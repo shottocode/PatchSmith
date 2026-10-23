@@ -19,8 +19,8 @@ from . import corrections, ui_language as ui, theme
 
 PAGE = 300  # list lines shown together
 CELL_WIDTH = 160  # characters shown in a cell (the whole text is below, in the chosen line)
-COLUMNS = (("originale", "Original", 280), ("traduzione", "Translation", 280), ("limite", "Limit", 70),
-           ("problema", "Problem", 230))
+COLUMNS = (("original", "Original", 280), ("translation", "Translation", 280), ("limit", "Limit", 70),
+           ("problem", "Problem", 230))
 
 
 def _in_cell(text):
@@ -56,7 +56,7 @@ class Window:
         top = self.top = tk.Toplevel(app.root)
         top.withdraw()
         top.title(self._title())
-        top.configure(background=self.c["sfondo"])
+        top.configure(background=self.c["background"])
         top.transient(app.root)
         top.minsize(780, 560)
         frame = ttk.Frame(top, padding=10)
@@ -85,13 +85,13 @@ class Window:
                                    selectmode="extended", height=14)
         for key, title_text, width in COLUMNS:
             self.tree.heading(key, text=title_text, anchor="w")
-            self.tree.column(key, width=width, minwidth=50, stretch=key != "limite",
-                               anchor="center" if key == "limite" else "w")
+            self.tree.column(key, width=width, minwidth=50, stretch=key != "limit",
+                               anchor="center" if key == "limit" else "w")
         # "Limit" (longest line/space in the game) only if the game makes the space of its texts known (GameMaker
         # with measured line breaks): in the other games it would be empty in every line
         if not any(x.space for x in self.items.entries):
-            self.tree.configure(displaycolumns=[k for k, _, _ in COLUMNS if k != "limite"])
-        self.tree.tag_configure("modificata", foreground=self.c["accento"])
+            self.tree.configure(displaycolumns=[k for k, _, _ in COLUMNS if k != "limit"])
+        self.tree.tag_configure("modified", foreground=self.c["accent"])
         scrollbar = ttk.Scrollbar(items_frame, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
@@ -134,7 +134,7 @@ class Window:
         self.length_label = ttk.Label(info, textvariable=self.length, style="Stato.TLabel")
         self.length_label.pack(side="left")
         self.warning = ui.TextVar()
-        self.warning_label = ttk.Label(info, textvariable=self.warning, foreground=theme.ICONS["avviso"][1])
+        self.warning_label = ttk.Label(info, textvariable=self.warning, foreground=theme.ICONS["warning"][1])
         self.warning_label.pack(side="left", padx=(14, 0))
         # the line's whole problem (in the list column only the beginning is visible)
         self.problem = ui.TextVar()
@@ -173,7 +173,7 @@ class Window:
         y = root.winfo_rooty() + max(0, (root.winfo_height() - top.winfo_reqheight()) // 4)
         top.geometry("+%d+%d" % (max(0, x), max(0, y)))
         top.deiconify()
-        theme._title_bar(top, self.c.get("nome") == "scuro")
+        theme._title_bar(top, self.c.get("name") == "dark")
         self._resume()
         if filter_ and self.shown:
             self._choose_line(0)
@@ -193,7 +193,7 @@ class Window:
     @property
     def filter_(self):
         i = self.filter_choice.current()
-        return self.filter_keys[i] if 0 <= i < len(self.filter_keys) else "tutte"
+        return self.filter_keys[i] if 0 <= i < len(self.filter_keys) else "all"
 
     def choose_filter(self, filter_):
         self.filter_choice.current(self.filter_keys.index(filter_))
@@ -229,7 +229,7 @@ class Window:
         start = self.page * PAGE
         for x in self.shown[start:start + PAGE]:
             self.tree.insert("", "end", iid=str(self.idx[x.text]), values=self._values(x),
-                               tags=("modificata",) if x.text in self.changes else ())
+                               tags=("modified",) if x.text in self.changes else ())
         multi_page = self._pages() > 1
         for w in (self.btn_prev, self.position_label, self.btn_next):
             w.pack_forget()
@@ -336,7 +336,7 @@ class Window:
             self.changes[x.text] = new
         iid = str(self.idx[x.text])
         if self.tree.exists(iid):
-            self.tree.item(iid, values=self._values(x), tags=("modificata",) if x.text in self.changes else ())
+            self.tree.item(iid, values=self._values(x), tags=("modified",) if x.text in self.changes else ())
         self.top.title(self._title())
         self._update_info()
 
@@ -425,7 +425,7 @@ class Window:
         except tk.TclError:
             pass
 
-    def _choose(self, title_text, text, buttons, kind="domanda"):
+    def _choose(self, title_text, text, buttons, kind="question"):
         try:
             return theme.choose(self.top, self.c, title_text, text, buttons, kind)
         finally:
@@ -452,10 +452,10 @@ class Window:
             choice = self._choose("Save the changes?",
                                   "You have %s. Save the corrections and write them into the game?"
                                   % _count_label(len(self.changes), "unsaved correction", "unsaved changes"),
-                                  [("Save", "salva"), ("Don't save", "esci"), ("Cancel", None)])
-            if choice == "salva":
+                                  [("Save", "save"), ("Don't save", "exit"), ("Cancel", None)])
+            if choice == "save":
                 return self.save()
-            if choice != "esci":
+            if choice != "exit":
                 return False
         self._close_window()
         return True
@@ -478,8 +478,8 @@ class Window:
                                                              "might display them incorrectly (for example, a "
                                                              "placeholder like {0} must be copied exactly as it is). "
                                                              "Save anyway?" % (lines, "\n…" if len(doubts) > 5 else ""),
-                                  [("Go back to editing", None), ("Save anyway", "salva")], "avviso")
-            if choice != "salva":
+                                  [("Go back to editing", None), ("Save anyway", "save")], "warning")
+            if choice != "save":
                 self._go_to(doubts[0][0])
                 return None
         return dict(self.changes)
@@ -532,8 +532,8 @@ class Window:
             return True
         choice = self._choose("Unsaved changes", "You have %s: save the corrections before continuing?"
                               % _count_label(len(self.changes), "unsaved correction", "unsaved changes"),
-                              [("Save and continue", "salva"), ("Cancel", None)])
-        if choice != "salva":
+                              [("Save and continue", "save"), ("Cancel", None)])
+        if choice != "save":
             return False
         changes = self._to_save()
         return changes is not None and self._save_changes(changes)
@@ -541,7 +541,7 @@ class Window:
     def _current_translator(self):
         from .gui import TRANSLATORS
         name = self.app._backend()
-        return name, TRANSLATORS.get(name, "the test translator" if name == "finto" else name)
+        return name, TRANSLATORS.get(name, "the test translator" if name == "fake" else name)
 
     def retranslate_selected(self):
         from . import ollama
@@ -552,23 +552,23 @@ class Window:
             return False
         name, label = self._current_translator()
         buttons = []
-        if name != "finto":
+        if name != "fake":
             try:
-                is_ready = ollama.state() == "pronto"
+                is_ready = ollama.state() == "ready"
             except OSError:
                 is_ready = False
             if is_ready:
                 from .gui import LOCAL_MODELS
                 buttons += [("Local translator: %s" % LOCAL_MODELS[k], k) for k in ("12b", "4b")
                              if ollama.model_present(k)]
-            if name == "locale" and not buttons:
+            if name == "local" and not buttons:
                 self._warn("Local translator to install", "To re-translate, you'll need a translator: the local "
                                                               "translator hasn't been installed yet. Install it using "
                                                               '"Install…" in the main window, or choose a different '
                                                               "translator there.")
                 return False
-        if name != "locale":
-            buttons.append(("With %s" % label, "attuale"))
+        if name != "local":
+            buttons.append(("With %s" % label, "current"))
         text = ("I'm re-translating %s with new requests, so the translation can come out different from the current "
                 "one (even for the lines you fixed by hand: you chose them). If the new translation doesn't pass the "
                 "checks, the previous one stays. Then I write it into the game."
@@ -581,7 +581,7 @@ class Window:
         if choice is None or not self._save_first():
             return False
         self._close_window()
-        self.app._retranslate_fixes([x.text for x in lines], None if choice == "attuale" else choice)
+        self.app._retranslate_fixes([x.text for x in lines], None if choice == "current" else choice)
         return True
 
     def retranslate_all(self):
@@ -589,7 +589,7 @@ class Window:
         from .limiter import describe_duration
         name, _ = self._current_translator()
         try:
-            present_value = name == "finto" or (ollama.state() == "pronto" and ollama.model_present("12b"))
+            present_value = name == "fake" or (ollama.state() == "ready" and ollama.model_present("12b"))
         except OSError:
             present_value = False
         if not present_value:
@@ -602,8 +602,8 @@ class Window:
                                                                    "translator will be the local translator using the "
                                                                    '"Quality" model (you can change this in the main '
                                                                    "window).",
-                                  [("Install the Quality model", "installa"), ("Cancel", None)])
-            if choice != "installa" or not self._save_first():
+                                  [("Install the Quality model", "install"), ("Cancel", None)])
+            if choice != "install" or not self._save_first():
                 return False
             self._close_window()
             self.app._install_12b_and_retranslate()
@@ -619,18 +619,19 @@ class Window:
         if self.items.known_machine:
             text += ("Your manual corrections (%d) stay as they are. " % by_hand) if by_hand else ""
             if self.items.unannotated:
-                text += ("%s from an old version of PatchSmith, which didn't remember which ones you fixed by hand: "
-                         "I'll re-translate %s too. " % (
-                              _count_label(self.items.unannotated, "translation is", "translations are"),
-                              "quella" if self.items.unannotated == 1 else "quelle"))
+                text += (("%s from an old version of PatchSmith, which didn't remember which ones you fixed by hand: "
+                          "I'll re-translate it too. " if self.items.unannotated == 1 else
+                          "%s from an old version of PatchSmith, which didn't remember which ones you fixed by hand: "
+                          "I'll re-translate them too. ")
+                         % _count_label(self.items.unannotated, "translation is", "translations are"))
         else:
             text += ("This game has been translated using an older version of PatchSmith, which doesn't remember which "
                      "translations you corrected manually. I will also re-translate those. ")
         text += ("If a new translation fails, the previous one stays. Estimated time: %s (the game must stay closed). "
                  "Then I write them into the game." % describe_duration(estimate))
         choice = self._choose("Re-translate everything with Quality (12B)", text,
-                              [("Cancel", None), ("Re-translate", "si")])
-        if choice != "si" or not self._save_first():
+                              [("Cancel", None), ("Re-translate", "yes")])
+        if choice != "yes" or not self._save_first():
             return False
         self._close_window()
         self.app._retranslate_fixes(None, "12b")
@@ -646,8 +647,8 @@ class Window:
             "with the chosen translator. Only needed if the translations came out badly across the board: for a few "
             "phrases, just fix them here.\n\nThe game must be closed." % (
                 translated_count, ", including %d corrected by hand" % by_hand if by_hand else ""),
-            [("Cancel", None), ("Start over", "si")], "avviso")
-        if choice != "si":
+            [("Cancel", None), ("Start over", "yes")], "warning")
+        if choice != "yes":
             return False
         self._close_window()
         self.app._translate(from_scratch=True)

@@ -17,7 +17,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def write(path, data):
@@ -39,7 +39,7 @@ def fingerprints(folder):
 def main(base):
     base = os.path.abspath(base)
     os.makedirs(base)
-    project.DATA_ROOT = os.path.join(base, "dati")
+    project.DATA_ROOT = os.path.join(base, "data_folder")
     automatic.PROFILES_FOLDER = os.path.join(project.DATA_ROOT, "profiles")
     achievements = json.dumps([{"name": "a1", "displayName": "Defeat the dragon",
                              "description": "Beat the first dragon of the game"}]).encode()
@@ -54,14 +54,14 @@ def main(base):
         write(os.path.join(game, *name.split("/")), data)
     outcome = detection.detect(game)
     check("Electron riconosciuto anche senza LICENSE.electron.txt; GemShell come archivio cifrato",
-              outcome["motore_principale"] == "Electron" and detection.encrypted_container(outcome) == "GemShell")
+              outcome["main_engine"] == "Electron" and detection.encrypted_container(outcome) == "GemShell")
     before = fingerprints(game)
     lines = []
-    path, outcome = automatic.prepare(game, "auto", "it", "finto", lines.append)
-    e = outcome.get("esito")
+    path, outcome = automatic.prepare(game, "auto", "it", "fake", lines.append)
+    e = outcome.get("outcome")
     check("file cifrati: non supportato, spiegato (nessuna traduzione sperimentale), nessun profilo",
-              path is None and e is not None and e.code == "NON_SUPPORTATO" and "encrypted" in e.reason
-              and "sperimentale" not in (e.actions or []))
+              path is None and e is not None and e.code == "NOT_SUPPORTED" and "encrypted" in e.reason
+              and "experimental" not in (e.actions or []))
     check("file cifrati: nessun file del gioco cambiato (neanche quello dell'emulatore di Steam)",
               fingerprints(game) == before)
 
@@ -71,7 +71,7 @@ def main(base):
                                                                 "esci": "Quit to the main menu"}).encode())
     write(os.path.join(web, "steam_settings", "achievements.json"), achievements)
     candidates, others = scan.scan_folder(web, lambda _m: None)
-    paths = [c["percorso"] for c in candidates] + [a if isinstance(a, str) else a.get("percorso", "") for a in others]
+    paths = [c["path"] for c in candidates] + [a if isinstance(a, str) else a.get("path", "") for a in others]
     check("cartella di un emulatore di Steam (steam_settings) mai scansionata",
               not any("steam_settings" in p for p in paths) and any("testi.json" in p for p in paths))
 

@@ -96,7 +96,7 @@ def is_readable_text(s):
 
 
 def protect(line, codes=()):
-    """Replaces the placeholders with [[n]] tokens. Returns (text, placeholder_list). 'codici': game words not
+    """Replaces the placeholders with [[n]] tokens. Returns (text, placeholder_list). 'codes': game words not
     to translate (e.g. Forager's 'EP' and 'H' icons), protected like the placeholders (exact case)."""
     found = []
 
@@ -155,7 +155,7 @@ def split_lines(text):
 
 
 def reassemble_lines(parts, translations):
-    """Rebuilds the lines using the dictionary {nucleo: traduzione}."""
+    """Rebuilds the lines using the dictionary {nucleo: translation}."""
     return "\n".join(p + (translations.get(n, n) if n else "") + d for p, n, d in parts)
 
 

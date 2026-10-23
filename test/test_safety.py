@@ -4,7 +4,7 @@ Usage: python -I test/test_safety.py <game_copy_folder> <relative_json_file>
 or (recommended) python -I test/run_all.py --sicurezza <cartella_copia_del_gioco> <file_json_relativo>
 Prerequisite: `smith auto <copia> --backend finto` has already been run on the copy with the same data folder
 (run_all.py does it by itself); if the game profile is not there, the test does it itself.
-Game profile and translation memory go in the PATCHSMITH_DATI folder; without it, in "dati-prova-sicurezza" next to
+Game profile and translation memory go in the PATCHSMITH_DATA folder; without it, in "dati-prova-sicurezza" next to
 the copy: never among PatchSmith's real data. Do not use on a real game.
 """
 import hashlib
@@ -22,7 +22,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def fingerprint(path):
@@ -38,17 +38,17 @@ def main(folder, rel_json):
     folder = os.path.abspath(folder)
     data = os.path.join(folder, *rel_json.split("/"))
     backup = data + BACKUP_SUFFIX
-    if not os.environ.get("PATCHSMITH_DATI"):
+    if not os.environ.get("PATCHSMITH_DATA"):
         project.DATA_ROOT = os.path.join(os.path.dirname(folder), "dati-prova-sicurezza")
     if not automatic.find_profile(folder):  # prerequisite not done with this data folder
-        automatic.analyze_and_translate(folder, backend="finto", log=silent)
+        automatic.analyze_and_translate(folder, backend="fake", log=silent)
     original = fingerprint(backup)
     profiles_before = len(list(automatic.list_profiles()))
 
     # 1) same game chosen from the parent folder: must reuse the game profile
     parent = os.path.dirname(folder)
     check("cartella superiore -> stesso profilo", automatic.find_profile(parent) == automatic.find_profile(folder))
-    automatic.analyze_and_translate(parent, backend="finto", log=silent)
+    automatic.analyze_and_translate(parent, backend="fake", log=silent)
     check("nessun profilo duplicato", len(list(automatic.list_profiles())) == profiles_before)
     check("backup invariato dopo il secondo giro", fingerprint(backup) == original)
 
@@ -63,8 +63,8 @@ def main(folder, rel_json):
     automatic.reapply(folder, silent, test=True)
     info = json.load(open(data + INFO_SUFFIX, encoding="utf-8"))
     check("aggiornamento: nuovo originale registrato", fingerprint(backup) == hashlib.sha256(new_bytes).hexdigest())
-    check("aggiornamento: vecchio originale conservato", info["precedenti"] and
-              os.path.exists(os.path.join(os.path.dirname(data), info["precedenti"][0])))
+    check("aggiornamento: vecchio originale conservato", info["prior"] and
+              os.path.exists(os.path.join(os.path.dirname(data), info["prior"][0])))
 
     # 3) tampered backup: no writes, no destructive restore
     with open(backup, "rb") as f:

@@ -35,7 +35,7 @@ import time
 import zipfile
 
 from . import (__version__, adapter_unity_loc, components, interruption,
-               language, detection, unityfs)
+               language, legacy, detection, unityfs)
 from .adapter_webjson import TMP_SUFFIX, write_atomic
 from .project import PROJECT_FOLDER, data_folder
 from .text import DETAIL, is_readable_text, words_only
@@ -69,7 +69,7 @@ ROOT_ARTIFACTS = re.compile(r"^(preloader_.*\.log|output_log\.txt|BepInEx_Shim_B
 class UnityError(Exception):
     def __init__(self, message="", code=None):
         super().__init__(message)
-        self.code = code  # outcome for the interface (see outcome.py), e.g. GIOCO_APERTO
+        self.code = code  # outcome for the interface (see outcome.py), e.g. GAME_OPEN
 
 
 def _sha256(path):
@@ -187,12 +187,12 @@ def analyze(folder):
         backend = "mono"
     return {
         "exe": exe,
-        "dati": data,
+        "data_folder": data,
         "backend": backend,
-        "architettura": _architecture(os.path.join(folder, exe)) if exe else None,
-        "versione_unity": _unity_version(data) if data else None,
-        "conflitti": [c for c in CONFLICTS if os.path.exists(os.path.join(folder, c))],
-        "installato": os.path.exists(os.path.join(folder, MANIFEST)),
+        "architecture": _architecture(os.path.join(folder, exe)) if exe else None,
+        "unity_version": _unity_version(data) if data else None,
+        "conflicts": [c for c in CONFLICTS if os.path.exists(os.path.join(folder, c))],
+        "installed": os.path.exists(os.path.join(folder, MANIFEST)),
     }
 
 
@@ -281,12 +281,12 @@ def sample_texts(folder, info, max_mb=40):
     code only Assembly-CSharp counts: the game's other modules often have only technical messages in English, which
     would make even a Japanese game look English."""
     texts = []
-    code = os.path.join(info["dati"], "Managed", "Assembly-CSharp.dll") if info.get("dati") else None
+    code = os.path.join(info["data_folder"], "Managed", "Assembly-CSharp.dll") if info.get("data_folder") else None
     if code and os.path.exists(code):
         with open(code, "rb") as f:
             texts += [t for t in dotnet_strings(f.read()) if is_readable_text(t)]
     for name in ("resources.assets", "sharedassets0.assets", "level0"):
-        p = os.path.join(info["dati"], name) if info.get("dati") else None
+        p = os.path.join(info["data_folder"], name) if info.get("data_folder") else None
         if p and os.path.exists(p):
             with open(p, "rb") as f:
                 data = f.read(max_mb * 1024 * 1024)
@@ -312,11 +312,11 @@ def read_manifest(folder):
     """The manifest, only if valid (otherwise None): nothing is deleted on the basis of strange data."""
     try:
         with open(os.path.join(folder, MANIFEST), encoding="utf-8") as f:
-            m = json.load(f)
+            m = legacy.load(f)
     except (OSError, ValueError):
         return None
-    if not (isinstance(m, dict) and m.get("patchsmith") is True and m.get("versione") == 2
-            and m.get("cartelle_create") in ([], ["BepInEx"]) and isinstance(m.get("radice_prima"), list)
+    if not (isinstance(m, dict) and m.get("patchsmith") is True and m.get("version") == 2
+            and m.get("created_folders") in ([], ["BepInEx"]) and isinstance(m.get("root_before"), list)
             and isinstance(m.get("file"), dict) and all(_valid_rel(r) for r in m["file"])):
         return None
     return m
@@ -367,7 +367,7 @@ def uses_imgui(folder):
     e.g. One Million Coins, which has its whole interface this way. Every DLL of the game counts
     (game_assembly), not only Assembly-CSharp: many games have their interface in a module of their own."""
     info = analyze(folder)
-    data = info.get("dati") if isinstance(info, dict) else None
+    data = info.get("data_folder") if isinstance(info, dict) else None
     for path in game_assembly(data):
         try:
             code = _read_assembly(path)
@@ -486,7 +486,7 @@ def configure(folder, src_lang, a, imgui=None, url=None, google=True):
 
 
 def read_ini(path):
-    """{sezione: {chiave: valore}} of a BepInEx or XUnity .ini file (read only; empty if missing). The first time a
+    """{section: {key: value}} of a BepInEx or XUnity .ini file (read only; empty if missing). The first time a
     key appears in the section counts, as for XUnity."""
     try:
         with open(path, encoding="utf-8-sig", errors="replace") as f:
@@ -529,7 +529,7 @@ def _compile_plugin(folder, info):
     csc = _csc()
     if not csc:
         raise UnityError("the Windows C# compiler (.NET Framework 4) is missing")
-    managed = os.path.join(info["dati"], "Managed")
+    managed = os.path.join(info["data_folder"], "Managed")
     references = [os.path.join(managed, n) for n in ("mscorlib.dll", "netstandard.dll", "System.dll", "UnityEngine.dll",
                                                       "UnityEngine.CoreModule.dll")
                    if os.path.exists(os.path.join(managed, n))]
@@ -565,24 +565,24 @@ def service_url(folder):
     if not service_installed(folder):
         return None
     with open(_path(folder, SERVICE_CONFIG), encoding="utf-8-sig") as f:
-        m = re.search(r"--porta (\d+)", f.read())
+        m = re.search(r"--(?:port|porta) (\d+)", f.read())  # (--porta: earlier versions)
     return xunity_service.address(int(m.group(1))) if m else None
 
 
 def live_translator(folder):
-    """Who receives the new sentences while playing: 'servizio' (PatchSmith's translator started by the game: which
+    """Who receives the new sentences while playing: 'service' (PatchSmith's translator started by the game: which
     translators it uses is told by xunity_service.expected_translators), 'google' (XUnity with Google, on its own),
-    'nessuno' (configuration without a usable translator); None if XUnity is not installed."""
+    'none' (configuration without a usable translator); None if XUnity is not installed."""
     if not manifest_present(folder):
         return None
     try:
         if service_url(folder):
-            return "servizio"
+            return "service"
         with open(_path(folder, CONFIG_XUNITY), encoding="utf-8-sig", errors="replace") as f:
             m = re.search(r"^\s*Endpoint\s*=\s*(\S*)", f.read(), re.M)
     except OSError:
-        return "nessuno"
-    return "google" if m and m.group(1).lower().startswith("google") else "nessuno"
+        return "none"
+    return "google" if m and m.group(1).lower().startswith("google") else "none"
 
 
 def enable_service(folder, info, profile_path, profile_name):
@@ -591,12 +591,12 @@ def enable_service(folder, info, profile_path, profile_name):
     from . import xunity_service
     port = xunity_service.port_for(profile_name)
     lines = [
-        "# Scritto da Patchsmith: traduttore delle frasi nuove avviato all'apertura del gioco (plugin "
+        "# Written by PatchSmith: translator of the new phrases, started when the game opens (plugin "
         "Patchsmith.Servizio)",
-        "Programma=" + _windowless_python(),
-        'Argomenti=-I "%s" servizio-xunity --profilo "%s" --porta %d' % (
+        "Program=" + _windowless_python(),
+        'Arguments=-I "%s" xunity-service --profile "%s" --port %d' % (
             os.path.join(PROJECT_FOLDER, "smith.py"), os.path.abspath(profile_path), port),
-        "Cartella=" + PROJECT_FOLDER,
+        "Folder=" + PROJECT_FOLDER,
     ]
     _compile_plugin(folder, info)
     # on a new installation BepInEx/config does not exist yet (BepInEx creates it at the first start)
@@ -606,26 +606,26 @@ def enable_service(folder, info, profile_path, profile_name):
 
 
 def read_service_state(folder):
-    """What the plugin wrote at the game's last start (SERVICE_STATE): {Outcome, Data, Processo, Programma,
-    Dettaglio}; Outcome is avviato, cfg-mancante, patchsmith-mancante, python-mancante or errore. {} if the game has not
-    been started with the plugin yet."""
+    """What the plugin wrote at the game's last start (SERVICE_STATE): {Outcome, Date, Process, Program, Detail};
+    Outcome is started, cfg-missing, patchsmith-missing, python-missing or error. {} if the game has not been started
+    with the plugin yet. (A plugin compiled by an earlier version writes Italian keys and outcomes: renamed here.)"""
     try:
         with open(_path(folder, SERVICE_STATE), encoding="utf-8-sig", errors="replace") as f:
             lines = f.read().splitlines()
     except OSError:
         return {}
-    return dict(r.split("=", 1) for r in lines if "=" in r and not r.startswith("#"))
+    return legacy.upgrade(dict(r.split("=", 1) for r in lines if "=" in r and not r.startswith("#")))
 
 
 def read_service_command(folder):
-    """The command with which the plugin starts PatchSmith's translator (SERVICE_CONFIG): {Programma, Argomenti,
-    Cartella}; {} if missing."""
+    """The command with which the plugin starts PatchSmith's translator (SERVICE_CONFIG): {Program, Arguments,
+    Folder}; {} if missing. (Programma, Argomenti, Cartella in earlier versions: renamed here.)"""
     try:
         with open(_path(folder, SERVICE_CONFIG), encoding="utf-8-sig", errors="replace") as f:
             lines = f.read().splitlines()
     except OSError:
         return {}
-    return dict(r.split("=", 1) for r in lines if "=" in r and not r.startswith("#"))
+    return legacy.upgrade(dict(r.split("=", 1) for r in lines if "=" in r and not r.startswith("#")))
 
 
 def disable_service(folder):
@@ -658,7 +658,7 @@ def _configure_translator(folder, info, src_lang, a, local, profile_name, log):
     XUnity with Google; None = as before. Without PatchSmith's translator, XUnity uses Google only if it is not
     paused; otherwise no translator (the new sentences are left untranslated)."""
     url, problem = None, None
-    if local == "nessuno":  # chosen by the user: while playing only the translations already saved
+    if local == "none":  # chosen by the user: while playing only the translations already saved
         disable_service(folder)
         log("  Translation while playing is off: XUnity only uses the translations already saved")
         configure(folder, src_lang, a, url=None, google=False)
@@ -912,7 +912,7 @@ def extract_texts(folder, info, origin, log=print):
     4. the inner files of date.unity3d (compressed) and the bundles in StreamingAssets, within MAX_MB_BUNDLE and
        MAX_BUNDLE_SECONDS (first those that usually have texts; never images and sounds, nor the tables of the other
        languages). Read only."""
-    data_dir = info["dati"]
+    data_dir = info["data_folder"]
     collector = _Texts(origin)
     streaming = os.path.join(data_dir, "StreamingAssets")
     tables = {}
@@ -1052,12 +1052,12 @@ def write_xunity_cache(folder, a, translations, log=print, substitute=None, coun
     """Adds the translations to the XUnity cache without touching those already there (including those fixed by
     hand). The language names (English, Español...) stay unchanged. To be used with the game closed.
 
-    sostituisci: {originale: translation the line must have now}: those lines are rewritten with the translation
-    from 'traduzioni', but only if the file still has exactly that translation (written by PatchSmith or by its live
+    sostituisci: {original: translation the line must have now}: those lines are rewritten with the translation
+    from 'translations', but only if the file still has exactly that translation (written by PatchSmith or by its live
     translator, see check_xunity_cache): a line changed by hand in the meantime stays as it is.
-    esclusi: the characters the game's fonts cannot draw (profilo["caratteri_mancanti"], see checks.py): in the
+    esclusi: the characters the game's fonts cannot draw (profile["missing_chars"], see checks.py): in the
     lines written now they are adapted (è -> e', chars.adapt_without).
-    Returns how many lines it added; in 'conteggi' (if given) also {'aggiunte', 'sostituite'}."""
+    Returns how many lines it added; in 'conteggi' (if given) also {'additions', 'replaced'}."""
     path = _cache_path(folder, a)
     substitute = substitute or {}
     if excluded:
@@ -1095,7 +1095,7 @@ def write_xunity_cache(folder, a, translations, log=print, substitute=None, coun
     data = ("\n".join(output) + "\n").encode("utf-8")
     write_atomic(path, (b"\xef\xbb\xbf" + data) if bom else data)
     if counts is not None:
-        counts.update(aggiunte=new_lines, sostituite=replaced)
+        counts.update(additions=new_lines, replaced=replaced)
     return new_lines
 
 
@@ -1105,7 +1105,7 @@ def saved_cache_path(profile_name, a):
 
 
 def xunity_cache_entries(folder, a, path=None):
-    """{originale: traduzione} of the game's XUnity cache (empty if missing); percorso: another cache (e.g. the saved
+    """{original: translation} of the game's XUnity cache (empty if missing); percorso: another cache (e.g. the saved
     one, saved_cache_path). Read only."""
     try:
         with open(path or _cache_path(folder, a), "rb") as f:
@@ -1200,13 +1200,13 @@ def _write_entry(folder, rel, entry):
 
 
 def _packages(info, log):
-    bepinex_name = "bepinex5_%s" % info["architettura"]
+    bepinex_name = "bepinex5_%s" % info["architecture"]
     return bepinex_name, [components.obtain(bepinex_name, log), components.obtain("xunity_bepinex5", log)]
 
 
 def _check_anticheat(folder):
     outcome = detection.detect(folder)
-    names = [r["nome"] for r in outcome["risultati"] if r["sezione"] == "AntiCheat"]
+    names = [r["name"] for r in outcome["results"] if r["section"] == "AntiCheat"]
     if names:
         raise UnityError("This game has an anti-cheat system (%s): I don't install a mod loader (which could lead to a "
                          "ban)."
@@ -1227,14 +1227,14 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
     if not info["exe"]:
         raise UnityError("I can't find the Unity game executable (the .exe file with the _Data folder next to it).")
     if info["backend"] == "il2cpp":
-        raise UnityError("Unity IL2CPP Game: Not yet supported (requires BepInEx 6, coming soon).", "NON_SUPPORTATO")
+        raise UnityError("Unity IL2CPP Game: Not yet supported (requires BepInEx 6, coming soon).", "NOT_SUPPORTED")
     if info["backend"] != "mono":
-        raise UnityError("I don't recognize the Unity game type (the \"Managed\" folder is missing).", "NON_SUPPORTATO")
-    if info["architettura"] not in ("x64", "x86"):
+        raise UnityError("I don't recognize the Unity game type (the \"Managed\" folder is missing).", "NOT_SUPPORTED")
+    if info["architecture"] not in ("x64", "x86"):
         raise UnityError("Executable architecture not recognized.")
     _check_anticheat(folder)
     if is_running(folder, info["exe"]):
-        raise UnityError("The game is open: close it and try again.", "GIOCO_APERTO")
+        raise UnityError("The game is open: close it and try again.", "GAME_OPEN")
     if src_lang == language.AUTO:
         src_lang, reason = language.detect(sample_texts(folder, info))
         log("  Game language detected: %s" % language.label(src_lang))
@@ -1245,19 +1245,19 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
     if sure and src_lang.split("-")[0] == a.split("-")[0]:
         log("  The game is already in %s: nothing to translate." % language.label(a))
         return False
-    log(DETAIL + "  Unity %s, %s, %s" % (info["versione_unity"] or "?", info["backend"], info["architettura"]))
+    log(DETAIL + "  Unity %s, %s, %s" % (info["unity_version"] or "?", info["backend"], info["architecture"]))
 
     if manifest_present(folder):
         manifest = read_manifest(folder)
         if manifest is None:
             raise UnityError("The file %s is invalid: I'm not using it. Please check the folder manually." % MANIFEST)
-        if manifest.get("in_corso"):
+        if manifest.get("in_progress"):
             raise UnityError("A previous installation was interrupted: use 'Restore originals' and try again.")
         return _update(folder, manifest, info, src_lang, a, log, local, profile_name)
 
-    if info["conflitti"]:
+    if info["conflicts"]:
         raise UnityError("There's already a mod loader in the game (%s): I'm not installing it to avoid breaking the "
-                         "existing mods." % ", ".join(info["conflitti"]))
+                         "existing mods." % ", ".join(info["conflicts"]))
 
     bepinex_name, packages = _packages(info, log)
     entries = {}
@@ -1271,20 +1271,20 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
         raise UnityError("These files already exist in the game: %s. I'm not overwriting anything." % in_use[:3])
 
     manifest = {
-        "versione": 2,
+        "version": 2,
         "patchsmith": True,
-        "data": datetime.datetime.now().isoformat(timespec="seconds"),
+        "date": datetime.datetime.now().isoformat(timespec="seconds"),
         "exe": info["exe"],
-        "versione_unity": info["versione_unity"],
-        "componenti": {bepinex_name: components.CATALOG[bepinex_name]["versione"],
-                       "xunity_bepinex5": components.CATALOG["xunity_bepinex5"]["versione"]},
-        "radice_prima": sorted(os.listdir(folder)),
-        "cartelle_create": ["BepInEx"],
+        "unity_version": info["unity_version"],
+        "components": {bepinex_name: components.CATALOG[bepinex_name]["version"],
+                       "xunity_bepinex5": components.CATALOG["xunity_bepinex5"]["version"]},
+        "root_before": sorted(os.listdir(folder)),
+        "created_folders": ["BepInEx"],
         "file": {rel: entry[2] for rel, entry in entries.items()},  # FULL list, before writing
-        "in_corso": True,
+        "in_progress": True,
         # which PatchSmith version wrote the configuration (the after-play check updates it when it is from another
         # version)
-        "patchsmith_versione": __version__,
+        "patchsmith_version": __version__,
     }
     interruption.check()  # up to here nothing has been written to the game
     _save_manifest(folder, manifest)
@@ -1292,18 +1292,18 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
         for rel, entry in entries.items():
             _write_entry(folder, rel, entry)
         _configure_translator(folder, info, src_lang, a, local, profile_name, log)
-        if bepinex_entrypoint(folder, info["versione_unity"]):
+        if bepinex_entrypoint(folder, info["unity_version"]):
             log(DETAIL + "  Unity 6: BepInEx will start at the first MonoBehaviour (starting at Application, the game "
                          "would crash)")
         enable_unity_log(folder)  # the characters missing from the fonts end up in the BepInEx log
         n = _put_back_translations(folder, profile_name)
-        manifest["in_corso"] = False
+        manifest["in_progress"] = False
         _save_manifest(folder, manifest)
     except BaseException:
         _remove(folder, manifest, lambda m: None, forced=True)
         raise
     log("  Installed BepInEx %s and XUnity.AutoTranslator %s (%d files)%s" % (
-        manifest["componenti"][bepinex_name], manifest["componenti"]["xunity_bepinex5"], len(manifest["file"]),
+        manifest["components"][bepinex_name], manifest["components"]["xunity_bepinex5"], len(manifest["file"]),
         ", %d translation files restored" % n if n else ""))
     return src_lang
 
@@ -1323,14 +1323,14 @@ def _update(folder, manifest, info, src_lang, a, log, local=None, profile_name=N
                 raise UnityError("I can't put %s back: use 'Restore originals' and reinstall." % rel)
             _write_entry(folder, rel, entries[rel])
     _configure_translator(folder, info, src_lang, a, local, profile_name, log)
-    if bepinex_entrypoint(folder, info["versione_unity"]):
+    if bepinex_entrypoint(folder, info["unity_version"]):
         log(DETAIL + "  Unity 6: BepInEx will start at the first MonoBehaviour (starting at Application, the game "
                      "would crash)")
     enable_unity_log(folder)
     # the configuration is now this version's: in the manifest the version and when (the after-play check counts only
     # the signals that arrived after PatchSmith's last write)
-    manifest["patchsmith_versione"] = __version__
-    manifest["aggiornato"] = datetime.datetime.now().isoformat(timespec="seconds")
+    manifest["patchsmith_version"] = __version__
+    manifest["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
     _save_manifest(folder, manifest)
     log("  Already installed: configuration updated (%s -> %s)." % (src_lang, a))
     return src_lang
@@ -1358,7 +1358,7 @@ def _remove(folder, manifest, log, forced=False):
             left_behind.append(rel)
             log("  ! %s was modified by someone else after installation: leaving it as is" % rel)
     bepinex = os.path.join(folder, "BepInEx")
-    if "BepInEx" in manifest.get("cartelle_create", []) and "BepInEx" not in manifest.get("radice_prima", []) \
+    if "BepInEx" in manifest.get("created_folders", []) and "BepInEx" not in manifest.get("root_before", []) \
             and os.path.isdir(bepinex):
         for root, dirs, files in os.walk(bepinex, topdown=False):
             for f in files:
@@ -1377,7 +1377,7 @@ def _remove(folder, manifest, log, forced=False):
         except OSError:
             log("  ! In the BepInEx folder, there are files that weren't added by PatchSmith (e.g., other mods): I'll "
                 "leave them.")
-    before = set(manifest.get("radice_prima", []))
+    before = set(manifest.get("root_before", []))
     for name in os.listdir(folder):
         if name not in before and ROOT_ARTIFACTS.match(name):
             p = os.path.join(folder, name)
@@ -1398,14 +1398,14 @@ def uninstall(folder, profile_name, log=print):
         raise UnityError("The file %s is invalid: for your safety, I won't delete anything. Please check the folder."
                           % MANIFEST)
     if is_running(folder, manifest.get("exe")):
-        raise UnityError("The game is open: close it and try again.", "GIOCO_APERTO")
+        raise UnityError("The game is open: close it and try again.", "GAME_OPEN")
     n = save_translations(folder, profile_name)
     if n:
         log("  Translations saved in memory (%d files): they will come back with 'Analyze and translate'" % n)
     left_behind = _remove(folder, manifest, log)
     if left_behind:
         log("  Left in place (not put there by PatchSmith, or modified): %s" % ", ".join(left_behind[:6]))
-    before = set(manifest.get("radice_prima", []))
+    before = set(manifest.get("root_before", []))
     after = set(os.listdir(folder))
     if before == after:
         log("  BepInEx and XUnity removed: the game folder is back to normal.")
@@ -1420,12 +1420,12 @@ def state(folder, profile_name, a, log=print):
     """Checks the installation and the first start (BepInEx/LogOutput.log) and counts the translations."""
     info = analyze(folder)
     manifest = read_manifest(folder)
-    log(DETAIL + "  Unity %s, %s, %s" % (info["versione_unity"] or "?", info["backend"], info["architettura"]))
+    log(DETAIL + "  Unity %s, %s, %s" % (info["unity_version"] or "?", info["backend"], info["architecture"]))
     if not manifest:
         log("  Translation not installed." if not manifest_present(folder) else "  Invalid manifest!")
         return False
     missing = [rel for rel in manifest["file"] if not os.path.exists(_path(folder, rel))]
-    log("  Installed %s: %d files%s" % (manifest.get("data", "?"), len(manifest["file"]),
+    log("  Installed %s: %d files%s" % (manifest.get("date", "?"), len(manifest["file"]),
                                             ", MISSING %d (antivirus?)" % len(missing) if missing else ""))
     log_file = _path(folder, BEPINEX_LOG)
     if not os.path.exists(log_file):
@@ -1448,8 +1448,8 @@ def state(folder, profile_name, a, log=print):
     service_state = read_service_state(folder)
     if service_state:
         log("  PatchSmith translator, last game start: %s (%s)%s" % (
-            service_state.get("Esito", "?"), service_state.get("Data", "?"),
-            ", " + service_state["Dettaglio"] if service_state.get("Dettaglio") else ""))
+            service_state.get("Outcome", "?"), service_state.get("Date", "?"),
+            ", " + service_state["Detail"] if service_state.get("Detail") else ""))
     translations = translations_file(folder, profile_name, a)
     if translations:
         with open(translations, encoding="utf-8", errors="replace") as f:

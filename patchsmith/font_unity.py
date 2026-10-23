@@ -177,7 +177,7 @@ def _font_from_tree(tree, data):
         return None
     name, mode, codes = "", None, []
     for path, a, b in output:
-        if a == "valore":
+        if a == "value":
             if path[-1] == "m_Unicode" and "m_CharacterTable" in path:
                 codes.append(b)
             elif path[-1] == "id" and "m_glyphInfoList" in path:
@@ -201,11 +201,11 @@ def _useful_objects(s):
         if not 0 <= o.kind < len(s.kinds) or o.size > MAX_MB_OBJECT * 1024 * 1024:
             continue
         kind = s.kinds[o.kind]
-        if kind["classe"] == _FONT_CLASS and o.size > 128:  # (with the bytes of a .ttf file inside)
+        if kind["class"] == _FONT_CLASS and o.size > 128:  # (with the bytes of a .ttf file inside)
             output.append((o, "font"))
-        elif kind["classe"] == _SCRIPT_CLASS:
-            if kind["albero"] is not None:
-                if _is_tmp_font(kind["albero"]):
+        elif kind["class"] == _SCRIPT_CLASS:
+            if kind["tree"] is not None:
+                if _is_tmp_font(kind["tree"]):
                     output.append((o, "tmp"))
             elif o.size >= 16 * MIN_LETTERS:  # a smaller one does not have the table of a text font
                 output.append((o, "tmp?"))
@@ -214,7 +214,7 @@ def _useful_objects(s):
 
 def _extract(pieces, wanted):
     """The bytes of the wanted objects [(inizio, fine, chiave)] (in order, without overlaps) from a file read in
-    consecutive pieces [(posizione, byte)]: {chiave: byte}. Only the object being read is kept in memory."""
+    consecutive pieces [(posizione, byte)]: {key: byte}. Only the object being read is kept in memory."""
     output, i, buffer, src_lang = {}, 0, bytearray(), None
     for position, piece in pieces:
         while i < len(wanted):
@@ -283,18 +283,18 @@ class _Collector:
             if kind == "font":
                 chars = _ttf_in(data)
                 if chars:
-                    self.ttf.append({"fonte": label, "caratteri": chars})
+                    self.ttf.append({"source": label, "chars": chars})
             elif kind == "tmp":
-                was_read = _font_from_tree(s.kinds[o.kind]["albero"], data)
+                was_read = _font_from_tree(s.kinds[o.kind]["tree"], data)
                 if was_read:
                     name, mode, codes = was_read
-                    self.tmp.append({"nome": name, "modo": mode, "fonte": label,
-                                     "caratteri": {chr(c) for c in codes if 0 < c < 0x110000}})
+                    self.tmp.append({"name": name, "mode": mode, "source": label,
+                                     "chars": {chr(c) for c in codes if 0 < c < 0x110000}})
             else:
                 codes = tmp_table(data)
                 if codes:
-                    self.tmp.append({"nome": _object_name(data), "modo": None, "fonte": label,
-                                     "caratteri": {chr(c) for c in codes if 0 < c < 0x110000}})
+                    self.tmp.append({"name": _object_name(data), "mode": None, "source": label,
+                                     "chars": {chr(c) for c in codes if 0 < c < 0x110000}})
 
     def bundle(self, path, label):
         try:
@@ -394,7 +394,7 @@ def _is_bundle(path):
 
 
 def game_fonts(data_folder, log=None, seconds=MAX_SECONDS, items=None):
-    """{'tmp': [{nome, modo, fonte, caratteri}], 'ttf': [{fonte, caratteri}], 'completa': bool} of the game's fonts
+    """{'tmp': [{name, mode, source, chars}], 'ttf': [{source, chars}], 'complete': bool} of the game's fonts
     (read-only). The result stays in memory until the game's files change."""
     items = list(_files_to_read(data_folder) if items is None else items)
     key = (os.path.normcase(os.path.abspath(data_folder)),
@@ -415,7 +415,7 @@ def game_fonts(data_folder, log=None, seconds=MAX_SECONDS, items=None):
             collector.bundle(path, label)
         elif kind == "file":
             collector.file(path, label)
-    result = {"tmp": collector.tmp, "ttf": collector.ttf, "completa": collector.complete}
+    result = {"tmp": collector.tmp, "ttf": collector.ttf, "complete": collector.complete}
     if collector.complete:
         _CACHE[key] = result
     elif log:
@@ -449,11 +449,11 @@ def _read_cache(path, key):
             data = json.load(f)
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or data.get("impronta") != key or data.get("versione") != _CACHE_VERSION:
+    if not isinstance(data, dict) or data.get("fingerprint") != key or data.get("version") != _CACHE_VERSION:
         return None
     try:
-        return (from_ranges(data["intervalli"]) if data.get("intervalli") is not None else None), \
-            str(data.get("motivo") or "")
+        return (from_ranges(data["ranges"]) if data.get("ranges") is not None else None), \
+            str(data.get("reason") or "")
     except (TypeError, ValueError, KeyError):
         return None
 
@@ -473,13 +473,13 @@ def allowed_chars(data_folder, log=None, seconds=MAX_SECONDS, cache=None):
         log("  Checking which letters the game's fonts can draw (%d files, read-only; only the first time, it may take "
             "a few minutes)..." % len(items))
     found = game_fonts(data_folder, log, seconds, items)
-    result = _apply_rule(found) if found["completa"] else (None, "font reading didn't finish in time")
+    result = _apply_rule(found) if found["complete"] else (None, "font reading didn't finish in time")
     if cache:
         try:
             os.makedirs(os.path.dirname(cache), exist_ok=True)
             write_atomic(cache, json.dumps({
-                "versione": _CACHE_VERSION, "impronta": key, "motivo": result[1],
-                "intervalli": ranges(result[0]) if result[0] is not None else None},
+                "version": _CACHE_VERSION, "fingerprint": key, "reason": result[1],
+                "ranges": ranges(result[0]) if result[0] is not None else None},
                 separators=(",", ":")).encode("utf-8"))
         except OSError:
             pass  # it is only a shortcut: next time it is read again
@@ -491,20 +491,20 @@ def _apply_rule(found):
     tmp = found["tmp"]
     if not tmp:
         return None, "no TextMeshPro font"
-    if any(f["modo"] == _DYNAMIC_OS for f in tmp):
+    if any(f["mode"] == _DYNAMIC_OS for f in tmp):
         return None, "a font uses Windows fonts"
     allowed = set()
     dynamic_ones = []
     for f in tmp:
-        allowed |= f["caratteri"]
+        allowed |= f["chars"]
         # dynamic, or without field tree and almost empty (a dynamic one emptied when the game was built)
-        if f["modo"] == _DYNAMIC or (f["modo"] is None and _letters(f["caratteri"]) < MIN_LETTERS):
+        if f["mode"] == _DYNAMIC or (f["mode"] is None and _letters(f["chars"]) < MIN_LETTERS):
             dynamic_ones.append(f)
     if dynamic_ones:
         if not found["ttf"]:
             return None, "dynamic fonts without their .ttf files"
         for t in found["ttf"]:
-            allowed |= t["caratteri"]
+            allowed |= t["chars"]
     if _letters(allowed) < MIN_LETTERS:
         return None, "font without the letters of the text"
     description = "%d TextMeshPro fonts%s" % (len(tmp), (" (%d dynamic, with %d .ttf files)" % (

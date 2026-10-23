@@ -68,7 +68,7 @@ def _short_name(reader):
 
 
 def read_spritefont(data):
-    """SpriteFont -> {"caratteri": [...], "predefinito": character or None, "interlinea", "spaziatura"}."""
+    """SpriteFont -> {"chars": [...], "default": character or None, "line_spacing", "spacing"}."""
     _, _, _, readers, pos = header(data)
 
     def read_object(pos, expected):
@@ -110,8 +110,8 @@ def read_spritefont(data):
         default, pos = _read_char(data, pos)
     if pos != len(data):
         raise XnbError("SpriteFont not fully read (%d bytes remaining)" % (len(data) - pos))
-    return {"caratteri": chars, "predefinito": default, "interlinea": line_spacing,
-            "spaziatura": spacing, "texture": (width, height)}
+    return {"chars": chars, "default": default, "line_spacing": line_spacing,
+            "spacing": spacing, "texture": (width, height)}
 
 
 def main_kind(data):

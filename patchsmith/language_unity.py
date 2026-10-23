@@ -363,7 +363,7 @@ _LOCALE_BINARY = re.compile(
 
 
 def unity_localization_languages(data):
-    """{codice} of the Locales in the Addressables catalog, or None if the game does not use it."""
+    """{code} of the Locales in the Addressables catalog, or None if the game does not use it."""
     aa = os.path.join(data, "StreamingAssets", "aa")
     if not os.path.isdir(aa):
         return None

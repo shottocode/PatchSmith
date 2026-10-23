@@ -44,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
             options = data.get("options") or {}
             if os.environ.get("PATCHSMITH_FINTO_RICHIESTE"):
                 with open(os.environ["PATCHSMITH_FINTO_RICHIESTE"], "a", encoding="utf-8") as f:
-                    f.write(json.dumps({"testo": text, "seed": options.get("seed"),
+                    f.write(json.dumps({"text": text, "seed": options.get("seed"),
                                         "temperature": options.get("temperature"), "model": data.get("model")}) + "\n")
             wrong_seeds = {int(s) for s in os.environ.get("PATCHSMITH_FINTO_SEMI_SBAGLIATI", "").split(",")
                            if s.strip()}

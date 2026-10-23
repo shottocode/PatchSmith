@@ -31,7 +31,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -84,7 +84,7 @@ def gamemaker_game(folder, italian=False):
 
 
 def outcome_of(dictionary):
-    return dictionary.get("esito") if isinstance(dictionary, dict) else None
+    return dictionary.get("outcome") if isinstance(dictionary, dict) else None
 
 
 def without_smith(text):
@@ -102,20 +102,20 @@ def test_web(base):
     game = os.path.join(base, "web", "Lantern Keeper")
     fake_web_game.create(game)
     before = fingerprints(game)
-    path, completed, d = automatic.analyze_and_translate(game, "auto", "it", "finto", silent)
+    path, completed, d = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
     e = outcome_of(d)
     check("web tradotto: esito OK, scritto, motore web, testi contati, valori di prima invariati",
               completed and path and e and e.code == "OK" and e.written and e.engine == "web"
               and e.translated_items > 10 and e.remaining == 0)
-    f = outcome.window(e, "traduci")
+    f = outcome.window(e, "translate")
     check("web tradotto: finestra 'Traduzione installata' (prima non c'era nessuna finestra)",
-              f["titolo"] == "Translation installed" and "Start the game" in f["testo"]
-              and "Translated texts: %d." % e.translated_items in f["testo"] and f["pulsanti"] == [("OK", None)])
+              f["title"] == "Translation installed" and "Start the game" in f["text"]
+              and "Translated texts: %d." % e.translated_items in f["text"] and f["buttons"] == [("OK", None)])
 
     d = {}
     done = automatic.reapply(game, silent, test=True, outcome=d)
     check("riapplica: esito OK e finestra 'Traduzione riapplicata'", done and outcome_of(d).code == "OK"
-              and outcome.window(outcome_of(d), "riapplica")["titolo"] == "Translation reapplied")
+              and outcome.window(outcome_of(d), "reapply")["title"] == "Translation reapplied")
 
     # game open: restore refused, no file touched
     real = system.game_open
@@ -127,43 +127,43 @@ def test_web(base):
     finally:
         system.game_open = real
     e = outcome_of(d)
-    f = outcome.window(e, "ripristina")
+    f = outcome.window(e, "restore")
     check("ripristino con il gioco aperto: GIOCO_APERTO, nessun file toccato, 'Riprova'",
-              not done and e.code == "GIOCO_APERTO" and fingerprints(game) == translated
-              and f["titolo"] == "The game is open" and ("Try again", "chiudi_gioco") in f["pulsanti"])
+              not done and e.code == "GAME_OPEN" and fingerprints(game) == translated
+              and f["title"] == "The game is open" and ("Try again", "close_game") in f["buttons"])
 
     d = {}
     check("ripristino: esito OK, 'Originali ripristinati'", automatic.restore(game, silent, outcome=d)
-              and outcome_of(d).code == "OK" and outcome.window(outcome_of(d), "ripristina")["titolo"]
+              and outcome_of(d).code == "OK" and outcome.window(outcome_of(d), "restore")["title"]
               == "Originals restored" and fingerprints(game).keys() == before.keys())
     d = {}
     automatic.restore(game, silent, outcome=d)
-    check("di nuovo ripristino: GIA_ORIGINALE", outcome_of(d).code == "GIA_ORIGINALE"
-              and outcome.window(outcome_of(d), "ripristina")["titolo"] == "Game already original")
+    check("di nuovo ripristino: GIA_ORIGINALE", outcome_of(d).code == "ALREADY_ORIGINAL"
+              and outcome.window(outcome_of(d), "restore")["title"] == "Game already original")
 
     empty = os.path.join(base, "nessun-gioco")
     os.makedirs(empty)
     d = {}
     check("riapplica senza traduzioni salvate: NULLA_DA_FARE",
-              not automatic.reapply(empty, silent, outcome=d) and outcome_of(d).code == "NULLA_DA_FARE")
+              not automatic.reapply(empty, silent, outcome=d) and outcome_of(d).code == "NOTHING_TO_DO")
 
-    # some of the texts not translated: PARZIALE with the remaining texts to show (test translation memory from
+    # some of the texts not translated: PARTIAL with the remaining texts to show (test translation memory from
     # scratch)
     with open(automatic.find_profile(game), encoding="utf-8") as f:
         os.remove(project.memory_path(json.load(f), test=True))
     real = automatic.create_backend
     automatic.create_backend = lambda name, log=print: HalfTranslator()
     try:
-        _, completed, d = automatic.analyze_and_translate(game, "auto", "it", "finto", silent)
+        _, completed, d = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
     finally:
         automatic.create_backend = real
     e = outcome_of(d)
-    f = outcome.window(e, "traduci")
+    f = outcome.window(e, "translate")
     check("testi rimasti: PARZIALE, scritto, con i primi originali rimasti e 'Mostra i rimasti'",
-              not completed and e.code == "PARZIALE" and e.written and e.remaining > 0
-              and any("antern" in t for t in e.remaining_examples) and ("Show remaining", "mostra_rimasti")
-              in f["pulsanti"] and f["titolo"] == "Translation partially installed"
-              and "left untranslated: %d" % e.remaining in f["testo"])
+              not completed and e.code == "PARTIAL" and e.written and e.remaining > 0
+              and any("antern" in t for t in e.remaining_examples) and ("Show remaining", "show_remaining")
+              in f["buttons"] and f["title"] == "Translation partially installed"
+              and "left untranslated: %d" % e.remaining in f["text"])
     check("testi rimasti: elenco leggibile", "Texts left untranslated: %d" % e.remaining
               in outcome.remaining_text(e) and "- " in outcome.remaining_text(e))
     automatic.restore(game, silent)
@@ -175,22 +175,22 @@ def test_google_blocked(base, game):
     state = project.data_folder("services.json")
     now = time.time()
     with open(state, "w", encoding="utf-8") as f:
-        json.dump({"versione": 1, "google": {"richieste": [], "blocco": {
-            "dal": now - 60, "fino": now + 86400, "livello": 1, "tipo": "a_freddo", "http": 429,
-            "dettaglio": None, "disattivato": False}}}, f)
+        json.dump({"version": 1, "google": {"requests": [], "block": {
+            "since": now - 60, "until": now + 86400, "level": 1, "kind": "cold", "http": 429,
+            "detail": None, "disabled": False}}}, f)
     # the test translator's translation memory (.test.json) does not apply to Google: requests would be needed,
     # which the pause prevents before one is sent
     _, completed, d = automatic.analyze_and_translate(game, "auto", "it", "google", silent)
     e = outcome_of(d)
-    f = outcome.window(e, "traduci", local_ready=False, current="google")
+    f = outcome.window(e, "translate", local_ready=False, current="google")
     check("Google in pausa: TRADUTTORE_BLOCCATO, con il motivo e il traduttore locale da installare",
-              not completed and e and e.code == "TRADUTTORE_BLOCCATO" and "Google" in e.reason
-              and not e.written and ("Install the local translator", "installa_locale") in f["pulsanti"]
-              and f["titolo"] == "Translation interrupted")
-    check("Google in pausa: nessun riferimento alla riga di comando", without_smith(f["testo"] + e.reason))
-    f = outcome.window(e, "traduci", local_ready=True, current="google")
+              not completed and e and e.code == "TRANSLATOR_BLOCKED" and "Google" in e.reason
+              and not e.written and ("Install the local translator", "install_local") in f["buttons"]
+              and f["title"] == "Translation interrupted")
+    check("Google in pausa: nessun riferimento alla riga di comando", without_smith(f["text"] + e.reason))
+    f = outcome.window(e, "translate", local_ready=True, current="google")
     check("... con il traduttore locale installato: 'Usa il traduttore locale'",
-              ("Use the local translator", "usa_locale") in f["pulsanti"])
+              ("Use the local translator", "use_local") in f["buttons"])
     os.remove(state)
     automatic.restore(game, silent)
 
@@ -202,184 +202,184 @@ def test_gamemaker_open(base):
     actual = system.game_open, project.game_open
     system.game_open = project.game_open = lambda c: True
     try:
-        _, completed, d = automatic.analyze_and_translate(game, "auto", "it", "finto", silent)
+        _, completed, d = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
     finally:
         system.game_open, project.game_open = actual
     e = outcome_of(d)
-    f = outcome.window(e, "traduci")
+    f = outcome.window(e, "translate")
     check("GameMaker con il gioco aperto: GIOCO_APERTO, niente scritto, nessun file del gioco cambiato",
-              not completed and e.code == "GIOCO_APERTO" and not e.written and fingerprints(game) == before
-              and "riapplica" in e.actions and f["titolo"] == "The game is open")
+              not completed and e.code == "GAME_OPEN" and not e.written and fingerprints(game) == before
+              and "reapply" in e.actions and f["title"] == "The game is open")
 
     italian = os.path.join(base, "gm-it", "Gioco GM")
     gamemaker_game(italian, italian=True)
     before = fingerprints(italian)
-    path, completed, d = automatic.analyze_and_translate(italian, "auto", "it", "finto", silent)
+    path, completed, d = automatic.analyze_and_translate(italian, "auto", "it", "fake", silent)
     e = outcome_of(d)
     check("GameMaker con l'italiano ufficiale: UFFICIALE (con le righe per la domanda sulla lingua ufficiale), "
-              "nulla toccato", not path and e.code == "UFFICIALE" and e.extra.get("lingua_ufficiale")
-              and e.extra.get("righe") and fingerprints(italian) == before and "Italian" in e.reason)
+              "nulla toccato", not path and e.code == "OFFICIAL" and e.extra.get("official_language")
+              and e.extra.get("lines") and fingerprints(italian) == before and "Italian" in e.reason)
     # if the official language escapes the first check, the search of the GameMaker files finds it
     _, d = automatic._prepare_gamemaker(italian, None, "auto", "it", detection.detect(italian), silent)
     e = outcome_of(d)
-    f = outcome.window(e, "traduci")
-    check("GameMaker, file della lingua di arrivo: UFFICIALE con 'Traduci comunque'", e.code == "UFFICIALE"
-              and ("Translate anyway", "traduci_comunque") in f["pulsanti"] and fingerprints(italian) == before)
+    f = outcome.window(e, "translate")
+    check("GameMaker, file della lingua di arrivo: UFFICIALE con 'Traduci comunque'", e.code == "OFFICIAL"
+              and ("Translate anyway", "translate_anyway") in f["buttons"] and fingerprints(italian) == before)
 
 
 def test_unity_games(base):
-    test_unity.prepare_components(os.path.join(base, "componenti"))
+    test_unity.prepare_components(os.path.join(base, "components"))
     adapter_unity.is_running = lambda *_: False
 
     il2cpp = os.path.join(base, "il2cpp", "Gioco")
     unity_il2cpp_game(il2cpp)
     before = fingerprints(il2cpp)
-    path, _, d = automatic.analyze_and_translate(il2cpp, "auto", "it", "finto", silent)
+    path, _, d = automatic.analyze_and_translate(il2cpp, "auto", "it", "fake", silent)
     e = outcome_of(d)
-    f = outcome.window(e, "traduci")
+    f = outcome.window(e, "translate")
     check("Unity IL2CPP senza tabelle: NON_SUPPORTATO con 'IL2CPP' nel motivo, nulla toccato, 'Crea rapporto'",
-              not path and e.code == "NON_SUPPORTATO" and "IL2CPP" in e.reason and fingerprints(il2cpp) == before
-              and ("Create report", "crea_rapporto") in f["pulsanti"] and "I haven't made any changes" in f["testo"])
+              not path and e.code == "NOT_SUPPORTED" and "IL2CPP" in e.reason and fingerprints(il2cpp) == before
+              and ("Create report", "create_report") in f["buttons"] and "I haven't made any changes" in f["text"])
 
     crc = os.path.join(base, "crc", "Gioco")
     unity_il2cpp_game(crc, tables=True, crc=2737410034)
     before = fingerprints(crc)
-    path, _, d = automatic.analyze_and_translate(crc, "auto", "it", "finto", silent)
+    path, _, d = automatic.analyze_and_translate(crc, "auto", "it", "fake", silent)
     e = outcome_of(d)
     check("Unity Localization con CRC: NON_SUPPORTATO per l'impronta, non 'serve BepInEx 6', nulla toccato",
-              not path and e.code == "NON_SUPPORTATO" and "BepInEx 6" not in e.reason and "CRC" in e.reason
+              not path and e.code == "NOT_SUPPORTED" and "BepInEx 6" not in e.reason and "CRC" in e.reason
               and e.engine == "unity-localization" and fingerprints(crc) == before)
 
     anticheat = os.path.join(base, "anticheat", "Gioco")
     test_unity.create_game(anticheat)
     open(os.path.join(anticheat, "BEService.exe"), "wb").write(b"MZ")
     before = fingerprints(anticheat)
-    path, _, d = automatic.analyze_and_translate(anticheat, "auto", "it", "finto", silent)
+    path, _, d = automatic.analyze_and_translate(anticheat, "auto", "it", "fake", silent)
     e = outcome_of(d)
     check("Unity con anti-cheat: ANTICHEAT, nulla toccato", not path and e.code == "ANTICHEAT"
-              and fingerprints(anticheat) == before and outcome.window(e)["titolo"] == "Game with anti-cheat")
+              and fingerprints(anticheat) == before and outcome.window(e)["title"] == "Game with anti-cheat")
 
     mono = os.path.join(base, "mono", "Gioco")
     test_unity.create_game(mono)
-    path, completed, d = automatic.analyze_and_translate(mono, "auto", "it", "finto", silent)
+    path, completed, d = automatic.analyze_and_translate(mono, "auto", "it", "fake", silent)
     e = outcome_of(d)
-    f = outcome.window(e, "traduci")
+    f = outcome.window(e, "translate")
     check("Unity Mono (prova): OK, XUnity installato, frasi nuove a Google, finestra con ALT+T e 'Frasi nuove'",
               completed and e.code == "OK" and e.written and e.engine == "unity" and e.live == "google"
-              and "ALT+T" in f["testo"] and "New phrases while playing: XUnity, with free Google access" in f["testo"])
+              and "ALT+T" in f["text"] and "New phrases while playing: XUnity, with free Google access" in f["text"])
     with open(path, encoding="utf-8") as fp:
         profile = json.load(fp)
     check("profilo Unity: il traduttore scelto (non piu' 'xunity-google') e le frasi nuove al traduttore di "
-              "PatchSmith", profile.get("backend") == "finto" and profile.get("dal_vivo") == "servizio")
+              "PatchSmith", profile.get("backend") == "fake" and profile.get("live") == "service")
     return mono
 
 
 def test_exceptions():
     cases = [
-        (adapter_unity.UnityError("The game is open: close it and try again.", "GIOCO_APERTO"), "GIOCO_APERTO"),
-        (backend.BackendError(backend.NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=backend.INSTALL_COMMAND),
-         "TRADUTTORE_ASSENTE"),
-        (backend.BackendError("Google is unavailable"), "TRADUTTORE_BLOCCATO"),
-        (PermissionError(13, "Accesso negato", "D:/gioco/file.json"), "PERMESSI"),
-        (system.SysError("I'm having trouble checking if the game is open"), "GIOCO_APERTO"),
-        (RuntimeError("The backup doesn't match"), "ERRORE"),
-        (KeyError("cartella_gioco"), "ERRORE"),
+        (adapter_unity.UnityError("The game is open: close it and try again.", "GAME_OPEN"), "GAME_OPEN"),
+        (backend.BackendError(backend.NOT_INSTALLED, "TRANSLATOR_MISSING", command=backend.INSTALL_COMMAND),
+         "TRANSLATOR_MISSING"),
+        (backend.BackendError("Google is unavailable"), "TRANSLATOR_BLOCKED"),
+        (PermissionError(13, "Accesso negato", "D:/gioco/file.json"), "PERMISSIONS"),
+        (system.SysError("I'm having trouble checking if the game is open"), "GAME_OPEN"),
+        (RuntimeError("The backup doesn't match"), "ERROR"),
+        (KeyError("game_folder"), "ERROR"),
     ]
     codes = [outcome.from_exception(err).code for err, _ in cases]
     check("errori -> esiti: gioco aperto, traduttore assente/fermo, permessi, errori noti e imprevisti",
               codes == [c for _, c in cases])
-    unexpected = outcome.from_exception(KeyError("cartella_gioco"))
-    f = outcome.window(unexpected, "traduci")
+    unexpected = outcome.from_exception(KeyError("game_folder"))
+    f = outcome.window(unexpected, "translate")
     check("errore imprevisto: 'Errore imprevisto (KeyError)' e 'Crea rapporto'",
-              f["titolo"] == "Unexpected error" and "Unexpected error (KeyError)" in f["testo"]
-              and ("Create report", "crea_rapporto") in f["pulsanti"] and f["tipo"] == "errore")
+              f["title"] == "Unexpected error" and "Unexpected error (KeyError)" in f["text"]
+              and ("Create report", "create_report") in f["buttons"] and f["kind"] == "error")
     known_code = outcome.from_exception(RuntimeError("The backup doesn't match"))
-    check("errore noto: il suo messaggio, senza il tipo", not known_code.extra.get("imprevisto")
-              and "RuntimeError" not in outcome.window(known_code)["testo"]
-              and "backup" in outcome.window(known_code)["testo"])
+    check("errore noto: il suo messaggio, senza il tipo", not known_code.extra.get("unexpected")
+              and "RuntimeError" not in outcome.window(known_code)["text"]
+              and "backup" in outcome.window(known_code)["text"])
     absent = outcome.from_exception(cases[1][0])
-    f = outcome.window(absent, "traduci", local_ready=False, current="locale")
+    f = outcome.window(absent, "translate", local_ready=False, current="local")
     check("traduttore locale non installato: 'Installa il traduttore locale', niente comandi",
-              ("Install the local translator", "installa_locale") in f["pulsanti"] and without_smith(f["testo"]))
+              ("Install the local translator", "install_local") in f["buttons"] and without_smith(f["text"]))
     # DeepL without a key with the local translator already installed: "Install" would do nothing, we offer to use it
-    no_key = outcome.from_exception(backend.BackendError("To use DeepL you need your key", "TRADUTTORE_ASSENTE"))
-    f = outcome.window(no_key, "traduci", local_ready=True, current="deepl")
+    no_key = outcome.from_exception(backend.BackendError("To use DeepL you need your key", "TRANSLATOR_MISSING"))
+    f = outcome.window(no_key, "translate", local_ready=True, current="deepl")
     check("traduttore scelto non pronto, locale installato: 'Usa il traduttore locale' (non 'Installa')",
-              ("Use the local translator", "usa_locale") in f["pulsanti"]
-              and not any(a == "installa_locale" for _, a in f["pulsanti"]))
-    f = outcome.window(absent, "traduci", local_ready=True, current="locale")
+              ("Use the local translator", "use_local") in f["buttons"]
+              and not any(a == "install_local" for _, a in f["buttons"]))
+    f = outcome.window(absent, "translate", local_ready=True, current="local")
     check("traduttore locale scelto ma il suo modello manca: resta 'Installa il traduttore locale'",
-              ("Install the local translator", "installa_locale") in f["pulsanti"])
+              ("Install the local translator", "install_local") in f["buttons"])
     # operations that do not touch the game: no "Try again" (it would repeat the last operation on the game) nor advice
     # about the open game or the Program Files folder
     permissions = outcome.from_exception(PermissionError(13, "Accesso negato", "C:/Utente/Desktop/rapporto.zip"))
-    f = outcome.window(permissions, "rapporto")
+    f = outcome.window(permissions, "report")
     check("rapporto non creato: finestra sua, con il motivo, senza 'Riprova' ne' 'Crea rapporto'",
-              f["titolo"] == "Report not created" and "Accesso negato" in f["testo"] and f["tipo"] == "errore"
-              and f["pulsanti"] == [("OK", None)] and "game" not in f["testo"])
-    f = outcome.window(permissions, "installa")
+              f["title"] == "Report not created" and "Accesso negato" in f["text"] and f["kind"] == "error"
+              and f["buttons"] == [("OK", None)] and "game" not in f["text"])
+    f = outcome.window(permissions, "install")
     check("installazione del traduttore locale con file bloccati: senza 'Riprova' e senza consigli sul gioco",
-              not any(a == "chiudi_gioco" for _, a in f["pulsanti"]) and "Program Files" not in f["testo"]
-              and "Accesso negato" in f["testo"])
+              not any(a == "close_game" for _, a in f["buttons"]) and "Program Files" not in f["text"]
+              and "Accesso negato" in f["text"])
 
 
 def test_windows():
     """Every code has its own dialog: its own title, text without command line, valid buttons."""
     titles = {}
     for code in outcome.CODES:
-        e = outcome.Outcome(code, "Motivo di prova.", engine="gamemaker", written=code in ("OK", "PARZIALE"),
-                            translated_items=10, remaining=2 if code == "PARZIALE" else 0,
+        e = outcome.Outcome(code, "Motivo di prova.", engine="gamemaker", written=code in ("OK", "PARTIAL"),
+                            translated_items=10, remaining=2 if code == "PARTIAL" else 0,
                             remaining_examples=["Start", "Quit"], actions=outcome._actions_for(code))
-        f = outcome.window(e, "traduci")
-        titles[code] = f["titolo"]
-        ok = f["testo"] and without_smith(f["testo"]) and f["pulsanti"][0] == ("OK", None) and \
-            all(a is None or a in outcome.ACTIONS for _, a in f["pulsanti"]) and f["tipo"] in (
-                "info", "avviso", "errore")
+        f = outcome.window(e, "translate")
+        titles[code] = f["title"]
+        ok = f["text"] and without_smith(f["text"]) and f["buttons"][0] == ("OK", None) and \
+            all(a is None or a in outcome.ACTIONS for _, a in f["buttons"]) and f["kind"] in (
+                "info", "warning", "error")
         if not ok:
             check("finestra per %s" % code, False)
     check("una finestra per ogni codice, con titoli tutti diversi", len(set(titles.values())) == len(titles))
-    e = outcome.Outcome("PARZIALE", engine="gamemaker", written=True, translated_items=5, remaining=1,
+    e = outcome.Outcome("PARTIAL", engine="gamemaker", written=True, translated_items=5, remaining=1,
                         remaining_examples=["Quit"],
-                        extra={"lingua_aggiunta": {"nome": "italiano", "impostata": True}})
+                        extra={"added_language": {"name": "italiano", "is_set": True}})
     check("GameMaker con lingua aggiunta: la finestra lo dice", "new language for the game" in
-              outcome.window(e)["testo"] and "italiano" in outcome.window(e)["testo"])
+              outcome.window(e)["text"] and "italiano" in outcome.window(e)["text"])
     e = outcome.Outcome("OK", engine="unity-localization", written=True, translated_items=3)
     check("Unity Localization: finestra con 'lascia selezionata la lingua English'",
-              "English" in outcome.window(e)["testo"] and outcome.window(e)["titolo"] == "Translation installed")
+              "English" in outcome.window(e)["text"] and outcome.window(e)["title"] == "Translation installed")
     try:
         outcome.Outcome("INVENTATO")
         check("codice sconosciuto rifiutato", False)
     except ValueError:
         check("codice sconosciuto rifiutato", True)
-    e = outcome.Outcome("PARZIALE", remaining_examples=["t%d" % i for i in range(50)], remaining=50)
+    e = outcome.Outcome("PARTIAL", remaining_examples=["t%d" % i for i in range(50)], remaining=50)
     check("al massimo 20 esempi rimasti; riassunto per il registro", len(e.remaining_examples) == 20
-              and e.summary().startswith("Result: PARZIALE"))
+              and e.summary().startswith("Result: PARTIAL"))
     # revision 0.16: left out of the game only translations the game could not show (rejected while writing):
     # "Fix translations" opens "Not written to the game" and the text names that list, not "Left untranslated"
-    e = outcome.Outcome("PARZIALE", "A translation was not written because the game would not display it well.",
+    e = outcome.Outcome("PARTIAL", "A translation was not written because the game would not display it well.",
                         engine="gamemaker", written=True, translated_items=24, remaining=1,
-                        remaining_examples=["VULTURE TOKEN"], actions=[], extra={"scartate": 1})
+                        remaining_examples=["VULTURE TOKEN"], actions=[], extra={"discarded": 1})
     f = outcome.window(e)
     check("solo traduzioni scartate dal gioco: 'Correggi traduzioni' su 'Non scritte nel gioco', e il testo lo dice",
-              outcome.fixes_filter(e) == "gioco" and ("Fix translations", "correggi") in f["pulsanti"]
-              and "\"Not written to the game\"" in f["testo"] and "\"Left untranslated\"" not in f["testo"])
-    e = outcome.Outcome("PARZIALE", engine="gamemaker", written=True, translated_items=20, remaining=3,
-                        remaining_examples=["A", "B"], actions=["usa_locale"], extra={"scartate": 1, "ritentati": 1})
-    f = outcome.window(e, "riapplica", local_ready=True, current="locale")
+              outcome.fixes_filter(e) == "game" and ("Fix translations", "fix") in f["buttons"]
+              and "\"Not written to the game\"" in f["text"] and "\"Left untranslated\"" not in f["text"])
+    e = outcome.Outcome("PARTIAL", engine="gamemaker", written=True, translated_items=20, remaining=3,
+                        remaining_examples=["A", "B"], actions=["use_local"], extra={"discarded": 1, "retried": 1})
+    f = outcome.window(e, "reapply", local_ready=True, current="local")
     check("testi rimasti e traduzioni scartate dal gioco: 'Rimasti in originale', e il testo nomina anche l'altro "
-              "elenco; un testo riprovato al singolare", outcome.fixes_filter(e) == "rimasti"
-              and "Not written to the game" in f["testo"]
-              and "One text rejected by the checks has already been retried" in f["testo"])
+              "elenco; un testo riprovato al singolare", outcome.fixes_filter(e) == "remaining"
+              and "Not written to the game" in f["text"]
+              and "One text rejected by the checks has already been retried" in f["text"])
 
 
 def test_report(base, mono):
     """Create report: the useful files are there, DeepL key and email are not (not even if they ended up in a log)."""
     key, email = "chiave-segreta-1234567:fx", "giocatore.segreto@example.com"
     with open(project.data_folder("settings.json"), "w", encoding="utf-8") as f:
-        json.dump({"versione": 2, "backend": "deepl", "chiave_deepl": key, "email_mymemory": email,
-                   "tema": "auto", "cartella": mono}, f)
+        json.dump({"version": 2, "backend": "deepl", "deepl_key": key, "email_mymemory": email,
+                   "theme": "auto", "folder": mono}, f)
     with open(project.data_folder("services.json"), "w", encoding="utf-8") as f:
-        json.dump({"versione": 1, "google": {"richieste": []}}, f)
+        json.dump({"version": 1, "google": {"requests": []}}, f)
     logs = project.data_folder("logs")
     os.makedirs(logs, exist_ok=True)
     name = os.path.splitext(os.path.basename(automatic.find_profile(mono)))[0]
@@ -391,8 +391,8 @@ def test_report(base, mono):
         text_problems = project.problems_path(json.load(f))  # the texts left untranslated, with the reason
     os.makedirs(os.path.dirname(text_problems), exist_ok=True)
     with open(text_problems, "w", encoding="utf-8") as f:
-        json.dump({"Quit": {"motivo": "rejected by the checks (not translated)", "dove": "traduzione",
-                            "tentativi": 2}}, f)
+        json.dump({"Quit": {"reason": "rejected by the checks (not translated)", "where": "translation",
+                            "attempts": 2}}, f)
     # logs of the game, of BepInEx and of Unity (company and product from app.info), crashes, live translator
     open(os.path.join(mono, "BepInEx", "LogOutput.log"), "w", encoding="utf-8").write(
         "[Message:   BepInEx] Chainloader startup complete\n")
@@ -415,7 +415,7 @@ def test_report(base, mono):
     ollama.folder = lambda: work  # never the real logs of the local translator
     dest_lang = os.path.join(base, "Desktop")
     try:
-        last = outcome.Outcome("PARZIALE", "Motivo", engine="unity", written=True, remaining=1,
+        last = outcome.Outcome("PARTIAL", "Motivo", engine="unity", written=True, remaining=1,
                                remaining_examples=["Quit"])
         zip_ = report.create(mono, dest_lang, outcome=last)
         zip2 = report.create("", dest_lang)
@@ -440,9 +440,9 @@ def test_report(base, mono):
                                                                                        os.path.basename(log_file)])
     prefs = json.loads(content["settings.json"])
     check("rapporto: impostazioni senza chiave_deepl ed email, il resto c'e'",
-              "chiave_deepl" not in prefs and "email_mymemory" not in prefs and prefs.get("backend") == "deepl")
+              "deepl_key" not in prefs and "email_mymemory" not in prefs and prefs.get("backend") == "deepl")
     check("rapporto: versione e ultimo esito nel riepilogo, crash piu' recente, fine del registro lungo",
-              __version__ in content["riepilogo.txt"] and "PARZIALE" in content["riepilogo.txt"]
+              __version__ in content["riepilogo.txt"] and "PARTIAL" in content["riepilogo.txt"]
               and content["unity/crash-Crash_nuovo-Player.log"] == "crash nuovo"
               and "traduzione interrotta" in content["traduttore-locale/servizio-xunity.log"]
               and len(content["traduttore-locale/servizio-xunity.log"]) < report.MAX_BYTES + 200)
@@ -479,19 +479,19 @@ def test_live(mono):
         f.write(original)
     os.remove(service)
     results.append(adapter_unity.live_translator(os.path.dirname(mono)))  # folder without XUnity
-    e = outcome.Outcome("OK", engine="unity", written=True, translated_items=5, live="locale")
+    e = outcome.Outcome("OK", engine="unity", written=True, translated_items=5, live="local")
     check("frasi nuove mentre giochi: Google, traduttore di PatchSmith, nessuno (e None senza XUnity)%s" % (
-        "" if results == ["google", "servizio", "nessuno", None] else ": %s" % results),
-              results == ["google", "servizio", "nessuno", None]
+        "" if results == ["google", "service", "none", None] else ": %s" % results),
+              results == ["google", "service", "none", None]
               and "New phrases while playing: PatchSmith, with the local translator (on your PC)."
-              in outcome.window(e)["testo"])
-    e = outcome.Outcome("OK", engine="unity", written=True, translated_items=5, live="nessuno",
-                        actions=["installa_locale"], extra={"dal_vivo_nota": "senza_traduttore"})
+              in outcome.window(e)["text"])
+    e = outcome.Outcome("OK", engine="unity", written=True, translated_items=5, live="none",
+                        actions=["install_local"], extra={"live_note": "no_translator"})
     f = outcome.window(e, local_ready=False, current="google")
     check("frasi nuove senza traduttore: la finestra lo spiega e propone 'Installa il traduttore locale'",
-              "New phrases while playing: none" in f["testo"]
-              and outcome.LIVE_NOTES["senza_traduttore"] in f["testo"]
-              and ("Install the local translator", "installa_locale") in f["pulsanti"])
+              "New phrases while playing: none" in f["text"]
+              and outcome.LIVE_NOTES["no_translator"] in f["text"]
+              and ("Install the local translator", "install_local") in f["buttons"])
 
 
 def test_command_line(base):
@@ -501,13 +501,13 @@ def test_command_line(base):
     real = automatic.analyze_and_translate
 
     def without_local(*_a, **_k):
-        raise backend.BackendError(backend.NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=backend.INSTALL_COMMAND)
+        raise backend.BackendError(backend.NOT_INSTALLED, "TRANSLATOR_MISSING", command=backend.INSTALL_COMMAND)
 
     automatic.analyze_and_translate = without_local
     output = io.StringIO()
     try:
         with contextlib.redirect_stdout(output):
-            code = cli.main(["auto", base, "--backend", "finto"])
+            code = cli.main(["auto", base, "--backend", "fake"])
     finally:
         automatic.analyze_and_translate = real
     text = output.getvalue()
@@ -517,9 +517,9 @@ def test_command_line(base):
     state = project.data_folder("services.json")
     now = time.time()
     with open(state, "w", encoding="utf-8") as f:
-        json.dump({"versione": 1, "google": {"richieste": [], "blocco": {
-            "dal": now - 60, "fino": now + 86400, "livello": 3, "tipo": "a_freddo", "http": 429,
-            "dettaglio": None, "disattivato": True}}}, f)
+        json.dump({"version": 1, "google": {"requests": [], "block": {
+            "since": now - 60, "until": now + 86400, "level": 3, "kind": "cold", "http": 429,
+            "detail": None, "disabled": True}}}, f)
     output = io.StringIO()
     try:
         with contextlib.redirect_stdout(output):
@@ -537,7 +537,7 @@ def test_corrupted_profiles(base):
     block the search for the game profile (nor the interface, which does it before every operation)."""
     broken = os.path.join(automatic.profiles_folder(), "rotto.json")
     with open(broken, "w", encoding="utf-8") as f:
-        json.dump(["non", "un", "profilo"], f)
+        json.dump(["non", "un", "profile"], f)
     try:
         names = [os.path.basename(p) for p, _ in automatic.list_profiles()]
         located = automatic.find_profile(os.path.join(base, "web", "Lantern Keeper"))
@@ -551,7 +551,7 @@ def test_corrupted_profiles(base):
 
 def test_ui_texts():
     """No text that reaches the interface refers to the command line: 'smith.py' only in cli.py, in the path of the
-    service for XUnity and in the commands reserved for the command line (attribute 'comando')."""
+    service for XUnity and in the commands reserved for the command line (attribute 'command')."""
     folder = os.path.join(os.path.dirname(HERE), "patchsmith")
     found = []
     for name in sorted(os.listdir(folder)):
@@ -586,7 +586,7 @@ def main(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
     # PatchSmith's data, the user folder and %TEMP% in the test folder (even when run on its own)
-    project.DATA_ROOT = os.path.join(base, "dati")
+    project.DATA_ROOT = os.path.join(base, "data_folder")
     automatic.PROFILES_FOLDER = None
     for d in ("profiles", "memory"):
         os.makedirs(os.path.join(project.DATA_ROOT, d))

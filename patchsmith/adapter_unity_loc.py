@@ -103,7 +103,7 @@ def _content_language(path_or_data):
         try:
             s = unityfs.SerializedFile(bundle.file[name])
             for o in s.objects:
-                tree = s.kinds[o.kind]["albero"]
+                tree = s.kinds[o.kind]["tree"]
                 if tree is None or not {"m_TableData", "m_LocaleId"} <= {f.name for f in tree.children}:
                     continue
                 code, texts = _table_texts(s, o)
@@ -268,13 +268,13 @@ def _record_bin(catalog_bytes, bundle_name):
 
 def bundle_crc(bundle_path, read_from=None):
     """(stato, catalogo): how the Addressables catalog checks this bundle (read only).
-    'assente': no catalog; 'binario': catalog.bin in which the bundle cannot be found with certainty; 'controllato':
-    its CRC is not 0 (it must be removed from the catalog to rewrite the bundle); 'libero': CRC 0; 'sconosciuto': the
+    'absent': no catalog; 'binary': catalog.bin in which the bundle cannot be found with certainty; 'checked':
+    its CRC is not 0 (it must be removed from the catalog to rewrite the bundle); 'unlocked': CRC 0; 'unknown': the
     catalog cannot be read or does not name the bundle. read_from: another file to read the catalog from (e.g. its
     backup)."""
     catalog = catalog_of(bundle_path)
     if catalog is None:
-        return "assente", None
+        return "absent", None
     if catalog.lower().endswith(".bin"):
         try:
             with open(read_from or catalog, "rb") as f:
@@ -283,19 +283,19 @@ def bundle_crc(bundle_path, read_from=None):
         except (OSError, ValueError, struct.error):
             positions = None
         if not positions:
-            return "binario", catalog
+            return "binary", catalog
         crc = [struct.unpack_from("<I", byte, p)[0] for p in positions]
-        return ("controllato" if any(crc) else "libero"), catalog
+        return ("checked" if any(crc) else "unlocked"), catalog
     try:
         with open(read_from or catalog, "rb") as f:
             byte = f.read()
         extra, matches = _opts(byte, [os.path.basename(bundle_path)])
     except (OSError, ValueError, KeyError, TypeError, IndexError, struct.error):
-        return "sconosciuto", catalog
+        return "unknown", catalog
     if not matches:
-        return "sconosciuto", catalog
+        return "unknown", catalog
     crc = [_crc(extra[a:b].decode(cod)) for _, a, b, cod in matches]
-    return ("controllato" if any(crc) else "libero"), catalog
+    return ("checked" if any(crc) else "unlocked"), catalog
 
 
 def remove_crc(catalog_bytes, bundle_names):
@@ -386,7 +386,7 @@ class TablesFile:
                 continue
             self.serialized[name] = s
             for o in s.objects:
-                tree = s.kinds[o.kind]["albero"]
+                tree = s.kinds[o.kind]["tree"]
                 if tree is None or not any(f.name == "m_TableData" for f in tree.children):
                     continue
                 d = s.object_data(o)
@@ -407,7 +407,7 @@ class TablesFile:
         return list(self._units)
 
     def serialize(self, translations):
-        """The bundle with the translated texts ({posizione: testo}), not compressed."""
+        """The bundle with the translated texts ({posizione: text}), not compressed."""
         by_file = {}
         for (name, path_id, start, end), text in translations.items():
             by_file.setdefault(name, {}).setdefault(path_id, {})[(start, end)] = text

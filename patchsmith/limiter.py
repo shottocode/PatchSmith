@@ -8,8 +8,8 @@ make it longer.
 The state is in services.json among the user's data (project.data_folder: normally next to the program;
 atomic write, with a lock so that the interface, the command line and the translator started by Unity games
 (xunity_service) count the same requests and respect the same pauses):
-{"versione": 1, "google": {"richieste": [[time, characters], ...], "ultimo_ok": time, "ok_totali": n,
-                           "blocco": {"dal", "fino", "livello", "tipo", "http", "disattivato"}}}
+{"version": 1, "google": {"requests": [[time, characters], ...], "last_ok": time, "ok_total": n,
+                           "block": {"since", "until", "level", "kind", "http", "disabled"}}}
 """
 import datetime
 import json
@@ -17,23 +17,23 @@ import os
 import random
 import time
 
-from . import interruption
+from . import interruption, legacy
 
 MINUTE, HOUR, DAY = 60, 3600, 86400
 
 # per service: minimum pause between the start of two requests (+ random variation) and windows
 # (duration in seconds, maximum requests, maximum characters)
 RULES = {
-    "google": {"pausa": 4.0, "variazione": 2.0,
-               "finestre": ((MINUTE, 8, 32_000), (10 * MINUTE, 30, 120_000), (HOUR, 60, 240_000),
+    "google": {"pause": 4.0, "variation": 2.0,
+               "windows": ((MINUTE, 8, 32_000), (10 * MINUTE, 30, 120_000), (HOUR, 60, 240_000),
                             (DAY, 300, 1_000_000))},
-    "deepl": {"pausa": 0.5, "variazione": 0.0, "finestre": ()},
-    "mymemory": {"pausa": 1.0, "variazione": 0.5, "finestre": ((MINUTE, 50, None),)},
+    "deepl": {"pause": 0.5, "variation": 0.0, "windows": ()},
+    "mymemory": {"pause": 1.0, "variation": 0.5, "windows": ((MINUTE, 50, None),)},
 }
 # waits after a block: "a freddo" (cold) = the very first request was rejected (not a limit exceeded, access is
 # refused: no point retrying soon); "dopo traffico" (after traffic) = after successful requests (a rate limit)
-WAITS = {"a_freddo": (DAY, 3 * DAY, 7 * DAY), "dopo_traffico": (HOUR, 6 * HOUR, DAY, 3 * DAY)}
-MAX_FUTURE = 8 * DAY  # a farther "fino" (wrong clock, damaged file) is reduced
+WAITS = {"cold": (DAY, 3 * DAY, 7 * DAY), "after_traffic": (HOUR, 6 * HOUR, DAY, 3 * DAY)}
+MAX_FUTURE = 8 * DAY  # a farther "until" (wrong clock, damaged file) is reduced
 FORGET_AFTER = 7 * DAY  # a week without blocks: start again from the first level
 OK_TO_RESET = 10
 NAMES = {"google": "Google", "deepl": "DeepL", "mymemory": "MyMemory"}
@@ -101,7 +101,7 @@ class Limiter:
     def __init__(self, service, log=print, path=None, current_time=time.time, sleep=None, rng=random.random):
         self._corrected = False
         self.service = service
-        self.rules = RULES.get(service, {"pausa": 1.0, "variazione": 0.0, "finestre": ()})
+        self.rules = RULES.get(service, {"pause": 1.0, "variation": 0.0, "windows": ()})
         self.log = log
         self.path = path or state_path()
         self.current_time = current_time
@@ -118,13 +118,13 @@ class Limiter:
             return self._in_memory
         try:
             with open(self.path, encoding="utf-8") as f:
-                data = json.load(f)
-            return data if isinstance(data, dict) else {"versione": 1}
+                data = legacy.load(f)
+            return data if isinstance(data, dict) else {"version": 1}
         except FileNotFoundError:
-            return {"versione": 1}
+            return {"version": 1}
         except (OSError, ValueError):
             self._warning("  ! Translator status unreadable (%s): starting from scratch." % self.path)
-            return {"versione": 1}
+            return {"version": 1}
 
     def _write(self, data):
         if self._in_memory is not None:
@@ -153,20 +153,20 @@ class Limiter:
         s = data.setdefault(self.service, {})
         if not isinstance(s, dict):
             s = data[self.service] = {}
-        s["richieste"] = [r for r in s.get("richieste", []) if isinstance(r, list) and len(r) == 2
+        s["requests"] = [r for r in s.get("requests", []) if isinstance(r, list) and len(r) == 2
                           and 0 <= now - r[0] < DAY]
-        block = s.get("blocco")
+        block = s.get("block")
         if isinstance(block, dict):
-            if block.get("dal", now) > now or (block.get("fino") and block["fino"] - now > MAX_FUTURE):
+            if block.get("since", now) > now or (block.get("until") and block["until"] - now > MAX_FUTURE):
                 # recorded with the clock ahead (or damaged file): restart from now, only once
-                duration = max(0, block.get("fino", now) - block.get("dal", now))
-                block["dal"] = now
-                block["fino"] = now + min(duration, MAX_FUTURE)
+                duration = max(0, block.get("until", now) - block.get("since", now))
+                block["since"] = now
+                block["until"] = now + min(duration, MAX_FUTURE)
                 self._corrected = True
-            if not block.get("disattivato") and now - block.get("fino", now) > FORGET_AFTER:
-                s.pop("blocco")  # a week without blocks after the end of the last one: start over
+            if not block.get("disabled") and now - block.get("until", now) > FORGET_AFTER:
+                s.pop("block")  # a week without blocks after the end of the last one: start over
         else:
-            s.pop("blocco", None)
+            s.pop("block", None)
         return s
 
     # --- queries ----------------------------------------------------------------------------------
@@ -184,50 +184,50 @@ class Limiter:
 
     def current_block(self):
         s, now = self._corrected_state()
-        block = s.get("blocco")
-        return block if block and (block.get("disattivato") or now < block.get("fino", 0)) else None
+        block = s.get("block")
+        return block if block and (block.get("disabled") or now < block.get("until", 0)) else None
 
     def pause(self):
         """None if the service can be used, otherwise the message saying until when it is paused."""
         s, now = self._corrected_state()
-        block = s.get("blocco")
+        block = s.get("block")
         if not block:
             return None
-        if block.get("disattivato"):
+        if block.get("disabled"):
             return ("%s is disabled after repeated rejections (last %s): use the local translator (no limits and no "
                     "blocks) or another translator, or reactivate it with the 'Reactivate' button next to the "
                     "translator."
-                    % (NAMES.get(self.service, self.service), when(block.get("dal", now))))
-        if now < block.get("fino", 0) and block.get("tipo") == "quota":
+                    % (NAMES.get(self.service, self.service), when(block.get("since", now))))
+        if now < block.get("until", 0) and block.get("kind") == "quota":
             return "%s: %s, resumes %s." % (NAMES.get(self.service, self.service),
-                                                block.get("dettaglio") or "quota reached", when(block["fino"]))
-        if now < block.get("fino", 0):
+                                                block.get("detail") or "quota reached", when(block["until"]))
+        if now < block.get("until", 0):
             return ("%s is paused until %s (block received %s): PatchSmith won't send requests before then, so as not "
-                    "to extend it." % (NAMES.get(self.service, self.service), when(block["fino"]),
-                                     when(block.get("dal", now))))
+                    "to extend it." % (NAMES.get(self.service, self.service), when(block["until"]),
+                                     when(block.get("since", now))))
         return None
 
     def short_status(self):
-        """'in pausa fino alle 05:58 di domani', 'disattivato' or '' (for the interface)."""
+        """'in pausa fino alle 05:58 di domani', 'disabled' or '' (for the interface)."""
         try:
             s, now = self._corrected_state()
-            block = s.get("blocco")
+            block = s.get("block")
         except (OSError, ValueError, TypeError, AttributeError):
             return ""
         if not block:
             return ""
-        if block.get("disattivato"):
+        if block.get("disabled"):
             return "disabled after repeated rejections"
-        if now < block.get("fino", 0):
-            return "paused, resumes %s" % when(block["fino"])
+        if now < block.get("until", 0):
+            return "paused, resumes %s" % when(block["until"])
         return ""
 
     def _wait(self, s, chars, now):
-        requests = s["richieste"]
+        requests = s["requests"]
         wait = 0.0
         if requests:
-            wait = requests[-1][0] + self.rules["pausa"] + s.get("variazione", 0.0) - now
-        for duration, max_n, max_c in self.rules["finestre"]:
+            wait = requests[-1][0] + self.rules["pause"] + s.get("variation", 0.0) - now
+        for duration, max_n, max_c in self.rules["windows"]:
             inside = [r for r in requests if now - r[0] < duration]
             while inside and (len(inside) + 1 > max_n or
                               (max_c is not None and sum(c for _, c in inside) + chars > max_c)):
@@ -249,8 +249,8 @@ class Limiter:
                 s = self._own_state(data, now)
                 wait = self._wait(s, chars, now)
                 if wait <= 0:
-                    s["richieste"].append([now, chars])
-                    s["variazione"] = round(self.rng() * self.rules["variazione"], 3)
+                    s["requests"].append([now, chars])
+                    s["variation"] = round(self.rng() * self.rules["variation"], 3)
                     self._write(data)
                     return
             if wait > 15 and self.log:
@@ -264,43 +264,43 @@ class Limiter:
             data = self._read()
             now = self.current_time()
             s = self._own_state(data, now)
-            s["ultimo_ok"] = now
-            s["ok_totali"] = s.get("ok_totali", 0) + 1
-            if s["ok_totali"] >= OK_TO_RESET and s.get("blocco") and now >= s["blocco"].get("fino", 0):
-                s.pop("blocco")  # reliable again: the next blocks start again from the first level
+            s["last_ok"] = now
+            s["ok_total"] = s.get("ok_total", 0) + 1
+            if s["ok_total"] >= OK_TO_RESET and s.get("block") and now >= s["block"].get("until", 0):
+                s.pop("block")  # reliable again: the next blocks start again from the first level
             self.session_ok += 1
             self._write(data)
 
     def blocked(self, http=None, detail=None, now=None, until=None, extra=None):
-        """Records a block and returns the message for the user. 'fino': pause until that exact time (e.g.
+        """Records a block and returns the message for the user. 'until': pause until that exact time (e.g.
         daily quota used up), without levels."""
         with _Lock(self.path):
             data = self._read()
             now = self.current_time() if now is None else now
             s = self._own_state(data, now)
             if until is not None:
-                s["blocco"] = dict({"dal": now, "fino": min(until, now + MAX_FUTURE), "livello": 0,
-                                    "tipo": "quota", "http": http, "dettaglio": detail, "disattivato": False},
+                s["block"] = dict({"since": now, "until": min(until, now + MAX_FUTURE), "level": 0,
+                                    "kind": "quota", "http": http, "detail": detail, "disabled": False},
                                    **(extra or {}))
                 self._write(data)
                 return "%s paused until %s (%s)." % (NAMES.get(self.service, self.service), when(until), detail)
-            most_recent = s.get("ultimo_ok") and now - s["ultimo_ok"] < DAY
-            successes_24h = s.get("ok_totali", 0)
-            kind = "dopo_traffico" if (self.session_ok or most_recent) else "a_freddo"
-            previous = s.get("blocco") or {}
-            level = previous.get("livello", 0) + 1 if previous.get("tipo") == kind else 1
+            most_recent = s.get("last_ok") and now - s["last_ok"] < DAY
+            successes_24h = s.get("ok_total", 0)
+            kind = "after_traffic" if (self.session_ok or most_recent) else "cold"
+            previous = s.get("block") or {}
+            level = previous.get("level", 0) + 1 if previous.get("kind") == kind else 1
             expectations = WAITS[kind]
-            disabled = kind == "a_freddo" and level > len(expectations)
+            disabled = kind == "cold" and level > len(expectations)
             until = now + expectations[min(level, len(expectations)) - 1]
-            s["blocco"] = {"dal": now, "fino": until, "livello": level, "tipo": kind, "http": http,
-                           "dettaglio": detail, "disattivato": disabled}
-            s["ok_totali"] = 0
+            s["block"] = {"since": now, "until": until, "level": level, "kind": kind, "http": http,
+                           "detail": detail, "disabled": disabled}
+            s["ok_total"] = 0
             self._write(data)
         name = NAMES.get(self.service, self.service)
         if disabled:
             return ("%s rejected the requests again: disabling it until you reactivate it ('Reactivate' button next to "
                     "the translator). %s" % (name, LOCAL_ADVICE))
-        if kind == "a_freddo":
+        if kind == "cold":
             return ("%s rejected the first request: it's not an exceeded limit, %s doesn't accept automatic requests "
                     "from this program (this happens to many). Retrying right away won't help and could extend the "
                     "block: PatchSmith won't retry before %s. The translations done stay saved. To continue right "
@@ -317,8 +317,8 @@ class Limiter:
         with _Lock(self.path):
             data = self._read()
             s = self._own_state(data, self.current_time())
-            s.pop("blocco", None)
-            s["ok_totali"] = 0
+            s.pop("block", None)
+            s["ok_total"] = 0
             self._write(data)
 
     def estimate(self, chars_per_request, response_duration=1.5):
@@ -326,11 +326,11 @@ class Limiter:
         data = self._read()
         clock = [self.current_time()]
         s = self._own_state(json.loads(json.dumps(data)), clock[0])
-        s["variazione"] = self.rules["variazione"] / 2
+        s["variation"] = self.rules["variation"] / 2
         start = clock[0]
         for chars in chars_per_request:
             clock[0] += self._wait(s, chars, clock[0])
-            s["richieste"].append([clock[0], chars])
+            s["requests"].append([clock[0], chars])
             clock[0] += response_duration
         return clock[0] - start
 

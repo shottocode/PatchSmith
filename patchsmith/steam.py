@@ -151,7 +151,7 @@ def _path_keys(p):
 
 
 def game_installed(game_folder, steam=None):
-    """If the folder is a game installed by Steam: {'appid', 'nome', 'manifesto', 'lingua'}; otherwise None."""
+    """If the folder is a game installed by Steam: {'appid', 'name', 'manifest', 'language'}; otherwise None."""
     game = _path_keys(game_folder)
     for library in libraries(steam):
         app = os.path.join(library, "steamapps")
@@ -175,9 +175,9 @@ def game_installed(game_folder, steam=None):
             if any(g == d or g.startswith(d + os.sep) for g in game for d in _path_keys(folder)):
                 user = state.get("UserConfig") or {}
                 mounted_config = state.get("MountedConfig") or {}
-                return {"appid": state.get("appid"), "nome": state.get("name"), "manifesto": path,
-                        "cartella": os.path.normcase(os.path.abspath(folder)),
-                        "lingua": user.get("language") or mounted_config.get("language")}
+                return {"appid": state.get("appid"), "name": state.get("name"), "manifest": path,
+                        "folder": os.path.normcase(os.path.abspath(folder)),
+                        "language": user.get("language") or mounted_config.get("language")}
     return None
 
 
@@ -193,7 +193,7 @@ def is_running():
 # --- appinfo.vdf (binary) -----------------------------------------------------------------------
 
 _V27, _V28, _V29 = 0x07564427, 0x07564428, 0x07564429
-_CACHE = {}  # only one cache read: {'identita': (path, mtime, size), 'valore': (...)}
+_CACHE = {}  # only one cache read: {'identity': (path, mtime, size), 'value': (...)}
 
 
 def _binary_kv(data, pos, keys, depth=0):
@@ -281,8 +281,8 @@ def _appinfo(steam=None):
     try:
         st = os.stat(path)
         identity = (os.path.normcase(os.path.abspath(path)), st.st_mtime_ns, st.st_size)
-        if _CACHE.get("identita") == identity:
-            return _CACHE["valore"]
+        if _CACHE.get("identity") == identity:
+            return _CACHE["value"]
         with open(path, "rb") as f:
             data = f.read()
     except OSError:
@@ -294,8 +294,8 @@ def _appinfo(steam=None):
     except (struct.error, IndexError, ValueError, OverflowError) as e:
         raise SteamError("appinfo.vdf is unreadable (%s)" % e) from e
     _CACHE.clear()
-    _CACHE.update(identita=identity, valore=(data, keys, record, {}))
-    return _CACHE["valore"]
+    _CACHE.update(identity=identity, value=(data, keys, record, {}))
+    return _CACHE["value"]
 
 
 def _record_info(cache, app):
@@ -379,7 +379,7 @@ def identify_from_executables(game_folder, steam=None):
     """Game NOT installed by Steam but known to Steam: compares the folder's executables with the launch paths
     of the games in the Steam cache (config/launch/*/executable), ignoring case.
     Cautious: no installers or generic names, an executable launched by several games does not count, no
-    winner on a tie. {'appid', 'nome', 'eseguibile', 'installdir', 'cartella_simile'} or None."""
+    winner on a tie. {'appid', 'name', 'executable', 'installdir', 'similar_folder'} or None."""
     executables = _folder_executables(game_folder)
     if not executables:
         return None
@@ -449,9 +449,9 @@ def identify_from_executables(game_folder, steam=None):
         return None  # tie: better not to guess
     app, paths = ranking[0]
     app_name, installdir = descriptions[app]
-    return {"appid": str(app), "nome": app_name or None, "eseguibile": sorted(paths)[0],
+    return {"appid": str(app), "name": app_name or None, "executable": sorted(paths)[0],
             "installdir": installdir if isinstance(installdir, str) else None,
-            "cartella_simile": similar_names(base, installdir) or similar_names(base, app_name)}
+            "similar_folder": similar_names(base, installdir) or similar_names(base, app_name)}
 
 
 # --- languages ------------------------------------------------------------------------------------

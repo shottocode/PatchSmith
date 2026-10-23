@@ -21,7 +21,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -108,11 +108,11 @@ def main(base):
         '\t"UserConfig"\n\t{\n\t\t"language"\t\t"english"\n\t}\n}\n')
     info = steam.game_installed(os.path.join(steam_game, "bin"))
     check("gioco installato riconosciuto (anche da una sottocartella)", info and info["appid"] == "100"
-              and info["lingua"] == "english")
+              and info["language"] == "english")
     r = official_language.detect(steam_game, "it")
     lines = official_language.message(r, "it")
     check("Steam: italiano ufficiale e selezionabile -> istruzioni per il menu Lingua di Steam",
-              r["presente"] and r["selezionabile_steam"] and any("General > Language" in x for x in lines))
+              r["present"] and r["steam_selectable"] and any("General > Language" in x for x in lines))
 
     # --- folder outside Steam, recognized by the executable (the demo does not count)
     outside = os.path.join(base, "Fuori")
@@ -122,7 +122,7 @@ def main(base):
     check("gioco fuori da Steam riconosciuto dall'eseguibile, non la demo", known and known["appid"] == "300")
     r = official_language.detect(outside, "it")
     check("fuori da Steam: italiano ufficiale segnalato, senza istruzioni Steam per la cartella",
-              r["presente"] and r["steam"] is None and
+              r["present"] and r["steam"] is None and
               any("isn't a Steam installation" in x for x in official_language.message(r, "it")))
 
     # --- Unreal: game with Italian, setting and restore in GameUserSettings.ini
@@ -154,8 +154,8 @@ def main(base):
     open(gus, "wb").write(original_gus)
     import patchsmith.system as system
     system.game_open = lambda c: False
-    path, outcome = automatic.prepare(ue, "auto", "it", "finto", silent)
-    check("Unreal: niente traduzione automatica, lingua impostata", path is None and outcome.get("lingua_ufficiale")
+    path, outcome = automatic.prepare(ue, "auto", "it", "fake", silent)
+    check("Unreal: niente traduzione automatica, lingua impostata", path is None and outcome.get("official_language")
               and b"Language=it-IT" in open(gus, "rb").read() and official_language.is_set(ue))
     check("Unreal: messaggio con quello che e' stato fatto",
               any("I have set" in x for x in outcome.get("lingua_ufficiale_righe", [])))

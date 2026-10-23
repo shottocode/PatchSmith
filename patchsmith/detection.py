@@ -116,7 +116,7 @@ def _sequences(tree, limit=256):
 def _keys(rx):
     """Necessary conditions for rx.search() to find something in an ASCII path without newlines.
 
-    Set of pairs ("fine", s) / ("contiene", s), with s in lowercase: if the regex finds something,
+    Set of pairs ("end", s) / ("contains", s), with s in lowercase: if the regex finds something,
     at least one is true for the lowercased path. None if they cannot be deduced: a regex to always try.
     """
     if _re_parser is None or rx.flags & re.MULTILINE:
@@ -134,7 +134,7 @@ def _keys(rx):
                     break
                 tail = chr(av).lower() + tail
             if tail:
-                keys.add(("fine", tail[-KEY_LENGTH:]))
+                keys.add(("end", tail[-KEY_LENGTH:]))
                 continue
         stretch = best = ""  # otherwise the longest literal stretch
         for op, av in seq:
@@ -142,7 +142,7 @@ def _keys(rx):
             best = max(best, stretch, key=len)
         if not best:
             return None
-        keys.add(("contiene", best))
+        keys.add(("contains", best))
     # The weakest condition is enough: "fine x.dll" makes "fine /x.dll" redundant.
     return {a for a in keys if not any(b != a and _implies(a, b) for b in keys)}
 
@@ -150,8 +150,8 @@ def _keys(rx):
 def _implies(a, b):
     """True if every path that satisfies key a also satisfies key b."""
     (kind_a, text_a), (kind_b, text_b) = a, b
-    if kind_b == "fine":
-        return kind_a == "fine" and text_a.endswith(text_b)
+    if kind_b == "end":
+        return kind_a == "end" and text_a.endswith(text_b)
     return text_b in text_a
 
 
@@ -168,7 +168,7 @@ def _index(expressions):
             always.append(i)
             continue
         for kind, text in keys:
-            (by_ending if kind == "fine" else by_content).setdefault(text, []).append(i)
+            (by_ending if kind == "end" else by_content).setdefault(text, []).append(i)
     lengths = sorted({len(t) for t in by_ending})
     contents = list(by_content.items())
     filter_ = re.compile("|".join(map(re.escape, by_content))) if by_content else None
@@ -296,16 +296,16 @@ def detect(folder):
     """Returns a dictionary with results, web frameworks, web roots and recommendations."""
     rules = load_rules()
     items, truncated = list_files(folder)
-    results = {}  # (sezione, nome) -> {"punteggio", "evidenze"}
+    results = {}  # (sezione, nome) -> {"score", "evidence"}
 
     def _add(section, name, evidence, weight, from_rule=False):
-        r = results.setdefault((section, name), {"punteggio": 0, "evidenze": [], "da_regole": 0})
+        r = results.setdefault((section, name), {"score": 0, "evidence": [], "from_rules": 0})
         if from_rule:
-            weight = max(0, min(weight, MAX_RULE_POINTS - r["da_regole"]))
-            r["da_regole"] += weight
-        r["punteggio"] += weight
-        if len(r["evidenze"]) < 4 and evidence not in r["evidenze"]:
-            r["evidenze"].append(evidence)
+            weight = max(0, min(weight, MAX_RULE_POINTS - r["from_rules"]))
+            r["from_rules"] += weight
+        r["score"] += weight
+        if len(r["evidence"]) < 4 and evidence not in r["evidence"]:
+            r["evidence"].append(evidence)
 
     all_items = [(s, n, rx) for s in SECTIONS for n, rx in rules[s]]
     candidates_for = _index([rx for _, _, rx in all_items])
@@ -353,24 +353,24 @@ def detect(folder):
     section_order = {s: i for i, s in enumerate(("Engine", "Container", "Emulator", "AntiCheat", "SDK", "Launcher",
                                                  "Evidence"))}
     ordered = sorted(
-        ({"sezione": s, "nome": n, "punteggio": v["punteggio"], "evidenze": v["evidenze"]}
+        ({"section": s, "name": n, "score": v["score"], "evidence": v["evidence"]}
          for (s, n), v in results.items()),
-        key=lambda r: (section_order.get(r["sezione"], 9), -r["punteggio"], r["nome"]),
+        key=lambda r: (section_order.get(r["section"], 9), -r["score"], r["name"]),
     )
-    engines = [r for r in ordered if r["sezione"] in ("Engine", "Container", "Emulator")]
-    best = max((r["punteggio"] for r in engines), default=0)
+    engines = [r for r in ordered if r["section"] in ("Engine", "Container", "Emulator")]
+    best = max((r["score"] for r in engines), default=0)
     advice = []
     for r in engines:  # recommendations only for engines with at least half of the best score
-        if r["punteggio"] * 2 >= best and r["nome"] in ADVICE and ADVICE[r["nome"]] not in advice:
-            advice.append(ADVICE[r["nome"]])
+        if r["score"] * 2 >= best and r["name"] in ADVICE and ADVICE[r["name"]] not in advice:
+            advice.append(ADVICE[r["name"]])
     return {
-        "motore_principale": engines[0]["nome"] if engines else None,
-        "file_esaminati": len(items),
-        "troncato": truncated,
-        "risultati": ordered,
-        "radici_web": web_roots,
+        "main_engine": engines[0]["name"] if engines else None,
+        "files_examined": len(items),
+        "truncated": truncated,
+        "results": ordered,
+        "web_roots": web_roots,
         "framework_web": framework,
-        "consigli": advice,
+        "advice": advice,
     }
 
 
@@ -379,37 +379,37 @@ ENCRYPTED = ("GemShell",)  # containers that encrypt the game's files: PatchSmit
 
 def encrypted_container(outcome):
     """The name of the container that encrypts the game's files (e.g. 'GemShell'), or None."""
-    return next((r["nome"] for r in outcome.get("risultati", ()) if r["sezione"] == "Container"
-                 and r["nome"] in ENCRYPTED), None)
+    return next((r["name"] for r in outcome.get("results", ()) if r["section"] == "Container"
+                 and r["name"] in ENCRYPTED), None)
 
 
 def print_summary(outcome, log=print):
-    log("Files examined: %d%s" % (outcome["file_esaminati"], " (truncated list)" if outcome["troncato"] else ""))
-    if not outcome["risultati"]:
+    log("Files examined: %d%s" % (outcome["files_examined"], " (truncated list)" if outcome["truncated"] else ""))
+    if not outcome["results"]:
         log("No engine detected.")
     labels = {"Engine": "Engine", "Container": "Container", "SDK": "Component", "AntiCheat": "ANTI-CHEAT",
                  "Launcher": "Launcher", "Emulator": "Emulator", "Evidence": "Evidence"}
-    if outcome["motore_principale"]:
-        log("Main engine: %s" % outcome["motore_principale"])
-    elif outcome["risultati"]:
+    if outcome["main_engine"]:
+        log("Main engine: %s" % outcome["main_engine"])
+    elif outcome["results"]:
         log("Engine not recognized (probably proprietary or not in the list).")
-    has_engine = bool(outcome["motore_principale"])
+    has_engine = bool(outcome["main_engine"])
     components = 0
-    for r in outcome["risultati"]:
-        if r["sezione"] == "Evidence" and has_engine:
+    for r in outcome["results"]:
+        if r["section"] == "Evidence" and has_engine:
             continue  # the clues are only needed if the engine was not recognized
-        if r["sezione"] in ("SDK", "Launcher"):
+        if r["section"] in ("SDK", "Launcher"):
             components += 1
             if components > 8:
                 continue
-        log("  [%3d] %-12s %s" % (r["punteggio"], labels.get(r["sezione"], r["sezione"]), r["nome"]))
-        for e in r["evidenze"][:2]:
+        log("  [%3d] %-12s %s" % (r["score"], labels.get(r["section"], r["section"]), r["name"]))
+        for e in r["evidence"][:2]:
             log("          - %s" % e)
     if outcome["framework_web"]:
         log("Web framework: " + ", ".join(outcome["framework_web"]))
-    if any(r["sezione"] == "AntiCheat" for r in outcome["risultati"]):
+    if any(r["section"] == "AntiCheat" for r in outcome["results"]):
         log("WARNING: anti-cheat detected. Don't use injection tools on this game.")
-    if outcome["consigli"]:
+    if outcome["advice"]:
         log("Recommended route:")
-        for c in outcome["consigli"]:
+        for c in outcome["advice"]:
             log("  * " + c)

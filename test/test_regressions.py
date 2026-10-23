@@ -29,7 +29,7 @@ SIGNALS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "sign
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def read_file(path):
@@ -348,14 +348,14 @@ def _node():
 
 def test_keys(base):
     source = read_file(os.path.join(os.path.dirname(adapter_webui.__file__), "injector.js"))
-    classes = re.search(r"var CLASSI_TASTO = (\[[^\]]*\]);", source)
+    classes = re.search(r"var KEY_CLASSES = (\[[^\]]*\]);", source)
     check("iniettore: classi dei tasti 'key' e 'kbd'",
               classes and {"key", "kbd"} <= set(json.loads(classes.group(1))))
-    context = _js_function(source, "contestoTasto")
-    tree_node = _js_function(source, "nodoTesto")
+    context = _js_function(source, "keyContext")
+    tree_node = _js_function(source, "textNode")
     check("iniettore: <kbd> e classi dei tasti fino al nonno",
-              'nodeName === "KBD"' in context and "CLASSI_TASTO" in context and "i < 3" in context)
-    check("iniettore: un testo dentro un tasto resta in originale", "contestoTasto(p)" in tree_node)
+              'nodeName === "KBD"' in context and "KEY_CLASSES" in context and "i < 3" in context)
+    check("iniettore: un testo dentro un tasto resta in originale", "keyContext(p)" in tree_node)
     check("Delete, Enter, Space, Home restano traducibili (altrove sono parole dell'interfaccia)",
               all(adapter_webui.is_ui_text(t) for t in ("Delete", "Enter", "Space", "Home")))
     check("Esc, Ctrl, Shift, F5: mai tradotti",
@@ -365,24 +365,24 @@ def test_keys(base):
     if not node:
         print("(node.js non trovato: l'iniettore e' controllato solo nel codice)")
         return
-    ignore = re.search(r"var IGNORA = \{[^}]*\};", source).group(0)
+    ignore = re.search(r"var IGNORE = \{[^}]*\};", source).group(0)
     script = "\n".join([
-        'var mappa = new Map([["Delete", "Elimina"], ["Start Game", "Inizia partita"]]);',
-        "var scrittiTesto = new WeakMap();", ignore, classes.group(0),
-        _js_function(source, "traduci"), context, tree_node,
-        "function el(nome, classi, padre) { return {nodeType: 1, nodeName: nome, parentNode: padre || null,",
+        'var map = new Map([["Delete", "Elimina"], ["Start Game", "Inizia partita"]]);',
+        "var writtenText = new WeakMap();", ignore, classes.group(0),
+        _js_function(source, "translate"), context, tree_node,
+        "function el(name, classes, parent) { return {nodeType: 1, nodeName: name, parentNode: parent || null,",
         "  isContentEditable: false, hasAttribute: function () { return true; },",
-        "  classList: {contains: function (c) { return classi.indexOf(c) >= 0; }}}; }",
-        "function prova(testo, padre) { var n = {nodeType: 3, nodeValue: testo, parentNode: padre}; nodoTesto(n);",
+        "  classList: {contains: function (c) { return classes.indexOf(c) >= 0; }}}; }",
+        "function probe(text, parent) { var n = {nodeType: 3, nodeValue: text, parentNode: parent}; textNode(n);",
         "  return n.nodeValue; }",
-        'var corpo = el("BODY", []);',
+        'var body = el("BODY", []);',
         "console.log(JSON.stringify({",
-        '  kbd: prova("Delete", el("KBD", [], corpo)),',
-        '  classe_key: prova("Delete", el("SPAN", ["key"], corpo)),',
-        '  dentro_kbd: prova("Delete", el("B", [], el("KBD", [], corpo))),',
-        '  pulsante: prova("Delete", el("BUTTON", [], corpo)),',
-        '  classe_simile: prova("Delete", el("SPAN", ["keyboard-help"], corpo)),',
-        '  menu: prova("Start Game", el("BUTTON", [], corpo))}));',
+        '  kbd: probe("Delete", el("KBD", [], body)),',
+        '  key_class: probe("Delete", el("SPAN", ["key"], body)),',
+        '  inside_kbd: probe("Delete", el("B", [], el("KBD", [], body))),',
+        '  button: probe("Delete", el("BUTTON", [], body)),',
+        '  similar_class: probe("Delete", el("SPAN", ["keyboard-help"], body)),',
+        '  menu: probe("Start Game", el("BUTTON", [], body))}));',
     ])
     path = os.path.join(base, "tasti.js")
     write(path, script)
@@ -393,9 +393,9 @@ def test_keys(base):
         outcome = {}
         print("   node:", r.stderr.decode("utf-8", "replace")[-500:])
     check("iniettore (node): 'Delete' in <kbd>, in class=\"key\" e dentro un <kbd> resta in originale",
-              (outcome.get("kbd"), outcome.get("classe_key"), outcome.get("dentro_kbd")) == ("Delete",) * 3)
+              (outcome.get("kbd"), outcome.get("key_class"), outcome.get("inside_kbd")) == ("Delete",) * 3)
     check("iniettore (node): 'Delete' su un pulsante o in una classe solo simile si traduce",
-              (outcome.get("pulsante"), outcome.get("classe_simile"), outcome.get("menu"))
+              (outcome.get("button"), outcome.get("similar_class"), outcome.get("menu"))
               == ("Elimina", "Elimina", "Inizia partita"))
 
 
@@ -457,7 +457,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    project.DATA_ROOT = os.path.join(base, "dati")  # none of these tests should write data, to be safe
+    project.DATA_ROOT = os.path.join(base, "data_folder")  # none of these tests should write data, to be safe
     test_entrypoint(base)
     test_imgui(base)
     test_config_values(base)

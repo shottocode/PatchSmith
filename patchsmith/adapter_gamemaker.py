@@ -146,12 +146,12 @@ def family(rel):
 
 def read_original(path, reader):
     """The data of the file as it originally was: from PatchSmith's backup if there is one and it is valid (the file
-    may already be translated), otherwise from the file itself. 'lettore' reads a path."""
+    may already be translated), otherwise from the file itself. 'reader' reads a path."""
     from . import project
     backup = path + project.BACKUP_SUFFIX
     if os.path.exists(backup):
         info = project.read_info(path)
-        if info and project._hash_file(backup) == info["hash_originale"]:
+        if info and project._hash_file(backup) == info["original_hash"]:
             return reader(backup)
     return reader(path)
 
@@ -239,7 +239,7 @@ def data_file(folder):
 
 
 def _language_font(font_name, code):
-    """True if the font name says it is for the language 'codice' (e.g. fnt_english, font_en)."""
+    """True if the font name says it is for the language 'code' (e.g. fnt_english, font_en)."""
     if not code or not font_name:
         return False
     base = code.split("-")[0].lower()
@@ -276,21 +276,21 @@ def font_chars(folder, log=None, officials=None, source=None):
         return set(ASCII)
     common = None
     for f in items:
-        chars = set(f["caratteri"]) - {"\u25af"}
+        chars = set(f["chars"]) - {"\u25af"}
         letters = [c for c in chars if c.isascii() and c.isalpha()]
         if len(letters) < 20:
             continue
         other = sum(1 for c in chars if _other_alphabet(c))
         if other >= 100 and other > 10 * sum(1 for c in chars if _accented_latin(c)):
             continue  # font for another language (e.g. Korean, or Japanese with ç ê ñ Œ œ)
-        if _FALLBACK_FONT.search(f.get("nome") or ""):
+        if _FALLBACK_FONT.search(f.get("name") or ""):
             if log:
-                log("  Font %s ignored: it's a library's fallback font" % f.get("nome"))
+                log("  Font %s ignored: it's a library's fallback font" % f.get("name"))
             continue
-        if len(officials) >= 3 and not (chars & officials) and not _language_font(f.get("nome"), source):
+        if len(officials) >= 3 and not (chars & officials) and not _language_font(f.get("name"), source):
             if log:
                 log("  Font %s ignored: the game's official translations don't use it (it lacks their accented letters)"
-                    % f.get("nome"))
+                    % f.get("name"))
             continue
         if not any(c.islower() for c in letters):
             chars |= {c.lower() for c in chars}
@@ -334,7 +334,7 @@ def _values(data):
 
 
 def _strings(data):
-    """String values of a {chiave: testo} dictionary, also split into sections ({"menu": {"_play": "Play"...}}) or
+    """String values of a {key: text} dictionary, also split into sections ({"menu": {"_play": "Play"...}}) or
     with lists of texts: at least _MIN_JSON_ENTRIES texts and 80% of the values (None if the file does not have this
     shape)."""
     if not isinstance(data, dict):
@@ -354,14 +354,14 @@ def key_of(path):
 
 
 def flatten(data):
-    """{chiave: testo} of the texts of a localization file (see key_of): for a flat dictionary it is the
+    """{key: text} of the texts of a localization file (see key_of): for a flat dictionary it is the
     dictionary itself (only the string values)."""
     from .adapter_webjson import leaves
     return {key_of(p): v for p, _, v in leaves(data)} if isinstance(data, dict) else {}
 
 
 def at_path(data, path):
-    """The value of 'dati' at position 'percorso' (tuple of keys and indexes), or None if it is not there."""
+    """The value of 'data' at position 'path' (tuple of keys and indexes), or None if it is not there."""
     for step in path:
         try:
             data = data[step]
@@ -384,8 +384,8 @@ def created_by_patchsmith(folder):
         for suffix in project.INFO_SUFFIXES:
             if name.endswith(suffix):
                 info = project.read_info(os.path.join(folder, name[:-len(suffix)])) or {}
-                fingerprints = info.get("hash_creati") or {}
-                for created_one in info.get("creati", []):
+                fingerprints = info.get("created_hashes") or {}
+                for created_one in info.get("created", []):
                     p = os.path.join(folder, created_one)
                     if (created_one not in fingerprints or not os.path.exists(p)
                             or project._hash_file(p) == fingerprints[created_one]):
@@ -394,7 +394,7 @@ def created_by_patchsmith(folder):
 
 
 def language_json_files(folder, log=None):
-    """{relativo: lingua} of the JSON localization files: {chiave: testo} dictionaries (also split into sections, and
+    """{relativo: language} of the JSON localization files: {key: text} dictionaries (also split into sections, and
     also with // comments and trailing commas, which many games accept) with the language in the path, present in at
     least two languages in the same family (local/{L}.json, lang/{L}/ui.json, localization/strings{L}.json;
     read-only). Files created by PatchSmith (the added language) do not count. With 'log': the language files that
@@ -483,10 +483,10 @@ def _confirmed(others, spots, test, strong, weak):
 
 def markup(data, others):
     """Writing conventions of the source file's texts, confirmed by the majority of the official translations
-    ('altri': the other dictionaries of the same folder): {'a_capo': '*' if the asterisk acts as a line break (e.g.
-    "iron*ore"), 'punto_elenco': letter used as a symbol at the start of a paragraph (e.g.
+    ('altri': the other dictionaries of the same folder): {'line_break': '*' if the asterisk acts as a line break (e.g.
+    "iron*ore"), 'bullet': letter used as a symbol at the start of a paragraph (e.g.
     "U unlocks...**U gain...")}."""
-    outcome = {"a_capo": None, "punto_elenco": None}
+    outcome = {"line_break": None, "bullet": None}
     texts = {k: v for k, v in data.items() if isinstance(v, str)} if isinstance(data, dict) else {}
     others = [a for a in others if isinstance(a, dict)]
     if not texts or not others:
@@ -494,8 +494,8 @@ def markup(data, others):
     with_asterisk = [(k,) for k, v in texts.items() if _ASTERISK_BETWEEN_WORDS.search(v)]
     if len(with_asterisk) >= max(5, 0.05 * len(texts)) and \
             _confirmed(others, with_asterisk, lambda value_, _spot: "*" in value_, 0.6, 0.2):
-        outcome["a_capo"] = "*"
-    separator = "**" if outcome["a_capo"] else "\n\n"
+        outcome["line_break"] = "*"
+    separator = "**" if outcome["line_break"] else "\n\n"
     occurrences = {}  # letter -> [(key, paragraph number)]
     for k, v in texts.items():
         for n, paragraph in enumerate(v.split(separator)):
@@ -510,7 +510,7 @@ def markup(data, others):
             paragraphs = value_.split(separator)
             return spot[1] < len(paragraphs) and re.match(re.escape(letter) + r" +\S", paragraphs[spot[1]])
         if _confirmed(others, spots, has_bullet, 0.8, 0.3):
-            outcome["punto_elenco"] = letter
+            outcome["bullet"] = letter
             break
     return outcome
 
@@ -605,8 +605,8 @@ def _balanced_line_breaks(text, segments, marker):
 def reassemble_line_breaks(original, translated, marker=None, bullet=None, width=None, lines=None):
     """The translated (normalized) text brought back to the game's conventions, with the original's paragraphs,
     paragraph-start symbol and line breaks. None if the paragraphs do not match (the original stays).
-    With 'larghezza' and 'righe' (the longest line and the number of lines of the game's versions of this text):
-    if a line exceeds the width, the line breaks are redistributed, adding lines up to 'righe'."""
+    With 'width' and 'lines' (the longest line and the number of lines of the game's versions of this text):
+    if a line exceeds the width, the line breaks are redistributed, adding lines up to 'lines'."""
     result = _reassemble(original, translated, marker, bullet)
     if result is None or not marker or not width or _longest_line(result, marker) <= width:
         return result
@@ -625,7 +625,7 @@ def _longest_line(text, marker):
 
 def _min_cut(words, k, before=0):
     """The words on k lines so that the longest line is as short as possible (dynamic programming).
-    'prima': characters already taken at the start of the first line (e.g. the symbol 'U ').
+    'before': characters already taken at the start of the first line (e.g. the symbol 'U ').
     Returns (indexes of the words that start each line after the first, length of the longest line)."""
     n = len(words)
     k = max(1, min(k, n))
@@ -657,7 +657,7 @@ def _min_cut(words, k, before=0):
 def _within_width(text, marker, bullet, width, lines):
     """Redistributes the line breaks of paragraphs that are too wide (only those with simple line breaks only: the
     game's paragraphs and blank lines stay where they are), adding lines as long as the total does not exceed
-    'righe'."""
+    'lines'."""
     separator = marker * 2
     paragraphs = text.split(separator)
     total = len(_lines_of(text, marker))
@@ -774,8 +774,8 @@ def _without_placeholders(text):
 
 
 def caps_style(texts):
-    """How the game uses capitals in its texts: 'minuscolo' (almost all lowercase: capitals are codes or icons),
-    'maiuscolo', 'normale', or 'non applicabile' (few texts, or scripts without capitals such as Chinese,
+    """How the game uses capitals in its texts: 'lowercase' (almost all lowercase: capitals are codes or icons),
+    'uppercase', 'normal', or 'not applicable' (few texts, or scripts without capitals such as Chinese,
     Japanese, Korean, Thai). Identifiers and placeholders do not count."""
     valid_spots, cased_letters, letters = [], 0, 0
     for t in texts:
@@ -791,11 +791,11 @@ def caps_style(texts):
         return "not applicable"
     no_lowercase = sum(1 for t in valid_spots if not any(c.islower() for c in t))
     if no_lowercase >= 0.95 * len(valid_spots):
-        return "maiuscolo"
+        return "uppercase"
     mixed_count = sum(1 for t in valid_spots if _mixed_words(t))
     if mixed_count <= 0.05 * len(valid_spots) and no_lowercase <= 0.05 * len(valid_spots):
-        return "minuscolo"
-    return "normale"
+        return "lowercase"
+    return "normal"
 
 
 def uppercase_codes(texts, mapping=None, bullet=None):
@@ -856,7 +856,7 @@ def dedicated_fonts(data_win, codes):
         items, _ = gamemaker.font(data_win)
     except (gamemaker.GameMakerError, struct.error, ValueError, IndexError):
         return set()
-    return {c for c in codes for f in items if _language_font(f.get("nome"), c)}
+    return {c for c in codes for f in items if _language_font(f.get("name"), c)}
 
 
 def _other_script_text(text):
@@ -865,7 +865,7 @@ def _other_script_text(text):
 
 
 def line_limits(data, others, marker):
-    """{chiave: [larghezza, righe, uguali]} for each text: the longest line (in characters) and the maximum number
+    """{key: [width, lines, uguali]} for each text: the longest line (in characters) and the maximum number
     of lines among the original and the official translations that use the same font ('altri': their
     dictionaries), and how many official translations leave the text the same as the original (e.g. 'vsync:')."""
     output = {}

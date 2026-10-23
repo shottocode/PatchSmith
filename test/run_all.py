@@ -2,7 +2,7 @@
 
 Usage: python -I test/run_all.py [--lavoro FOLDER] [--sicurezza COPIA FILE_JSON] [--tieni] [prova ...]
 - each test gets an empty folder of its own (prove/<nome>), holding its own PatchSmith data (game profiles,
-  translation memory, settings, logs...: the PATCHSMITH_DATI folder) and its own %LOCALAPPDATA%, %APPDATA%, %TEMP%
+  translation memory, settings, logs...: the PATCHSMITH_DATA folder) and its own %LOCALAPPDATA%, %APPDATA%, %TEMP%
   and user folder: the games' real options, crashes and saves are not touched, and a test does not see what
   another one left behind;
 - each test's output goes to registri/<nome>.txt; a test that runs longer than MAX_SECONDS is stopped, together
@@ -48,7 +48,7 @@ def tests(choices):
 
 def snapshot():
     """Size and date of every file of the user's real data (next to the program and, if set, in the
-    PATCHSMITH_DATI of whoever runs the tests)."""
+    PATCHSMITH_DATA of whoever runs the tests)."""
     roots = {project.PROJECT_FOLDER}
     if project.DATA_ROOT:
         roots.add(project.DATA_ROOT)
@@ -70,13 +70,14 @@ def environment(folder):
     """Environment variables of a test: PatchSmith data and Windows user folders all of its own, inside its folder
     (without the PATCHSMITH_* and OLLAMA_* of whoever runs the tests)."""
     test_env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PATCHSMITH_", "OLLAMA_"))}
-    folders = {"PATCHSMITH_DATI": "dati", "LOCALAPPDATA": "utente/AppData/Local", "APPDATA": "utente/AppData/Roaming",
+    folders = {"PATCHSMITH_DATA": "data_folder", "LOCALAPPDATA": "utente/AppData/Local",
+                "APPDATA": "utente/AppData/Roaming",
                 "TEMP": "utente/Temp", "TMP": "utente/Temp", "USERPROFILE": "utente"}
     for env_var, rel in folders.items():
         test_env[env_var] = os.path.join(folder, *rel.split("/"))
         os.makedirs(test_env[env_var], exist_ok=True)
     # the tests check the texts of the code (test_ui_language chooses Italian)
-    test_env["PATCHSMITH_INTERFACCIA"] = "en"
+    test_env["PATCHSMITH_INTERFACE"] = "en"
     return test_env
 
 
@@ -145,7 +146,7 @@ def main(argv=None):
           % work, flush=True)
     before = snapshot()
 
-    outcomes = {}  # nome -> (stato, secondi, uscita); stato: "OK", "ERRORE", "SALTATA"
+    outcomes = {}  # nome -> (stato, secondi, uscita); stato: "OK", "ERROR", "SALTATA"
     for name in items:
         log_file = os.path.join(logs, name + ".txt")
         folder = os.path.join(work, "prove", name)
@@ -161,16 +162,16 @@ def main(argv=None):
             fake_web_game.create(game)
             # pre-existing settings, as for someone who already uses PatchSmith: the test must put them back as
             # they were
-            with open(os.path.join(test_env["PATCHSMITH_DATI"], "settings.json"), "w", encoding="utf-8") as f:
-                json.dump({"versione": 2, "nota": "impostazioni di prima della prova"}, f)
+            with open(os.path.join(test_env["PATCHSMITH_DATA"], "settings.json"), "w", encoding="utf-8") as f:
+                json.dump({"version": 2, "nota": "impostazioni di prima della prova"}, f)
             arguments = [game]
         elif name == "test_safety":
             copy_dir = os.path.abspath(a.confidence[0])
             code, output, _ = run_command([sys.executable, "-I", os.path.join(os.path.dirname(HERE), "smith.py"),
-                                        "auto", copy_dir, "--backend", "finto"], test_env, folder, log_file)
+                                        "auto", copy_dir, "--backend", "fake"], test_env, folder, log_file)
             if code != 0:
-                outcomes[name] = ("ERRORE", 0, output)
-                print("ERRORE   %-28s prerequisito `smith auto` non riuscito (codice %s)" % (name, code), flush=True)
+                outcomes[name] = ("ERROR", 0, output)
+                print("ERROR    %-28s prerequisito `smith auto` non riuscito (codice %s)" % (name, code), flush=True)
                 continue
             arguments = [copy_dir, a.confidence[1]]
         elif name in NO_ARGUMENTS:
@@ -178,7 +179,7 @@ def main(argv=None):
         else:
             arguments = [os.path.join(folder, "base")]
         code, output, seconds = run_command([sys.executable, "-I", script] + arguments, test_env, folder, log_file)
-        state = "OK" if code == 0 else "ERRORE"
+        state = "OK" if code == 0 else "ERROR"
         outcomes[name] = (state, seconds, output)
         note = "" if code == 0 else "  (fermata: oltre %d s)" % MAX_SECONDS if code is None else \
             "  (codice %s)" % code
@@ -186,7 +187,7 @@ def main(argv=None):
 
     after = snapshot()
     changed_files = sorted((set(before) ^ set(after)) | {p for p in set(before) & set(after) if before[p] != after[p]})
-    failed = [n for n, (state, _, _) in outcomes.items() if state == "ERRORE"]
+    failed = [n for n, (state, _, _) in outcomes.items() if state == "ERROR"]
     for name in failed:
         lines = outcomes[name][2].strip().splitlines()
         print("\n--- %s (ultime righe; tutto in %s)" % (name, os.path.join(logs, name + ".txt")))

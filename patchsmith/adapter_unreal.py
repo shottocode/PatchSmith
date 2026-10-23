@@ -20,7 +20,7 @@ import struct
 import unicodedata
 import zlib
 
-from . import __version__, language, detection
+from . import __version__, language, legacy, detection
 from .adapter_webjson import TMP_SUFFIX, write_atomic
 from .system import game_open
 
@@ -38,7 +38,7 @@ def pak_name(target_lang):
 class UnrealError(Exception):
     def __init__(self, message="", code=None):
         super().__init__(message)
-        self.code = code  # outcome for the interface (see outcome.py), e.g. GIOCO_APERTO
+        self.code = code  # outcome for the interface (see outcome.py), e.g. GAME_OPEN
 
 
 # --- FString ------------------------------------------------------------------------------------
@@ -200,7 +200,7 @@ def _serialize_entry(version, offset, data, method_width=4):
 
 
 def write_pak(path, model, file, mount=None):
-    """Writes an uncompressed pak with the same format as the 'modello' pak. file: [(nome, dati)]. mount: the mount
+    """Writes an uncompressed pak with the same format as the 'model' pak. file: [(nome, dati)]. mount: the mount
     point (usually the model's; '../../../' with full names)."""
     v, width = model.version, getattr(model, "method_width", 4)
     mount = model.mount if mount is None else mount
@@ -275,15 +275,15 @@ def read_locres(data):
         raise UnrealError(".locres inconsistent (strings)")
     if any(not 0 <= i < n for _, _, i in keys):
         raise UnrealError(".locres inconsistent (string indices)")
-    return {"versione": version, "testa": data[:strings_offset], "chiavi": keys, "stringhe": strings}
+    return {"version": version, "head": data[:strings_offset], "keys": keys, "strings": strings}
 
 
 def write_locres(info, new_lines):
     """Same .locres with the strings replaced (everything else identical byte for byte)."""
-    output = bytearray(info["testa"]) + struct.pack("<i", len(new_lines))
-    for s, (_, ref) in zip(new_lines, info["stringhe"]):
+    output = bytearray(info["head"]) + struct.pack("<i", len(new_lines))
+    for s, (_, ref) in zip(new_lines, info["strings"]):
         output += _write_fstring(unicodedata.normalize("NFC", s))  # accents the way Unreal expects them
-        if info["versione"] >= 2:
+        if info["version"] >= 2:
             output += struct.pack("<i", ref)
     return bytes(output)
 
@@ -369,18 +369,18 @@ def find_locres(folder, skipped=None):
 
 def analyze(folder):
     paks = _paks(folder)
-    info = {"paks": paks, "versioni": [], "iostore": False, "firmati": False, "problemi": []}
+    info = {"paks": paks, "versions": [], "iostore": False, "signed": False, "problems": []}
     for p in paks:
         if os.path.exists(p[:-4] + ".utoc"):
             info["iostore"] = True
         if os.path.exists(p[:-4] + ".sig"):
-            info["firmati"] = True
+            info["signed"] = True
         try:
-            info["versioni"].append(Pak(p).version)
+            info["versions"].append(Pak(p).version)
         except UnrealError as e:
-            info["problemi"].append("%s: %s" % (os.path.basename(p), e))
-    if info["firmati"]:
-        info["problemi"].append("the game's paks are signed (.sig): an added pak would be rejected")
+            info["problems"].append("%s: %s" % (os.path.basename(p), e))
+    if info["signed"]:
+        info["problems"].append("the game's paks are signed (.sig): an added pak would be rejected")
     return info
 
 
@@ -389,7 +389,7 @@ def analyze(folder):
 def read_manifest(folder):
     try:
         with open(os.path.join(folder, MANIFEST), encoding="utf-8") as f:
-            m = json.load(f)
+            m = legacy.load(f)
     except (OSError, ValueError):
         return None
     def ours(entries):
@@ -398,7 +398,7 @@ def read_manifest(folder):
             and ":" not in r and os.path.basename(r).startswith(PAK_PREFIX) and isinstance(h, str)
             for r, h in entries.items())
     valid = (isinstance(m, dict) and m.get("patchsmith") is True and ours(m.get("file"))
-              and ours(m.get("precedenti", {})) and set(m.get("precedenti", {})) <= set(m["file"]))
+              and ours(m.get("prior", {})) and set(m.get("prior", {})) <= set(m["file"]))
     return m if valid else None
 
 
@@ -418,12 +418,12 @@ def _sha256(path):
 
 def _checks(folder):
     if game_open(folder):
-        raise UnrealError("The game is open: close it and try again.", "GIOCO_APERTO")
-    if analyze(folder)["firmati"]:
+        raise UnrealError("The game is open: close it and try again.", "GAME_OPEN")
+    if analyze(folder)["signed"]:
         raise UnrealError("The game's paks are signed (.sig files): the game would reject an added pak.",
-                           "NON_SUPPORTATO")
+                           "NOT_SUPPORTED")
     outcome = detection.detect(folder)
-    names = [r["nome"] for r in outcome["risultati"] if r["sezione"] == "AntiCheat"]
+    names = [r["name"] for r in outcome["results"] if r["section"] == "AntiCheat"]
     if names:
         raise UnrealError("This game has an anti-cheat system (%s): I won't add modified paks (risk of a ban)."
                            % ", ".join(names), "ANTICHEAT")
@@ -434,13 +434,13 @@ def texts_to_translate(folder, log=print):
     sources = find_locres(folder)
     if not sources:
         raise UnrealError("I haven't found any localization files (.locres) within the game's PAK files.",
-                          "NON_SUPPORTATO")
+                          "NOT_SUPPORTED")
     texts, cultures = {}, set()
     for pak, name, target, culture in sources:
         info = read_locres(pak.read_file(name))
-        log("  %s (%s): %d phrases" % (name, culture, len(info["stringhe"])))
+        log("  %s (%s): %d phrases" % (name, culture, len(info["strings"])))
         cultures.add(culture)
-        for s, _ in info["stringhe"]:
+        for s, _ in info["strings"]:
             if any(c.isalpha() for c in s):
                 texts.setdefault(s, None)
     return sources, list(texts), sorted(cultures)[0]
@@ -479,7 +479,7 @@ def culture_chars(folder, excluded_cultures=()):
             except (UnrealError, OSError, struct.error, ValueError, UnicodeDecodeError):
                 continue
             cultures.add(culture)
-            for s, _ in info["stringhe"]:
+            for s, _ in info["strings"]:
                 chars.update(s)
     return chars, sorted(cultures)
 
@@ -514,28 +514,28 @@ def _adapt(translation, present, allowed=None, target_lang="it"):
 
 
 def install(folder, a, profile_name, memory, log=print, refused=None):
-    """Writes the patch pak with the translated .locres files using the translations in 'memoria' {originale:
+    """Writes the patch pak with the translated .locres files using the translations in 'memory' {originale:
     tradotto}. Returns the number of translated lines inserted. Characters the game's fonts probably lack are
     adapted (see allowed_chars: è -> e'); a translation that cannot be adapted stays in the original and goes into
-    'respinte' (if given), {originale: caratteri}, for problems.json."""
+    'respinte' (if given), {original: chars}, for problems.json."""
     folder = os.path.abspath(folder)
     _checks(folder)
     sources = find_locres(folder)
     if not sources:
         raise UnrealError("I haven't found any localization files (.locres) within the game's PAK files.",
-                          "NON_SUPPORTATO")
+                          "NOT_SUPPORTED")
     manifest = read_manifest(folder) if manifest_present(folder) else None
     if manifest_present(folder) and manifest is None:
         raise UnrealError("The file %s is invalid: I'm not using it. Please check the folder manually." % MANIFEST)
 
     read_items = [(pak, name, pak.read_file(name)) for pak, name, _, _ in sources]
     read_items = [(pak, name, original, read_locres(original)) for pak, name, original in read_items]
-    present = {c for _, _, _, info in read_items for s, _ in info["stringhe"] for c in s}
+    present = {c for _, _, _, info in read_items for s, _ in info["strings"] for c in s}
     allowed = allowed_chars(folder, present, {culture for _, _, _, culture in sources})
     by_pak, translated_count, total, adapted, rejected = {}, 0, 0, 0, {}
     for pak, name, original, info in read_items:
         new_lines = []
-        for s, _ in info["stringhe"]:
+        for s, _ in info["strings"]:
             raw_translation = memory.get(s)
             t = _adapt(raw_translation, present, allowed, a) if raw_translation else None
             if raw_translation and t is None and allowed is not None and _adapt(raw_translation, present) is not None:
@@ -548,7 +548,7 @@ def install(folder, a, profile_name, memory, log=print, refused=None):
             total += 1
         new = write_locres(info, new_lines)
         checks = read_locres(new)  # it must read back with the same structure
-        if checks["chiavi"] != info["chiavi"] or checks["testa"] != info["testa"]:
+        if checks["keys"] != info["keys"] or checks["head"] != info["head"]:
             raise UnrealError("Check of the translated .locres failed for %s: not writing anything" % name)
         by_pak.setdefault(os.path.dirname(pak.path), (pak, []))[1].append((name, new, original))
     if adapted:
@@ -584,14 +584,14 @@ def install(folder, a, profile_name, memory, log=print, refused=None):
         raise
 
     # 2) manifest written BEFORE putting the paks in place: if things stop halfway, restore
-    #    recognizes both the new pak and the one that was there before ("precedenti" field)
+    #    recognizes both the new pak and the one that was there before ("prior" field)
     def write_manifest(file, prior):
         write_atomic(os.path.join(folder, MANIFEST), json.dumps({
-            "versione": 1, "patchsmith": True, "patchsmith_versione": __version__, "lingua": a,
-            "profilo": profile_name,
-            "data": datetime.datetime.now().isoformat(timespec="seconds"),
-            "file": file, "precedenti": prior,
-            "sorgenti": {n: hashlib.sha1(o).hexdigest() for _, (_, f) in by_pak.items() for n, _, o in f},
+            "version": 1, "patchsmith": True, "patchsmith_version": __version__, "language": a,
+            "profile": profile_name,
+            "date": datetime.datetime.now().isoformat(timespec="seconds"),
+            "file": file, "prior": prior,
+            "sources": {n: hashlib.sha1(o).hexdigest() for _, (_, f) in by_pak.items() for n, _, o in f},
         }, ensure_ascii=False, indent=2).encode("utf-8"))
 
     new_files = {rel: fingerprint for rel, (_, _, fingerprint) in ready.items()}
@@ -617,13 +617,13 @@ def uninstall(folder, log=print):
     if manifest is None:
         raise UnrealError("The file %s is invalid: for your safety, I won't delete anything." % MANIFEST)
     if game_open(folder):
-        raise UnrealError("The game is open: close it and try again.", "GIOCO_APERTO")
+        raise UnrealError("The game is open: close it and try again.", "GAME_OPEN")
     for rel, fingerprint in manifest["file"].items():
         p = os.path.join(folder, *rel.split("/"))
         if os.path.exists(p + TMP_SUFFIX):
             os.remove(p + TMP_SUFFIX)
         if os.path.exists(p):
-            if _sha256(p) in (fingerprint, manifest.get("precedenti", {}).get(rel)):
+            if _sha256(p) in (fingerprint, manifest.get("prior", {}).get(rel)):
                 os.remove(p)
                 log("  Removed %s" % rel)
             else:
@@ -637,9 +637,9 @@ def uninstall(folder, log=print):
 
 def state(folder, log=print):
     info = analyze(folder)
-    log("  Game paks: %d (versions %s)%s" % (len(info["paks"]), sorted(set(info["versioni"])),
+    log("  Game paks: %d (versions %s)%s" % (len(info["paks"]), sorted(set(info["versions"])),
                                                 ", IoStore present" if info["iostore"] else ""))
-    for p in info["problemi"]:
+    for p in info["problems"]:
         log("  ! " + p)
     manifest = read_manifest(folder)
     if not manifest:
@@ -648,10 +648,10 @@ def state(folder, log=print):
     for rel, fingerprint in manifest["file"].items():
         p = os.path.join(folder, *rel.split("/"))
         ok = os.path.exists(p) and _sha256(p) == fingerprint
-        log("  %s %s (language %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("lingua"), manifest.get("data")))
+        log("  %s %s (language %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("language"), manifest.get("date")))
     try:
         current_count = {n: hashlib.sha1(pak.read_file(n)).hexdigest() for pak, n, _, _ in find_locres(folder)}
-        if current_count != manifest.get("sorgenti"):
+        if current_count != manifest.get("sources"):
             log("  ! The game has been updated: press 'Analyze and translate' to translate the new texts too (the ones "
                 "already translated are kept).")
     except UnrealError as e:

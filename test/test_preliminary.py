@@ -36,7 +36,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -96,7 +96,7 @@ class FakeServer:
 def test_checks(base):
     game = web_game(os.path.join(base, "giochi", "Lantern Keeper"), "Lantern Keeper.exe")
     before = sorted(os.listdir(game))
-    problems = automatic.preflight_checks(game, "finto", "traduci", language.AUTO, "it")
+    problems = automatic.preflight_checks(game, "fake", "translate", language.AUTO, "it")
     check("gioco pronto: nessun problema, e il file di prova della scrittura non resta (%s)" % codes(problems),
               problems == [] and sorted(os.listdir(game)) == before)
 
@@ -104,30 +104,30 @@ def test_checks(base):
     real = system.game_open
     system.game_open = lambda _c: True
     try:
-        all_items = {op: codes(automatic.preflight_checks(game, "finto", op, language.AUTO, "it"))
-                 for op in ("traduci", "riapplica", "ripristina")}
-        is_open = automatic.preflight_checks(game, "finto", "traduci", language.AUTO, "it")[0]
+        all_items = {op: codes(automatic.preflight_checks(game, "fake", op, language.AUTO, "it"))
+                 for op in ("translate", "reapply", "restore")}
+        is_open = automatic.preflight_checks(game, "fake", "translate", language.AUTO, "it")[0]
     finally:
         system.game_open = real
     check("gioco aperto: primo controllo, con 'Riprova', per tradurre, riapplicare e ripristinare",
-              all(c == ["GIOCO_APERTO"] for c in all_items.values()) and is_open.action == "riprova"
+              all(c == ["GAME_OPEN"] for c in all_items.values()) and is_open.action == "retry"
               and "Try again" in is_open.message)
 
     def system_error(_c):
-        raise system.SysError("prova")
+        raise system.SysError("test")
     system.game_open = system_error
     try:
-        problems = automatic.preflight_checks(game, "finto", "traduci", language.AUTO, "it")
+        problems = automatic.preflight_checks(game, "fake", "translate", language.AUTO, "it")
     finally:
         system.game_open = real
     check("controllo dei processi non riuscito: nessun avviso qui (lo dice l'operazione stessa)", problems == [])
 
     # languages
-    cases ={("Inglesse", "it"): None, ("en", "Italianoo"): None, ("xx", "it"): "continua", ("it", "it"): None,
-            ("en", "it"): "ok", (language.AUTO, "it"): "ok", ("en", "pt-BR"): "continua"}
+    cases ={("Inglesse", "it"): None, ("en", "Italianoo"): None, ("xx", "it"): "continue", ("it", "it"): None,
+            ("en", "it"): "ok", (language.AUTO, "it"): "ok", ("en", "pt-BR"): "continue"}
     wrong_seeds = []
     for (src_lang, a), expected in cases.items():
-        found = [p for p in automatic.preflight_checks(game, "finto", "traduci", src_lang, a) if p.code == "LINGUA"]
+        found = [p for p in automatic.preflight_checks(game, "fake", "translate", src_lang, a) if p.code == "LANGUAGE"]
         got = "ok" if not found else found[0].action
         if got != expected:
             wrong_seeds.append("%s->%s: %s" % (src_lang, a, got))
@@ -136,7 +136,7 @@ def test_checks(base):
         " (sbagliati: %s)" % wrong_seeds if wrong_seeds else ""),
               not wrong_seeds and "same language" in same[0].message)
     check("lingue: si controllano solo per Analizza e traduci",
-              "LINGUA" not in codes(automatic.preflight_checks(game, "finto", "riapplica", "Inglesse", "it")))
+              "LANGUAGE" not in codes(automatic.preflight_checks(game, "fake", "reapply", "Inglesse", "it")))
 
     # folder that cannot be written to (Program Files, controlled folder access, antivirus)
     real_version = automatic.check_writable
@@ -144,11 +144,11 @@ def test_checks(base):
     old_pf = os.environ.get("ProgramFiles")
     try:
         os.environ["ProgramFiles"] = os.path.join(base, "altrove")
-        outside = {op: by_code(automatic.preflight_checks(game, "finto", op, language.AUTO, "it"),
-                                "SOLA_LETTURA") for op in ("traduci", "riapplica", "ripristina")}
+        outside = {op: by_code(automatic.preflight_checks(game, "fake", op, language.AUTO, "it"),
+                                "READ_ONLY") for op in ("translate", "reapply", "restore")}
         os.environ["ProgramFiles"] = os.path.join(base, "giochi")
-        inside = by_code(automatic.preflight_checks(game, "finto", "traduci", language.AUTO, "it"),
-                            "SOLA_LETTURA")
+        inside = by_code(automatic.preflight_checks(game, "fake", "translate", language.AUTO, "it"),
+                            "READ_ONLY")
     finally:
         automatic.check_writable = real_version
         if old_pf is None:
@@ -157,8 +157,8 @@ def test_checks(base):
             os.environ["ProgramFiles"] = old_pf
     check("cartella protetta: si ferma (nessuna azione) per tutte le operazioni, con 'amministratore' e l'accesso "
               "controllato alle cartelle", all(p and p.action is None for p in outside.values())
-              and "administrator" in outside["traduci"].message
-              and "Controlled Folder Access" in outside["traduci"].message)
+              and "administrator" in outside["translate"].message
+              and "Controlled Folder Access" in outside["translate"].message)
     check("cartella protetta dentro Programmi: lo dice e spiega come spostare il gioco",
               inside and "Program Files" in inside.message and "Move install folder" in inside.message)
     one_file = os.path.join(base, "un-file")
@@ -171,56 +171,56 @@ def test_checks(base):
     real_disk_usage = automatic.shutil.disk_usage
     automatic.shutil.disk_usage = lambda _p: types.SimpleNamespace(total=10 ** 12, used=0, free=50 * 1024 ** 2)
     try:
-        space = {op: [p for p in automatic.preflight_checks(game, "finto", op, language.AUTO, "it")
-                       if p.code == "SPAZIO"] for op in ("traduci", "riapplica", "ripristina")}
+        space = {op: [p for p in automatic.preflight_checks(game, "fake", op, language.AUTO, "it")
+                       if p.code == "DISK_SPACE"] for op in ("translate", "reapply", "restore")}
     finally:
         automatic.shutil.disk_usage = real_disk_usage
     check("poco spazio (50 MB): avviso per il gioco e per i dati, si puo' continuare; non per Ripristina",
-              len(space["traduci"]) == 2 and len(space["riapplica"]) == 2 and not space["ripristina"]
-              and all(p.action == "continua" and "50 MB" in p.message for p in space["traduci"]))
+              len(space["translate"]) == 2 and len(space["reapply"]) == 2 and not space["restore"]
+              and all(p.action == "continue" and "50 MB" in p.message for p in space["translate"]))
 
     # translator paused: the local translator is offered (installing it, if missing)
-    limiter.Limiter("google", log=None).blocked(429, "prova")
+    limiter.Limiter("google", log=None).blocked(429, "test")
     real_state = ollama.state
     try:
-        pause = by_code(automatic.preflight_checks(game, "google", "traduci", language.AUTO, "it"),
-                           "TRADUTTORE_IN_PAUSA")
-        ollama.state = lambda: "pronto"
-        ready_text = by_code(automatic.preflight_checks(game, "google", "traduci", language.AUTO, "it"),
-                            "TRADUTTORE_IN_PAUSA")
+        pause = by_code(automatic.preflight_checks(game, "google", "translate", language.AUTO, "it"),
+                           "TRANSLATOR_PAUSED")
+        ollama.state = lambda: "ready"
+        ready_text = by_code(automatic.preflight_checks(game, "google", "translate", language.AUTO, "it"),
+                            "TRANSLATOR_PAUSED")
         ollama.state = real_state
-        reapply = codes(automatic.preflight_checks(game, "google", "riapplica", language.AUTO, "it"))
-        deepl = codes(automatic.preflight_checks(game, "deepl", "traduci", language.AUTO, "it"))
+        reapply = codes(automatic.preflight_checks(game, "google", "reapply", language.AUTO, "it"))
+        deepl = codes(automatic.preflight_checks(game, "deepl", "translate", language.AUTO, "it"))
     finally:
         ollama.state = real_state
         limiter.Limiter("google", log=None).reset()
     check("Google in pausa: 'Installa il traduttore locale' (non installato), 'Usa il traduttore locale' "
               "(installato); niente per Riapplica ne' per un altro traduttore",
-              pause and pause.action == "installa_locale" and "Google" in pause.message
-              and "local translator" in pause.message and ready_text and ready_text.action == "usa_locale"
-              and "TRADUTTORE_IN_PAUSA" not in reapply and "TRADUTTORE_IN_PAUSA" not in deepl)
+              pause and pause.action == "install_local" and "Google" in pause.message
+              and "local translator" in pause.message and ready_text and ready_text.action == "use_local"
+              and "TRANSLATOR_PAUSED" not in reapply and "TRANSLATOR_PAUSED" not in deepl)
 
     # local translator chosen but not installed
-    absent = by_code(automatic.preflight_checks(game, "locale", "traduci", language.AUTO, "it"),
-                         "LOCALE_ASSENTE")
-    ollama.state = lambda: "pronto"
+    absent = by_code(automatic.preflight_checks(game, "local", "translate", language.AUTO, "it"),
+                         "LOCAL_MISSING")
+    ollama.state = lambda: "ready"
     try:
-        is_ready = codes(automatic.preflight_checks(game, "locale", "traduci", language.AUTO, "it"))
+        is_ready = codes(automatic.preflight_checks(game, "local", "translate", language.AUTO, "it"))
     finally:
         ollama.state = real_state
     check("traduttore locale non installato: 'Installa ora' prima di partire; installato: nessun avviso",
-              absent and absent.action == "installa_locale" and "LOCALE_ASSENTE" not in is_ready
+              absent and absent.action == "install_local" and "LOCAL_MISSING" not in is_ready
               and "continue without" in absent.message)
     # "Continue anyway" without a translator: the game is analyzed, but it stops before changing it (the official
     # language, if there is one, is activated without a translator)
     fingerprints = {n: open(os.path.join(r, n), "rb").read() for r, _d, f in os.walk(game) for n in f}
     try:
-        automatic.analyze_and_translate(game, "auto", "it", "locale", silent)
+        automatic.analyze_and_translate(game, "auto", "it", "local", silent)
         error = None
     except backend.BackendError as e:
         error = e
     check("continuare senza traduttore locale: errore 'traduttore non pronto' prima di toccare il gioco",
-              error is not None and getattr(error, "code", None) == "TRADUTTORE_ASSENTE"
+              error is not None and getattr(error, "code", None) == "TRANSLATOR_MISSING"
               and {n: open(os.path.join(r, n), "rb").read() for r, _d, f in os.walk(game) for n in f} == fingerprints)
 
 
@@ -240,13 +240,13 @@ def test_same_game(base):
               automatic.same_game({"steam": "123"}, {"steam": "123", "exe": ["x.exe"]})
               and not automatic.same_game({"steam": "123", "exe": ["x.exe"]}, {"steam": "9", "exe": ["x.exe"]})
               and automatic.same_game({"exe": ["a.exe", "b.exe"]}, {"exe": ["b.exe"]})
-              and not automatic.same_game({"exe": ["a.exe"]}, {"exe": ["b.exe"], "nome": "a"})
-              and automatic.same_game({"nome": "lantern-keeper"}, {"nome": "lantern-keeper-2", "da_profilo": True})
-              and automatic.same_game({"nome": "lantern-keeper-2", "da_profilo": True}, {"nome": "lantern-keeper"})
-              and not automatic.same_game({"nome": "lantern-keeper"}, {"nome": "lantern-keeper-2"})
-              and not automatic.same_game({"nome": "gioco"}, {"nome": "gioco"}))
+              and not automatic.same_game({"exe": ["a.exe"]}, {"exe": ["b.exe"], "name": "a"})
+              and automatic.same_game({"name": "lantern-keeper"}, {"name": "lantern-keeper-2", "from_profile": True})
+              and automatic.same_game({"name": "lantern-keeper-2", "from_profile": True}, {"name": "lantern-keeper"})
+              and not automatic.same_game({"name": "lantern-keeper"}, {"name": "lantern-keeper-2"})
+              and not automatic.same_game({"name": "gioco"}, {"name": "gioco"}))
     real = steam.game_installed
-    steam.game_installed = lambda folder, steam=None: {"appid": "4242", "nome": "Prova"}
+    steam.game_installed = lambda folder, steam=None: {"appid": "4242", "name": "Prova"}
     try:
         with_steam = automatic.identity(unity_a)
         unlabeled = automatic.identity(unity_a, steam=False)
@@ -269,7 +269,7 @@ def test_same_game(base):
     # a copy of the already translated web game: its translation memory is offered (with the test translator, the
     # test one)
     original = web_game(os.path.join(base, "web", "Originale", "Lantern Keeper"), "Lantern Keeper.exe")
-    path, completed, _ = automatic.analyze_and_translate(original, "auto", "it", "finto", silent)
+    path, completed, _ = automatic.analyze_and_translate(original, "auto", "it", "fake", silent)
     with open(path, encoding="utf-8") as f:
         profile = json.load(f)
     memory = project.memory_path(profile, test=True)
@@ -277,43 +277,43 @@ def test_same_game(base):
     entries["Start a new game"] = "VALORE CORRETTO A MANO"
     json.dump(entries, open(memory, "w", encoding="utf-8"), ensure_ascii=False)
     check("originale tradotto: l'identita resta nel profilo",
-              completed and profile.get("identita", {}).get("exe") == ["lantern keeper.exe"])
+              completed and profile.get("identity", {}).get("exe") == ["lantern keeper.exe"])
     copy_dir = web_game(os.path.join(base, "web", "Copia", "Lantern Keeper"), "Lantern Keeper.exe")
-    proposal = by_code(automatic.preflight_checks(copy_dir, "finto", "traduci", language.AUTO, "it"),
-                          "STESSO_GIOCO")
-    online = by_code(automatic.preflight_checks(copy_dir, "deepl", "traduci", language.AUTO, "it"),
-                        "STESSO_GIOCO")
-    other_language = by_code(automatic.preflight_checks(copy_dir, "finto", "traduci", language.AUTO, "fr"),
-                              "STESSO_GIOCO")
+    proposal = by_code(automatic.preflight_checks(copy_dir, "fake", "translate", language.AUTO, "it"),
+                          "SAME_GAME")
+    online = by_code(automatic.preflight_checks(copy_dir, "deepl", "translate", language.AUTO, "it"),
+                        "SAME_GAME")
+    other_language = by_code(automatic.preflight_checks(copy_dir, "fake", "translate", language.AUTO, "fr"),
+                              "SAME_GAME")
     check("copia: 'stesso gioco gia' tradotto' con il profilo dell'originale e i testi salvati; non con una memoria "
-              "vuota (traduttore vero) ne' per un'altra lingua", proposal and proposal.action == "riusa"
-              and proposal.data["profilo"] == path and proposal.data["testi"] == len(entries)
-              and not proposal.data["spostato"] and "Shall I reuse its translations" in proposal.message
+              "vuota (traduttore vero) ne' per un'altra lingua", proposal and proposal.action == "reuse"
+              and proposal.data["profile"] == path and proposal.data["texts"] == len(entries)
+              and not proposal.data["moved"] and "Shall I reuse its translations" in proposal.message
               and online is None and other_language is None)
-    # a game profile from a previous version (without 'identita'): recognized by its folder, if it is still there
+    # a game profile from a previous version (without 'identity'): recognized by its folder, if it is still there
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({k: v for k, v in profile.items() if k != "identita"}, f, ensure_ascii=False)
+        json.dump({k: v for k, v in profile.items() if k != "identity"}, f, ensure_ascii=False)
     try:
-        old = by_code(automatic.preflight_checks(copy_dir, "finto", "traduci", language.AUTO, "it"),
-                             "STESSO_GIOCO")
+        old = by_code(automatic.preflight_checks(copy_dir, "fake", "translate", language.AUTO, "it"),
+                             "SAME_GAME")
     finally:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(profile, f, ensure_ascii=False)
     check("profilo di una versione precedente, senza identita: riconosciuto dalla sua cartella",
-              old and old.data["profilo"] == path and not old.data["spostato"])
+              old and old.data["profile"] == path and not old.data["moved"])
     lines = []
-    new, completed, _ = automatic.analyze_and_translate(copy_dir, "auto", "it", "finto", lines.append,
-                                                         reuse=proposal.data["profilo"])
+    new, completed, _ = automatic.analyze_and_translate(copy_dir, "auto", "it", "fake", lines.append,
+                                                         reuse=proposal.data["profile"])
     with open(new, encoding="utf-8") as f:
         profile_copy = json.load(f)
     copy_memory = json.load(open(project.memory_path(profile_copy, test=True), encoding="utf-8"))
     check("copia con 'Riusa': profilo nuovo con la memoria dell'originale (anche la correzione a mano) e "
               "l'origine segnata", new != path and completed
               and copy_memory.get("Start a new game") == "VALORE CORRETTO A MANO"
-              and profile_copy.get("traduzioni_da") == profile["nome"]
+              and profile_copy.get("translations_from") == profile["name"]
               and any("I'm reusing the translations" in r for r in lines))
     check("copia con il suo profilo: non si chiede piu'",
-              "STESSO_GIOCO" not in codes(automatic.preflight_checks(copy_dir, "finto", "traduci", language.AUTO,
+              "SAME_GAME" not in codes(automatic.preflight_checks(copy_dir, "fake", "translate", language.AUTO,
                                                                              "it")))
     # copying the translations fails (disk full, file in use): what is missing is translated from scratch, without
     # stopping "Analyze and translate" and without leaving a half-written translation memory
@@ -329,7 +329,7 @@ def test_same_game(base):
     automatic.shared_file.save_merging = broken_save
     lines = []
     try:
-        new3, completed3, _ = automatic.analyze_and_translate(third_game, "auto", "it", "finto", lines.append,
+        new3, completed3, _ = automatic.analyze_and_translate(third_game, "auto", "it", "fake", lines.append,
                                                                reuse=path)
     finally:
         automatic.shared_file.save_merging = real_save
@@ -343,28 +343,28 @@ def test_same_game(base):
     # a moved game: the recorded folder is no longer there, the game profile moves to the new folder
     moved = os.path.join(automatic.profiles_folder(), "gioco-spostato.json")
     with open(moved, "w", encoding="utf-8") as f:
-        json.dump({"nome": "gioco-spostato", "cartella_gioco": os.path.join(base, "sparita", "Gioco").replace(
-            os.sep, "/"), "lingua_origine": "auto", "lingua_destinazione": "it", "backend": "finto", "file": [],
-            "identita": {"nome": "gioco", "exe": ["gioco spostato.exe"]}}, f)
+        json.dump({"name": "gioco-spostato", "game_folder": os.path.join(base, "sparita", "Gioco").replace(
+            os.sep, "/"), "source_language": "auto", "target_language": "it", "backend": "fake", "file": [],
+            "identity": {"name": "game", "exe": ["gioco spostato.exe"]}}, f)
     for test in (False, True):
-        with open(project.memory_path({"nome": "gioco-spostato", "lingua_destinazione": "it"}, test), "w",
+        with open(project.memory_path({"name": "gioco-spostato", "target_language": "it"}, test), "w",
                   encoding="utf-8") as f:
             json.dump({"Start a new game": "Nuova partita (spostato)"}, f)
     new_folder = web_game(os.path.join(base, "web", "Nuovo Disco", "Gioco Spostato 2"), "Gioco Spostato.exe")
     profiles_before = len(list(automatic.list_profiles()))
-    proposal = by_code(automatic.preflight_checks(new_folder, "deepl", "traduci", language.AUTO, "it"),
-                          "STESSO_GIOCO")
+    proposal = by_code(automatic.preflight_checks(new_folder, "deepl", "translate", language.AUTO, "it"),
+                          "SAME_GAME")
     check("gioco spostato: proposto con 'la cartella non c'e' piu'' (dall'identita salvata nel profilo)",
-              proposal and proposal.data["spostato"] and proposal.data["profilo"] == moved
+              proposal and proposal.data["moved"] and proposal.data["profile"] == moved
               and "no longer exists" in proposal.message)
-    path_s, _, _ = automatic.analyze_and_translate(new_folder, "auto", "it", "finto", silent,
-                                                     reuse=proposal.data["profilo"])
+    path_s, _, _ = automatic.analyze_and_translate(new_folder, "auto", "it", "fake", silent,
+                                                     reuse=proposal.data["profile"])
     with open(moved, encoding="utf-8") as f:
         after = json.load(f)
     check("gioco spostato con 'Riusa': stesso profilo e stessa memoria nella cartella nuova, nessun profilo nuovo",
-              path_s == moved and automatic._normalize(after["cartella_gioco"]) == automatic._normalize(
+              path_s == moved and automatic._normalize(after["game_folder"]) == automatic._normalize(
                   new_folder)
-              and after.get("cartella_precedente", "").endswith("sparita/Gioco")
+              and after.get("previous_folder", "").endswith("sparita/Gioco")
               and len(list(automatic.list_profiles())) == profiles_before
               and json.load(open(project.memory_path(after, test=True), encoding="utf-8")).get(
                   "Start a new game") == "Nuova partita (spostato)")
@@ -374,7 +374,7 @@ def test_same_game(base):
 
 def test_defaults(base):
     check("traduttore predefinito: quello locale anche se non e' installato ('da installare', 'Installa...')",
-              ollama.state() != "pronto" and backend.default() == "locale")
+              ollama.state() != "ready" and backend.default() == "local")
     check("etichette: Google 'non ufficiale' (con l'avviso alla scelta), modelli con il compromesso",
               "unofficial" in gui.TRANSLATORS["google"] and "block them" in gui.GOOGLE_WARNING
               and "slower" in gui.LOCAL_MODELS["12b"])
@@ -409,15 +409,15 @@ def test_defaults(base):
     real_run = ollama.subprocess.run
     responses, commands = {}, []
     ollama.subprocess.run = lambda command, **_k: commands.append(command[0]) or types.SimpleNamespace(
-        returncode=0, stdout=responses["uscita"], stderr=b"")
+        returncode=0, stdout=responses["output"], stderr=b"")
     real_program = ollama._nvidia_smi_program
     ollama._nvidia_smi_program = lambda: sys.executable  # a file that exists, never executed (run is simulated)
     try:
-        responses["uscita"] = b"8192\r\n"
+        responses["output"] = b"8192\r\n"
         nvidia = ollama._nvidia_smi()
-        responses["uscita"] = b"4293918720\r\n"
+        responses["output"] = b"4293918720\r\n"
         wmi_limit = ollama._wmi_video()
-        responses["uscita"] = b"2147483648\r\n0\r\n"
+        responses["output"] = b"2147483648\r\n0\r\n"
         wmi_2 = ollama._wmi_video()
     finally:
         ollama.subprocess.run, ollama._nvidia_smi_program = real_run, real_program
@@ -462,26 +462,26 @@ def test_defaults(base):
               and "RAM" in ollama.performance_warning(8, 6) and ollama.performance_warning(8, 16) == ""
               and ollama.performance_warning(3.9, 16) == "")
 
-    # command line: "locale" without installation tells the recommended model and the command to install it;
+    # command line: "local" without installation tells the recommended model and the command to install it;
     # "--installa" also does the test sentence (code 2 if it fails)
     from patchsmith import cli
     output = io.StringIO()
     ollama._VIDEO_MEMORY[:] = [8.0]
     try:
         with contextlib.redirect_stdout(output):
-            status_code = cli.main(["locale"])
+            status_code = cli.main(["local"])
     finally:
         ollama._VIDEO_MEMORY.clear()
     text = output.getvalue()
     actual = ollama.download_description, ollama.install, backend.probe_local
     tests = []
-    ollama.download_description = lambda selected: ["finto"]
+    ollama.download_description = lambda selected: ["fake"]
     ollama.install = lambda selected, log=print: True
     backend.probe_local = lambda model=None, log=print, **_k: tests.append(model) or {
-        "ok": False, "messaggio": "la prova di traduzione non e' riuscita: prova"}
+        "ok": False, "message": "la prova di traduzione non e' riuscita: prova"}
     try:
         with contextlib.redirect_stdout(io.StringIO()):
-            trial_code = cli.main(["locale", "--installa", "12b"])
+            trial_code = cli.main(["local", "--installa", "12b"])
     finally:
         ollama.download_description, ollama.install, backend.probe_local = actual
     check("riga di comando 'locale': modello consigliato (12B con 8 GB) e comando; '--installa' fa la frase di "
@@ -491,22 +491,22 @@ def test_defaults(base):
     # test of the local translator after installation
     server = FakeServer()
     r = backend.probe_local("4b", silent, server=server)
-    check("prova del traduttore locale: tradotto sulla scheda video, con i tempi (%s)" % r["messaggio"],
-              r["ok"] and r["scheda"] == 1.0 and r["traduzione"] == "Inizia la partita"
-              and "on the graphics card" in r["messaggio"] and "Start game" in r["messaggio"]
-              and r["secondi"] is not None)
+    check("prova del traduttore locale: tradotto sulla scheda video, con i tempi (%s)" % r["message"],
+              r["ok"] and r["gpu"] == 1.0 and r["translation"] == "Inizia la partita"
+              and "on the graphics card" in r["message"] and "Start game" in r["message"]
+              and r["seconds"] is not None)
     r = backend.probe_local("4b", silent, server=FakeServer(vram=0))
-    check("prova: solo processore -> 'sara' lento' e il consiglio", r["ok"] and r["scheda"] == 0
-              and "only with the processor" in r["messaggio"])
+    check("prova: solo processore -> 'sara' lento' e il consiglio", r["ok"] and r["gpu"] == 0
+              and "only with the processor" in r["message"])
     r = backend.probe_local("4b", silent, server=FakeServer(response="Start game"))
     check("prova: frase rimasta in originale -> non riuscita, senza errori", not r["ok"]
-              and "stayed untranslated" in r["messaggio"])
+              and "stayed untranslated" in r["message"])
     r = backend.probe_local("4b", silent, server=FakeServer(error=ollama.LocalError("non parte")))
     check("prova: server che non parte -> non riuscita, con il motivo, senza eccezioni",
-              not r["ok"] and "non parte" in r["messaggio"])
+              not r["ok"] and "non parte" in r["message"])
 
     # the limiter recommends the local translator
-    message = limiter.Limiter("google", log=None).blocked(429, "prova")
+    message = limiter.Limiter("google", log=None).blocked(429, "test")
     limiter.Limiter("google", log=None).reset()
     check("blocco di Google: il messaggio consiglia il traduttore locale, senza comandi",
               "local translator" in message and "smith.py" not in message)
@@ -517,7 +517,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    project.DATA_ROOT = os.path.join(base, "dati")
+    project.DATA_ROOT = os.path.join(base, "data_folder")
     automatic.PROFILES_FOLDER = None
     ollama.folder = lambda: os.path.join(base, "ollama")  # local translator not installed
     steam.game_installed = lambda folder, steam=None: None  # no real Steam

@@ -77,7 +77,7 @@ La traduzione automatica non ha contesto: la qualità è quella di una traduzion
 - **Problemi o proposte:** apri una segnalazione nelle [Issues](https://github.com/shottocode/PatchSmith/issues), anche in italiano. Allega lo zip di **Crea rapporto**: non contiene la chiave DeepL né l'email.
 - **Domande e idee:** [Discussions](https://github.com/shottocode/PatchSmith/discussions).
 - **Problemi di sicurezza:** in privato, con [Report a vulnerability](https://github.com/shottocode/PatchSmith/security/advisories/new).
-- **Contribuire:** vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese, con il glossario dei termini italiani rimasti nelle chiavi dei dati).
+- **Contribuire:** vedi [CONTRIBUTING.md](CONTRIBUTING.md) (in inglese).
 
 ## Note legali
 

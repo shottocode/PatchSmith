@@ -24,7 +24,7 @@ CHAR_MAP = "?!0123456789aàbcdeèéfghiíjklmnoópqrstuùúvwxyz/.:,_-'%X()+CHTE
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -38,7 +38,7 @@ def fingerprint(p):
 # --- minimal date.win ------------------------------------------------------------------------------------------
 
 def data_win(strings, sprite, code=True, name="FintoGame"):
-    """FORM with GEN8 (name), STRG (strings), SPRT (sprites: [(nome, fotogrammi)]) and, if 'codice', an empty CODE
+    """FORM with GEN8 (name), STRG (strings), SPRT (sprites: [(nome, fotogrammi)]) and, if 'code', an empty CODE
     (game for the virtual machine: the code's strings are in STRG)."""
     all_items = [name] + list(strings) + [n for n, _ in sprite]
     # the chunks are built with absolute positions: first compute where STRG will be
@@ -119,12 +119,12 @@ def main(base):
 
     # --- 1. reading date.win: sprites, name, strings, map of the sprite font, mask of the languages
     vm = data_win(["local/*.json", CHAR_MAP], [("sprFont", len(CHAR_MAP)), ("sprPlayer", 4)])
-    game = os.path.join(base, "gioco")
+    game = os.path.join(base, "game")
     os.makedirs(os.path.join(game, "local"))
     open(os.path.join(game, "data.win"), "wb").write(vm)
     check("data.win: sprite con i fotogrammi, nome del gioco, stringhe",
-              gamemaker.sprite(vm) == [{"nome": "sprFont", "fotogrammi": len(CHAR_MAP)},
-                                       {"nome": "sprPlayer", "fotogrammi": 4}]
+              gamemaker.sprite(vm) == [{"name": "sprFont", "frames": len(CHAR_MAP)},
+                                       {"name": "sprPlayer", "frames": 4}]
               and gamemaker.names_of_game(vm) == ["FintoGame"] and "local/*.json" in gamemaker.strings(vm))
     check("font a sprite: la mappa dei caratteri (tanti quanti i fotogrammi) e la maschera 'local/*.json'",
               gamemaker.font_sprite_maps(game, vm) == [("sprFont", CHAR_MAP)]
@@ -144,10 +144,10 @@ def main(base):
     # --- 2. rules on the texts: style, codes, lowercase, space of the lines
     texts = list(EN.values())
     check("stile 'minuscolo' e codici-icona EP e H (confermati dal font); un gioco normale non lo e'",
-              adapter_gamemaker.caps_style(texts) == "minuscolo"
+              adapter_gamemaker.caps_style(texts) == "lowercase"
               and adapter_gamemaker.uppercase_codes(texts, CHAR_MAP, "U") == ["EP", "H"]
               and adapter_gamemaker.uppercase_codes(texts, None, "U") == []
-              and adapter_gamemaker.caps_style(["Hello World %d, Start Game" % i for i in range(40)]) == "normale")
+              and adapter_gamemaker.caps_style(["Hello World %d, Start Game" % i for i in range(40)]) == "normal")
     check("minuscole: tutto tranne icone e segnaposto; i testi con maiuscole normali restano come sono",
               adapter_gamemaker.to_lowercase("Mostra*FPS:", "show*fps:") == "mostra*fps:"
               and adapter_gamemaker.to_lowercase("Ottieni EP per {Item}", "gain EP for {Item}", ["EP"])
@@ -168,16 +168,16 @@ def main(base):
         json.dump(data, open(os.path.join(game, "local", name + ".json"), "w", encoding="utf-8"))
     english = os.path.join(game, "local", "english.json")
     before = fingerprint(english)
-    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "finto", silent)
+    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
     profile = json.load(open(path, encoding="utf-8"))
     entry = profile["file"][0]
     italian = os.path.join(game, "local", "italiano.json")
     check("lingua nuova local/italiano.json; english.json identico; profilo con stile, icone, spazio, riferimenti",
               os.path.exists(italian) and fingerprint(english) == before
-              and entry.get("lingua_nuova") == "local/italiano.json"
-              and entry.get("maiuscole") == "minuscolo" and entry.get("codici") == ["EP", "H"]
-              and entry.get("limiti", {}).get("configVsync") == [11, 2, 2]
-              and set(entry.get("riferimenti", {})) == {"fr", "es", "pt"} and outcome.get("lingua_aggiunta"))
+              and entry.get("new_language") == "local/italiano.json"
+              and entry.get("capitals") == "lowercase" and entry.get("codes") == ["EP", "H"]
+              and entry.get("limits", {}).get("configVsync") == [11, 2, 2]
+              and set(entry.get("references", {})) == {"fr", "es", "pt"} and outcome.get("added_language"))
     local_files = os.listdir(os.path.join(game, "local"))
     check("nessun file di PatchSmith che il gioco caricherebbe come lingua (niente *.json nostri)",
               not [n for n in local_files if "patchsmith" in n and n.endswith(".json")]
@@ -192,7 +192,7 @@ def main(base):
               it["uiDelete"] != EN["uiDelete"] and "Are you sure" in it["uiDelete"])
     check("rilancio: italiano.json non e' scambiato per una traduzione ufficiale del gioco",
               not any("italiano" in r for r in adapter_gamemaker.language_json_files(game))
-              and automatic.analyze_and_translate(game, "auto", "it", "finto", silent)[0] == path)
+              and automatic.analyze_and_translate(game, "auto", "it", "fake", silent)[0] == path)
 
     # --- 4. language set in the game's saved options, and restore
     options_dir = os.path.join(base, "appdata", "FintoGame")
@@ -229,12 +229,12 @@ def main(base):
     original = fingerprint(old_en)
     info = project.create_backup(old_en)
     translated = json.dumps(dict(EN, uiPlay="gioca")).encode("utf-8")
-    info["hash_scritti"] = [hashlib.sha256(translated).hexdigest()]
+    info["written_hashes"] = [hashlib.sha256(translated).hexdigest()]
     os.replace(old_en + project.INFO_SUFFIX, old_en + project.OLD_INFO_SUFFIX)
     with open(old_en + project.OLD_INFO_SUFFIX, "w", encoding="utf-8") as f:
         json.dump(info, f)
     open(old_en, "wb").write(translated)
-    automatic.analyze_and_translate(old, "auto", "it", "finto", silent)
+    automatic.analyze_and_translate(old, "auto", "it", "fake", silent)
     check("dalla versione precedente: english.json rimesso originale, informazioni con il nome nuovo, lingua nuova",
               fingerprint(old_en) == original and not os.path.exists(old_en + project.OLD_INFO_SUFFIX)
               and os.path.exists(old_en + project.INFO_SUFFIX)
@@ -246,7 +246,7 @@ def main(base):
     for n in os.listdir(os.path.join(other, "local")):
         if "patchsmith" in n or n == "italiano.json":
             os.remove(os.path.join(other, "local", n))
-    automatic.analyze_and_translate(other, "auto", "it", "finto", silent)
+    automatic.analyze_and_translate(other, "auto", "it", "fake", silent)
     other_italian = os.path.join(other, "local", "italiano.json")
     automatic.restore(other, silent)
     open(other_italian, "w", encoding="utf-8").write('{"uiPlay": "gioca (traduzione amatoriale)"}')
@@ -269,7 +269,7 @@ def main(base):
     open(config, "w", encoding="utf-8", newline="").write(text.replace(
         json.loads(text)["config"], ds_map([("extrasUnlocked", 10), ("options", ds_list(["italiano", 0, 1, "yes"])),
                                              ("totalFeats", 3)])))
-    os.rename(options_dir, options_dir + "-tmp")  # the options of 'gioco', not of 'altro'
+    os.rename(options_dir, options_dir + "-tmp")  # the options of 'game', not of 'altro'
     other_options = os.path.join(base, "appdata", "FintoGame")
     os.rename(options_dir + "-tmp", other_options)
     automatic.restore(other, silent)
@@ -291,7 +291,7 @@ def main(base):
     is_set = language_gamemaker.find(open(config, encoding="utf-8").read(), {"italiano"})
     os.remove(config)
     check("Riapplica imposta la lingua aggiunta; con le opzioni cancellate il ripristino si chiude lo stesso",
-              outcome.get("lingua_aggiunta", {}).get("impostata") and is_set
+              outcome.get("added_language", {}).get("is_set") and is_set
               and automatic.restore(other, silent) and not official_language.is_set(other))
     # the player chooses another language after the translation: a new 'Analyze and translate' respects it
     open(config, "w", encoding="utf-8", newline="").write(text)

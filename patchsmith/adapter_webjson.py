@@ -168,7 +168,7 @@ class JSONFile:
     def _replace(self, data):
         """The original text with only the literals of the changed strings rewritten; the rest (comments, spaces,
         trailing commas, numbers written as they were) stays identical. Raises ValueError if something that is not
-        a string changed, or if the result, read back, does not give 'dati'."""
+        a string changed, or if the result, read back, does not give 'data'."""
         pieces, last = [], 0
         for path, (start, end) in sorted(string_positions(without_comments(self._text)).items(),
                                                key=lambda x: x[1][0]):
@@ -216,13 +216,13 @@ def schema_stats(data, max_examples=3):
     """For each schema: how many strings, how many readable, characters, examples."""
     stat = {}
     for _, pattern, value_ in leaves(data):
-        s = stat.setdefault(pattern, {"stringhe": 0, "leggibili": 0, "caratteri": 0, "esempi": []})
-        s["stringhe"] += 1
+        s = stat.setdefault(pattern, {"strings": 0, "readable": 0, "chars": 0, "examples": []})
+        s["strings"] += 1
         if is_readable_text(value_):
-            s["leggibili"] += 1
-            s["caratteri"] += len(value_)
-            if len(s["esempi"]) < max_examples:
-                s["esempi"].append(value_[:90].replace("\n", " / "))
+            s["readable"] += 1
+            s["chars"] += len(value_)
+            if len(s["examples"]) < max_examples:
+                s["examples"].append(value_[:90].replace("\n", " / "))
     return stat
 
 
@@ -239,7 +239,7 @@ def suggest_schemas(stat):
     """Splits the schemas into (includi, escludi) with generic rules."""
     include, exclude = [], []
     for pattern, s in sorted(stat.items()):
-        if s["leggibili"] == 0:
+        if s["readable"] == 0:
             continue
         if technical_key(pattern):
             exclude.append(pattern)

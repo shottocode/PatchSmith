@@ -15,7 +15,7 @@ import urllib.parse
 import urllib.request
 import zlib
 
-from . import interruption
+from . import interruption, legacy
 from .text import DETAIL
 
 MAX_BLOCK = 4000  # characters per request (margin below the roughly 5,000 accepted)
@@ -24,7 +24,7 @@ MAX_BLOCK = 4000  # characters per request (margin below the roughly 5,000 accep
 class BackendError(Exception):
     """The translation service cannot be reached or rejects the requests.
 
-    codice: the outcome for the interface (see outcome.py), e.g. TRADUTTORE_ASSENTE; comando: what to type on the
+    codice: the outcome for the interface (see outcome.py), e.g. TRANSLATOR_MISSING; comando: what to type on the
     command line to fix it (only the command line shows it: the messages talk about the interface's buttons)."""
 
     def __init__(self, message="", code=None, command=None):
@@ -45,7 +45,7 @@ class Fake(Backend):
     """Test backend: does not use the network, puts [it] before the text. Its translations end up in a separate
     translation memory (*.test.json), so they do not pollute the real one."""
 
-    name = "finto"
+    name = "fake"
 
     def translate_lines(self, lines, origin, dest_lang):
         interruption.check()
@@ -279,10 +279,10 @@ class DeepL(Backend):
         if not key:
             raise BackendError("To use DeepL you need your key (free): create a DeepL API Free account at "
                                "deepl.com/pro-api and paste it into the 'DeepL key' field (or into the "
-                               "PATCHSMITH_DEEPL variable).", "TRADUTTORE_ASSENTE")
+                               "PATCHSMITH_DEEPL variable).", "TRANSLATOR_MISSING")
         if not re.fullmatch(r"[0-9A-Za-z:-]+", key):
             raise BackendError("The DeepL key contains invalid characters: copy it from the DeepL website.",
-                                "TRADUTTORE_ASSENTE")
+                                "TRANSLATOR_MISSING")
         self.key = key
         self.from_variable = False
         self.base = "https://api-free.deepl.com" if key.endswith(":fx") else "https://api.deepl.com"
@@ -427,7 +427,7 @@ class MyMemory(Backend):
 
     def pause(self):
         block = self.limiter.current_block()
-        if block and block.get("tipo") == "quota" and self.email and not block.get("con_email"):
+        if block and block.get("kind") == "quota" and self.email and not block.get("with_email"):
             self.limiter.reset()  # quota without email used up: with the email we can go on
             return None
         return self.limiter.pause()
@@ -439,7 +439,7 @@ class MyMemory(Backend):
         now = datetime.datetime.fromtimestamp(self.limiter.current_time())
         tomorrow = (now + datetime.timedelta(days=1)).replace(hour=0, minute=30, second=0, microsecond=0)
         self.limiter.blocked(429, "free daily characters have been used up", until=tomorrow.timestamp(),
-                                 extra={"con_email": bool(self.email)})
+                                 extra={"with_email": bool(self.email)})
         return ("You've used today's free MyMemory characters (%s): the translations done stay saved, resume "
                 "tomorrow%s." % ("50,000 with your email address" if self.email else "5,000 without email",
                                         "" if self.email else " or enter your email address to reach 50,000"))
@@ -651,7 +651,7 @@ def translation_problems(original, translated, dest_lang="it"):
     from .text import _TOKEN
     problems = []
     if not translated.strip():
-        return ["vuota"]
+        return ["empty"]
     if "\n" in translated and "\n" not in original:
         problems.append("line break added")
     elif translated.count("\n") != original.count("\n"):  # more or fewer lines: the label overflows its space
@@ -675,7 +675,7 @@ def translation_problems(original, translated, dest_lang="it"):
             and not _numbers_in_words(o, t, dest_lang):
         problems.append("different numbers")
     if collections.Counter(_TOKEN.findall(original)) != collections.Counter(_TOKEN.findall(translated)):
-        problems.append("segnaposto")
+        problems.append("placeholders")
     own_letters = _LANGUAGE_LETTERS.get(dest_lang.split("-")[0])
     if own_letters and any(c not in own_letters and c not in original and c.isalpha() and not c.isascii()
                        and unicodedata.normalize("NFKD", c)[0].isascii() for c in translated):
@@ -694,7 +694,7 @@ def _unchanged(original, translated):
 
 
 def seed_for(text, number):
-    """The seed of attempt 'numero' for a text: always the same for the same pair (even from one run to the next:
+    """The seed of attempt 'number' for a text: always the same for the same pair (even from one run to the next:
     no Python hash(), which changes at every run), different from one attempt to the next and never equal to those
     of the first round (Local.ATTEMPTS: 42, 7, 11)."""
     return zlib.crc32(("%d\x00%s" % (number, text)).encode("utf-8")) % 2_000_000_000 + 100
@@ -712,7 +712,7 @@ class Local(Backend):
     untranslated (Project retries them right away in another round: see 'giri' in translate_lines). The server
     starts at the first line and is closed with close()."""
 
-    name = "locale"
+    name = "local"
     limited = False
     uses_context = True  # accepts for each line the key and the game's official translations (see Project)
     # accepts for each line the round (see translate_lines): an already rejected text changes seeds
@@ -730,7 +730,7 @@ class Local(Backend):
         if model not in ollama.MODELS:
             model = "4b"
         self.key = model
-        self.model = ollama.MODELS[model]["nome"]
+        self.model = ollama.MODELS[model]["name"]
         self.log = log
         self._server = server
         self._owned = server is None
@@ -740,7 +740,7 @@ class Local(Backend):
         self._warned_slow = False
         # lines translated together: with PatchSmith's server as many as the model on the graphics card can handle;
         # with a server given from outside (tests) one at a time, unless told otherwise
-        self.parallel = max(1, parallel or (ollama.MODELS[model].get("parallele", 1) if server is None else 1))
+        self.parallel = max(1, parallel or (ollama.MODELS[model].get("parallel", 1) if server is None else 1))
         self._lock = threading.Lock()
         # {testo: (traduzione, problemi)}: the best proposal for the texts rejected by the checks. Only if it is a
         # dictionary (the live translator, xunity_service, prepares it to answer XUnity anyway)
@@ -756,10 +756,10 @@ class Local(Backend):
         """Expected seconds: startup (detection of the graphics card and loading of the model) plus the texts, at the
         pace measured on this PC after the first lines (before that: the one from the tests on an RTX 3060 Ti 8 GB)."""
         from . import ollama
-        per_text = ollama.MODELS[self.key]["secondi_per_testo"]
+        per_text = ollama.MODELS[self.key]["seconds_per_text"]
         if self.lines_done >= 10:
             per_text = self.lines_elapsed / self.lines_done
-        startup = 0 if self._ready else ollama.MODELS[self.key]["secondi_avvio"]  # graphics card + model
+        startup = 0 if self._ready else ollama.MODELS[self.key]["startup_seconds"]  # graphics card + model
         return startup + sum(per_text * (0.5 + c / 80) for c in chars_per_request)
 
     def _ensure_server(self):
@@ -768,10 +768,10 @@ class Local(Backend):
             return
         if self._server is None:
             if not ollama.installed():
-                raise BackendError(NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=INSTALL_COMMAND)
+                raise BackendError(NOT_INSTALLED, "TRANSLATOR_MISSING", command=INSTALL_COMMAND)
             if not ollama.model_present(self.key):
                 raise BackendError("The %s model is not downloaded: press 'Install...' next to the local translator."
-                                    % ollama.MODELS[self.key]["etichetta"], "TRADUTTORE_ASSENTE",
+                                    % ollama.MODELS[self.key]["label"], "TRANSLATOR_MISSING",
                                     command="python -I smith.py local --install %s" % self.key)
             self._server = ollama.Server(self.log, parallel=self.parallel)
         try:
@@ -817,18 +817,18 @@ class Local(Backend):
         if not context:
             return ""
         lines = ""
-        key = (context.get("chiave") or "").replace("\n", " ").strip()[:80]
+        key = (context.get("key") or "").replace("\n", " ").strip()[:80]
         if key:
             lines += KEY_CONTEXT % key
-        references = [(c, t.replace("\n", " ").strip()) for c, t in (context.get("riferimenti") or {}).items()
+        references = [(c, t.replace("\n", " ").strip()) for c, t in (context.get("references") or {}).items()
                        if t and t.strip()]
         if references:
             lines += REFERENCES_CONTEXT % (self._english_name(dest_lang), "; ".join(
                 "%s: %s" % (self._english_name(c), t) for c, t in references))
-        do_not_use = "".join(c for c in dict.fromkeys(context.get("non_usare") or "") if not c.isspace())
+        do_not_use = "".join(c for c in dict.fromkeys(context.get("do_not_use") or "") if not c.isspace())
         if do_not_use:
             lines += CHARS_FIX % " ".join(do_not_use)
-        width = context.get("larghezza")
+        width = context.get("width")
         if isinstance(width, int) and width > 0:  # (only when a label is requested shorter)
             lines += WIDTH_CONTEXT % (self._english_name(dest_lang), width)
         return lines
@@ -944,8 +944,8 @@ class Local(Backend):
         last, echo, echoes_seen = "", None, 0
         same_language = origin.split("-")[0] == dest_lang.split("-")[0]
         current = dict(context or {})
-        key = re.sub(r"[\W_]+", "", current.get("chiave") or "").casefold()
-        references = [r for r in (current.get("riferimenti") or {}).values() if r and r.strip()]
+        key = re.sub(r"[\W_]+", "", current.get("key") or "").casefold()
+        references = [r for r in (current.get("references") or {}).values() if r and r.strip()]
         attempts, fix = self._attempts(text, round_), ""
         proposal = None  # (translation, problems) rejected with the fewest problems: for self.rejects
         for n, (temperature, seed) in enumerate(attempts):
@@ -968,15 +968,15 @@ class Local(Backend):
             if len(key) >= 6 and key in re.sub(r"[\W_]+", "", translated).casefold() \
                     and key not in re.sub(r"[\W_]+", "", text).casefold():
                 problems.append("copied key")  # the model wrote the hint instead of the translation
-                current["chiave"] = None  # the next attempt, without the hint
+                current["key"] = None  # the next attempt, without the hint
             if references and not _unchanged(text, translated) and any(_unchanged(r, translated) for r in references):
                 problems.append("copied reference")  # an official translation of another language, copied
-                current["riferimenti"] = {}  # next attempt, without the references (if the same again, it is right)
+                current["references"] = {}  # next attempt, without the references (if the same again, it is right)
                 references = []
             fix = ""
             if "different numbers" in problems and re.search(r"\d", text):
                 fix += NUMBERS_FIX
-            if "segnaposto" in problems:
+            if "placeholders" in problems:
                 fix += PLACEHOLDER_FIX
             if fix and n == 0:
                 attempts[1] = attempts[0]  # the same question, with the correction (then the third attempt remains)
@@ -987,7 +987,7 @@ class Local(Backend):
                 echo, echoes_seen = translated, echoes_seen + 1
                 if echoes_seen >= 2:
                     return translated  # a text that stayed the same twice is a name or a word that does not change
-            elif problems == ["segnaposto"] and _TOKEN.search(text):
+            elif problems == ["placeholders"] and _TOKEN.search(text):
                 last = translated
             if translated.strip() and (proposal is None or len(problems) < len(proposal[1])):
                 proposal = (translated, problems)
@@ -998,7 +998,7 @@ class Local(Backend):
         return last
 
     def translate_lines(self, lines, origin, dest_lang, contexts=None, rounds=None):
-        """Translates the lines, 'parallele' at a time (the graphics card processes several together); the order stays
+        """Translates the lines, 'parallel' at a time (the graphics card processes several together); the order stays
         that of the lines. With 'Stop' or an error, those already translated are in e.partials. giri: for each line
         how many times it has already been tried (0 or missing: first round, see _attempts)."""
         self._ensure_server()
@@ -1060,9 +1060,9 @@ class Local(Backend):
         self._ready = False
 
 
-BACKEND = {"locale": Local, "google": GoogleFree, "deepl": DeepL, "mymemory": MyMemory, "finto": Fake}
+BACKEND = {"local": Local, "google": GoogleFree, "deepl": DeepL, "mymemory": MyMemory, "fake": Fake}
 DESCRIPTIONS = {
-    "locale": "Local translator (on your PC: no limits, no blocks)",
+    "local": "Local translator (on your PC: no limits, no blocks)",
     "google": "Free Google (unofficial, often blocked: Google may reject it)",
     "deepl": "DeepL (free with your key, 500,000 characters per month)",
     "mymemory": "MyMemory (without an account, 50,000 characters per day with your email)",
@@ -1075,67 +1075,68 @@ def credentials():
     data = {}
     try:
         with open(project.data_folder("settings.json"), encoding="utf-8") as f:
-            data = json.load(f)
+            data = legacy.load(f)
     except (OSError, ValueError):
         pass
-    return {"chiave_deepl": data.get("chiave_deepl") or os.environ.get("PATCHSMITH_DEEPL") or "",
+    return {"deepl_key": data.get("deepl_key") or os.environ.get("PATCHSMITH_DEEPL") or "",
             "email_mymemory": data.get("email_mymemory") or os.environ.get("PATCHSMITH_EMAIL") or "",
-            "deepl_da_variabile": not data.get("chiave_deepl") and bool(os.environ.get("PATCHSMITH_DEEPL")),
-            "modello_locale": data.get("modello_locale") or os.environ.get("PATCHSMITH_MODELLO") or ""}
+            "deepl_from_env": not data.get("deepl_key") and bool(os.environ.get("PATCHSMITH_DEEPL")),
+            "local_model": data.get("local_model") or os.environ.get("PATCHSMITH_MODEL")
+            or os.environ.get("PATCHSMITH_MODELLO") or ""}
 
 
 def default():
     """The proposed translator: always the local one (no limits, no blocks), even if it is not installed yet.
     On a new PC the first step is to install it ("to install" and the "Install..." button next to it): free Google
     often rejects PatchSmith's requests from the very first one."""
-    return "locale"
+    return "local"
 
 
 def probe_local(model=None, log=print, text="Start game", a="it", server=None):
     """Test of the local translator (after installation): starts the server, loads the model and translates a
-    sentence, measuring the times. {'ok', 'traduzione', 'avvio' (seconds to start the server and load the model),
-    'secondi' (for the sentence), 'scheda' (how much of the model is on the graphics card, from 0 to 1; None if
-    unknown), 'messaggio' (for the player)}. Does not raise translator errors: if the test fails, the message says so.
+    sentence, measuring the times. {'ok', 'translation', 'startup' (seconds to start the server and load the model),
+    'seconds' (for the sentence), 'gpu' (how much of the model is on the graphics card, from 0 to 1; None if
+    unknown), 'message' (for the player)}. Does not raise translator errors: if the test fails, the message says so.
     server: for the tests."""
     from . import ollama
     key = model if model in ollama.MODELS and (server is not None or ollama.model_present(model)) \
         else ollama.default_model()
     a = "it" if (a or "en").split("-")[0].lower() == "en" else a  # (in English the sentence would stay the same)
     translator = Local(key, log=log, server=server)
-    output = {"ok": False, "traduzione": None, "avvio": None, "secondi": None, "scheda": None, "modello": key}
+    output = {"ok": False, "translation": None, "startup": None, "seconds": None, "gpu": None, "model": key}
     start = time.monotonic()
     try:
         translator._ensure_server()
-        output["avvio"] = time.monotonic() - start
+        output["startup"] = time.monotonic() - start
         try:
             loaded = translator._server.call("/api/ps").get("models", [])
         except (OSError, ValueError, AttributeError):
             loaded = []
         for m in loaded:
             if m.get("name") == translator.model and m.get("size"):
-                output["scheda"] = max(0.0, min(1.0, m.get("size_vram", 0) / m["size"]))
+                output["gpu"] = max(0.0, min(1.0, m.get("size_vram", 0) / m["size"]))
         before = time.monotonic()
         response = translator.translate_lines([text], "en", a)[0]
-        output["secondi"] = time.monotonic() - before
+        output["seconds"] = time.monotonic() - before
     except Exception as e:  # noqa: BLE001 - the installation succeeded: here we only say how the test went
-        output["messaggio"] = "the translation test failed: %s" % (
+        output["message"] = "the translation test failed: %s" % (
             e if isinstance(e, BackendError) else "%s: %s" % (type(e).__name__, e))
         return output
     finally:
         translator.close()
-    output["traduzione"] = response
+    output["translation"] = response
     if not response or _unchanged(response, text):
-        output["messaggio"] = ('the translation test failed: "%s" stayed untranslated. Try again; if it happens again, '
+        output["message"] = ('the translation test failed: "%s" stayed untranslated. Try again; if it happens again, '
                                "create a report." % text)
         return output
     output["ok"] = True
-    sheet = output["scheda"]
+    sheet = output["gpu"]
     where = ("" if sheet is None else ", on the graphics card" if sheet > 0.95 else
             ", partly on the graphics card (a bit slower)" if sheet > 0 else
             ", but only with the processor, without a graphics card: it will be slow (update the graphics card driver, "
             'or choose the "Fast" model)')
-    output["messaggio"] = "ready%s: \"%s\" -> \"%s\" in %s (startup and model loading: %s)." % (
-        where, text, response, _seconds(output["secondi"]), _seconds(output["avvio"]))
+    output["message"] = "ready%s: \"%s\" -> \"%s\" in %s (startup and model loading: %s)." % (
+        where, text, response, _seconds(output["seconds"]), _seconds(output["startup"]))
     return output
 
 
@@ -1182,20 +1183,20 @@ def create_backend(name, log=print):
         return GoogleFree(log=log)
     if name == "deepl":
         c = credentials()
-        d = DeepL(c["chiave_deepl"], log=log)
-        d.from_variable = c["deepl_da_variabile"]
+        d = DeepL(c["deepl_key"], log=log)
+        d.from_variable = c["deepl_from_env"]
         return d
     if name == "mymemory":
         return MyMemory(credentials()["email_mymemory"], log=log)
-    if name == "locale":
+    if name == "local":
         from . import ollama
-        if ollama.state() != "pronto":  # right away: before installing or changing anything in the game
-            raise BackendError(NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=INSTALL_COMMAND)
-        model = credentials()["modello_locale"]
+        if ollama.state() != "ready":  # right away: before installing or changing anything in the game
+            raise BackendError(NOT_INSTALLED, "TRANSLATOR_MISSING", command=INSTALL_COMMAND)
+        model = credentials()["local_model"]
         if model not in ollama.MODELS or not ollama.model_present(model):
             if model in ollama.MODELS:
-                log("  The %s model is not downloaded: using %s." % (ollama.MODELS[model]["etichetta"],
-                                                                  ollama.MODELS[ollama.default_model()]["etichetta"]))
+                log("  The %s model is not downloaded: using %s." % (ollama.MODELS[model]["label"],
+                                                                  ollama.MODELS[ollama.default_model()]["label"]))
             model = ollama.default_model()
         return Local(model, log=log)
     return Fake()

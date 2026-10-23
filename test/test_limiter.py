@@ -22,7 +22,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -61,7 +61,7 @@ class Response:
 
 
 def http_error(code, body=b"", url="https://translate.googleapis.com/x", header=None):
-    return urllib.error.HTTPError(url, code, "errore", header or {}, io.BytesIO(body))
+    return urllib.error.HTTPError(url, code, "error", header or {}, io.BytesIO(body))
 
 
 class Opener:
@@ -132,11 +132,11 @@ def main(base):
         message = ""
     except backend.Blocked as e:
         message = str(e)
-    state = json.load(open(os.path.join(base, "blocco.json"), encoding="utf-8"))["google"]["blocco"]
+    state = json.load(open(os.path.join(base, "blocco.json"), encoding="utf-8"))["google"]["block"]
     check("Google 429 alla prima richiesta: una sola richiesta, nessuna attesa 30/60/120 s",
               len(opener.requests) == 1 and not network_waits and sum(clock.expectations) < 10)
     check("... blocco 'a freddo' ricordato per 24 ore, messaggio onesto (non 'troppe richieste')",
-              state["tipo"] == "a_freddo" and abs(state["fino"] - state["dal"] - 86400) < 1
+              state["kind"] == "cold" and abs(state["until"] - state["since"] - 86400) < 1
               and "it's not an exceeded limit" in message and "too many requests" not in message)
     lim2, _ = fake_limiter(base, name="blocco.json", clock=clock)
     opener2 = Opener(google_echo, clock)
@@ -156,9 +156,9 @@ def main(base):
     ends = []
     for _ in range(4):
         lim.blocked(429)
-        s = json.load(open(os.path.join(base, "livelli.json"), encoding="utf-8"))["google"]["blocco"]
-        ends.append((round((s["fino"] - s["dal"]) / 86400), s["disattivato"]))
-        clock.t = s["fino"] + 1
+        s = json.load(open(os.path.join(base, "livelli.json"), encoding="utf-8"))["google"]["block"]
+        ends.append((round((s["until"] - s["since"]) / 86400), s["disabled"]))
+        clock.t = s["until"] + 1
     check("blocchi a freddo ripetuti: 1, 3, 7 giorni, poi disattivato finche' non lo riattivi tu",
               ends[:3] == [(1, False), (3, False), (7, False)] and ends[3][1] is True and lim.pause())
     lim.reset()
@@ -168,9 +168,9 @@ def main(base):
         lim.before_request(100)
         lim.ok()
     lim.blocked(429)
-    s = json.load(open(os.path.join(base, "traffico.json"), encoding="utf-8"))["google"]["blocco"]
+    s = json.load(open(os.path.join(base, "traffico.json"), encoding="utf-8"))["google"]["block"]
     check("blocco dopo richieste riuscite: 'dopo traffico', pausa di un'ora",
-              s["tipo"] == "dopo_traffico" and abs(s["fino"] - s["dal"] - 3600) < 1)
+              s["kind"] == "after_traffic" and abs(s["until"] - s["since"] - 3600) < 1)
 
     # --- 4. other signals: HTML instead of JSON, /sorry/, cookie consent, 400
     for name, response, expected in (
@@ -222,7 +222,7 @@ def main(base):
     lim.before_request(100)
     for _ in range(7):
         s = lim._read()
-        s["google"]["richieste"].append([time.time(), 100])
+        s["google"]["requests"].append([time.time(), 100])
         lim._write(s)
     threading.Timer(0.3, interruption.request_stop).start()
     start = time.monotonic()
@@ -247,13 +247,13 @@ def main(base):
     lim, clock = fake_limiter(base, name="rotto.json")
     lim.before_request(10)
     future = os.path.join(base, "futuro.json")
-    json.dump({"google": {"richieste": [], "blocco": {"dal": 1, "fino": 4_000_000_000, "livello": 1,
-                                                      "tipo": "a_freddo"}}}, open(future, "w"))
+    json.dump({"google": {"requests": [], "block": {"since": 1, "until": 4_000_000_000, "level": 1,
+                                                      "kind": "cold"}}}, open(future, "w"))
     lim, clock = fake_limiter(base, name="futuro.json")
     lim.pause()
     data = json.load(open(future, encoding="utf-8")) if os.path.exists(future) else {}
     check("stato rovinato: nessun errore; data assurda ridotta a 8 giorni",
-              lim.pause() is not None and lim._own_state(lim._read(), clock.t)["blocco"]["fino"] <= clock.t + 8 * 86400
+              lim.pause() is not None and lim._own_state(lim._read(), clock.t)["block"]["until"] <= clock.t + 8 * 86400
               and data is not None)
 
     # --- 10. two limiters on the same file count together (interface + command line)
@@ -283,7 +283,7 @@ def main(base):
     check("DeepL: codici delle lingue (zh-TW, pt-BR, en)",
               backend._deepl_language("zh-TW", True) == "ZH-HANT" and backend._deepl_language("pt-BR", True) == "PT-BR"
               and backend._deepl_language("en", True) == "EN-US" and backend._deepl_language("zh-CN", False) == "ZH")
-    for code, text, expected_text in ((456, "finito", "used up"), (403, "chiave", "doesn't accept the key")):
+    for code, text, expected_text in ((456, "finito", "used up"), (403, "key", "doesn't accept the key")):
         try:
             backend.DeepL("x:fx", log=silent, opener=Opener(lambda r, c=code: http_error(c), clock),
                           limiter=lim).translate_lines(["one"], "en", "it")
@@ -337,14 +337,14 @@ def main(base):
 
     # --- 13. credentials from settings.json
     with open(os.path.join(project.PROJECT_FOLDER, "settings.json"), "w", encoding="utf-8") as f:
-        json.dump({"chiave_deepl": "k:fx", "email_mymemory": "a@b.it"}, f)
+        json.dump({"deepl_key": "k:fx", "email_mymemory": "a@b.it"}, f)
     check("credenziali lette dalle impostazioni",
               backend.create_backend("deepl", silent).key == "k:fx"
               and backend.create_backend("mymemory", silent).email == "a@b.it")
 
     # --- 14. project: service paused -> no request; groups by characters; fallbacks in one request
     profile = os.path.join(base, "profilo.json")
-    json.dump({"nome": "prova", "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
+    json.dump({"name": "test", "game_folder": base, "source_language": "en", "target_language": "it",
                "file": []}, open(profile, "w"))
     p = Project(profile, silent)
     lim, clock = fake_limiter(base, name="progetto.json")
@@ -469,12 +469,12 @@ def main(base):
 
     from patchsmith import cli
     cli_profile = os.path.join(project.PROJECT_FOLDER, "profilo-cli.json")
-    json.dump({"nome": "cli", "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
+    json.dump({"name": "cli", "game_folder": base, "source_language": "en", "target_language": "it",
                "file": [], "backend": "deepl"}, open(cli_profile, "w"))
     os.remove(os.path.join(project.PROJECT_FOLDER, "settings.json"))
     os.environ.pop("PATCHSMITH_DEEPL", None)
     try:
-        code = cli.main(["traduci", cli_profile, "--backend", "deepl"])
+        code = cli.main(["translate", cli_profile, "--backend", "deepl"])
     except Exception:
         code = "eccezione"
     check("riga di comando: DeepL senza chiave -> errore spiegato (uscita 1), niente traceback", code == 1)

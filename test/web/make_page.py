@@ -69,7 +69,7 @@ def main():
         w.TAG, "<script>\n" + script + "\n</script>")
     with open(os.path.join(HERE, "index-inline.html"), "w", encoding="utf-8") as f:
         f.write(page)
-    print("scritto", os.path.join(HERE, "index-inline.html"))
+    print("written", os.path.join(HERE, "index-inline.html"))
 
 
 if __name__ == "__main__":

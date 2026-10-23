@@ -39,7 +39,7 @@ def main():
         put_back_text = text.restore_placeholders(shielded, found)
         outcome = found == expected and put_back_text == s
         ok += outcome
-        print(("OK    " if outcome else "ERRORE") + "  %r -> %r %s" % (s, shielded, found))
+        print(("OK    " if outcome else "ERROR ") + "  %r -> %r %s" % (s, shielded, found))
     print("\nRISULTATO: %d/%d controlli superati" % (ok, len(CASES)))
     return ok == len(CASES)
 

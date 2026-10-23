@@ -15,7 +15,7 @@ Fake games, fonts and logs (test/fake_unity.py, test/data/signals): no real game
   read-only mode it writes nothing;
 - Unity Localization with the Player.log (IL2CPP game): characters noted and table rewritten with "Reapply";
 - Unreal: characters of the game's other Latin languages (full Latin-1 if they use them), no limit without clues;
-- labels too long: shorter requests to the local translator (context 'larghezza', also in the real prompt), the
+- labels too long: shorter requests to the local translator (context 'width', also in the real prompt), the
   shortest valid one kept, the others in problems.json with the original text and in the "Too long" list of
   "Fix translations"; only once; not the fixes made by hand; with the other translators only noted; the space of the
   official translations; outcome and messages.
@@ -45,7 +45,7 @@ ASCII = "".join(chr(c) for c in range(32, 127))
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -109,9 +109,9 @@ def test_font(base):
         "Gioco_Data/resources.assets": fake.font_file([("Testi SDF", ASCII + "à", 0)], trees=False)})
     game_data = os.path.join(game, "Gioco_Data")
     found = font_unity.game_fonts(game_data)
-    names = sorted((f["nome"], f["modo"]) for f in found["tmp"])
+    names = sorted((f["name"], f["mode"]) for f in found["tmp"])
     check("font del gioco: quello del bundle (con il modo) e quello di resources.assets (senza albero)",
-              names == [("Testi SDF", None), ("Titoli SDF", 0)] and found["completa"])
+              names == [("Testi SDF", None), ("Titoli SDF", 0)] and found["complete"])
     allowed, reason = font_unity.allowed_chars(game_data)
     check("regola: un carattere va bene se almeno un font lo ha (à da uno, ü dall'altro), è no",
               allowed is not None and {"à", "ü"} <= allowed and "è" not in allowed
@@ -149,7 +149,7 @@ def test_font(base):
     third = font_unity.allowed_chars(game_data, cache=cache)
     check("cache: la seconda volta non rilegge i font; dopo un aggiornamento del gioco si, e ora è va bene",
               reread and second == first and "è" not in first[0] and third[0] is not None and "è" in third[0]
-              and read_json(cache)["intervalli"])
+              and read_json(cache)["ranges"])
 
 
 def _test_memory(profile):
@@ -163,11 +163,11 @@ def test_unity_localization(base):
                                           TABLE_FR: fake.table_bundles([("UI_fr", "fr", FR)]),
                                           "fonts_assets_all.bundle": font})
     fr_before = fingerprint(os.path.join(folder, TABLE_FR))
-    profile, _full, e = automatic.analyze_and_translate(game, "en", "it", backend="finto", log=silent)
-    name = read_json(profile)["nome"]
+    profile, _full, e = automatic.analyze_and_translate(game, "en", "it", backend="fake", log=silent)
+    name = read_json(profile)["name"]
     cache = project.data_folder("memory", "%s.unity" % name, "font.json")
     check("Unity Localization: traduzione senza accenti scritta com'e'; font letti e tenuti in font.json",
-              e["esito"].code == "OK" and os.path.exists(cache) and [t for _, t in adapter_unity_loc.TablesFile(
+              e["outcome"].code == "OK" and os.path.exists(cache) and [t for _, t in adapter_unity_loc.TablesFile(
                   os.path.join(folder, TABLE_EN)).texts()] == ["[it] " + t for t in EN])
     memory = _test_memory(profile)
     data = read_json(memory)
@@ -184,12 +184,12 @@ def test_unity_localization(base):
     problems = read_json(project.problems_path(read_json(profile), test=True))
     check("un carattere che non si puo' adattare (→): resta l'originale, in problemi.json con il carattere da "
               "non usare; l'esito lo dice (testo adattato e traduzione scartata)",
-              texts[4] == EN[4] and problems.get(EN[4], {}).get("dove") == "gioco"
-              and "→" in problems[EN[4]].get("non_usare", "") and d["esito"].extra.get("adattate_font") == 1
-              and '"è" becomes "e"' in "\n".join(outcome._attempts_text(d["esito"])))
+              texts[4] == EN[4] and problems.get(EN[4], {}).get("where") == "game"
+              and "→" in problems[EN[4]].get("do_not_use", "") and d["outcome"].extra.get("font_adapted") == 1
+              and '"è" becomes "e"' in "\n".join(outcome._attempts_text(d["outcome"])))
     # characters the game said it cannot draw (Unity's log): they count even if the font has them
     p = read_json(profile)
-    p["caratteri_mancanti"] = "é"
+    p["missing_chars"] = "é"
     scan.save_json(profile, p)
     automatic.reapply(game, silent, test=True, outcome={})
     texts = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(folder, TABLE_EN)).texts()]
@@ -200,7 +200,7 @@ def test_unity_localization(base):
     folder_b = fake.il2cpp_game(good, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)]),
                                             "fonts_assets_all.bundle": fake.bundle([("CAB-f", fake.font_file(
                                                 [("Testi SDF", ASCII + "àèéìòù", 0)]))])})
-    profile_b, _c, _e = automatic.analyze_and_translate(good, "en", "it", backend="finto", log=silent)
+    profile_b, _c, _e = automatic.analyze_and_translate(good, "en", "it", backend="fake", log=silent)
     memory_b = _test_memory(profile_b)
     data = read_json(memory_b)
     data[EN[3]] = "La porta è chiusa. Trova prima la chiave, perché serve."
@@ -220,7 +220,7 @@ def test_unity_localization(base):
     finally:
         font_unity.allowed_chars = real
     check("errore imprevisto nella lettura dei font: le traduzioni si scrivono lo stesso, senza limiti",
-              done and d["esito"].code == "OK" and [t for _, t in adapter_unity_loc.TablesFile(
+              done and d["outcome"].code == "OK" and [t for _, t in adapter_unity_loc.TablesFile(
                   os.path.join(folder_b, TABLE_EN)).texts()][3] == data[EN[3]])
 
 
@@ -253,8 +253,8 @@ def _fake_components(folder):
                 z.writestr(name, content)
         with open(path, "rb") as f:
             data = f.read()
-        return {"url": "file://non-usato", "file": os.path.basename(path), "dimensione": len(data),
-                "sha256": hashlib.sha256(data).hexdigest(), "versione": "prova", "licenza": "-"}
+        return {"url": "file://non-usato", "file": os.path.basename(path), "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(), "version": "test", "license": "-"}
     components.FOLDER = folder
     os.makedirs(folder, exist_ok=True)
     components.CATALOG = {
@@ -277,7 +277,7 @@ def test_log(base):
               chars.adapt_without("Può è pre‑ordine", {"ò", "è", "‑"}, "it") == "Puo' e' pre-ordine"
               and chars.adapt_without("ok \U0001F41A", {"\U0001F41A"}, "it") is None
               and chars.adapt_without("niente", {"è"}, "it") == "niente")
-    copy_dir = os.path.join(base, "copia")
+    copy_dir = os.path.join(base, "copy_dir")
     text = open(os.path.join(SIGNALS, "unity-tmp-caratteri-mancanti.log"), encoding="utf-8").read()
     check("copia del gioco riconosciuta anche senza 'Mono path' (giochi IL2CPP: 'Discovering subsystems')",
               checks.of_this_copy(text.replace("C:/Giochi/Cast n Chill",
@@ -288,9 +288,9 @@ def test_log(base):
     game = os.path.join(base, "giochi", "Pixel")
     _unity_mono_game(game, "Pixel", "Studio Pixel", "Pixel")
     path = os.path.join(automatic.profiles_folder(), name + ".json")
-    scan.save_json(path, {"nome": name, "cartella_gioco": game.replace(os.sep, "/"), "motore": "unity",
-                                    "lingua_origine": "en", "lingua_destinazione": "it", "backend": "google",
-                                    "dal_vivo": "google", "file": []})
+    scan.save_json(path, {"name": name, "game_folder": game.replace(os.sep, "/"), "engine": "unity",
+                                    "source_language": "en", "target_language": "it", "backend": "google",
+                                    "live": "google", "file": []})
     adapter_unity.install(game, "en", "it", name, silent, local=False)
     cfg = os.path.join(game, *adapter_unity.CONFIG_BEPINEX.split("/"))
     check("installazione: BepInEx scrive nel suo registro anche i messaggi di Unity (WriteUnityLog = true)",
@@ -302,7 +302,7 @@ def test_log(base):
     # the first start: BepInEx completes its configuration (it keeps the value written by PatchSmith)
     write(cfg, "[Logging.Disk]\n\n## Include unity log messages in log file output.\nWriteUnityLog = true\n\n"
                 "AppendLog = false\n", before)
-    memory = project.memory_path({"nome": name, "lingua_destinazione": "it"})
+    memory = project.memory_path({"name": name, "target_language": "it"})
     our_translations = {"The door is locked": "La porta è chiusa", "Hand line": "Riga è nostra", "Start": "Inizia"}
     write_json(memory, our_translations)
     write_json(memory[:-len(".json")] + ".automatiche.json", our_translations)
@@ -314,24 +314,24 @@ def test_log(base):
                 "by Unicode character \\u25A1 in text object [Text (TMP)].\n", after)
     whole = snapshot(base)
     problems = checks.check(path, apply=False, log=silent)
-    font = next((p for p in problems if p.code == "FONT_MANCANTI"), None)
+    font = next((p for p in problems if p.code == "MISSING_FONT_CHARS"), None)
     check("controllo in sola lettura: lettere mancanti trovate (si correggerebbero da sole), nulla scritto",
-              font is not None and font.state == "da_correggere" and "«è»" in font.message
+              font is not None and font.state == "to_fix" and "«è»" in font.message
               and "One sentence with those letters" in font.message and snapshot(base) == whole
-              and "caratteri_mancanti" not in read_json(path))
+              and "missing_chars" not in read_json(path))
     problems = checks.check(path, apply=True, log=silent)
-    font = next((p for p in problems if p.code == "FONT_MANCANTI"), None)
+    font = next((p for p in problems if p.code == "MISSING_FONT_CHARS"), None)
     lines = open(cache, encoding="utf-8").read()
     check("correzione: la riga scritta da PatchSmith adattata (è -> e'), quella cambiata a mano no, caratteri "
               "annotati nel profilo; in memoria resta è",
-              font is not None and font.state == "corretto" and "The door is locked=La porta e' chiusa" in lines
-              and "Hand line=Riga è cambiata a mano" in lines and read_json(path)["caratteri_mancanti"] == "è"
+              font is not None and font.state == "fixed" and "The door is locked=La porta e' chiusa" in lines
+              and "Hand line=Riga è cambiata a mano" in lines and read_json(path)["missing_chars"] == "è"
               and read_json(memory)["The door is locked"] == "La porta è chiusa")
     problems = checks.check(path, apply=True, log=silent)
-    check("secondo controllo: nulla da rifare", not any(p.code == "FONT_MANCANTI" for p in problems))
+    check("secondo controllo: nulla da rifare", not any(p.code == "MISSING_FONT_CHARS" for p in problems))
     # from now on: the new cache lines and the live translator's answers avoid è
     adapter_unity.write_xunity_cache(game, "it", {"New line": "Novità è qui"}, silent,
-                                      excluded=read_json(path)["caratteri_mancanti"])
+                                      excluded=read_json(path)["missing_chars"])
     s = xunity_service.Service(path, port=1, log=silent, backend=backend.Fake())
     ours_now, _ = automatic.our_values(read_json(path), read_json(memory), {})
     check("da adesso: nuove righe della cache e risposte dal vivo senza è (é, à e ì restano); la riga adattata "
@@ -349,7 +349,7 @@ def test_log(base):
     automatic.reapply(game, log_lines.append, outcome=d)
     check("Riapplica con le lettere mancanti: la correzione a mano scritta adattata nella cache e contata come "
               "scritta", "Quit=Esci e'" in open(cache, encoding="utf-8").read()
-              and d["esito"].extra.get("correzioni_scritte") == 1
+              and d["outcome"].extra.get("fixes_written") == 1
               and not any("lasciate com'erano" in r for r in log_lines))
     # an unexpected error in the font check does not hide the game's other problems
     real = adapter_unity.xunity_cache_entries
@@ -366,12 +366,12 @@ def test_log(base):
     finally:
         adapter_unity.xunity_cache_entries = real
     check("errore imprevisto nel controllo delle lettere: solo una riga nel registro, gli altri problemi restano",
-              ok and any(p.code == "CONFIGURAZIONE" for p in problems)
+              ok and any(p.code == "CONFIGURATION" for p in problems)
               and any("Font letter check failed" in r for r in log_lines))
     # an earlier configuration (WriteUnityLog off): the check puts it back
     write(cfg, "[Logging.Disk]\nWriteUnityLog = false\n")
     problems = checks.check(path, apply=False, log=silent)
-    conf = next((p for p in problems if p.code == "CONFIGURAZIONE"), None)
+    conf = next((p for p in problems if p.code == "CONFIGURATION"), None)
     check("installazione di prima con WriteUnityLog spento: il controllo lo riaccende (CONFIGURAZIONE)",
               conf is not None and "WriteUnityLog" in conf.detail and "letters missing" in conf.message)
     # BepInEx.cfg with non-UTF-8 bytes (a comment written by hand): it is switched on all the same, the rest stays
@@ -390,7 +390,7 @@ def test_localization_log(base):
     """Unity Localization (IL2CPP, without BepInEx): the missing letters from the Player.log, then Reapply."""
     game = os.path.join(base, "loc-registro")
     folder = fake.il2cpp_game(game, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)])})
-    profile, _c, _e = automatic.analyze_and_translate(game, "en", "it", backend="finto", log=silent)
+    profile, _c, _e = automatic.analyze_and_translate(game, "en", "it", backend="fake", log=silent)
     p = read_json(profile)
     memory = project.memory_path(p)  # the real translation memory (a test one: in the test data folder)
     write_json(memory, {EN[0]: "Nuova partita", EN[1]: "Può continuare", EN[2]: "Opzioni"})
@@ -409,12 +409,12 @@ def test_localization_log(base):
     check("Player.log nei segnali dei giochi con Unity Localization (il controllo all'apertura lo vede)",
               "unity:Player.log" in checks.signals(profile))
     problems = checks.check(profile, apply=True, log=silent)
-    font = next((x for x in problems if x.code == "FONT_MANCANTI"), None)
+    font = next((x for x in problems if x.code == "MISSING_FONT_CHARS"), None)
     texts = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(folder, TABLE_EN)).texts()]
     check("Unity Localization: ò mancante annotato nel profilo e tabella riscritta (Può -> Puo'); i caratteri che "
               "ci sono solo nei testi del gioco (Ù, ღ) non contano",
-              font is not None and font.state == "corretto" and "«ò»" in font.message and "Ù" not in font.message
-              and "ò" in read_json(profile)["caratteri_mancanti"] and texts[1] == "Puo' continuare")
+              font is not None and font.state == "fixed" and "«ò»" in font.message and "Ù" not in font.message
+              and "ò" in read_json(profile)["missing_chars"] and texts[1] == "Puo' continuare")
 
 
 # --- Unreal --------------------------------------------------------------------------------------------------------
@@ -443,7 +443,7 @@ def test_unreal(base):
     adapter_unreal.install(g, "it", "prova-ue", memory, silent, refused=refused)
     was_read = adapter_unreal.Pak(os.path.join(paks, adapter_unreal.pak_name("it")))
     texts = [s for s, _ in adapter_unreal.read_locres(was_read.read_file(
-        "Proj/Content/Localization/Game/en/Game.locres"))["stringhe"]]
+        "Proj/Content/Localization/Game/en/Game.locres"))["strings"]]
     check("Unreal: lettere italiane scritte; un carattere che nessuna lingua del gioco usa e non si puo' "
               "adattare (★) lascia l'originale e torna a chi chiama (problemi.json)",
               "Inizia la partita è ò" in texts and "Next -> page" in texts and "★" in refused.get("Next -> page", ""))
@@ -463,7 +463,7 @@ SHORT = {"Credits": "Crediti", "Main Menu": "Menu principale gioco", "Quest Log"
 
 class Labels(backend.Backend):
     """Fake translator that knows about a maximum space (like the local one): long the first time, short if the
-    'larghezza' context asks for it."""
+    'width' context asks for it."""
     name = "prova-etichette"
     uses_context = True
     max_texts = 40
@@ -475,8 +475,8 @@ class Labels(backend.Backend):
         output = []
         for i, r in enumerate(lines):
             c = (contexts or [None] * len(lines))[i] or {}
-            self.requests.append((r, c.get("larghezza")))
-            output.append(SHORT.get(r, LONG_LABELS.get(r, "IT " + r)) if c.get("larghezza")
+            self.requests.append((r, c.get("width")))
+            output.append(SHORT.get(r, LONG_LABELS.get(r, "IT " + r)) if c.get("width")
                           else LONG_LABELS.get(r, "IT " + r))
         return output
 
@@ -494,7 +494,7 @@ class NoContext(backend.Backend):
 
 def _profile(base, name):
     path = os.path.join(base, name + ".json")
-    write_json(path, {"nome": name, "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
+    write_json(path, {"name": name, "game_folder": base, "source_language": "en", "target_language": "it",
                            "file": []})
     return path
 
@@ -533,28 +533,28 @@ def test_length(base):
     extra = automatic._extra_attempts(p)
     check("ancora troppo lunga: in problemi.json con il testo originale come chiave ('lunghezza', con la "
               "traduzione e lo spazio); l'esito conta le accorciate e quella annotata adesso",
-              extra.get("accorciate") == 3 and extra.get("troppo_lunghe") == 1
-              and problems.get("Main Menu", {}).get("dove") == "lunghezza"
-              and problems["Main Menu"].get("valore") == "Menu principale gioco"
-              and problems["Main Menu"]["spazio"] == 17
+              extra.get("shortened") == 3 and extra.get("too_long") == 1
+              and problems.get("Main Menu", {}).get("where") == "length"
+              and problems["Main Menu"].get("value") == "Menu principale gioco"
+              and problems["Main Menu"]["space"] == 17
               and "Credits" not in problems and "Crediti" not in json.dumps(problems))
     b2 = Labels()
     p2 = Project(path, silent)
     p2.translate_texts(texts, b2, "en", "it")
     check("una volta sola: la volta dopo nessuna richiesta (la troppo lunga resta annotata, e l'esito non la "
-              "ridice a ogni traduzione)", b2.requests == [] and "troppo_lunghe" not in automatic._extra_attempts(p2)
-              and Project(path, silent).problems()["Main Menu"]["dove"] == "lunghezza")
+              "ridice a ogni traduzione)", b2.requests == [] and "too_long" not in automatic._extra_attempts(p2)
+              and Project(path, silent).problems()["Main Menu"]["where"] == "length")
     # written to the game, it stays noted as long as the translation is that one
     p = Project(path, silent)
     p._refused, p._applied = {}, {"Main Menu", "Credits"}
     p._record_applied()
     check("scritta nel gioco: resta nell'elenco finche' la traduzione non cambia",
-              p.problems()["Main Menu"]["dove"] == "lunghezza")
+              p.problems()["Main Menu"]["where"] == "length")
     items = corrections.load(path)
     entry = next(x for x in items.entries if x.text == "Main Menu")
     check("'Correggi traduzioni': nell'elenco 'Troppo lunghi' con il testo originale",
-              "lunghi" in entry.problems and "too long" in entry.problems["lunghi"]
-              and entry in items.apply_filter("lunghi"))
+              "long" in entry.problems and "too long" in entry.problems["long"]
+              and entry in items.apply_filter("long"))
     # fixed by hand: not asked again
     p = Project(path, silent)
     p.fix({"Back": "Torna indietro alla schermata"})
@@ -568,31 +568,31 @@ def test_length(base):
     p2 = Project(path2, silent)
     p2.translate_texts(texts, online, "en", "it")
     check("con un traduttore online: nessuna richiesta in piu', le etichette lunghe annotate per 'Troppo lunghi'",
-              sorted(online.requests) == sorted(texts) and p2.problems().get("Credits", {}).get("dove") == "lunghezza")
+              sorted(online.requests) == sorted(texts) and p2.problems().get("Credits", {}).get("where") == "length")
     # longer official translations: there is room
     path3 = _profile(base, "etichette-ufficiali")
     b4 = Labels()
     Project(path3, silent).translate_texts(["Credits"], b4, "en", "it", contexts={
-        "Credits": {"chiave": "menu_credits", "riferimenti": {"de": "Mitwirkende Personen"}}})
+        "Credits": {"key": "menu_credits", "references": {"de": "Mitwirkende Personen"}}})
     check("con una traduzione ufficiale piu' lunga ('Mitwirkende Personen') 'Riconoscimenti' ci sta",
               [n for _, n in b4.requests if n] == [])
     # the local translator's real prompt
     loc = backend.Local("4b", log=silent, server=object())
     check("traduttore locale: il numero massimo di caratteri nel prompt solo quando lo si chiede",
-              "at most 12 characters" in loc._context_text({"larghezza": 12}, "it")
-              and "at most" not in loc._context_text({"chiave": "menu", "spazio": 12}, "it"))
+              "at most 12 characters" in loc._context_text({"width": 12}, "it")
+              and "at most" not in loc._context_text({"key": "menu", "space": 12}, "it"))
     # the outcome
-    e = outcome.Outcome(code="OK", extra={"accorciate": 2, "troppo_lunghe": 1})
+    e = outcome.Outcome(code="OK", extra={"shortened": 2, "too_long": 1})
     text = "\n".join(outcome._attempts_text(e))
     check("esito: etichette accorciate e quella ancora lunga, con 'Correggi traduzioni' > 'Troppo lunghi'",
               "2 labels were too long for their space" in text
               and "A label might not fit" in text
-              and outcome.to_fix(e) and outcome.fixes_filter(e) == "lunghi")
-    singular = "\n".join(outcome._attempts_text(outcome.Outcome(code="OK", extra={"accorciate": 1})))
+              and outcome.to_fix(e) and outcome.fixes_filter(e) == "long")
+    singular = "\n".join(outcome._attempts_text(outcome.Outcome(code="OK", extra={"shortened": 1})))
     check("esito con un'etichetta sola: 'lo spazio che ha nel gioco' (non 'che hanno')",
               "A label was too long for its space in the game: I asked for a shorter one." in singular)
     check("'Correggi traduzioni': il motivo si legge bene (caratteri e spazio)",
-              "too long: 21 characters, usually about 17 fit" in entry.problems["lunghi"])
+              "too long: 21 characters, usually about 17 fit" in entry.problems["long"])
     # noted with an online translator, then with the local one: asked shorter once
     _without_shared()
     path4 = _profile(base, "etichette-poi-locale")
@@ -605,7 +605,7 @@ def test_length(base):
     check("annotate con un traduttore online: con il traduttore locale si chiedono piu' corte, una volta sola",
               sorted(t for t, n in b5.requests if n) == ["Credits", "Main Menu", "Quest Log"]
               and p5.memory["Credits"] == "Crediti" and b6.requests == []
-              and Project(path4, silent).problems()["Main Menu"].get("chiesta") is True)
+              and Project(path4, silent).problems()["Main Menu"].get("requested") is True)
     # "Re-translate" of a label in the "Too long" list: asked with its space
     b7 = Labels()
     p7 = Project(path4, silent)
@@ -616,7 +616,7 @@ def test_length(base):
 
     class Broken(Labels):
         def translate_lines(self, lines, origin, dest_lang, contexts=None, rounds=None):
-            if any((c or {}).get("larghezza") for c in contexts or []):
+            if any((c or {}).get("width") for c in contexts or []):
                 return [object()] * len(lines)  # meaningless answers: error when putting them back together
             return super().translate_lines(lines, origin, dest_lang, contexts, rounds)
     _without_shared()
@@ -674,18 +674,18 @@ def main(base):
                             ("LOCALAPPDATA", "appdata"), ("APPDATA", "appdata-roaming")):
         os.environ[env_var] = os.path.join(base, name)
         os.makedirs(os.environ[env_var], exist_ok=True)
-    project.DATA_ROOT = os.path.join(base, "dati")
-    os.environ["PATCHSMITH_DATI"] = project.DATA_ROOT
+    project.DATA_ROOT = os.path.join(base, "data_folder")
+    os.environ["PATCHSMITH_DATA"] = project.DATA_ROOT
     for d in ("memory", "profiles"):
         os.makedirs(os.path.join(project.DATA_ROOT, d), exist_ok=True)
     automatic.PROFILES_FOLDER = None
     adapter_unity.is_running = lambda *_: False
     from patchsmith import ollama
     ollama.folder = lambda: os.path.join(base, "ollama")  # log of the test live translator
-    _fake_components(os.path.join(base, "componenti"))
+    _fake_components(os.path.join(base, "components"))
     for name, test in (("font", test_font), ("loc", test_unity_localization), ("registro", test_log),
                         ("registro-loc", test_localization_log), ("unreal", test_unreal),
-                        ("lunghezza", test_length), ("lunghezza-locale", test_local_length)):
+                        ("length", test_length), ("lunghezza-locale", test_local_length)):
         folder = os.path.join(base, name)
         os.makedirs(folder)
         try:

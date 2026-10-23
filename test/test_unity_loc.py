@@ -36,7 +36,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -185,7 +185,7 @@ def test_languages(base):
                        ("catalog.json", fake.catalog([])))
     languages, data = official_language.languages_in_files(game, "Unity", "it")
     check("lingua ufficiale: italiano trovato dalle tabelle (il catalogo non lo dice)",
-              data.get("trovata") is True and {"en", "it"} <= {c.lower() for c in languages})
+              data.get("found") is True and {"en", "it"} <= {c.lower() for c in languages})
 
 
 def _flow(base, name, bundle_aa, catalog, extra=None, origin="en"):
@@ -195,7 +195,7 @@ def _flow(base, name, bundle_aa, catalog, extra=None, origin="en"):
     before = {n: fingerprint(os.path.join(bundle_folder, n)) for n in bundle_aa}
     if catalog:
         before[catalog[0]] = fingerprint(os.path.join(os.path.dirname(bundle_folder), catalog[0]))
-    profile, _full, outcome = automatic.analyze_and_translate(game, origin, "it", backend="finto", log=silent)
+    profile, _full, outcome = automatic.analyze_and_translate(game, origin, "it", backend="fake", log=silent)
     return game, bundle_folder, profile, outcome, before
 
 
@@ -216,8 +216,8 @@ def test_crc(base):
     catalog_path = os.path.join(os.path.dirname(bundle_folder), "catalog.json")
     entries = json.load(open(profile, encoding="utf-8"))["file"] if profile else []
     check("CRC controllato: profilo con il catalogo da sistemare per il bundle inglese",
-              entries == [{"percorso": "Gioco_Data/StreamingAssets/aa/StandaloneWindows64/" + en,
-                        "formato": "unity-tabelle", "catalogo": "Gioco_Data/StreamingAssets/aa/catalog.json"}])
+              entries == [{"path": "Gioco_Data/StreamingAssets/aa/StandaloneWindows64/" + en,
+                        "format": "unity-tables", "catalog": "Gioco_Data/StreamingAssets/aa/catalog.json"}])
     translated_items = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(bundle_folder, en)).texts()]
     after = read_file(catalog_path)
     check("CRC: bundle inglese tradotto; nel catalogo CRC 0 solo per lui (il francese resta), stessa lunghezza",
@@ -232,9 +232,9 @@ def test_crc(base):
               and read_file(catalog_path) == after and fake.catalog_crc(after)[en] == 0)
     # a new "Analyze and translate": in the game the catalog already has CRC 0 (written by PatchSmith), but the game
     # profile's entry must keep naming it (the original in the backup counts)
-    profile2, _full, outcome2 = automatic.analyze_and_translate(game, "en", "it", backend="finto", log=silent)
+    profile2, _full, outcome2 = automatic.analyze_and_translate(game, "en", "it", backend="fake", log=silent)
     check("CRC: una nuova 'Analizza e traduci' tiene il catalogo nel profilo (conta l'originale, non il CRC gia' 0)",
-              profile2 == profile and outcome2["esito"].code == "OK"
+              profile2 == profile and outcome2["outcome"].code == "OK"
               and json.load(open(profile, encoding="utf-8"))["file"] == entries and read_file(catalog_path) == after)
     # the game puts back its files (Steam's file verification): the after-play check sees it
     shutil.copyfile(catalog_path + project.BACKUP_SUFFIX, catalog_path)
@@ -242,7 +242,7 @@ def test_crc(base):
     c = checks._Context(profile, json.load(open(profile, encoding="utf-8")), {}, silent, False, None)
     problems = checks._verify_file(c)
     check("CRC: catalogo rimesso dal gioco -> il controllo dopo aver giocato lo rimette (Riapplica)",
-              any(p.code == "RIPRISTINATO_DAL_GIOCO" and "catalog.json" in p.message for p in problems))
+              any(p.code == "RESTORED_BY_GAME" and "catalog.json" in p.message for p in problems))
     automatic.reapply(game, silent, test=True)
     check("CRC: dopo Riapplica bundle di nuovo tradotto e CRC di nuovo 0 nel catalogo",
               [t for _, t in adapter_unity_loc.TablesFile(os.path.join(bundle_folder, en)).texts()]
@@ -277,8 +277,8 @@ def test_crc(base):
     problems = checks._verify_file(c)
     check("CRC: aggiornamento che cambia solo il catalogo -> correzione automatica (Riapplica), non 'Analizza e "
               "traduci'",
-              [p.code for p in problems] == ["RIPRISTINATO_DAL_GIOCO"] and problems[0].safe
-              and problems[0].key == "riapplica" and "catalog.json" in problems[0].message)
+              [p.code for p in problems] == ["RESTORED_BY_GAME"] and problems[0].safe
+              and problems[0].key == "reapply" and "catalog.json" in problems[0].message)
     automatic.reapply(game, silent, test=True)
     after = read_file(catalog_path)
     check("CRC: dopo l'aggiornamento il catalogo nuovo ha il CRC 0 per il bundle tradotto (il resto come "
@@ -297,11 +297,11 @@ def test_crc(base):
     game, bundle_folder, profile, outcome, before = _flow(
         base, "crc-zero", {en: table("UI_en", "en", EN)}, ("catalog.json", fake.catalog([(en, 0)])))
     check("CRC 0 (come SWORN): bundle tradotto, catalogo intatto e senza backup",
-              outcome["esito"].code == "OK" and fingerprint(os.path.join(os.path.dirname(bundle_folder),
+              outcome["outcome"].code == "OK" and fingerprint(os.path.join(os.path.dirname(bundle_folder),
                                                                       "catalog.json")) == before["catalog.json"]
               and not os.path.exists(os.path.join(os.path.dirname(bundle_folder), "catalog.json"
                                                   + project.BACKUP_SUFFIX))
-              and "catalogo" not in json.load(open(profile, encoding="utf-8"))["file"][0])
+              and "catalog" not in json.load(open(profile, encoding="utf-8"))["file"][0])
 
 
 def test_refusals(base):
@@ -309,33 +309,33 @@ def test_refusals(base):
     # binary catalog (Addressables 2, Unity 6): it is not known whether it checks the fingerprint
     game, bundle_folder, profile, outcome, before = _flow(
         base, "catalogo-bin", {en: table("UI_en", "en", EN)}, ("catalog.bin", b"\x01\x02catalogo binario"))
-    e = outcome["esito"]
+    e = outcome["outcome"]
     check("catalog.bin: non supportato con il motivo del catalogo binario, nessun file modificato",
-              profile is None and e.code == "NON_SUPPORTATO" and "catalog.bin" in e.reason
+              profile is None and e.code == "NOT_SUPPORTED" and "catalog.bin" in e.reason
               and "BepInEx" not in e.reason and _unchanged(bundle_folder, before))
     # the catalog checks the fingerprint of other bundles and does not name this one: it cannot be removed
     game, bundle_folder, profile, outcome, before = _flow(
         base, "crc-sconosciuto", {en: table("UI_en", "en", EN)},
         ("catalog.json", fake.catalog([("altro.bundle", 777)])))
-    e = outcome["esito"]
+    e = outcome["outcome"]
     check("CRC che non si trova nel catalogo: non supportato (impronta), nessun file modificato",
-              profile is None and e.code == "NON_SUPPORTATO" and "CRC" in e.reason
+              profile is None and e.code == "NOT_SUPPORTED" and "CRC" in e.reason
               and _unchanged(bundle_folder, before))
     # anti-cheat: before looking at the tables, also in IL2CPP games
     game, bundle_folder, profile, outcome, before = _flow(
         base, "anticheat", {en: table("UI_en", "en", EN)}, ("catalog.json", fake.catalog([(en, 0)])),
         extra={"EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe": b"finto"})
     check("anti-cheat (IL2CPP con tabelle): rilevato, ANTICHEAT, nessun bundle scritto",
-              any(r["sezione"] == "AntiCheat" for r in detection.detect(game)["risultati"])
-              and profile is None and outcome["esito"].code == "ANTICHEAT" and _unchanged(bundle_folder, before))
+              any(r["section"] == "AntiCheat" for r in detection.detect(game)["results"])
+              and profile is None and outcome["outcome"].code == "ANTICHEAT" and _unchanged(bundle_folder, before))
     # tables, but not in the source language: the reason says so (not "serve BepInEx 6")
     game, bundle_folder, profile, outcome, before = _flow(
         base, "senza-inglese", {"localization-string-tables-french(fr)_assets_all.bundle": table("UI_fr", "fr", FR)},
         ("catalog.json", fake.catalog([])))
-    e = outcome["esito"]
+    e = outcome["outcome"]
     check("tabelle senza la lingua di partenza: motivo chiaro con le lingue del gioco (per nome) e cosa scegliere, "
               "nessun file modificato",
-              profile is None and e.code == "NON_SUPPORTATO" and "text tables" in e.reason
+              profile is None and e.code == "NOT_SUPPORTED" and "text tables" in e.reason
               and "original language" in e.reason and "French (fr)" in e.reason and '"From:"' in e.reason
               and "IL2CPP" not in e.reason and "BepInEx" not in e.reason and _unchanged(bundle_folder, before))
     # with the language the game has as source language chosen: its table is translated
@@ -344,7 +344,7 @@ def test_refusals(base):
         {"localization-string-tables-french(fr)_assets_all.bundle": table("UI_fr", "fr", FR)},
         ("catalog.json", fake.catalog([])), origin="fr")
     check("tabelle senza inglese, partenza scelta Francese: la tabella francese si traduce",
-              outcome["esito"].code == "OK" and [t for _, t in adapter_unity_loc.TablesFile(os.path.join(
+              outcome["outcome"].code == "OK" and [t for _, t in adapter_unity_loc.TablesFile(os.path.join(
                   bundle_folder, "localization-string-tables-french(fr)_assets_all.bundle")).texts()]
               == ["[it] " + t for t in FR])
     # Italian already in the game, with Lego Party-style names: official language
@@ -353,7 +353,7 @@ def test_refusals(base):
                                   "localization_it_assets_all.bundle": table("ui_it", "it", IT)},
         ("catalog.json", fake.catalog([])))
     check("italiano gia' nel gioco (nomi 'localization_it'): UFFICIALE, nessun file modificato",
-              profile is None and outcome["esito"].code == "UFFICIALE" and _unchanged(bundle_folder, before))
+              profile is None and outcome["outcome"].code == "OFFICIAL" and _unchanged(bundle_folder, before))
     # names without a code: the English table is found from the contents and translated (before: "non supportato")
     game, bundle_folder, profile, outcome, before = _flow(
         base, "nomi-senza-codice", {"localization-string-tables-english_assets_all.bundle":
@@ -362,7 +362,7 @@ def test_refusals(base):
     translated_items = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(
         bundle_folder, "localization-string-tables-english_assets_all.bundle")).texts()]
     check("tabella inglese senza codice nel nome: trovata dal contenuto e tradotta",
-              outcome["esito"].code == "OK" and translated_items == ["[it] " + t for t in EN])
+              outcome["outcome"].code == "OK" and translated_items == ["[it] " + t for t in EN])
 
 
 def test_real_bundle(base, bundle):
@@ -445,19 +445,19 @@ def test_catalog_bin(base):
     mismatched = [i for i in range(len(byte)) if byte[i] != new[i]] if new and len(new) == len(byte) else None
     crc_fr = adapter_unity_loc._record_bin(byte, french)
     check("catalog.bin: CRC del bundle inglese trovato ('controllato'); tolto solo quello (4 byte a 0, il francese "
-              "resta)", state[0] == "controllato" and mismatched is not None and len(mismatched) == 4
+              "resta)", state[0] == "checked" and mismatched is not None and len(mismatched) == 4
               and new[mismatched[0]:mismatched[0] + 4] == b"\x00" * 4 and crc_fr
               and struct.unpack_from("<I", new, crc_fr[0])[0] == 0x11111111)
     open(catalog, "wb").write(new)
     check("catalog.bin: dopo la modifica il bundle risulta 'libero'",
-              adapter_unity_loc.bundle_crc(bundle)[0] == "libero")
+              adapter_unity_loc.bundle_crc(bundle)[0] == "unlocked")
     ambiguous = _bin_catalog([(english, 0xd345c8b3)], double=english)
     open(catalog, "wb").write(ambiguous)
     check("catalog.bin: due record per lo stesso bundle -> 'binario' e nessuna modifica (non si tocca nulla)",
-              adapter_unity_loc.bundle_crc(bundle)[0] == "binario"
+              adapter_unity_loc.bundle_crc(bundle)[0] == "binary"
               and adapter_unity_loc.remove_crc(ambiguous, [english]) is None)
     open(catalog, "wb").write(_bin_catalog([(french, 1)]))
-    check("catalog.bin che non nomina il bundle -> 'binario'", adapter_unity_loc.bundle_crc(bundle)[0] == "binario")
+    check("catalog.bin che non nomina il bundle -> 'binario'", adapter_unity_loc.bundle_crc(bundle)[0] == "binary")
 
 
 def main(base, bundle=None):
@@ -471,8 +471,8 @@ def main(base, bundle=None):
     for d in ("memory", "profiles"):
         os.makedirs(os.path.join(project.PROJECT_FOLDER, d))
     automatic.PROFILES_FOLDER = os.path.join(project.PROJECT_FOLDER, "profiles")
-    test_format(_folder(base, "formato"))
-    test_languages(_folder(base, "lingue"))
+    test_format(_folder(base, "format"))
+    test_languages(_folder(base, "languages"))
     test_crc(_folder(base, "crc"))
     test_catalog_bin(_folder(base, "catalogo-bin"))
     test_refusals(_folder(base, "rifiuti"))

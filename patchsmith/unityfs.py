@@ -146,7 +146,7 @@ def _header(read_file, file_size):
 
 
 class Bundle:
-    """An AssetBundle: self.file = {nome: bytes} of the inner files, in the original order."""
+    """An AssetBundle: self.file = {name: bytes} of the inner files, in the original order."""
 
     def __init__(self, data):
         (self.version, self.player_version, self.unity_version, self.markers, blocks, nodes,
@@ -266,7 +266,7 @@ class Index:
         yield _decompress(self._read(position, compressed), kind, decompressed)
 
     def pieces(self, start=0, end=None):
-        """Decompressed [(posizione, byte)] covering the data from 'inizio' to 'fine' (positions in the decompressed
+        """Decompressed [(posizione, byte)] covering the data from 'inizio' to 'end' (positions in the decompressed
         data, e.g. an inner file: inizio, inizio + dimensione). Only the blocks needed are read."""
         if end is None:
             end = sum(b[0] for b in self.blocks)
@@ -430,15 +430,15 @@ class SerializedFile:
                 else:
                     ndeps = struct.unpack_from("<i", d, p)[0]
                     p += 4 + 4 * ndeps
-        return {"classe": class_, "albero": root}, p
+        return {"class": class_, "tree": root}, p
 
     def object_data(self, o):
         return self.data[self.data_start + o.start:self.data_start + o.start + o.size]
 
     def strings(self, o, values=()):
         """[(field path, start, end)] of all the object's strings (positions in its data). With 'valori' (names of
-        numeric fields, e.g. 'm_Unicode') also [(percorso, 'valore', numero)] of those fields."""
-        tree = self.kinds[o.kind]["albero"]
+        numeric fields, e.g. 'm_Unicode') also [(percorso, 'value', numero)] of those fields."""
+        tree = self.kinds[o.kind]["tree"]
         if tree is None:
             raise UnityError("the file does not contain the field trees (type tree)")
         output = []
@@ -498,7 +498,7 @@ def _read(tree_node, d, p, path, output, values=frozenset()):
     if not tree_node.children:
         if tree_node.kind in _SIMPLE_ESCAPES:
             if tree_node.name in values:
-                output.append((tuple(path), "valore",
+                output.append((tuple(path), "value",
                                struct.unpack_from("<" + _SIMPLE_ESCAPES[tree_node.kind], d, p)[0]))
             p += struct.calcsize("<" + _SIMPLE_ESCAPES[tree_node.kind])
         elif tree_node.size > 0:

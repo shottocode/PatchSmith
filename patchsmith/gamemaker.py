@@ -71,7 +71,7 @@ def _glyphs(data, start, end, p):
 
 
 def font(data):
-    """([{'nome', 'caratteri'}], how many fonts could not be read)."""
+    """([{'name', 'chars'}], how many fonts could not be read)."""
     table = pieces(data)
     if "FONT" not in table:
         return [], 0
@@ -96,7 +96,7 @@ def font(data):
         for shift in range(40, 96, 4):
             chars = _glyphs(data, start, end, p + shift)
             if chars:
-                output.append({"nome": name, "caratteri": chars})
+                output.append({"name": name, "chars": chars})
                 break
         else:
             unreadable += 1
@@ -132,7 +132,7 @@ def roots(folder, depth=2):
 
 
 def sprite(data):
-    """[{'nome', 'fotogrammi'}] of the sprites (SPRT chunk). GameMaker Studio 1 and 2 format (with the -1 marker
+    """[{'name', 'frames'}] of the sprites (SPRT chunk). GameMaker Studio 1 and 2 format (with the -1 marker
     after the 14 fixed fields); sprites that cannot be read are skipped."""
     table = pieces(data)
     if "SPRT" not in table:
@@ -160,7 +160,7 @@ def sprite(data):
             else:
                 frames = marker
             if 0 <= frames <= 10000:
-                output.append({"nome": name, "fotogrammi": frames})
+                output.append({"name": name, "frames": frames})
         except (GameMakerError, struct.error):
             continue
     return output
@@ -245,8 +245,8 @@ def font_sprite_maps(folder, data=None):
         data = read_file(path)
     by_length = {}
     for sp in sprite(data):
-        if "font" in sp["nome"].lower() and sp["fotogrammi"] >= 20:
-            by_length.setdefault(sp["fotogrammi"], []).append(sp["nome"])
+        if "font" in sp["name"].lower() and sp["frames"] >= 20:
+            by_length.setdefault(sp["frames"], []).append(sp["name"])
     if not by_length:
         return []
     texts = strings(data)

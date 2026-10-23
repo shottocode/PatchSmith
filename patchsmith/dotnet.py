@@ -274,8 +274,8 @@ class Assembly:
         if not self.lines.get(0x20):
             raise DotnetError("the Assembly table is missing (it's a module, not an assembly)")
         _, ma, mi, bu, re, flags, key, name, culture = self.line(0x20, 1)
-        return {"nome": self.read_string(name), "versione": "%d.%d.%d.%d" % (ma, mi, bu, re),
-                "cultura": self.read_string(culture), "chiave_pubblica": self.blob(key).hex(), "flags": flags}
+        return {"name": self.read_string(name), "version": "%d.%d.%d.%d" % (ma, mi, bu, re),
+                "culture": self.read_string(culture), "public_key": self.blob(key).hex(), "flags": flags}
 
     def references(self):
         """Referenced assemblies: [(name, version)]."""
@@ -358,7 +358,7 @@ class Assembly:
                 # like csc for AssemblyVersion: "1.0" becomes "1.0.0.0"
                 if 2 <= len(parts) <= 4 and all(x.isdigit() and int(x) < 65535 for x in parts):
                     return ".".join(str(int(x)) for x in parts + ["0"] * (4 - len(parts)))
-        return self.identity()["versione"]
+        return self.identity()["version"]
 
     def code_strings(self):
         """Strings of the #US heap (literals written in the code), in order of appearance."""
@@ -429,7 +429,7 @@ def hash_name(name):
 
 
 def read_resources(data):
-    """.resources file -> {"lettore", "insieme", "versione", "tipi", "voci": [(name, type_code, value)]}.
+    """.resources file -> {"reader", "item_set", "version", "kinds", "entries": [(name, type_code, value)]}.
 
     The entries are in the order of the data section. Non-string values stay raw bytes (untouched)."""
     try:
@@ -493,29 +493,29 @@ def _read_resources(data):
         else:
             value_ = data[q2:end]
         result.append((name, code, value_))
-    return {"lettore": reader, "insieme": item_set, "versione": version, "tipi": kinds,
-            "voci": result, "ordine_hash": hash_order}
+    return {"reader": reader, "item_set": item_set, "version": version, "kinds": kinds,
+            "entries": result, "hash_order": hash_order}
 
 
 def write_resources(info, new_lines=None):
     """Rewrites a version 2 .resources like ResourceWriter. nuove: {name: text} replaces the strings.
 
     Non-string entries are copied identically. Order and headers as in the file read."""
-    if info["versione"] != 2:
+    if info["version"] != 2:
         raise DotnetError("writing supported only for .resources version 2")
     new_lines = new_lines or {}
-    head = _write_string_bw(info["lettore"]) + _write_string_bw(info["insieme"])
+    head = _write_string_bw(info["reader"]) + _write_string_bw(info["item_set"])
     output = bytearray(struct.pack("<Iii", MAGIC_RESOURCES, 1, len(head)) + head)
-    entries = info["voci"]
-    output += struct.pack("<iii", 2, len(entries), len(info["tipi"]))
-    for t in info["tipi"]:
+    entries = info["entries"]
+    output += struct.pack("<iii", 2, len(entries), len(info["kinds"]))
+    for t in info["kinds"]:
         output += _write_string_bw(t)
     k = 0
     while len(output) % 8:
         output += b"PAD"[k % 3:k % 3 + 1]
         k += 1
     names, section_data, items = bytearray(), bytearray(), []
-    rank = {name: k for k, name in enumerate(info.get("ordine_hash", []))}
+    rank = {name: k for k, name in enumerate(info.get("hash_order", []))}
     for k, (name, code, value_) in enumerate(entries):
         items.append((hash_name(name), rank.get(name, len(rank) + k), len(names)))
         names += _write_string_bw(name, "utf-16-le") + struct.pack("<i", len(section_data))
@@ -535,4 +535,4 @@ def write_resources(info, new_lines=None):
 
 def resources_strings(info):
     """{name: text} of the string resources only."""
-    return {name: value_ for name, code, value_ in info["voci"] if code == KIND_STRING}
+    return {name: value_ for name, code, value_ in info["entries"] if code == KIND_STRING}

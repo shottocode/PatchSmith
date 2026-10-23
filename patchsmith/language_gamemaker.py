@@ -73,7 +73,7 @@ def _string(text):
 
 
 def _replace(b, value_, new):
-    """The bytes with the string 'valore' (type, start, end, text) replaced by 'nuovo'."""
+    """The bytes with the string 'value' (type, start, end, text) replaced by 'nuovo'."""
     return b[:value_[1]] + _string(new) + b[value_[2]:]
 
 
@@ -85,7 +85,7 @@ def _to_hex(b, uppercase):
 def find(json_text, languages):
     """Where the language is in the file: [(JSON key, map key, index in the list, current language)].
     It looks, in the hexadecimal values of the JSON, for maps containing lists with a value equal to the name of
-    one of the game's 'lingue'."""
+    one of the game's 'languages'."""
     try:
         data = json.loads(json_text)
     except ValueError:
@@ -115,7 +115,7 @@ def find(json_text, languages):
 
 
 def change(json_text, spot, new):
-    """The text of the file with the language at 'posto' (from trova) changed to 'nuovo'. Touches only that string:
+    """The text of the file with the language at 'spot' (from trova) changed to 'nuovo'. Touches only that string:
     the whole rest of the file stays identical (only the hexadecimal value is replaced, which is unique in the file)."""
     json_key, mapping_key, idx, _current = spot
     data = json.loads(json_text)
@@ -192,8 +192,8 @@ def set_(root, new_value, languages, saves, log=print, respect=None):
     if path is None:
         return None, spot
     if spot[3] == new_value:
-        return {"tipo": "gamemaker_opzioni", "file": path, "posto": list(spot[:3]), "precedente": None,
-                "scritto": new_value}, None
+        return {"kind": "gamemaker_options", "file": path, "spot": list(spot[:3]), "previous": None,
+                "written": new_value}, None
     if respect and spot[3] != respect:
         return None, ("in the game, you have chosen the language '%s'. I will leave it as is (the translation is in "
                       "language '%s')" % (spot[3], new_value))
@@ -208,24 +208,24 @@ def set_(root, new_value, languages, saves, log=print, respect=None):
     write_atomic(path, new.encode("utf-8"))
     log("  Game language set to '%s' in its options (%s; previous copy in %s)"
         % (new_value, path, copy_dir))
-    return {"tipo": "gamemaker_opzioni", "file": path, "posto": list(spot[:3]), "precedente": spot[3],
-            "scritto": new_value, "copia": copy_dir}, None
+    return {"kind": "gamemaker_options", "file": path, "spot": list(spot[:3]), "previous": spot[3],
+            "written": new_value, "copy_dir": copy_dir}, None
 
 
 def restore(log_file):
     """Puts back the previous language if the options still hold the one written by PatchSmith. True if put back,
     False if the player has changed it in the meantime (their choice is kept)."""
     path = log_file["file"]
-    if not log_file.get("precedente") or not os.path.isfile(path):
+    if not log_file.get("previous") or not os.path.isfile(path):
         return False  # options deleted or recreated by the game: there is nothing to put back
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
-    json_key, mapping_key, idx = log_file["posto"]
-    current_count = [p for p in find(text, {log_file["scritto"]}) if tuple(p[:3]) == (json_key, mapping_key, idx)]
+    json_key, mapping_key, idx = log_file["spot"]
+    current_count = [p for p in find(text, {log_file["written"]}) if tuple(p[:3]) == (json_key, mapping_key, idx)]
     if not current_count:
         return False
     try:
-        new = change(text, current_count[0], log_file["precedente"])
+        new = change(text, current_count[0], log_file["previous"])
     except FormatError:
         return False  # file rewritten in a way I do not recognize: leave it as it is
     from .adapter_webjson import write_atomic

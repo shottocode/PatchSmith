@@ -5,7 +5,7 @@ Usage: python -I test/test_xunity_service.py <empty_temp_folder> [cartella_Data_
 - service with the fake translator on 127.0.0.1: answers, XUnity {{A}} placeholders, translation memory, diary of
   the lines, port already in use, closing at the end of the game process (503 while closing), old temp files removed;
 - translators in a queue: one that does not answer is skipped, one that is paused is not called, none reachable = 500;
-- lines rejected by the checks: never 500, fallback answer ("rilassata") or the original ("rifiutata");
+- lines rejected by the checks: never 500, fallback answer ("relaxed") or the original ("rejected");
 - Google with PatchSmith's cautious margins: a long wait postpones the line, without requests;
 - which translators the service would use (local, chosen online one, Google if it is not paused);
 - translation memory, machine translations and shared translation memory saved together by several programs: no
@@ -43,7 +43,7 @@ XUNITY = "Hold RMB {{A}}s to leap up to {{B}} m and slam"
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -72,8 +72,8 @@ def translate(port, text):
 
 
 def make_test_profile(tmp, name, backend=None):
-    profile = {"nome": name, "cartella_gioco": tmp, "motore": "unity", "lingua_origine": "en",
-               "lingua_destinazione": "it", "file": []}
+    profile = {"name": name, "game_folder": tmp, "engine": "unity", "source_language": "en",
+               "target_language": "it", "file": []}
     if backend:
         profile["backend"] = backend
     path = os.path.join(tmp, name + ".json")
@@ -163,7 +163,7 @@ class Repeats(Fake):
 
 def test_service(tmp):
     path = make_test_profile(tmp, "prova-servizio-xunity")
-    memory = memory_path({"nome": "prova-servizio-xunity", "lingua_destinazione": "it"}, test=True)
+    memory = memory_path({"name": "prova-servizio-xunity", "target_language": "it"}, test=True)
     # a save interrupted long ago (to remove) and one just started (to leave)
     os.makedirs(os.path.dirname(memory), exist_ok=True)
     old, most_recent = memory + ".tmp", memory + ".123-4.tmp"
@@ -191,14 +191,14 @@ def test_service(tmp):
         check("stessa frase: stessa risposta", translate(port, XUNITY) == (200, translated))
         lines = journal("prova-servizio-xunity")
         check("diario: una riga per frase (traduttore, poi memoria), con testo, lingue e risposta",
-                  [(r["esito"], r["backend"]) for r in lines] == [("ok", "finto"), ("ok", "memoria")]
-                  and lines[0]["testo"] == XUNITY and lines[0]["risposta"] == translated
-                  and (lines[0]["da"], lines[0]["a"]) == ("en", "it") and lines[0]["ts"])
+                  [(r["outcome"], r["backend"]) for r in lines] == [("ok", "fake"), ("ok", "memory")]
+                  and lines[0]["text"] == XUNITY and lines[0]["response"] == translated
+                  and (lines[0]["from"], lines[0]["to"]) == ("en", "it") and lines[0]["ts"])
         s.project.memory["Did you know that higher level <artifact>artifacts</artifact> will earn you"] = \
             "Sai che gli <artifact>oggetti</artifact> di livello piu' alto ti fanno guadagnare"
         check("pezzo di una frase gia' tradotta (tabelle dei testi tradotte nel gioco): resta com'e', senza "
-                  "traduttore", translate(port, "Sai che gli ") == (200, "Sai che gli ")
-                  and journal("prova-servizio-xunity")[-1]["backend"] == "gia' tradotta")
+                  "translator", translate(port, "Sai che gli ") == (200, "Sai che gli ")
+                  and journal("prova-servizio-xunity")[-1]["backend"] == "already_translated")
         check("testo vuoto: risposta vuota", ask(port, "/translate", text=" ") == (200, " "))
         check("indirizzo sconosciuto: 404", ask(port, "/altro")[0] == 404)
         check("all'avvio tolto il temporaneo vecchio, lasciato quello recente",
@@ -273,7 +273,7 @@ def test_close_during_translation(tmp):
         check("gioco chiuso durante una traduzione: porta libera subito (%.1f s), la frase in corso finisce e "
                   "resta in memoria, il servizio si chiude" % released_after,
                   released_after < 2.5 and s.project.memory.get("Open the gate") == "[it] Open the gate"
-                  and journal("chiusura-in-corso")[-1]["esito"] == "ok" and not thread.is_alive())
+                  and journal("chiusura-in-corso")[-1]["outcome"] == "ok" and not thread.is_alive())
     finally:
         if game.poll() is None:
             game.kill()
@@ -284,29 +284,29 @@ def test_close_during_translation(tmp):
 def test_queue(tmp):
     """Several translators in a queue: we move on to the next one; 500 only if none answers."""
     faulty, good = Faulty(), Counting()
-    with Running(tmp, "fila", [("locale", faulty), ("google", good)]) as a:
+    with Running(tmp, "fila", [("local", faulty), ("google", good)]) as a:
         code, translated = translate(a.port, "Open the gate")
         latest = journal("fila")[-1]
         check("il primo traduttore non risponde: traduce il secondo (200), il diario lo dice",
                   (code, translated) == (200, "[it] Open the gate") and faulty.calls == 1
-                  and (latest["esito"], latest["backend"]) == ("ok", "google"))
+                  and (latest["outcome"], latest["backend"]) == ("ok", "google"))
     paused, after = Counting("[pausa]", pause="Google is paused (simulated)"), Counting("[mm]")
-    with Running(tmp, "pausa", [("google", paused), ("mymemory", after)]) as a:
+    with Running(tmp, "pause", [("google", paused), ("mymemory", after)]) as a:
         check("traduttore in pausa: non lo si chiama nemmeno, traduce il prossimo",
                   translate(a.port, "Open the gate") == (200, "[mm] Open the gate") and paused.calls == 0)
-    with Running(tmp, "nessuno", [("locale", Faulty()), ("google", Faulty())]) as a:
+    with Running(tmp, "none", [("local", Faulty()), ("google", Faulty())]) as a:
         code, _ = translate(a.port, "Open the gate")
-        latest = journal("nessuno")[-1]
+        latest = journal("none")[-1]
         check("nessun traduttore raggiungibile: 500 (solo in questo caso), nel diario 'errore' con i motivi",
-                  code == 500 and latest["esito"] == "errore" and "not responding" in latest["motivo"])
-    with Running(tmp, "vuota", []) as a:
+                  code == 500 and latest["outcome"] == "error" and "not responding" in latest["reason"])
+    with Running(tmp, "empty", []) as a:
         check("nessun traduttore disponibile: 500", translate(a.port, "Open the gate")[0] == 500)
     counting = Counting()
     with Running(tmp, "chiusura", [("google", counting)]) as a:
         a.service.closing.set()
         code, _ = translate(a.port, "Open the gate")
         check("gioco in chiusura: 503 e nessuna traduzione (traduttore non chiamato), nel diario 'interrotta'",
-                  code == 503 and counting.calls == 0 and journal("chiusura")[-1]["esito"] == "interrotta")
+                  code == 503 and counting.calls == 0 and journal("chiusura")[-1]["outcome"] == "interrupted")
 
 
 def test_rejects(tmp):
@@ -315,19 +315,19 @@ def test_rejects(tmp):
         return "Tieni premuto " + text.replace("Hold RMB", "RMB") + " " + "per saltare in alto " * 8
 
     b, _ = test_local.local(line_len)
-    with Running(tmp, "rilassata", [("locale", b)]) as a:
+    with Running(tmp, "relaxed", [("local", b)]) as a:
         codes, responses = [], []
         for _ in range(3):
             code, response = translate(a.port, XUNITY)
             codes.append(code)
             responses.append(response)
-        lines = [r for r in journal("rilassata") if r["testo"] == XUNITY]
+        lines = [r for r in journal("relaxed") if r["text"] == XUNITY]
         check("scartata dai controlli: 200 con la traduzione migliore, segnaposto {{A}} intatti, mai 500",
                   codes == [200, 200, 200] and "{{A}}" in responses[0] and "{{B}}" in responses[0]
                   and responses[0].startswith("Tieni premuto"))
         check("risposta di ripiego: NON in memoria, nel diario come 'rilassata' (da ritradurre dopo)",
-                  XUNITY not in a.service.project.memory and lines and all(r["esito"] == "rilassata" for r in lines)
-                  and lines[0]["risposta"] == responses[0] and "rejected" in lines[0]["motivo"])
+                  XUNITY not in a.service.project.memory and lines and all(r["outcome"] == "relaxed" for r in lines)
+                  and lines[0]["response"] == responses[0] and "rejected" in lines[0]["reason"])
 
     def in_pieces(text, _opts):  # the sentence with codes is wrong, the pieces between codes are translated well
         if "[[" in text:
@@ -336,26 +336,26 @@ def test_rejects(tmp):
                 }.get(text, "")
 
     b, server = test_local.local(in_pieces)
-    with Running(tmp, "a-pezzi", [("locale", b)]) as a:
+    with Running(tmp, "a-pezzi", [("local", b)]) as a:
         code, response = translate(a.port, XUNITY)
         check("ripiego: i pezzi tra i segnaposto tradotti a parte (una volta), poi ricomposti",
                   (code, response) == (200, "Tieni premuto RMB {{A}}s per saltare fino a {{B}} m e schiantati")
-                  and journal("a-pezzi")[-1]["esito"] == "rilassata")
+                  and journal("a-pezzi")[-1]["outcome"] == "relaxed")
 
     def english(text, _opts):  # answers in English: no translation
         return text
 
     b, _ = test_local.local(english)
-    with Running(tmp, "inglese", [("locale", b)]) as a:
+    with Running(tmp, "inglese", [("local", b)]) as a:
         code, response = translate(a.port, XUNITY)
         latest = journal("inglese")[-1]
         check("proposta in un'altra lingua: 200 con l'originale, nel diario 'rifiutata'",
-                  (code, response) == (200, XUNITY) and latest["esito"] == "rifiutata"
-                  and latest["risposta"] == XUNITY)
-    with Running(tmp, "segnaposto", [("google", NoPlaceholders())]) as a:
+                  (code, response) == (200, XUNITY) and latest["outcome"] == "rejected"
+                  and latest["response"] == XUNITY)
+    with Running(tmp, "placeholders", [("google", NoPlaceholders())]) as a:
         code, response = translate(a.port, XUNITY)
         check("segnaposto {{A}} persi (anche a pezzi): 200 con l'originale, 'rifiutata'",
-                  (code, response) == (200, XUNITY) and journal("segnaposto")[-1]["esito"] == "rifiutata")
+                  (code, response) == (200, XUNITY) and journal("placeholders")[-1]["outcome"] == "rejected")
     check("lingua della risposta: italiano si', inglese o spagnolo no",
               not xunity_service.other_language("Open the door to the castle", "Apri la porta del castello", "en", "it")
               and xunity_service.other_language("Open the door to the castle", "Open the door of the castle", "en",
@@ -374,11 +374,11 @@ def test_rejects(tmp):
               xunity_service.other_language("Hold RMB {{A}}s to leap", "Hold RMB {{A}}s to leap", "en", "it")
               and xunity_service.other_language("Open the door in the castle", "Open the door in the castle now", "en",
                                                "it"))
-    with Running(tmp, "uguale", [("locale", Repeats())]) as a:
+    with Running(tmp, "uguale", [("local", Repeats())]) as a:
         code, response = translate(a.port, "Hold RMB {{A}}s to leap")
         check("proposta scartata uguale all'originale: 200 con l'originale, nel diario 'rifiutata' (non "
                   "'rilassata')", (code, response) == (200, "Hold RMB {{A}}s to leap")
-                  and journal("uguale")[-1]["esito"] == "rifiutata")
+                  and journal("uguale")[-1]["outcome"] == "rejected")
 
 
 def test_google(tmp):
@@ -387,19 +387,19 @@ def test_google(tmp):
     now = time.time()
     os.makedirs(os.path.dirname(state), exist_ok=True)
     with open(state, "w", encoding="utf-8") as f:  # 30 requests in the last minute: the next one in ~10 minutes
-        json.dump({"versione": 1, "google": {"richieste": [[now - 50 + i, 100] for i in range(30)]}}, f)
+        json.dump({"version": 1, "google": {"requests": [[now - 50 + i, 100] for i in range(30)]}}, f)
     g = xunity_service.create_translator("google", silent)
     requests = []
     g.opener = lambda req, timeout: requests.append(req) or (_ for _ in ()).throw(OSError("niente rete nella prova"))
     check("Google nel servizio: attese brevi del limitatore e un solo nuovo tentativo dopo un errore di rete",
               g.limiter.sleep is xunity_service._short_wait and g.NETWORK_WAITS == (5,))
-    with Running(tmp, "rinviata", [("google", g)]) as a:
+    with Running(tmp, "deferred", [("google", g)]) as a:
         code, response = translate(a.port, "Open the gate")
-        latest = journal("rinviata")[-1]
+        latest = journal("deferred")[-1]
         check("Google con i margini prudenti pieni: frase rimandata (200 con l'originale, 'rinviata'), nessuna "
-                  "richiesta", (code, response) == (200, "Open the gate") and latest["esito"] == "rinviata"
+                  "richiesta", (code, response) == (200, "Open the gate") and latest["outcome"] == "deferred"
                   and not requests)
-    limiter.Limiter("google", log=None).blocked(429, "prova")
+    limiter.Limiter("google", log=None).blocked(429, "test")
     with Running(tmp, "google-in-pausa", [("google", g), ("mymemory", Counting("[mm]"))]) as a:
         check("Google in pausa per un blocco: non lo si chiama, traduce il prossimo",
                   translate(a.port, "Open the gate") == (200, "[mm] Open the gate") and not requests)
@@ -444,14 +444,14 @@ def test_expected(tmp):
     settings = project.data_folder("settings.json")
     os.environ.pop("PATCHSMITH_DEEPL", None)  # the DeepL key of whoever runs the test must not count
     try:
-        ollama.state = lambda: "pronto"
+        ollama.state = lambda: "ready"
         first = xunity_service.expected_translators({"backend": "google"})
         with_deepl = xunity_service.expected_translators({"backend": "deepl"})  # without a key: no
         with open(settings, "w", encoding="utf-8") as f:
             json.dump({"backend": "mymemory"}, f)
-        with_mymemory = xunity_service.expected_translators({"backend": "locale"})
+        with_mymemory = xunity_service.expected_translators({"backend": "local"})
         os.remove(settings)
-        limiter.Limiter("google", log=None).blocked(429, "prova")
+        limiter.Limiter("google", log=None).blocked(429, "test")
         paused = xunity_service.expected_translators({"backend": "google"})
         ollama.state = lambda: "not installed"
         nothing = xunity_service.expected_translators({"backend": "google"})
@@ -464,8 +464,8 @@ def test_expected(tmp):
                   and s.chain[0][1].limiter.sleep is xunity_service._short_wait)
         check("traduttori in fila: locale e Google; DeepL solo con la chiave; MyMemory se scelto; Google in pausa "
                   "escluso; nessuno se non c'e' altro (%s)" % [first, with_deepl, with_mymemory, paused, nothing],
-                  first == ["locale", "google"] and with_deepl == ["locale", "google"]
-                  and with_mymemory == ["locale", "mymemory", "google"] and paused == ["locale"] and nothing == [])
+                  first == ["local", "google"] and with_deepl == ["local", "google"]
+                  and with_mymemory == ["local", "mymemory", "google"] and paused == ["local"] and nothing == [])
     finally:
         ollama.state = real
         if os.path.exists(limiter.state_path()):
@@ -492,7 +492,7 @@ for i in range(int(sys.argv[6])):
 
 def test_shared_memory(tmp):
     path = make_test_profile(tmp, "condivisa")
-    memory = memory_path({"nome": "condivisa", "lingua_destinazione": "it"})
+    memory = memory_path({"name": "condivisa", "target_language": "it"})
     first, second = Project(path, silent), Project(path, silent)
     first.memory["Start"] = "Inizia"
     second.memory["Options"] = "Opzioni"
@@ -592,23 +592,31 @@ def test_shared_memory(tmp):
 
 
 def test_group(tmp):
-    """POST /traduci-gruppo (live translation of web games): several lines in a single group translation, those in
-    the translation memory at once, the pieces already in Italian left alone."""
+    """POST /translate-group (live translation of web games): several lines in a single group translation, those in the
+    translation memory at once, the pieces already in Italian left alone. The scripts installed by earlier versions
+    (POST /traduci-gruppo with "testi", answer read from "traduzioni") still get their translations."""
     counting = Counting()
-    with Running(tmp, "gruppo", [("finto", counting)]) as av:
+    with Running(tmp, "gruppo", [("fake", counting)]) as av:
         av.service.project.memory["Settings"] = "Impostazioni"
-        body = json.dumps({"from": "en", "to": "it", "testi": ["Start the adventure now", "Quit to the main menu",
+        body = json.dumps({"from": "en", "to": "it", "texts": ["Start the adventure now", "Quit to the main menu",
                                                               "Settings", "Impostazioni"]}).encode("utf-8")
-        req = urllib.request.Request("http://127.0.0.1:%d/traduci-gruppo" % av.port, data=body,
+        req = urllib.request.Request("http://127.0.0.1:%d/translate-group" % av.port, data=body,
                                      headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as r:
             response = json.loads(r.read().decode("utf-8"))
-    t = response["traduzioni"]
+        old_body = json.dumps({"from": "en", "to": "it", "testi": ["Settings"]}).encode("utf-8")
+        req = urllib.request.Request("http://127.0.0.1:%d/traduci-gruppo" % av.port, data=old_body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            old_response = json.loads(r.read().decode("utf-8"))
+    t = response["translations"]
     check("gruppo: frasi nuove tradotte insieme (una chiamata al traduttore), quella in memoria subito, il pezzo gia' "
               "in italiano lasciato stare (%s)" % response,
               t.get("Start the adventure now", "").startswith("[it]") and t.get("Quit to the main menu", "").startswith("[it]")
-              and t.get("Settings") == "Impostazioni" and "Impostazioni" not in t and not response["riprova"]
+              and t.get("Settings") == "Impostazioni" and "Impostazioni" not in t and not response["retry"]
               and counting.calls == 1)
+    check("gruppo dagli script delle versioni precedenti (%s)" % old_response,
+              old_response.get("traduzioni") == {"Settings": "Impostazioni"} and old_response.get("riprova") == [])
 
 
 def test_stop(tmp):
@@ -633,7 +641,7 @@ def test_stop(tmp):
 
 
 def test_configuration(tmp, game_data):
-    folder = os.path.join(tmp, "gioco")
+    folder = os.path.join(tmp, "game")
     os.makedirs(folder)
     url = xunity_service.address(47123)
     p = adapter_unity.configure(folder, "en", "it", imgui=False, url=url)
@@ -661,20 +669,20 @@ def test_configuration(tmp, game_data):
     with zipfile.ZipFile(zip_bepinex) as z:
         z.extract("BepInEx/core/BepInEx.dll", folder)
     profile = os.path.join(tmp, "profilo.json")
-    url = adapter_unity.enable_service(folder, {"dati": game_data}, profile, "prova-servizio-xunity")
+    url = adapter_unity.enable_service(folder, {"data_folder": game_data}, profile, "prova-servizio-xunity")
     check("plugin compilato", os.path.getsize(os.path.join(folder, *adapter_unity.SERVICE_PLUGIN.split("/")))
               > 2000)
     with open(os.path.join(folder, *adapter_unity.SERVICE_CONFIG.split("/")), encoding="utf-8") as f:
         cfg = f.read()
-    check("comando del servizio", "servizio-xunity" in cfg and profile in cfg and "Programma=" in cfg
-              and os.path.exists(cfg.split("Programma=")[1].splitlines()[0]))
+    check("comando del servizio", "xunity-service" in cfg and profile in cfg and "Program=" in cfg
+              and os.path.exists(cfg.split("Program=")[1].splitlines()[0]))
     check("indirizzo letto dal comando", adapter_unity.service_url(folder) == url
               and url == xunity_service.address(xunity_service.port_for("prova-servizio-xunity")))
     check("i file del servizio si tolgono con la disinstallazione",
               adapter_unity._created_by_them("config/patchsmith-servizio.cfg")
               and adapter_unity._created_by_them("plugins/Patchsmith/Patchsmith.Servizio.dll")
               and adapter_unity._created_by_them("patchsmith-servizio-stato.txt"))
-    check("disattivato", adapter_unity.disable_service(folder) and not adapter_unity.service_installed(folder)
+    check("disabled", adapter_unity.disable_service(folder) and not adapter_unity.service_installed(folder)
               and adapter_unity.service_url(folder) is None)
 
 
@@ -685,7 +693,7 @@ def main():
     os.makedirs(tmp, exist_ok=True)
     if os.listdir(tmp):
         raise SystemExit("La cartella temporanea deve essere vuota: %s" % tmp)
-    project.DATA_ROOT = os.path.join(tmp, "dati")  # the test service's memory and diary: never in the real data
+    project.DATA_ROOT = os.path.join(tmp, "data_folder")  # the test service's memory and diary: never in the real data
     test_service(tmp)
     test_close_during_translation(tmp)
     test_queue(tmp)

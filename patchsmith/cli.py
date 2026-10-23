@@ -6,7 +6,7 @@ import sys
 
 from . import (__version__, adapter_unity, adapter_unreal, adapter_xna, auto as automatic, language,
                detection, scan)
-from . import components, dotnet, project, ui_language as ui, xnb
+from . import components, dotnet, legacy, project, ui_language as ui, xnb
 from .backend import BACKEND, BackendError, create_backend, default
 from .project import Project
 from .text import DETAIL, readable, slug
@@ -20,7 +20,7 @@ def _ui_lang():
     """The window's language (settings.json, otherwise the Windows one): also for the help and the messages here."""
     try:
         with open(project.data_folder("settings.json"), encoding="utf-8") as f:
-            choice = json.load(f).get("interfaccia")
+            choice = legacy.load(f).get("interface")
     except (OSError, ValueError, AttributeError):
         choice = None
     ui.set_(choice or ui.default_language())
@@ -53,6 +53,11 @@ def _profile(value_):
     raise SystemExit("Profile not found: %s" % value_)
 
 
+def _backend_name(value_):
+    """--backend: also the names of earlier versions (locale, finto)."""
+    return legacy.code("backend", value_)
+
+
 def cmd_detect(a):
     detection.print_summary(detection.detect(a.folder), _log)
 
@@ -74,7 +79,7 @@ def cmd_scan(a):
         name = automatic.name_for_folder(folder)
     _, web = automatic.game_supported(outcome)
     profile = scan.create_profile(name, folder, candidates, a.src_lang, a.a, a.backend or default(),
-                                     outcome["radici_web"] if web else (), engine=outcome.get("motore_principale"),
+                                     outcome["web_roots"] if web else (), engine=outcome.get("main_engine"),
                                      log=_log)
     if not profile["file"]:
         _log("\nNo file above threshold: profile not created.")
@@ -82,32 +87,32 @@ def cmd_scan(a):
     path = os.path.join(automatic.profiles_folder(), name + ".json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
-            registered = json.load(f).get("cartella_gioco", "")
+            registered = legacy.load(f).get("game_folder", "")
         if os.path.normcase(os.path.abspath(registered)) != os.path.normcase(folder):
             _log("\nThe name '%s' is already used for another game (%s): choose another one with --name."
                  % (name, registered))
             return 1
-        if not a.sovrascrivi:
+        if not a.overwrite:
             _log("\nProfile %s already exists (use --overwrite to regenerate it)." % path)
             return 0
     scan.save_json(path, profile)
     _log("\nProfile created: %s" % path)
     for f in profile["file"]:
-        if f.get("formato") == "web-ui":
-            _log("  %s: Interface (Menu)" % f["percorso"])
-        elif f.get("formato") == "csv":
-            _log("  %s: Text table, column %s" % (f["percorso"], f.get("colonna")))
+        if f.get("format") == "web-ui":
+            _log("  %s: Interface (Menu)" % f["path"])
+        elif f.get("format") == "csv":
+            _log("  %s: Text table, column %s" % (f["path"], f.get("column")))
         else:
-            _log("  %s: %d patterns included, %d patterns excluded" % (f["percorso"], len(f["includi"]),
-                                                                        len(f["escludi"])))
+            _log("  %s: %d patterns included, %d patterns excluded" % (f["path"], len(f["include"]),
+                                                                        len(f["exclude"])))
     _log("Check it (optional), then:  python -I smith.py translate %s" % name)
     return 0
 
 
 def _engine_profile(path, engine):
     with open(path, encoding="utf-8") as f:
-        profile = json.load(f)
-    return profile if profile.get("motore") == engine else None
+        profile = legacy.load(f)
+    return profile if profile.get("engine") == engine else None
 
 
 def _unity_profile(path):
@@ -126,7 +131,7 @@ def _xna_profile(path):
 def cmd_translate(a):
     path = _profile(a.profile)
     with open(path, encoding="utf-8") as f:
-        profile_backend = json.load(f).get("backend", "google")
+        profile_backend = legacy.load(f).get("backend", "google")
     unity = _unity_profile(path)
     if unity:  # installs/updates XUnity and pre-translates the game's texts
         return 0 if automatic.unity_full(path, _log, network=True, backend=a.backend or profile_backend) else 2
@@ -135,8 +140,8 @@ def cmd_translate(a):
     if _xna_profile(path):
         return 0 if automatic.xna_full(path, _log, network=True, backend=a.backend or profile_backend) else 2
     with open(path, encoding="utf-8") as f:
-        backend_name = a.backend or json.load(f).get("backend", "google")
-    p = Project(path, _log, test=(backend_name == "finto"))
+        backend_name = a.backend or legacy.load(f).get("backend", "google")
+    p = Project(path, _log, test=(backend_name == "fake"))
     return 0 if p.translate(create_backend(backend_name, _log)) else 2
 
 
@@ -146,9 +151,9 @@ def cmd_apply(a):
         return 0 if automatic.unity_full(path, _log, network=False) else 2
     if _unreal_profile(path):
         return 0 if automatic.unreal_full(path, _log, network=False,
-                                               backend="finto" if a.test else "google") else 2
+                                               backend="fake" if a.test else "google") else 2
     if _xna_profile(path):
-        return 0 if automatic.xna_full(path, _log, network=False, backend="finto" if a.test else "google") else 2
+        return 0 if automatic.xna_full(path, _log, network=False, backend="fake" if a.test else "google") else 2
     return 0 if Project(path, _log, test=a.test).apply() else 2
 
 
@@ -158,7 +163,7 @@ def cmd_restore(a):
         return 0
     path = _profile(a.profile)
     with open(path, encoding="utf-8") as f:
-        folder = json.load(f).get("cartella_gioco")
+        folder = legacy.load(f).get("game_folder")
     if folder and os.path.isdir(folder):  # everything, including the language set or added by PatchSmith
         automatic.restore(folder, _log)
         return 0
@@ -169,15 +174,15 @@ def cmd_status(a):
     path = _profile(a.profile)
     unity = _unity_profile(path)
     if unity:
-        adapter_unity.state(unity["cartella_gioco"], unity["nome"], unity["lingua_destinazione"], _log)
+        adapter_unity.state(unity["game_folder"], unity["name"], unity["target_language"], _log)
         return 0
     unreal = _unreal_profile(path)
     if unreal:
-        adapter_unreal.state(unreal["cartella_gioco"], _log)
+        adapter_unreal.state(unreal["game_folder"], _log)
         return 0
     xna = _xna_profile(path)
     if xna:
-        adapter_xna.state(xna["cartella_gioco"], _log)
+        adapter_xna.state(xna["game_folder"], _log)
         return 0
     Project(path, _log).show_status(a.examples)
 
@@ -185,15 +190,15 @@ def cmd_status(a):
 def cmd_auto(a):
     path, completed, outcome = automatic.analyze_and_translate(
         a.folder, a.src_lang, a.a, a.backend or default(), _log, force=a.force, regenerate=a.regenerate,
-        translate_anyway=a.translate_anyway, consent=a.modifica_eseguibili)
-    if not path and outcome.get("sperimentale_possibile"):
+        translate_anyway=a.translate_anyway, consent=a.modify_executables)
+    if not path and outcome.get("experimental_possible"):
         _log("To try anyway: add --force")
-    if not path and outcome.get("serve_consenso"):
+    if not path and outcome.get("needs_consent"):
         _log("To activate it: repeat with --modify-executables (the consent then stays valid for this game)")
-    elif not path and outcome.get("lingua_ufficiale"):
-        if a.modifica_eseguibili and outcome.get("lingua_impostata") is False:
+    elif not path and outcome.get("official_language"):
+        if a.modify_executables and outcome.get("language_set") is False:
             return 2  # activation requested but failed (the reason has already been written)
-        if outcome.get("motore_supportato", True):
+        if outcome.get("engine_supported", True):
             _log("For a machine translation anyway: add --translate-anyway")
         return 0  # the official language has been handled: not an error
     return 0 if completed else 2
@@ -215,8 +220,8 @@ def cmd_check(a):
         paths = [path]
     else:
         paths = [p for p, profile in automatic.list_profiles()  # (not the test profiles: fake translator)
-                    if profile.get("cartella_gioco") and os.path.isdir(profile["cartella_gioco"])
-                    and profile.get("backend") != "finto"]
+                    if profile.get("game_folder") and os.path.isdir(profile["game_folder"])
+                    and profile.get("backend") != "fake"]
     left_to_do = errors = False
     for path in paths:
         try:
@@ -225,7 +230,7 @@ def cmd_check(a):
             _log("ERROR while checking %s (%s: %s)" % (os.path.basename(path), type(e).__name__, e))
             errors = True
             continue
-        left_to_do = left_to_do or any(p.state in checks.TO_DO + ("rimandato", "da_correggere") for p in problems)
+        left_to_do = left_to_do or any(p.state in checks.TO_DO + ("postponed", "to_fix") for p in problems)
         _log()
     if errors:
         return 1
@@ -246,7 +251,7 @@ def cmd_services(a):
         l = Limiter(service, _log)
         _log("%-9s %s" % (NAMES[service] + ":", l.pause() or "available"))
         block = l.current_block()
-        if block and block.get("disattivato"):
+        if block and block.get("disabled"):
             _log("          to reactivate it: python -I smith.py services --reset %s" % service)
     return 0
 
@@ -268,7 +273,7 @@ def cmd_xunity_service(a):
         def log(message=""):
             f.write("%s %s\n" % (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), message))
             f.flush()
-            if a.mostra and sys.stdout:
+            if a.show and sys.stdout:
                 _log(message)
         return xunity_service.Service(_profile(a.profile), a.port, a.pid, log).launch()
 
@@ -290,14 +295,14 @@ def cmd_local(a):
         from .backend import probe_local
         _log("Testing the local translator: I'll translate \"Start game\"...")
         test = probe_local(a.install[0], _log)
-        _log("Local translator: %s" % test["messaggio"])
+        _log("Local translator: %s" % test["message"])
         if not test["ok"]:
             return 2
-    _log("Local translator: %s (in %s)" % ({"pronto": "ready"}.get(ollama.state(), ollama.state()), ollama.folder()))
+    _log("Local translator: %s (in %s)" % ({"ready": "ready"}.get(ollama.state(), ollama.state()), ollama.folder()))
     for k, m in ollama.MODELS.items():
-        _log("  %-4s %-30s %s" % (k, m["etichetta"], "downloaded" if ollama.model_present(k) else
+        _log("  %-4s %-30s %s" % (k, m["label"], "downloaded" if ollama.model_present(k) else
                                   "to download (%.1f GB)" % m["gb"]))
-    if ollama.state() != "pronto":
+    if ollama.state() != "ready":
         key, reason = ollama.recommended_model()
         _log(reason)
         _log("To install it: python -I smith.py local --install %s (or %s, or both)"
@@ -310,10 +315,10 @@ def cmd_interface(a):
     (those already in the file stay: fixes made by hand are not lost)."""
     if not a.create:
         for code, info in ui.languages().items():
-            _log("%s  %s" % (code, info["nome"]))
+            _log("%s  %s" % (code, info["name"]))
         return 0
     from .backend import Local
-    flag = json.loads(a.flag) if a.flag else {}
+    flag = legacy.upgrade(json.loads(a.flag)) if a.flag else {}
     translator = Local(a.model, log=_log)
     try:
         n = ui.create_language(a.create, a.name or a.create, translator, _log, flag)
@@ -358,7 +363,7 @@ def main(argv=None):
     s.add_argument("folder", metavar="folder")
     s.add_argument("--from", "--da", **game_language)
     s.add_argument("--to", "--a", **target_language)
-    s.add_argument("--backend", choices=sorted(BACKEND),
+    s.add_argument("--backend", choices=sorted(BACKEND), type=_backend_name,
                    help="translator (default: local; if not installed, it will tell you how to install it)")
     s.add_argument("--force", "--forza", dest="force", action="store_true",
                    help="try even if the engine isn't supported yet")
@@ -366,7 +371,7 @@ def main(argv=None):
                    help="recreate the profile from scratch")
     s.add_argument("--translate-anyway", "--traduci-comunque", dest="translate_anyway", action="store_true",
                    help="translates even if the game already officially has the target language")
-    s.add_argument("--modify-executables", "--modifica-eseguibili", dest="modifica_eseguibili", action="store_true",
+    s.add_argument("--modify-executables", "--modifica-eseguibili", dest="modify_executables", action="store_true",
                    help="allows you to modify the game's executables when needed to activate its official language "
                         "(with a backup; the consent remains valid for that game)")
     s.set_defaults(fn=cmd_auto)
@@ -378,7 +383,7 @@ def main(argv=None):
                    help="game folder or profile name (default: all games)")
     s.add_argument("--dry-run", "--solo-leggi", dest="dry_run", action="store_true",
                    help="says what it would do, without fixing or writing anything")
-    s.add_argument("--backend", choices=sorted(BACKEND),
+    s.add_argument("--backend", choices=sorted(BACKEND), type=_backend_name,
                    help="translator for phrases left untranslated while you were playing (default: the game's)")
     s.set_defaults(fn=cmd_check)
 
@@ -400,7 +405,7 @@ def main(argv=None):
     s.add_argument("--port", "--porta", dest="port", metavar="PORT", type=int,
                    help="port on 127.0.0.1 (default: the game's)")
     s.add_argument("--pid", type=int, help="game process: when you close the game, the service will stop")
-    s.add_argument("--show", "--mostra", dest="mostra", action="store_true", help="also writes the log here")
+    s.add_argument("--show", "--mostra", dest="show", action="store_true", help="also writes the log here")
     s.set_defaults(fn=cmd_xunity_service)
 
     s = sub.add_parser("interface", aliases=["interfaccia"],
@@ -412,7 +417,7 @@ def main(argv=None):
     s.add_argument("--model", "--modello", dest="model", default="4b", choices=["4b", "12b"],
                    help="local translator model")
     s.add_argument("--flag", "--bandiera", dest="flag", metavar="JSON",
-                   help='flag in JSON, e.g. {"verticali": ["#0055a4", "#ffffff", "#ef4135"]}')
+                   help='flag in JSON, e.g. {"vertical": ["#0055a4", "#ffffff", "#ef4135"]}')
     s.set_defaults(fn=cmd_interface)
 
     s = sub.add_parser("package", aliases=["pacchetto"],
@@ -437,18 +442,18 @@ def main(argv=None):
                    help="profile name (default: folder name)")
     s.add_argument("--from", "--da", **game_language)
     s.add_argument("--to", "--a", **target_language)
-    s.add_argument("--backend", choices=sorted(BACKEND),
+    s.add_argument("--backend", choices=sorted(BACKEND), type=_backend_name,
                    help="translator (default: local; if not installed, it will tell you how to install it)")
     s.add_argument("--detail", "--dettaglio", dest="detail", metavar="FILE",
                    help="display the text patterns of a file (relative path)")
-    s.add_argument("--overwrite", "--sovrascrivi", dest="sovrascrivi", action="store_true",
+    s.add_argument("--overwrite", "--sovrascrivi", dest="overwrite", action="store_true",
                    help="regenerates the profile if it exists")
     s.set_defaults(fn=cmd_scan)
 
     s = sub.add_parser("translate", aliases=["traduci"],
                        help="translates the missing texts and writes them into the game (with backup)")
     s.add_argument("profile", metavar="profile", help="profile name or path")
-    s.add_argument("--backend", choices=sorted(BACKEND), help="replaces the profile backend")
+    s.add_argument("--backend", choices=sorted(BACKEND), type=_backend_name, help="replaces the profile backend")
     s.set_defaults(fn=cmd_translate)
 
     s = sub.add_parser("apply", aliases=["applica"], help="rewrites the saved translations into the game (no network)")

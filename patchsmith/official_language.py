@@ -18,7 +18,7 @@ import hashlib
 import json
 import os
 
-from . import language, steam
+from . import language, legacy, steam
 
 
 def _base(code):
@@ -45,11 +45,11 @@ def _now():
 def detect(folder, dest_lang, engine=None, log=None):
     """What is known about the 'destinazione' language in the game.
 
-    {'presente': True/False/None, 'fonti': [text], 'note': [text], 'steam': installation info or None,
-     'steam_conosciuto': game recognized from the executables or None, 'lingua_steam': current language in Steam,
-     'selezionabile_steam': True/False/None, 'motore': {...data for the setting...}}"""
-    r = {"presente": None, "fonti": [], "note": [], "steam": None, "steam_conosciuto": None, "lingua_steam": None,
-         "selezionabile_steam": None, "motore": {}}
+    {'present': True/False/None, 'sources': [text], 'notes': [text], 'steam': installation info or None,
+     'steam_known': game recognized from the executables or None, 'steam_language': current language in Steam,
+     'steam_selectable': True/False/None, 'engine': {...data for the setting...}}"""
+    r = {"present": None, "sources": [], "notes": [], "steam": None, "steam_known": None, "steam_language": None,
+         "steam_selectable": None, "engine": {}}
     name = _steam_name(dest_lang)
     label = language.label(dest_lang)
 
@@ -62,39 +62,39 @@ def detect(folder, dest_lang, engine=None, log=None):
         present, engine_data = None, {}
         if log:
             log("  ! Check of the languages in the files failed (%s: %s)" % (type(e).__name__, e))
-    r["motore"] = engine_data
-    root = engine_data.get("radice") if engine_data.get("tipo") == "scheda" else None
+    r["engine"] = engine_data
+    root = engine_data.get("root") if engine_data.get("kind") == "sheet" else None
     if not info and root and os.path.normcase(root) != os.path.normcase(os.path.abspath(folder)):
         # the folder above the game was chosen: the Steam installation is recognized from the game's folder
         root_info, _, root_says, sel_root = _steam_data(root, name, log, installed_only=True)
         if root_info:
             info, known, steam_says, selectable = root_info, None, root_says, sel_root
-    r["selezionabile_steam"] = selectable
+    r["steam_selectable"] = selectable
     if info:
-        r["steam"], r["lingua_steam"] = info, info.get("lingua")
+        r["steam"], r["steam_language"] = info, info.get("language")
     elif known:
-        r["steam_conosciuto"] = known
+        r["steam_known"] = known
     if steam_says is not None:
         state = "is one of the official languages" if steam_says else "is not one of the official languages"
         if info:
-            r["fonti"].append("Steam: %s %s" % (label, state))
-    in_files = None if present is None else bool(engine_data.get("trovata"))
+            r["sources"].append("Steam: %s %s" % (label, state))
+    in_files = None if present is None else bool(engine_data.get("found"))
     if in_files:
-        r["fonti"].append("Game files: the %s language is present" % label)
+        r["sources"].append("Game files: the %s language is present" % label)
 
     # 3) decision
     if info:  # Steam installation: Steam wins (the language may be in a package not yet downloaded)
-        r["presente"] = True if in_files else steam_says if steam_says is not None else in_files
+        r["present"] = True if in_files else steam_says if steam_says is not None else in_files
     else:
-        r["presente"] = in_files
+        r["present"] = in_files
         if known and steam_says is not None:
-            game = "\"%s\"" % (known.get("nome") or known["appid"])
-            if in_files is None and known.get("cartella_simile"):
-                r["presente"] = steam_says
-                r["fonti"].append("Steam recognizes this game (%s, launched by %s): %s %s" % (
-                    game, known["eseguibile"], label, state))
+            game = "\"%s\"" % (known.get("name") or known["appid"])
+            if in_files is None and known.get("similar_folder"):
+                r["present"] = steam_says
+                r["sources"].append("Steam recognizes this game (%s, launched by %s): %s %s" % (
+                    game, known["executable"], label, state))
             elif steam_says and not in_files:
-                r["note"].append("Perhaps it's the Steam game %s, which has %s official language support: if that's "
+                r["notes"].append("Perhaps it's the Steam game %s, which has %s official language support: if that's "
                                  "the case, look for the language setting in the game options or in the launcher."
                                  % (game, label))
     return r
@@ -123,19 +123,19 @@ def _steam_data(folder, name, log, installed_only=False):
 
 
 def languages_in_files(folder, engine, dest_lang):
-    """({languages} or None if not known, data to set it; 'trovata' says whether the requested language is there).
+    """({languages} or None if not known, data to set it; 'found' says whether the requested language is there).
     Game sheets (games known one by one) come before the engine."""
     from . import games as sheets
     sheet, roots = sheets.identify(folder)
     if sheet:
         languages = sheet.present_languages(roots[0])
-        return languages, {"tipo": "scheda", "scheda": sheet.ID, "radice": roots[0] if len(roots) == 1 else None,
-                        "radici": roots, "trovata": bool(languages) and language.best(languages, dest_lang) is not None}
+        return languages, {"kind": "sheet", "sheet": sheet.ID, "root": roots[0] if len(roots) == 1 else None,
+                        "roots": roots, "found": bool(languages) and language.best(languages, dest_lang) is not None}
     if engine == "Unreal":
         from . import language_unreal
         languages, project = language_unreal.game_languages(folder)
         tag = language_unreal.target_tag(languages, dest_lang) if languages else None
-        return languages, {"tipo": "unreal", "progetto": project, "tag": tag, "trovata": tag is not None}
+        return languages, {"kind": "unreal", "project": project, "tag": tag, "found": tag is not None}
     if engine == "Unity":
         from . import language_unity
         data = language_unity.data_folder(folder)
@@ -168,18 +168,18 @@ def languages_in_files(folder, engine, dest_lang):
             languages |= set(ul)
         company, product = language_unity.company_product(data)
         found_root = entry is not None or bool(ul and language.best(ul, dest_lang))
-        engine_data = {"tipo": "unity", "dati": data, "azienda": company, "prodotto": product,
-                       "i2_lingua": entry, "i2_personalizzato": bool(entry) and language_unity.i2_custom(data),
-                       "unity_localization": sorted(ul) if ul else None, "trovata": found_root}
+        engine_data = {"kind": "unity", "data_folder": data, "company": company, "product": product,
+                       "i2_language": entry, "i2_custom": bool(entry) and language_unity.i2_custom(data),
+                       "unity_localization": sorted(ul) if ul else None, "found": found_root}
         return (languages if (i2 or ul) else None), engine_data
     if engine in ("XNA", "FNA", "MonoGame"):
         from . import adapter_xna
         resource_sets = adapter_xna.find_resources(folder)  # satellites created by PatchSmith do not count
         if not resource_sets:
-            return None, {"tipo": "xna"}
-        codes = {c for i in resource_sets for cultures in i["basi"].values() for c in cultures}
-        codes |= {i["lingua_neutra"] for i in resource_sets if i["lingua_neutra"]}
-        return codes, {"tipo": "xna", "trovata": language.best(codes, dest_lang) is not None}
+            return None, {"kind": "xna"}
+        codes = {c for i in resource_sets for cultures in i["bases"].values() for c in cultures}
+        codes |= {i["neutral_language"] for i in resource_sets if i["neutral_language"]}
+        return codes, {"kind": "xna", "found": language.best(codes, dest_lang) is not None}
     if engine == "GameMaker":
         from . import adapter_csv, adapter_gamemaker
         found = adapter_gamemaker.localization_file(folder)
@@ -190,8 +190,8 @@ def languages_in_files(folder, engine, dest_lang):
         tables = adapter_csv.tables(folder)
         for f in tables.values():
             languages |= f.full_languages()
-        return (languages if found or tables else None), {"tipo": "gamemaker",
-                                                          "trovata": language.best(languages, dest_lang) is not None}
+        return (languages if found or tables else None), {"kind": "gamemaker",
+                                                          "found": language.best(languages, dest_lang) is not None}
     return None, {}
 
 
@@ -206,7 +206,7 @@ def _log_file(folder):
 def _read_log(folder):
     try:
         with open(_log_file(folder), encoding="utf-8") as f:
-            return json.load(f)
+            return legacy.load(f)
     except (OSError, ValueError):
         return None
 
@@ -247,22 +247,22 @@ def _is_open(folder):
 def set_(folder, detection, dest_lang, log=print, consent=False):
     """Sets the language where it can be done safely. Returns (fatto, [lines to show]); fatto is None when the
     user's consent is needed (e.g. to modify the executables): then the lines are the proposal."""
-    m = detection.get("motore") or {}
+    m = detection.get("engine") or {}
     name = language.label(dest_lang)
     in_menu = "choose %s in the game's options menu" % name
-    if m.get("tipo") == "scheda":
+    if m.get("kind") == "sheet":
         from . import games as sheets
-        if detection.get("steam") and detection.get("selezionabile_steam"):
+        if detection.get("steam") and detection.get("steam_selectable"):
             return False, []  # installed from Steam: the language is chosen there (the message says where)
-        sheet = sheets.by_id(m.get("scheda"))
-        if sheet and not m.get("radice") and len(m.get("radici") or []) > 1:
+        sheet = sheets.by_id(m.get("sheet"))
+        if sheet and not m.get("root") and len(m.get("roots") or []) > 1:
             return False, ["The folder contains %d copies of %s (%s): choose the folder of just one."
-                           % (len(m["radici"]), sheet.NAME, "; ".join(m["radici"]))]
-        if sheet and m.get("radice"):
-            return sheet.set_language(m["radice"], dest_lang, consent, log)
-    if m.get("tipo") == "unreal" and m.get("tag"):
+                           % (len(m["roots"]), sheet.NAME, "; ".join(m["roots"]))]
+        if sheet and m.get("root"):
+            return sheet.set_language(m["root"], dest_lang, consent, log)
+    if m.get("kind") == "unreal" and m.get("tag"):
         from . import language_unreal
-        gus = language_unreal.settings_file(m.get("progetto"), folder)
+        gus = language_unreal.settings_file(m.get("project"), folder)
         if not gus:
             if _first_time(folder):
                 return False, ["I can't find the game settings yet: start it once and close it, then repeat 'Analyze "
@@ -285,22 +285,22 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
             return True, ["The game settings are already set to %s (%s)." % (name, gus),
                           "If the game is still in another language, %s." % in_menu]
         previous = _read_log(folder)
-        if previous and previous.get("tipo") == "unreal" and previous.get("file") == gus:
-            changes = previous["modifiche"] + changes  # the oldest values (the original ones) win
+        if previous and previous.get("kind") == "unreal" and previous.get("file") == gus:
+            changes = previous["changes"] + changes  # the oldest values (the original ones) win
         lines = ["I have set %s in the game settings (%s, [Internationalization])." % (name, gus),
                  "Start the game: if it's still in another language, the game uses its own menu: %s." % in_menu]
         try:
-            _save_log(folder, {"tipo": "unreal", "file": gus, "tag": m["tag"], "modifiche": changes,
-                                       "data": _now()})
+            _save_log(folder, {"kind": "unreal", "file": gus, "tag": m["tag"], "changes": changes,
+                                       "date": _now()})
         except OSError as e:
             lines.append("Warning: I couldn't save the restore log (%s)." % e)
         return True, lines
-    if m.get("tipo") == "unity" and m.get("i2_lingua"):
+    if m.get("kind") == "unity" and m.get("i2_language"):
         from . import language_unity
-        company, product = m.get("azienda"), m.get("prodotto")
+        company, product = m.get("company"), m.get("product")
         if not company or not product:
             return False, [in_menu[0].upper() + in_menu[1:] + "."]
-        if m.get("i2_personalizzato"):
+        if m.get("i2_custom"):
             return False, ["The game saves the language in its own way: %s." % in_menu]
         try:
             previous = language_unity.read_pref(company, product, language_unity.PREF_I2)
@@ -311,7 +311,7 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
                 return False, ["The game has no preferences yet: start it once and close it, then repeat 'Analyze and "
                                "translate' and I'll try to set %s myself (or %s)." % (name, in_menu)]
             return False, ["I can't find the game settings: %s." % in_menu]
-        value_ = m["i2_lingua"]
+        value_ = m["i2_language"]
         written = value_.encode("utf-8") + b"\x00"
         if previous and previous[1] == written:
             return True, ["The game's language is already set to %s." % name,
@@ -324,9 +324,9 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
         except (OSError, ValueError) as e:
             return False, ["I was unable to set the language (%s): %s." % (e, in_menu)]
         old = _read_log(folder)
-        if old and old.get("tipo") == "unity_i2" and old.get("azienda") == company and \
-                old.get("prodotto") == product:
-            before = old.get("precedente")  # the value from before the first time
+        if old and old.get("kind") == "unity_i2" and old.get("company") == company and \
+                old.get("product") == product:
+            before = old.get("previous")  # the value from before the first time
         else:
             before = [previous[0], previous[1].hex()] if previous else None
         lines = ["I have set the game language to %s (following I2 Localization's preference: \"%s\")."
@@ -334,9 +334,9 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
                  "Start the game: it should start in %s. If it's still in another language, the game uses its own "
                  "setting: %s." % (name, in_menu)]
         try:
-            _save_log(folder, {"tipo": "unity_i2", "azienda": company, "prodotto": product,
-                                       "chiave": language_unity.PREF_I2, "scritto": written.hex(), "precedente": before,
-                                       "data": _now()})
+            _save_log(folder, {"kind": "unity_i2", "company": company, "product": product,
+                                       "key": language_unity.PREF_I2, "written": written.hex(), "previous": before,
+                                       "date": _now()})
         except OSError as e:
             lines.append("Warning: I couldn't save the restore log (%s)." % e)
         return True, lines
@@ -356,20 +356,20 @@ def set_added_language(folder, name, languages, log=print, source=None, force=Fa
         return False, ["I'm not setting the language '%s' in the game options: %s." % (name, reason)]
     saves = data_folder("save-backups", "lingua-" + os.path.basename(_log_file(folder))[:-5])
     old = _read_log(folder)
-    if not (old and old.get("tipo") == "gamemaker_opzioni"):
+    if not (old and old.get("kind") == "gamemaker_options"):
         old = None
     try:
         log_file, reason = language_gamemaker.set_(folder, name, languages, saves, log,
-                                                    respect=old.get("scritto") if old and not force else None)
+                                                    respect=old.get("written") if old and not force else None)
     except (OSError, ValueError, KeyError, StopIteration) as e:
         return False, ["I wasn't able to set the language in the game options (%s)." % e]
     if log_file is None:
         return False, ["I don't set the language from outside: %s." % reason]
-    if old and old.get("file") == log_file["file"] and old.get("precedente"):
-        log_file["precedente"] = old["precedente"]  # the language from before the first time wins
-    elif not log_file.get("precedente") and source:
-        log_file["precedente"] = source  # already set (e.g. by the player): on restore the original comes back
-    log_file["data"] = _now()
+    if old and old.get("file") == log_file["file"] and old.get("previous"):
+        log_file["previous"] = old["previous"]  # the language from before the first time wins
+    elif not log_file.get("previous") and source:
+        log_file["previous"] = source  # already set (e.g. by the player): on restore the original comes back
+    log_file["date"] = _now()
     try:
         _save_log(folder, log_file)
     except OSError as e:
@@ -386,7 +386,7 @@ def put_back_added_language(folder, additions, source, languages, log=print):
     None if there was nothing to do, True if put back, False if it was needed but could not be done."""
     from . import language_gamemaker
     log_file = _read_log(folder) or {}
-    if log_file.get("tipo") != "gamemaker_opzioni":
+    if log_file.get("kind") != "gamemaker_options":
         return None
     try:
         path, spot = language_gamemaker.search(folder, set(languages) | set(additions))
@@ -395,7 +395,7 @@ def put_back_added_language(folder, additions, source, languages, log=print):
     if (path is None or spot[3] not in additions
             or os.path.normcase(path) != os.path.normcase(log_file.get("file") or "")):
         return None
-    previous = log_file.get("precedente")
+    previous = log_file.get("previous")
     if not previous or previous in additions:
         previous = source
     reason = _is_open(folder)
@@ -411,7 +411,7 @@ def put_back_added_language(folder, additions, source, languages, log=print):
         log("  ! I was unable to set the language back to '%s' in the game options (%s)." % (previous, e))
         return False
     log("  Game language: set back to '%s' (it was '%s', the added language)" % (previous, spot[3]))
-    if log_file.get("tipo") == "gamemaker_opzioni":
+    if log_file.get("kind") == "gamemaker_options":
         try:
             os.remove(_log_file(folder))
         except OSError:
@@ -426,7 +426,7 @@ def _lever_roots(folder):
     for root in sheets.identify(folder)[1]:
         if os.path.normcase(root) not in {os.path.normcase(r) for r in roots}:
             roots.append(root)
-    return [r for r in roots if configurator.lever(r, "lingua")]
+    return [r for r in roots if configurator.lever(r, "language")]
 
 
 def is_set(folder):
@@ -439,7 +439,7 @@ def restore(folder, log=print):
     from . import configurator
     outcomes = [_restore_setting(folder, log)]
     for root in _lever_roots(folder):
-        outcome = configurator.restore(root, "lingua", log)
+        outcome = configurator.restore(root, "language", log)
         if outcome:
             log("  Game language: set back to how it was")
         outcomes.append(outcome)
@@ -461,22 +461,22 @@ def _restore_setting(folder, log):
         log("  ! Game language not restored: %s (still to do)." % reason)
         return False
     try:
-        if data.get("tipo") == "unreal":
+        if data.get("kind") == "unreal":
             from . import language_unreal
-            ok = language_unreal.restore_culture(data["file"], data["modifiche"], data["tag"]) > 0
-        elif data.get("tipo") == "unity_i2":
+            ok = language_unreal.restore_culture(data["file"], data["changes"], data["tag"]) > 0
+        elif data.get("kind") == "unity_i2":
             from . import language_unity
-            previous = tuple(data["precedente"]) if data.get("precedente") else None
-            ok = language_unity.restore_pref(data["azienda"], data["prodotto"], data["chiave"], previous,
-                                              bytes.fromhex(data["scritto"]))
-        elif data.get("tipo") == "gamemaker_opzioni":
+            previous = tuple(data["previous"]) if data.get("previous") else None
+            ok = language_unity.restore_pref(data["company"], data["product"], data["key"], previous,
+                                              bytes.fromhex(data["written"]))
+        elif data.get("kind") == "gamemaker_options":
             from . import language_gamemaker
             ok = language_gamemaker.restore(data)
         else:
             ok = False
     except (OSError, ValueError, TypeError, KeyError) as e:
-        where = data.get("file") or "Windows registry, HKCU\\Software\\%s\\%s" % (data.get("azienda"),
-                                                                                   data.get("prodotto"))
+        where = data.get("file") or "Windows registry, HKCU\\Software\\%s\\%s" % (data.get("company"),
+                                                                                   data.get("product"))
         log("  ! I wasn't able to revert the game's language to its original setting (%s; %s): either remove read-only "
             "mode and try again, or select the language in the game's menu." % (e, where))
         return False
@@ -492,28 +492,28 @@ def message(detection, dest_lang, setting=None, done=False):
     """Lines to show the user when the official language is there."""
     name = language.label(dest_lang)
     lines = ["The game already has an official translation in %s: it's better than an automated translation." % name]
-    lines += ["  - " + f for f in detection["fonti"]]
+    lines += ["  - " + f for f in detection["sources"]]
     if setting:
         lines += setting
     if done is None:  # proposal waiting for the user's consent: no other instructions
         return lines
-    if (detection.get("motore") or {}).get("tipo") == "scheda" and setting:
+    if (detection.get("engine") or {}).get("kind") == "sheet" and setting:
         return lines  # the game sheet already said what it did, or why not and what to do
     info = detection.get("steam")
     if info:
-        if detection.get("lingua_steam") == _steam_name(dest_lang):
+        if detection.get("steam_language") == _steam_name(dest_lang):
             lines.append("Steam already uses %s for this game: if the game is in another language, select it from its "
                          "options." % name)
-        elif detection.get("selezionabile_steam"):
+        elif detection.get("steam_selectable"):
             lines.append('In Steam: Library > Right-click on "%s" > Properties > General > Language > %s.' % (
-                info.get("nome") or "the game", name))
+                info.get("name") or "the game", name))
         elif not setting:
             lines.append("Choose %s in the game options (this game doesn't have a language menu on Steam)." % name)
-    elif detection.get("steam_conosciuto"):
+    elif detection.get("steam_known"):
         if done is False:
             lines.append("I can't set it myself: this folder isn't a Steam installation, and many games use the "
                          "language that the store (Steam or Epic) passes to them at startup.")
-            if detection.get("selezionabile_steam"):
+            if detection.get("steam_selectable"):
                 lines.append("From Steam: Library > Right-click on the game > Properties > General > Language > %s."
                              % name)
             lines.append("Alternatively, try searching for %s in the game's options or in the launcher from which you "

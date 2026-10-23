@@ -1,7 +1,7 @@
 """Live translation of Electron games with encrypted files (adapter_web_live + injector_live.js).
 
 Usage: python -I test/test_web_live.py <test_folder_that_does_not_exist>
-- fake Electron game with GemShell: game profile "web-vivo", script in preload.js with a backup, dictionary and the
+- fake Electron game with GemShell: game profile "web-live", script in preload.js with a backup, dictionary and the
   translator's command; Reapply with the saved translations; Restore originals with the files identical to the original;
 - if Node.js is there: the real script in a fake page, with a fake translator on 127.0.0.1 (texts translated, numbers
   put back, keys and numbers left as they are, preload put back by the game -> the after-play check puts it back).
@@ -26,7 +26,7 @@ MAIN = ("const{app,BrowserWindow}=require('electron');new BrowserWindow({webPref
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def write(path, data):
@@ -53,41 +53,41 @@ def fake_game(folder):
 
 
 NODE = r"""
-// pagina finta per injector_live.js: nodi di testo, TreeWalker, MutationObserver, nessun font; traduttore finto
-// (POST /traduci-gruppo) che risponde dopo 400 ms
+// fake page for injector_live.js: text nodes, TreeWalker, MutationObserver, no fonts; fake translator
+// (POST /translate-group) that answers after 400 ms
 const path = require('path'), http = require('http');
-const [script, porta, uscita] = process.argv.slice(2);
-function testo(v, genitore) { return { nodeType: 3, nodeValue: v, parentNode: genitore }; }
-const corpo = { nodeType: 1, nodeName: 'BODY', figli: [], childNodes: [], getAttribute: () => null };
-const testi = ['Click or press Z to attack the dragon!', 'Elapsed: 1.28 minutes', 'Q', '999,999'];
-const nodi = testi.map(t => { const n = testo(t, corpo); corpo.figli.push(n); corpo.childNodes.push(n); return n; });
+const [script, port, output] = process.argv.slice(2);
+function text(v, parent) { return { nodeType: 3, nodeValue: v, parentNode: parent }; }
+const body = { nodeType: 1, nodeName: 'BODY', children: [], childNodes: [], getAttribute: () => null };
+const texts = ['Click or press Z to attack the dragon!', 'Elapsed: 1.28 minutes', 'Q', '999,999'];
+const nodes = texts.map(t => { const n = text(t, body); body.children.push(n); body.childNodes.push(n); return n; });
 const span = { nodeType: 1, nodeName: 'SPAN', style: { visibility: '' }, childNodes: [], getAttribute: () => null };
-const solo = testo('Settings', span); span.childNodes.push(solo); corpo.figli.push(span, solo); nodi.push(solo);
-const bottone = { nodeType: 1, nodeName: 'BUTTON', childNodes: [], attr: { title: 'Close' },
+const alone = text('Settings', span); span.childNodes.push(alone); body.children.push(span, alone); nodes.push(alone);
+const button = { nodeType: 1, nodeName: 'BUTTON', childNodes: [], attr: { title: 'Close' },
   getAttribute(k) { return this.attr[k] || null; }, setAttribute(k, v) { this.attr[k] = v; } };
-corpo.figli.push(bottone);
+body.children.push(button);
 global.window = { getComputedStyle: () => ({ fontFamily: 'serif' }) };
 global.NodeFilter = { SHOW_ELEMENT: 1, SHOW_TEXT: 4 };
 global.MutationObserver = class { observe() {} };
-global.document = { readyState: 'complete', body: corpo, documentElement: corpo,
-  createTreeWalker: r => { let i = 0; const l = r.figli || []; return { nextNode: () => l[i++] || null }; } };
-const richieste = [];
+global.document = { readyState: 'complete', body: body, documentElement: body,
+  createTreeWalker: r => { let i = 0; const l = r.children || []; return { nextNode: () => l[i++] || null }; } };
+const requests = [];
 const server = http.createServer((req, res) => {
-  let corpoRichiesta = '';
-  req.on('data', p => corpoRichiesta += p);
+  let requestBody = '';
+  req.on('data', p => requestBody += p);
   req.on('end', () => {
-    const testi = JSON.parse(corpoRichiesta).testi;
-    richieste.push(testi);
-    const traduzioni = {};
-    testi.forEach(t => traduzioni[t] = 'IT ' + t);
-    setTimeout(() => res.end(JSON.stringify({ traduzioni, riprova: [] })), 400);
+    const group = JSON.parse(requestBody).texts;
+    requests.push(group);
+    const translations = {};
+    group.forEach(t => translations[t] = 'IT ' + t);
+    setTimeout(() => res.end(JSON.stringify({ translations, retry: [] })), 400);
   });
-}).listen(Number(porta), '127.0.0.1', () => {
+}).listen(Number(port), '127.0.0.1', () => {
   require(path.resolve(script));
-  let nascosto = null;
-  setTimeout(() => { nascosto = span.style.visibility; }, 300);
-  setTimeout(() => { require('fs').writeFileSync(uscita, JSON.stringify({ valori: nodi.map(n => n.nodeValue),
-    nascosto, dopo: span.style.visibility, title: bottone.attr.title, richieste }));
+  let hidden = null;
+  setTimeout(() => { hidden = span.style.visibility; }, 300);
+  setTimeout(() => { require('fs').writeFileSync(output, JSON.stringify({ values: nodes.map(n => n.nodeValue),
+    hidden, after: span.style.visibility, title: button.attr.title, requests }));
     server.close(); process.exit(0); }, 2500);
 });
 """
@@ -101,7 +101,7 @@ def test_script(base, preload, port):
     # the script as PatchSmith writes it, with the fake translator's port and without the Python command
     with open(preload, encoding="utf-8") as f:
         script = f.read().split(adapter_web_live.MARKER, 1)[1]
-    config = {"dizionario": adapter_web_live.DICTIONARY_NAME, "porta": port, "da": "en", "a": "it", "comando": None}
+    config = {"dictionary": adapter_web_live.DICTIONARY_NAME, "port": port, "from": "en", "to": "it", "command": None}
     start = script.index("var CFG = ") + len("var CFG = ")
     end = script.index(";", start)
     script = ";(function () { //" + script[:start] + json.dumps(config) + script[end:]
@@ -114,36 +114,36 @@ def test_script(base, preload, port):
     with open(output, encoding="utf-8") as f:
         r = json.load(f)
     check("nella pagina: frasi tradotte dal dizionario e dal traduttore (numeri tolti e rimessi), tasti e numeri "
-              "come sono (%s)" % r["valori"],
-              r["valori"] == ["Clicca o premi Z per attaccare il drago!", "IT Elapsed: 1.28 minutes", "Q", "999,999",
+              "come sono (%s)" % r["values"],
+              r["values"] == ["Clicca o premi Z per attaccare il drago!", "IT Elapsed: 1.28 minutes", "Q", "999,999",
                               "IT Settings"] and r["title"] == "IT Close")
-    check("frasi nuove chieste in un solo gruppo, mai le traduzioni gia' scritte (%s)" % r["richieste"],
-              len(r["richieste"]) == 1 and sorted(r["richieste"][0]) == ["Close", "Elapsed: {{A}} minutes", "Settings"])
-    check("frase in attesa nascosta per poco, poi visibile e tradotta (%r -> %r)" % (r["nascosto"], r["dopo"]),
-              r["nascosto"] == "hidden" and r["dopo"] == "")
+    check("frasi nuove chieste in un solo gruppo, mai le traduzioni gia' scritte (%s)" % r["requests"],
+              len(r["requests"]) == 1 and sorted(r["requests"][0]) == ["Close", "Elapsed: {{A}} minutes", "Settings"])
+    check("frase in attesa nascosta per poco, poi visibile e tradotta (%r -> %r)" % (r["hidden"], r["after"]),
+              r["hidden"] == "hidden" and r["after"] == "")
 
 
 def main(base):
     base = os.path.abspath(base)
     os.makedirs(base)
-    project.DATA_ROOT = os.path.join(base, "dati")
+    project.DATA_ROOT = os.path.join(base, "data_folder")
     automatic.PROFILES_FOLDER = os.path.join(project.DATA_ROOT, "profiles")
     game = os.path.join(base, "Drago")
     fake_game(game)
     before = fingerprints(game)
     lines = []
-    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "finto", lines.append)
+    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "fake", lines.append)
     preload = os.path.join(game, "game", "resources", "app", "preload.js")
     with open(preload, encoding="utf-8") as f:
         written = f.read()
     profile = json.load(open(path, encoding="utf-8")) if path else {}
     check("file cifrati con preload.js in chiaro: traduzione dal vivo (profilo web-vivo), esito OK",
-              completed and profile.get("motore") == "web-vivo" and outcome["esito"].code == "OK")
+              completed and profile.get("engine") == "web-live" and outcome["outcome"].code == "OK")
     check("preload.js: originale in testa, script in fondo; backup verificato; dizionario e comando accanto",
               written.startswith(PRELOAD.rstrip("\n")) and adapter_web_live.MARKER in written
               and os.path.exists(preload + project.BACKUP_SUFFIX)
               and os.path.exists(os.path.join(os.path.dirname(preload), adapter_web_live.CONFIG_NAME))
-              and "servizio-xunity" in written and "gemshell-assets" not in [r for r in lines])
+              and "xunity-service" in written and "gemshell-assets" not in [r for r in lines])
     # translations that arrived while playing (the game's translation memory): Reapply puts them in the dictionary
     memory = project.memory_path(profile, test=True)
     write(memory, json.dumps({"Click or press Z to attack the dragon!": "Clicca o premi Z per attaccare il drago!",
@@ -166,14 +166,14 @@ def main(base):
     with open(preload, encoding="utf-8") as f:
         is_on = f.read()
     check("traduzione mentre giochi spenta (solo dizionario, nessun traduttore avviato) e poi riaccesa",
-              '"porta": 0' in off_button and '"comando": null' in off_button and profile_off["dal_vivo"] == "nessuno"
-              and '"porta": 0' not in is_on and "servizio-xunity" in is_on
+              '"port": 0' in off_button and '"command": null' in off_button and profile_off["live"] == "none"
+              and '"port": 0' not in is_on and "xunity-service" in is_on
               and automatic.live_translation(game)[1] is True and is_on.count(adapter_web_live.MARKER) == 1)
     # the game puts back its own preload.js: the after-play check notices it
     write(preload, PRELOAD)
     problems = checks.check(path, apply=False, log=lambda _m: None, retranslate=False)
     check("preload.js rimesso dal gioco: il controllo dopo aver giocato propone di rimettere la traduzione",
-              any(p.code == "RIPRISTINATO_DAL_GIOCO" for p in problems))
+              any(p.code == "RESTORED_BY_GAME" for p in problems))
     automatic.reapply(game, lines.append, test=True, outcome={})
     automatic.restore(game, lines.append, outcome={})
     check("Ripristina originali: cartella del gioco identica a prima (preload.js, nessun file di PatchSmith)",

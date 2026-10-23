@@ -15,7 +15,7 @@ does what a player would do:
   translator not installed, texts left untranslated.
 For each dialog it checks that it tells the next step in plain Italian (a button or an instruction), without
 technical names (smith.py, JSON file, traceback).
-PatchSmith's data go to PATCHSMITH_DATI (test/run_all.py creates one for the test); without it, to a
+PatchSmith's data go to PATCHSMITH_DATA (test/run_all.py creates one for the test); without it, to a
 folder inside the test's folder.
 """
 import glob
@@ -55,7 +55,7 @@ TECHNICAL = re.compile(r"smith\.py|Traceback|\.json\b|\bNone\b|%[sd]\b|\{\}|Errn
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name, flush=True)
+    print(("OK    " if condition else "ERROR ") + "  " + name, flush=True)
 
 
 def silent(_):
@@ -134,9 +134,9 @@ def fingerprints(folder):
 
 
 class Translator(backend.Backend):
-    """A "real" fake translator (not the 'finto' backend: real translation memory): words reversed, recognizable;
+    """A "real" fake translator (not the 'fake' backend: real translation memory): words reversed, recognizable;
     those in ODD come back with a character no font has, or the same as the original."""
-    name = "dizionario"
+    name = "dictionary"
     ODD = {}
 
     def __init__(self):
@@ -155,9 +155,9 @@ class Blocked(Translator):
 
     def translate_lines(self, lines, origin, dest_lang, *_a, **_k):
         if self.received:
-            limiter.Limiter("google", log=None).blocked(429, "prova")
+            limiter.Limiter("google", log=None).blocked(429, "test")
             raise backend.Blocked("Google rejected the requests (too many requests): I'll try again later.",
-                                   "TRADUTTORE_BLOCCATO")
+                                   "TRANSLATOR_BLOCKED")
         return super().translate_lines(lines, origin, dest_lang)
 
 
@@ -174,11 +174,11 @@ def prepare(base):
     automatic.GAME_SPACE = automatic.DATA_SPACE = 0
     ollama.recommended_model = lambda gb=None: ("4b", "Your graphics card has 4 GB of memory: I recommend the Fast "
                                                       "model (4B).")
-    if not os.environ.get("PATCHSMITH_DATI"):
-        project.DATA_ROOT = os.path.join(base, "dati")
+    if not os.environ.get("PATCHSMITH_DATA"):
+        project.DATA_ROOT = os.path.join(base, "data_folder")
     gui.SETTINGS = None
     for v, rel in (("LOCALAPPDATA", "appdata"), ("USERPROFILE", "utente"), ("TEMP", "temp")):
-        if not os.environ.get("PATCHSMITH_DATI"):  # (with run_all they are already test folders)
+        if not os.environ.get("PATCHSMITH_DATA"):  # (with run_all they are already test folders)
             os.environ[v] = os.path.join(base, rel)
         os.makedirs(os.environ[v], exist_ok=True)
     steam.steam_folder = lambda: None
@@ -186,14 +186,14 @@ def prepare(base):
     steam.identify_from_executables = lambda folder: None
     checks.crash_events = lambda since: []  # never the real Windows log
     # the local translator "installed" (simulated state) and the fake translator in place of all of them
-    STATE["locale"] = "pronto"
-    ollama.state = lambda: STATE["locale"]
-    ollama.installed = lambda: STATE["locale"] == "pronto"
-    ollama.model_present = lambda key=None: STATE["locale"] == "pronto"
+    STATE["local"] = "ready"
+    ollama.state = lambda: STATE["local"]
+    ollama.installed = lambda: STATE["local"] == "ready"
+    ollama.model_present = lambda key=None: STATE["local"] == "ready"
     automatic.create_backend = checks.create_backend = create_backend
-    STATE["traduttore"] = Translator
+    STATE["translator"] = Translator
     # Unity: BepInEx and XUnity packages already "downloaded", the translator's plugin without a compiler
-    pc.prepare_components(os.path.join(base, "componenti"))
+    pc.prepare_components(os.path.join(base, "components"))
     adapter_unity._compile_plugin = pc._fake_plugin
 
 
@@ -203,9 +203,9 @@ STATE = {}
 def create_backend(name, log=print):
     """Like backend.create_backend, but with the fake translator: the local translator not installed does not start,
     the online one, if paused, says so (pause(), like GoogleFree)."""
-    if name == "locale" and STATE["locale"] != "pronto":
-        raise backend.BackendError(backend.NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=backend.INSTALL_COMMAND)
-    t = STATE["traduttore"]()
+    if name == "local" and STATE["local"] != "ready":
+        raise backend.BackendError(backend.NOT_INSTALLED, "TRANSLATOR_MISSING", command=backend.INSTALL_COMMAND)
+    t = STATE["translator"]()
     if name in ("google", "deepl", "mymemory"):
         t.pause = lambda: limiter.Limiter(name, log=None).pause()
     return t
@@ -217,7 +217,7 @@ def open_window():
     for _ in range(20):
         root.update()
         time.sleep(0.02)
-    app.translator.set(gui.TRANSLATORS["locale"])
+    app.translator.set(gui.TRANSLATORS["local"])
     app._change_translator()
     return root, app
 
@@ -302,20 +302,20 @@ def unexpected_path(app, root, base):
     app.folder.set(game)
     real_is_open = system.game_open
     # game open before starting: nothing starts, "Try again" with the game closed starts
-    state = {"aperto": True}
-    system.game_open = lambda _c: state["aperto"]
-    ANSWERS["The game is open"] = ["riprova"]
+    state = {"is_open": True}
+    system.game_open = lambda _c: state["is_open"]
+    ANSWERS["The game is open"] = ["retry"]
     try:
         n = len(WINDOWS)
         app._translate()
         question = latest(src_lang=n)
-        state["aperto"] = False
+        state["is_open"] = False
         wait_for(app, root)
     finally:
         system.game_open = real_is_open
     end = latest(src_lang=n)
     check("gioco aperto prima di partire: 'Il gioco è aperto' con 'Riprova'; chiuso il gioco, 'Riprova' traduce",
-              question[1] == "The game is open" and "riprova" in buttons(question) and is_clear(question)
+              question[1] == "The game is open" and "retry" in buttons(question) and is_clear(question)
               and end[1] == "Translation installed")
 
     # online translator paused before starting: "Continue anyway" -> only the saved translations
@@ -324,8 +324,8 @@ def unexpected_path(app, root, base):
     app.folder.set(other)
     app.translator.set(gui.TRANSLATORS["google"])
     app._change_translator()
-    limiter.Limiter("google", log=None).blocked(429, "prova")
-    ANSWERS["Translator paused"] = ["continua"]
+    limiter.Limiter("google", log=None).blocked(429, "test")
+    ANSWERS["Translator paused"] = ["continue"]
     try:
         n = len(WINDOWS)
         app._translate()
@@ -335,16 +335,16 @@ def unexpected_path(app, root, base):
     pause = latest("Translator paused", src_lang=n)
     end = latest(src_lang=n)
     check("Google in pausa: finestra con 'Usa il traduttore locale'; 'Continua comunque' -> esito con il passo dopo "
-              "(%s: %s)" % (end[1], buttons(end)), pause[1] and "usa_locale" in buttons(pause) and is_clear(pause)
+              "(%s: %s)" % (end[1], buttons(end)), pause[1] and "use_local" in buttons(pause) and is_clear(pause)
               and end[1] in ("Translation interrupted", "Translation partially installed") and is_clear(end)
-              and "usa_locale" in buttons(end))
+              and "use_local" in buttons(end))
     # "Use the local translator" from the final dialog: selects it and translates
     n = len(WINDOWS)
-    app._action("usa_locale", app.last_outcome)
+    app._action("use_local", app.last_outcome)
     wait_for(app, root)
     end = latest(src_lang=n)
     check("... 'Usa il traduttore locale': scelto e tradotto ('%s')" % end[1],
-              app._chosen == "locale" and end[1] == "Translation installed")
+              app._chosen == "local" and end[1] == "Translation installed")
 
     # Google blocked halfway through the work: "Translation interrupted", the translations done stay
     third = os.path.join(base, "giochi", "Moss Gate")
@@ -352,29 +352,29 @@ def unexpected_path(app, root, base):
     app.folder.set(third)
     app.translator.set(gui.TRANSLATORS["google"])
     app._change_translator()
-    STATE["traduttore"] = Blocked
+    STATE["translator"] = Blocked
     try:
         n = len(WINDOWS)
         app._translate()
         wait_for(app, root)
     finally:
-        STATE["traduttore"] = Translator
+        STATE["translator"] = Translator
         limiter.Limiter("google", log=None).reset()
     end = latest(src_lang=n)
     check("Google bloccato a meta': '%s' con il passo dopo e 'Usa il traduttore locale' (%s)"
               % (end[1], buttons(end)), end[1] in ("Translation interrupted", "Translation partially installed")
-              and is_clear(end) and "usa_locale" in buttons(end))
+              and is_clear(end) and "use_local" in buttons(end))
 
     # local translator not installed: "Continue anyway" -> "Translator not ready" with "Install"; once installed
     # (fake) -> the translation starts again on its own
-    app.translator.set(gui.TRANSLATORS["locale"])
+    app.translator.set(gui.TRANSLATORS["local"])
     app._change_translator()
-    STATE["locale"] = "non installato"
+    STATE["local"] = "non installato"
     fourth = os.path.join(base, "giochi", "Salt Marsh")
     fake_web_game.create(fourth)
     originals = fingerprints(fourth)
     app.folder.set(fourth)
-    ANSWERS["Local translator to install"] = ["continua"]
+    ANSWERS["Local translator to install"] = ["continue"]
     n = len(WINDOWS)
     app._translate()
     wait_for(app, root)
@@ -382,30 +382,30 @@ def unexpected_path(app, root, base):
     end = latest(src_lang=n)
     check("traduttore locale non installato: 'Installa ora' prima di partire; 'Continua comunque' -> '%s' con "
               "'Installa il traduttore locale', gioco non toccato" % end[1],
-              absent[1] and "installa_locale" in buttons(absent) and is_clear(absent)
-              and end[1] == "Translator not ready" and "installa_locale" in buttons(end) and is_clear(end)
+              absent[1] and "install_local" in buttons(absent) and is_clear(absent)
+              and end[1] == "Translator not ready" and "install_local" in buttons(end) and is_clear(end)
               and fingerprints(fourth) == originals)
     actual = ollama.download_description, ollama.install, backend.probe_local
 
     def install(selected, log=print):
-        STATE["locale"] = "pronto"
+        STATE["local"] = "ready"
         return True
 
     ollama.download_description = lambda selected: ["Ollama (finto)", "modello Veloce (finto)"]
     ollama.install = install
     backend.probe_local = lambda model=None, log=print, **_k: {
-        "ok": True, "messaggio": "ready, on the graphics card: \"Start game\" -> \"Inizia\".", "scheda": 1.0}
+        "ok": True, "message": "ready, on the graphics card: \"Start game\" -> \"Inizia\".", "gpu": 1.0}
     ANSWERS["Install the local translator?"] = True
-    ANSWERS["Local translator to install"] = ["installa_locale"]
+    ANSWERS["Local translator to install"] = ["install_local"]
     try:
-        STATE["locale"] = "non installato"
+        STATE["local"] = "non installato"
         n = len(WINDOWS)
         app._translate()
         wait_for(app, root)  # the installation
         wait_for(app, root)  # and then the translation that was waiting
     finally:
         ollama.download_description, ollama.install, backend.probe_local = actual
-        STATE["locale"] = "pronto"
+        STATE["local"] = "ready"
     end = latest(src_lang=n)
     check("'Installa ora' prima di partire: installa (finto), frase di prova, poi traduce da solo ('%s')"
               % end[1], end[1] == "Translation installed")
@@ -424,16 +424,16 @@ def unexpected_path(app, root, base):
     end = latest(src_lang=n)
     check("testi rimasti in originale: '%s' con 'Mostra i rimasti' e 'Correggi traduzioni' (%s)"
               % (end[1], buttons(end)), end[1] == "Translation partially installed" and is_clear(end)
-              and "correggi" in buttons(end)
+              and "fix" in buttons(end)
               and "Rest here" in end[2] + json.dumps(app.last_outcome.remaining_examples))
     open_toplevels = []
     app._fix = lambda filter_=None: open_toplevels.append(filter_)
     try:
-        app._action("correggi", app.last_outcome)
+        app._action("fix", app.last_outcome)
     finally:
         del app._fix
-    check("... 'Correggi traduzioni' apre l'elenco dei rimasti", open_toplevels == ["rimasti"])
-    window = app._fix("rimasti")
+    check("... 'Correggi traduzioni' apre l'elenco dei rimasti", open_toplevels == ["remaining"])
+    window = app._fix("remaining")
     lines = len(window.tree.get_children()) if window else 0
     check("... la finestra mostra i testi rimasti (%d)" % lines, lines >= 1)
     if window:
@@ -461,19 +461,19 @@ def gamemaker_path(app, root, base):
         project.game_open = real_is_open
     end = latest(src_lang=n)
     check("GameMaker aperto durante il lavoro: 'Il gioco è aperto' (traduzioni pronte, non scritte) con Riprova "
-              "(%s: %s)" % (end[1], buttons(end)), end[1] == "The game is open" and "chiudi_gioco" in buttons(end)
+              "(%s: %s)" % (end[1], buttons(end)), end[1] == "The game is open" and "close_game" in buttons(end)
               and is_clear(end) and fingerprints(game) == originals)
     try:
         n = len(WINDOWS)
-        app._action("chiudi_gioco", app.last_outcome)  # "Try again", with the game closed
+        app._action("close_game", app.last_outcome)  # "Try again", with the game closed
         wait_for(app, root)
     finally:
         Translator.ODD = {}
     end = latest(src_lang=n)
     check("GameMaker: '%s' con il passo dopo; la traduzione che il font non sa disegnare porta all'elenco "
               "'Non scritte nel gioco' (%s)" % (end[1], buttons(end)),
-              end[1] == "Translation partially installed" and is_clear(end) and "correggi" in buttons(end)
-              and outcome.fixes_filter(app.last_outcome) == "gioco" and "\"Not written to the game\"" in end[2]
+              end[1] == "Translation partially installed" and is_clear(end) and "fix" in buttons(end)
+              and outcome.fixes_filter(app.last_outcome) == "game" and "\"Not written to the game\"" in end[2]
               and "\"Left untranslated\"" not in end[2])
     with open(os.path.join(game, "localization", "stringsEN.json"), encoding="utf-8") as f:
         translated = f.read()
@@ -485,7 +485,7 @@ def gamemaker_path(app, root, base):
     wait_for(app, root)
     end = latest(src_lang=n)
     check("GameMaker: controllo dopo aver giocato con il passo dopo (%s)" % end[1], is_clear(end))
-    window = app._fix("gioco")
+    window = app._fix("game")
     entries = [window.tree.item(i, "values")[0] for i in window.tree.get_children()] if window else []
     check("GameMaker: la traduzione con la stella e' in 'Non scritte nel gioco' (%s)" % entries[:3],
               any("VULTURE" in v for v in entries))
@@ -538,7 +538,7 @@ def unity_path(app, root, base):
     path = automatic.find_profile(game)
     with open(path, encoding="utf-8") as f:
         profile = json.load(f)
-    name = profile["nome"]
+    name = profile["name"]
 
     # a fix made with the game open: it stays waiting ("Try again" not pressed, the player plays)
     real_is_open = system.game_open
@@ -598,7 +598,7 @@ def unity_path_after(app, root, base, game, name, path):
         profile = json.load(f)
     entries = adapter_unity.xunity_cache_entries(game, "it")
     check("Unity: lettere che il font non ha annotate e frasi gia' scritte adattate (è -> e')",
-              "è" in (profile.get("caratteri_mancanti") or "") and not any("è" in v for v in entries.values()))
+              "è" in (profile.get("missing_chars") or "") and not any("è" in v for v in entries.values()))
     check("Unity: la correzione fatta a gioco aperto scritta nella cache dal controllo all'apertura (%s)"
               % entries.get("Start a new game"), entries.get("Start a new game") == "Nuova partita"
               and not corrections.to_write(profile))

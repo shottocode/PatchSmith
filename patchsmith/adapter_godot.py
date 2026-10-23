@@ -22,6 +22,7 @@ import os
 import re
 import struct
 
+from . import legacy
 from .adapter_webjson import write_atomic
 
 MANIFEST = "patchsmith-godot.json"
@@ -270,59 +271,59 @@ def tables(pck):
 # --- installation ----------------------------------------------------------------------------------------------------
 
 SCRIPT_GD = '''extends Node
-## Patchsmith: traduzione di questo gioco (aggiunta da Patchsmith: "Ripristina originali" in Patchsmith la toglie).
-## Prende il posto della tabella della lingua indicata in patchsmith-traduzione.json ("lingua", di solito "en"):
-## con quella lingua scelta nel gioco i testi compaiono tradotti. Aggiunge anche le lingue in "aggiunte".
+## Patchsmith: translation of this game (added by Patchsmith: "Restore originals" in Patchsmith removes it).
+## Takes the place of the table of the language given in patchsmith-traduzione.json ("language", usually "en"):
+## with that language chosen in the game the texts appear translated. Also adds the languages in "additions".
 
-class Ponte extends Translation:
-	var originale: Translation
-	var testi := {}
+class Bridge extends Translation:
+	var original: Translation
+	var texts := {}
 
-	func _traduci(sorgente: String, chiave: StringName) -> StringName:
-		if sorgente.is_empty():
-			sorgente = String(chiave)
-		var t = testi.get(sorgente)
-		return StringName(t) if t != null else StringName(sorgente)
+	func _translate(source: String, key: StringName) -> StringName:
+		if source.is_empty():
+			source = String(key)
+		var t = texts.get(source)
+		return StringName(t) if t != null else StringName(source)
 
 	func _get_message(src_message: StringName, context: StringName) -> StringName:
-		return _traduci(String(originale.get_message(src_message, context)), src_message)
+		return _translate(String(original.get_message(src_message, context)), src_message)
 
 	func _get_plural_message(src_message: StringName, src_plural_message: StringName, n: int, context: StringName) -> StringName:
-		return _traduci(String(originale.get_plural_message(src_message, src_plural_message, n, context)), src_message)
+		return _translate(String(original.get_plural_message(src_message, src_plural_message, n, context)), src_message)
 
-var _fatto := false
+var _done := false
 
 func _enter_tree() -> void:
-	_sostituisci()
+	_replace()
 
 func _ready() -> void:
-	if not _fatto:
-		_sostituisci.call_deferred()
+	if not _done:
+		_replace.call_deferred()
 
-func _sostituisci() -> void:
-	if _fatto:
+func _replace() -> void:
+	if _done:
 		return
 	var f := FileAccess.open("res://patchsmith-traduzione.json", FileAccess.READ)
 	if f == null:
 		return
-	var dati = JSON.parse_string(f.get_as_text())
-	if typeof(dati) != TYPE_DICTIONARY:
+	var data = JSON.parse_string(f.get_as_text())
+	if typeof(data) != TYPE_DICTIONARY:
 		return
-	var lingua: String = dati.get("lingua", "en")
-	var originale := TranslationServer.get_translation_object(lingua)
-	if originale == null or originale is Ponte:
+	var language: String = data.get("language", "en")
+	var original := TranslationServer.get_translation_object(language)
+	if original == null or original is Bridge:
 		return
-	_fatto = true
-	var testi: Dictionary = dati.get("testi", {})
-	TranslationServer.remove_translation(originale)
-	var lingue: Array = [lingua]
-	lingue.append_array(dati.get("aggiunte", []))
-	for l in lingue:
-		var ponte := Ponte.new()
-		ponte.originale = originale
-		ponte.testi = testi
-		ponte.locale = l
-		TranslationServer.add_translation(ponte)
+	_done = true
+	var texts: Dictionary = data.get("texts", {})
+	TranslationServer.remove_translation(original)
+	var languages: Array = [language]
+	languages.append_array(data.get("additions", []))
+	for l in languages:
+		var bridge := Bridge.new()
+		bridge.original = original
+		bridge.texts = texts
+		bridge.locale = l
+		TranslationServer.add_translation(bridge)
 	TranslationServer.set_locale(TranslationServer.get_locale())
 '''
 
@@ -335,7 +336,7 @@ def _sha256(path):
 def read_manifest(folder):
     try:
         with open(os.path.join(folder, MANIFEST), encoding="utf-8") as f:
-            m = json.load(f)
+            m = legacy.load(f)
     except (OSError, ValueError):
         return None
     return m if isinstance(m, dict) and m.get("patchsmith") else None
@@ -347,9 +348,9 @@ def manifest_present(folder):
 
 def _original(manifest):
     """The text of the game's override.cfg (if there was one), or None."""
-    if manifest.get("override_originale") is None:
+    if manifest.get("original_override") is None:
         return None
-    return base64.b64decode(manifest["override_originale"]).decode("utf-8", "replace")
+    return base64.b64decode(manifest["original_override"]).decode("utf-8", "replace")
 
 
 def _override_text(previous, autoload):
@@ -367,22 +368,22 @@ def _override_text(previous, autoload):
 
 def install(folder, table_language, translations, dest_lang, log=print):
     """Writes (or updates) override.cfg, the script and the translations next to the executable, with the manifest."""
-    manifest = read_manifest(folder) or {"patchsmith": True, "versione": 1, "file": {}}
+    manifest = read_manifest(folder) or {"patchsmith": True, "version": 1, "file": {}}
     override = os.path.join(folder, OVERRIDE)
     if os.path.exists(override) and OVERRIDE not in manifest["file"]:  # the game's override.cfg: it is kept
         with open(override, "rb") as f:  # (the exact bytes: it is put back identical)
-            manifest["override_originale"] = base64.b64encode(f.read()).decode("ascii")
+            manifest["original_override"] = base64.b64encode(f.read()).decode("ascii")
         log("  game's override.cfg: kept, adding only PatchSmith's line")
     dictionary = {k: v for k, v in translations.items() if isinstance(v, str) and v and v != k}
     contents = {
         OVERRIDE: _override_text(_original(manifest), SCRIPT).encode("utf-8"),
         SCRIPT: SCRIPT_GD.encode("utf-8"),
-        DICTIONARY: json.dumps({"lingua": table_language.replace("-", "_"),
-                                "aggiunte": [dest_lang.replace("-", "_")],
-                                "testi": dictionary}, ensure_ascii=False, indent=0, sort_keys=True).encode("utf-8"),
+        DICTIONARY: json.dumps({"language": table_language.replace("-", "_"),
+                                "additions": [dest_lang.replace("-", "_")],
+                                "texts": dictionary}, ensure_ascii=False, indent=0, sort_keys=True).encode("utf-8"),
     }
-    manifest["data"] = datetime.datetime.now().isoformat(timespec="seconds")
-    write_atomic(os.path.join(folder, MANIFEST), json.dumps(dict(manifest, in_corso=True), indent=2).encode())
+    manifest["date"] = datetime.datetime.now().isoformat(timespec="seconds")
+    write_atomic(os.path.join(folder, MANIFEST), json.dumps(dict(manifest, in_progress=True), indent=2).encode())
     for name, data in contents.items():
         write_atomic(os.path.join(folder, name), data)
         manifest["file"][name] = hashlib.sha256(data).hexdigest()
@@ -404,8 +405,8 @@ def uninstall(folder, log=print):
                 os.remove(p)
             else:
                 log("  ! %s has been changed after the translation: I'm leaving it as is" % name)
-    if manifest.get("override_originale") is not None:
-        write_atomic(os.path.join(folder, OVERRIDE), base64.b64decode(manifest["override_originale"]))
+    if manifest.get("original_override") is not None:
+        write_atomic(os.path.join(folder, OVERRIDE), base64.b64decode(manifest["original_override"]))
         log("  game's override.cfg restored as it was")
     os.remove(os.path.join(folder, MANIFEST))
     log("  Translation for Godot removed from the game folder")

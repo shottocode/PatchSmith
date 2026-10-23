@@ -65,18 +65,18 @@ def _number_prefix(s):
 
 
 def mode(lines):
-    """'blocchi' if the file is made of multi-line entries closed by '.', otherwise 'righe'."""
+    """'blocks' if the file is made of multi-line entries closed by '.', otherwise 'lines'."""
     bodies = [_split_end(r)[0] for r in lines]
     periods = sum(1 for c in bodies if _is_closer(c))
     line_entries = sum(1 for c in bodies if _ID_TEXT.match(c) and _ID_TEXT.match(c).group(3).strip())
-    return "blocchi" if periods >= 3 and periods >= line_entries else "righe"
+    return "blocks" if periods >= 3 and periods >= line_entries else "lines"
 
 
 def is_valid(pos, original, translated):
     """True if the translation can replace the original without changing how the game reads the file."""
     if "\r" in translated or any(c in _CONTROL_CHARS for c in translated):
         return False
-    if pos[0] == "riga":
+    if pos[0] == "line":
         return ("\n" not in translated and _is_text(translated) and translated.strip(_SEPARATORS) != ""
                 and not translated.lstrip(_SEPARATORS).startswith("//"))
     lines_o, lines_t = original.split("\n"), translated.split("\n")
@@ -105,17 +105,17 @@ class LinesFile:
             text = text[1:]
         self.lines = _split(text)
         self.mode = mode(self.lines)
-        self.units, self.shape, self.anomalies = (_analyze_blocks if self.mode == "blocchi"
+        self.units, self.shape, self.anomalies = (_analyze_blocks if self.mode == "blocks"
                                                 else _analyze_lines)(self.lines)
 
     def texts(self):
-        """[(posizione, testo)]: posizione = ('riga', i) or ('blocco', i, j) for lines i..j-1."""
+        """[(posizione, testo)]: posizione = ('line', i) or ('block', i, j) for lines i..j-1."""
         return list(self.units)
 
     def _write(self, replacements):
         lines = list(self.lines)
         for pos, new in replacements.items():
-            if pos[0] == "riga":
+            if pos[0] == "line":
                 i = pos[1]
                 body, end = _split_end(lines[i])
                 m = _ID_TEXT.match(body)
@@ -166,13 +166,13 @@ def _analyze_lines(lines):
         body, end = _split_end(line)
         m = _ID_TEXT.match(body)
         if _comment_or_empty(body) or _ID_ALONE.match(body):
-            shape.append(("fisso", line))
+            shape.append(("static", line))
         elif m:
-            shape.append(("voce", m.group(1), m.group(2), end))
+            shape.append(("entry", m.group(1), m.group(2), end))
             if _is_text(m.group(3)) and not m.group(3).lstrip(_SEPARATORS).startswith("//"):
-                units.append((("riga", i), m.group(3)))
+                units.append((("line", i), m.group(3)))
         else:
-            shape.append(("fisso", line))
+            shape.append(("static", line))
             anomalies.append(i + 1)
     return units, shape, anomalies
 
@@ -183,7 +183,7 @@ def _analyze_blocks(lines):
     while i < n:
         body, _ = _split_end(lines[i])
         if _comment_or_empty(body) or _ID_ALONE.match(body) or _is_closer(body):
-            shape.append(("fisso", lines[i]))
+            shape.append(("static", lines[i]))
             i += 1
             continue
         # text section: up to the closing line
@@ -192,16 +192,16 @@ def _analyze_blocks(lines):
             j += 1
         if j >= n:  # section without an end: left untouched
             for k in range(i, n):
-                shape.append(("fisso", lines[k]))
+                shape.append(("static", lines[k]))
                 anomalies.append(k + 1)
             break
         content = [_split_end(r)[0] for r in lines[i:j]]
-        shape.append(("sezione", j - i, tuple(_split_end(r)[1] for r in lines[i:j]), lines[j],
+        shape.append(("section", j - i, tuple(_split_end(r)[1] for r in lines[i:j]), lines[j],
                       tuple(_number_prefix(c) for c in content)))
         if _is_text("\n".join(content)) and not any(c.startswith("//") for c in content):
-            units.append((("blocco", i, j), "\n".join(content)))
+            units.append((("block", i, j), "\n".join(content)))
         else:
-            shape.append(("contenuto", tuple(lines[i:j])))
+            shape.append(("content", tuple(lines[i:j])))
         i = j + 1
     return units, shape, anomalies
 

@@ -22,9 +22,9 @@ import tempfile
 import urllib.parse
 import zipfile
 
-from . import __version__
+from . import __version__, legacy
 
-SECRET_KEYS = ("chiave", "email", "password", "token", "key")  # parts of the setting names to remove
+SECRET_KEYS = ("key", "email", "password", "token", "key")  # parts of the setting names to remove
 MAX_BYTES = 512 * 1024  # of each log the end is kept
 MAX_LOGS = 5  # operation logs (the game's most recent)
 # logs that do not belong to a game: window errors, installation of the local translator, check at startup
@@ -65,7 +65,7 @@ def _secrets():
     values = set()
     try:
         with open(data_folder("settings.json"), encoding="utf-8") as f:
-            data = json.load(f)
+            data = legacy.load(f)
     except (OSError, ValueError):
         data = {}
     if isinstance(data, dict):
@@ -136,7 +136,7 @@ def _unity(root):
     of the last crash (in %TEMP%), found with the company and product written in <gioco>_Data/app.info."""
     from . import adapter_unity
     try:
-        data = adapter_unity.analyze(root).get("dati")
+        data = adapter_unity.analyze(root).get("data_folder")
         with open(os.path.join(data, "app.info"), encoding="utf-8", errors="replace") as f:
             lines = [r.strip() for r in f.read().splitlines()]
     except Exception:  # noqa: BLE001 - not Unity or unreadable: the report is made anyway, without these
@@ -174,10 +174,10 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
     if found_profile_path:
         try:
             with open(found_profile_path, encoding="utf-8") as f:
-                profile = json.load(f)
+                profile = legacy.load(f)
         except (OSError, ValueError):
             profile = {}
-    root = profile.get("cartella_gioco") or folder
+    root = profile.get("game_folder") or folder
     root = os.path.abspath(root) if root and os.path.isdir(root) else folder
     name = (os.path.splitext(os.path.basename(found_profile_path))[0] if found_profile_path else
             slug(os.path.basename(folder)) if folder else "")
@@ -204,7 +204,7 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
         add("profilo/" + os.path.basename(checks), checks, tail=False)
     try:
         with open(data_folder("settings.json"), encoding="utf-8") as f:
-            texts["settings.json"] = json.dumps(clean_settings(json.load(f)), ensure_ascii=False, indent=2)
+            texts["settings.json"] = json.dumps(clean_settings(legacy.load(f)), ensure_ascii=False, indent=2)
     except (OSError, ValueError) as e:
         problems.append("settings.json: %s" % e)
     add("services.json", data_folder("services.json"), tail=False)
@@ -213,7 +213,7 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
     if name:  # the sentences requested while playing (only game texts)
         from .xunity_service import journal_path
         add("traduttore-locale/" + os.path.basename(journal_path(name)), journal_path(name))
-    if profile.get("nome") and profile.get("lingua_destinazione"):  # the texts left untranslated, with the reason
+    if profile.get("name") and profile.get("target_language"):  # the texts left untranslated, with the reason
         from .project import problems_path
         text_problems = problems_path(profile)
         add("traduzioni/" + os.path.basename(text_problems), text_problems, tail=False)
@@ -221,9 +221,9 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
         from .corrections import to_write_path
         add("traduzioni/" + os.path.basename(to_write_path(profile)), to_write_path(profile),
                  tail=False)
-    if profile.get("nome"):  # Unity Localization: the letters the game's fonts can draw (font_unity.py)
-        add("traduzioni/%s.font.json" % profile["nome"],
-                 data_folder("memory", "%s.unity" % profile["nome"], "font.json"), tail=False)
+    if profile.get("name"):  # Unity Localization: the letters the game's fonts can draw (font_unity.py)
+        add("traduzioni/%s.font.json" % profile["name"],
+                 data_folder("memory", "%s.unity" % profile["name"], "font.json"), tail=False)
     modified = []
     if root:
         try:
@@ -260,7 +260,7 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
         "System: %s, Python %s" % (platform.platform(), platform.python_version()),
         "Selected folder: %s" % (folder or "(none)"),
         "Game folder: %s" % (root or "(none)"),
-        "Profile: %s (engine %s)" % (name or "(none)", profile.get("motore") or "-"),
+        "Profile: %s (engine %s)" % (name or "(none)", profile.get("engine") or "-"),
         "Game files modified by PatchSmith: %s" % (", ".join(modified[:50]) or "none"),
     ]
     if outcome is not None:

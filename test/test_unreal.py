@@ -18,7 +18,7 @@ MAGIC_LOCRES = bytes.fromhex("0e147475674a03fc4a15909dc3377f1b")
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -97,12 +97,12 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     adapter_unreal.game_open = lambda c: False
-    game = os.path.join(base, "gioco")
+    game = os.path.join(base, "game")
     paks = create_game(game)
     before = sorted(os.listdir(paks)) + sorted(os.listdir(game))
 
     info = adapter_unreal.analyze(game)
-    check("analisi: un pak v9, nessun problema", info["versioni"] == [9] and not info["problemi"])
+    check("analisi: un pak v9, nessun problema", info["versions"] == [9] and not info["problems"])
     sources = adapter_unreal.find_locres(game)
     check("trova solo il .locres della lingua originale (en)", [s[1] for s in sources]
               == ["Proj/Content/Localization/Game/en/Game.locres"])
@@ -112,19 +112,19 @@ def main(base):
     original = sources[0][0].read_file(sources[0][1])
     locres_info = adapter_unreal.read_locres(original)
     check("round-trip .locres identico",
-          adapter_unreal.write_locres(locres_info, [s for s, _ in locres_info["stringhe"]]) == original)
+          adapter_unreal.write_locres(locres_info, [s for s, _ in locres_info["strings"]]) == original)
 
     memory = {"Start Game": "Inizia partita", "Quit": "Esci",
               "Press {key} to <Bold>jump</>": "Premi {key} per <Bold>saltare</>",
               "Can be interrupted;-;Knocks back enemies": "Può essere interrotto;-;Respinge i nemici"}
-    n = adapter_unreal.install(game, "it", "prova", memory, silent)
+    n = adapter_unreal.install(game, "it", "test", memory, silent)
     new_pak = os.path.join(paks, adapter_unreal.pak_name("it"))
     check("pak di patch scritto (4 frasi tradotte)", n == 4 and os.path.exists(new_pak))
     was_read = adapter_unreal.Pak(new_pak)
     translated = adapter_unreal.read_locres(was_read.read_file("Proj/Content/Localization/Game/en/Game.locres"))
-    translated_texts = [s for s, _ in translated["stringhe"]]
-    check("locres tradotto: chiavi e intestazione identiche", translated["chiavi"] == locres_info["chiavi"]
-              and translated["testa"] == locres_info["testa"])
+    translated_texts = [s for s, _ in translated["strings"]]
+    check("locres tradotto: chiavi e intestazione identiche", translated["keys"] == locres_info["keys"]
+              and translated["head"] == locres_info["head"])
     check("locres tradotto: testi, segnaposto e accenti", "Inizia partita" in translated_texts
               and "100" in translated_texts and "Premi {key} per <Bold>saltare</>" in translated_texts
               and "Può essere interrotto;-;Respinge i nemici" in translated_texts)
@@ -139,7 +139,7 @@ def main(base):
               and adapter_unreal._adapt("a\x00b", set()) is None and adapter_unreal._adapt("a￿b", set()) is None)
 
     # language change: the old pak is replaced
-    adapter_unreal.install(game, "es", "prova", {"Start Game": "Iniciar"}, silent)
+    adapter_unreal.install(game, "es", "test", {"Start Game": "Iniciar"}, silent)
     check("cambio lingua: pak it tolto, pak es scritto",
           os.path.exists(os.path.join(paks, adapter_unreal.pak_name("es"))) and not os.path.exists(new_pak))
 
@@ -150,17 +150,17 @@ def main(base):
     # pak with the same name not created by us: not overwritten
     open(new_pak, "wb").write(b"di qualcun altro")
     try:
-        adapter_unreal.install(game, "it", "prova", memory, silent)
+        adapter_unreal.install(game, "it", "test", memory, silent)
         check("pak altrui: non sovrascritto", False)
     except adapter_unreal.UnrealError:
         check("pak altrui: non sovrascritto", open(new_pak, "rb").read() == b"di qualcun altro")
     os.remove(new_pak)
 
     # pak changed by others after the install: left in place
-    adapter_unreal.install(game, "it", "prova", memory, silent)
+    adapter_unreal.install(game, "it", "test", memory, silent)
     from patchsmith import __version__
     check("manifesto con la versione di PatchSmith (per il controllo dopo aver giocato)",
-              adapter_unreal.read_manifest(game).get("patchsmith_versione") == __version__)
+              adapter_unreal.read_manifest(game).get("patchsmith_version") == __version__)
     open(new_pak, "ab").write(b"x")
     adapter_unreal.uninstall(game, silent)
     check("pak modificato da altri: lasciato", os.path.exists(new_pak))
@@ -178,7 +178,7 @@ def main(base):
     os.remove(os.path.join(game, adapter_unreal.MANIFEST))
 
     # install interrupted after the manifest and before putting the pak in place: everything is restored
-    adapter_unreal.install(game, "it", "prova", memory, silent)
+    adapter_unreal.install(game, "it", "test", memory, silent)
     real_replace = os.replace
 
     def replace_interrupted(a, b):
@@ -188,7 +188,7 @@ def main(base):
 
     adapter_unreal.os.replace = replace_interrupted
     try:
-        adapter_unreal.install(game, "it", "prova", dict(memory, Quit="Abbandona"), silent)
+        adapter_unreal.install(game, "it", "test", dict(memory, Quit="Abbandona"), silent)
     except KeyboardInterrupt:
         pass
     finally:
@@ -201,14 +201,14 @@ def main(base):
     sig = os.path.join(paks, "Proj-WindowsNoEditor.sig")
     open(sig, "wb").write(b"firma")
     try:
-        adapter_unreal.install(game, "it", "prova", memory, silent)
+        adapter_unreal.install(game, "it", "test", memory, silent)
         check("pak firmati: rifiutato", False)
     except adapter_unreal.UnrealError:
         check("pak firmati: rifiutato", not os.path.exists(new_pak))
     os.remove(sig)
 
     # game update: the status reports it
-    adapter_unreal.install(game, "it", "prova", memory, silent)
+    adapter_unreal.install(game, "it", "test", memory, silent)
     open(os.path.join(paks, "Proj-WindowsNoEditor.pak"), "wb").write(pak_v9([
         ("Proj/Content/Localization/Game/Game.locmeta", locmeta("en")),
         ("Proj/Content/Localization/Game/en/Game.locres",

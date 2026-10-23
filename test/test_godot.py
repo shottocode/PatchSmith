@@ -22,7 +22,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def _s(text):
@@ -112,7 +112,7 @@ def game(folder, with_italian=False, override=None):
 def main(base):
     base = os.path.abspath(base)
     os.makedirs(base)
-    project.DATA_ROOT = os.path.join(base, "dati")
+    project.DATA_ROOT = os.path.join(base, "data_folder")
     automatic.PROFILES_FOLDER = os.path.join(project.DATA_ROOT, "profiles")
 
     # reading
@@ -130,19 +130,19 @@ def main(base):
     # full flow with the fake translator
     before = fingerprints(folder)
     lines = []
-    path, completed, outcome = automatic.analyze_and_translate(folder, "auto", "it", "finto", lines.append)
+    path, completed, outcome = automatic.analyze_and_translate(folder, "auto", "it", "fake", lines.append)
     profile = json.load(open(path, encoding="utf-8")) if path else {}
     with open(os.path.join(folder, "override.cfg"), encoding="utf-8") as f:
         override = f.read()
     with open(os.path.join(folder, adapter_godot.DICTIONARY), encoding="utf-8") as f:
         dictionary = json.load(f)
     check("Analizza e traduci: profilo godot, override.cfg con l'autoload, script e traduzioni accanto all'eseguibile",
-              completed and profile.get("motore") == "godot" and outcome["esito"].code == "OK"
+              completed and profile.get("engine") == "godot" and outcome["outcome"].code == "OK"
               and '[autoload]' in override and 'PatchsmithTraduzione="*res://patchsmith-traduzione.gd"' in override
               and os.path.exists(os.path.join(folder, adapter_godot.SCRIPT))
-              and dictionary["lingua"] == "en" and dictionary["aggiunte"] == ["it"]
-              and dictionary["testi"].get("Upgrade", "").startswith("[it]")
-              and "[color=40ff40]" in dictionary["testi"].get("Unlock [color=40ff40]overdrive[/color] mode", ""))
+              and dictionary["language"] == "en" and dictionary["additions"] == ["it"]
+              and dictionary["texts"].get("Upgrade", "").startswith("[it]")
+              and "[color=40ff40]" in dictionary["texts"].get("Unlock [color=40ff40]overdrive[/color] mode", ""))
     check("il pacchetto del gioco non e' cambiato", fingerprints(folder)["drill.exe"] == before["drill.exe"])
     automatic.reapply(folder, lines.append, test=True, outcome={})
     automatic.restore(folder, lines.append, outcome={})
@@ -152,7 +152,7 @@ def main(base):
     another = os.path.join(base, "DrillConOverride")
     game(another, override="[display]\nwindow/size/mode=3\n")
     before = fingerprints(another)
-    automatic.analyze_and_translate(another, "auto", "it", "finto", lines.append)
+    automatic.analyze_and_translate(another, "auto", "it", "fake", lines.append)
     with open(os.path.join(another, "override.cfg"), encoding="utf-8") as f:
         merged = f.read()
     automatic.restore(another, lines.append, outcome={})
@@ -163,9 +163,9 @@ def main(base):
     ita = os.path.join(base, "DrillItaliano")
     game(ita, with_italian=True)
     before = fingerprints(ita)
-    path, completed, outcome = automatic.analyze_and_translate(ita, "auto", "it", "finto", lines.append)
+    path, completed, outcome = automatic.analyze_and_translate(ita, "auto", "it", "fake", lines.append)
     check("tabella in italiano gia' nel gioco: lingua ufficiale, nessun file scritto",
-              not completed and outcome["esito"].code == "UFFICIALE" and fingerprints(ita) == before)
+              not completed and outcome["outcome"].code == "OFFICIAL" and fingerprints(ita) == before)
 
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))

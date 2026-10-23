@@ -121,13 +121,13 @@ _UI_KEYS = {"text", "label", "title", "caption", "tooltip", "placeholder", "mess
 def _ui_context(history, brackets):
     """True if the string that follows the tokens 'storia' (the last three: (tipo, valore)) is an interface text."""
     recent = [None] * (3 - len(history)) + list(history)
-    if recent[2] == ("punt", "=") and recent[0] == ("punt", ".") and recent[1] and recent[1][0] == "parola" \
+    if recent[2] == ("punct", "=") and recent[0] == ("punct", ".") and recent[1] and recent[1][0] == "word" \
             and recent[1][1] in _UI_PROPERTIES:
         return True
-    if recent[2] == ("punt", ":") and recent[1] and recent[1][0] in ("parola", "stringa") \
+    if recent[2] == ("punct", ":") and recent[1] and recent[1][0] in ("word", "string") \
             and recent[1][1] in _UI_KEYS:
         return True
-    return bool(brackets) and brackets[-1] == "ui" and recent[2] in (("punt", "("), ("punt", ","))
+    return bool(brackets) and brackets[-1] == "ui" and recent[2] in (("punct", "("), ("punct", ","))
 
 
 def js_literals(code, context=False):
@@ -144,7 +144,7 @@ def js_literals(code, context=False):
     regex_allowed = True  # True if an expression can start at this point
     last = ""  # last significant character
     word_before = None  # last word read, if it is the last token
-    brackets = []  # for each open '(': "condizione" (if/while/for/with), "ui" (see _UI_FUNCTIONS) or None
+    brackets = []  # for each open '(': "condition" (if/while/for/with), "ui" (see _UI_FUNCTIONS) or None
     history = collections.deque(maxlen=3)  # the last three tokens: (tipo, valore)
     while i < n:
         c = code[i]
@@ -154,7 +154,7 @@ def js_literals(code, context=False):
             j = _string_end(code, i)
             s = code[i + 1:j - 1]
             yield (s, _ui_context(history, brackets)) if context else s
-            history.append(("stringa", s))
+            history.append(("string", s))
             i, regex_allowed, last, word_before = j, False, c, None
         elif c == "`":
             j, pieces = _read_template(code, i)
@@ -163,7 +163,7 @@ def js_literals(code, context=False):
                 yield from ((p, ui) for p in pieces)
             else:
                 yield from pieces
-            history.append(("stringa", None))
+            history.append(("string", None))
             i, regex_allowed, last, word_before = j, False, c, None
         elif c == "/":
             after = code[i + 1] if i + 1 < n else ""
@@ -181,7 +181,7 @@ def js_literals(code, context=False):
             else:
                 i, regex_allowed = i + 1, True
             last, word_before = "/", None
-            history.append(("punt", "/"))
+            history.append(("punct", "/"))
         elif c.isalpha() or c in "_$" or ord(c) > 127:
             j = i + 1
             while j < n and (code[j].isalnum() or code[j] in "_$" or ord(code[j]) > 127):
@@ -189,30 +189,30 @@ def js_literals(code, context=False):
             word = code[i:j]
             regex_allowed = word in _WORDS_BEFORE_REGEX and last != "."
             i, last, word_before = j, "a", word
-            history.append(("parola", word))
+            history.append(("word", word))
         elif c.isdigit():
             j = i + 1
             while j < n and (code[j].isalnum() or code[j] in "._"):
                 j += 1
             i, regex_allowed, last, word_before = j, False, "0", None
-            history.append(("numero", None))
+            history.append(("number", None))
         elif c in "+-" and i + 1 < n and code[i + 1] == c:
             i += 2  # ++/--: after a value (postfix) a division follows, otherwise nothing changes
             last, word_before = c, None
-            history.append(("punt", c + c))
+            history.append(("punct", c + c))
         else:
             if c == "(":
-                brackets.append("condizione" if word_before in _CONDITION_WORDS and last == "a" else
+                brackets.append("condition" if word_before in _CONDITION_WORDS and last == "a" else
                                  "ui" if word_before in _UI_FUNCTIONS and last == "a" else None)
                 regex_allowed = True
             elif c == ")":
-                regex_allowed = (brackets.pop() == "condizione") if brackets else False
+                regex_allowed = (brackets.pop() == "condition") if brackets else False
             elif c == "]":
                 regex_allowed = False
             else:
                 regex_allowed = True  # operators, '.', ',', ';', ':', '{', '}', ...
             i, last, word_before = i + 1, c, None
-            history.append(("punt", c))
+            history.append(("punct", c))
 
 
 # --- text filters -----------------------------------------------------------------------------
@@ -396,7 +396,7 @@ def generate_script(dictionary):
         model = f.read()
     entries = {normalize(k): v for k, v in dictionary.items() if v and normalize(k) != v}
     # ensure_ascii: the dictionary becomes a safe JavaScript literal (no raw U+2028)
-    return model.replace("/*__DIZIONARIO__*/{}", json.dumps(entries, ensure_ascii=True, sort_keys=True))
+    return model.replace("/*__DICTIONARY__*/{}", json.dumps(entries, ensure_ascii=True, sort_keys=True))
 
 
 def _mask(html):

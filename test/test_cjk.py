@@ -51,7 +51,7 @@ def main():
 
     total = len(TEXT) + len(NOT_TEXT) + len(LATIN) + 8
     for e in errors:
-        print("ERRORE  " + e)
+        print("ERROR   " + e)
     print("RISULTATO: %d/%d controlli superati" % (total - len(errors), total))
     return not errors
 

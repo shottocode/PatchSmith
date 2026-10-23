@@ -36,30 +36,30 @@ def _rounded(x, y, x0, y0, x1, y1, r):
 
 
 def _folder(x, y, margin=0.0):
-    """'davanti' (the lower, lighter part), 'dietro' (with the tab at the top left) or None; with a negative margin
+    """'front' (the lower, lighter part), 'back' (with the tab at the top left) or None; with a negative margin
     the shapes shrink (what is left outside is the border)."""
     m = margin
     if _rounded(x, y, 0.06 - m, 0.34 - m, 0.90 + m, 0.84 + m, 0.06 + m):
-        return "davanti"
+        return "front"
     if _rounded(x, y, 0.06 - m, 0.14 - m, 0.42 + m, 0.32 + m, 0.05 + m) or \
             _rounded(x, y, 0.06 - m, 0.22 - m, 0.90 + m, 0.84 + m, 0.06 + m):
-        return "dietro"
+        return "back"
     return None
 
 
 def _hammer(x, y, margin=0.0):
-    """'testa', 'manico' or None; with a margin the shapes grow (for the outline)."""
+    """'head', 'handle' or None; with a margin the shapes grow (for the outline)."""
     t = (x - _A[0]) * _D[0] + (y - _A[1]) * _D[1]
     s = (x - _A[0]) * _N[0] + (y - _A[1]) * _N[1]
     if abs(s) <= HALF_HEAD + margin:
         # the head: on the side opposite the striking face it gets thinner (the peen)
         half_thickness = (HEAD_TO - HEAD_FROM) / 2 * (1 - 0.6 * max(0.0, -s / HALF_HEAD))
         if abs(t - (HEAD_FROM + HEAD_TO) / 2) <= half_thickness + margin:
-            return "testa"
+            return "head"
     if 0 <= t <= HANDLE_END and abs(s) <= HALF_WIDTH + margin:
-        return "manico"
+        return "handle"
     if t < 0 and math.hypot(t, s) <= HALF_WIDTH + margin:  # rounded end of the handle
-        return "manico"
+        return "handle"
     return None
 
 
@@ -67,15 +67,15 @@ def _color(x, y):
     """(r, g, b, a) of the point (x, y) of the square of side 1."""
     part = _hammer(x, y)
     if part:
-        return (HEAD if part == "testa" else HANDLE) + (255,)
+        return (HEAD if part == "head" else HANDLE) + (255,)
     if _hammer(x, y, OUTLINE_THICKNESS):
         return OUTLINE + (255,)
     part = _folder(x, y)
     if part:
         inside = _folder(x, y, -OUTLINE_THICKNESS)
-        if part == "davanti" and inside == "davanti":
+        if part == "front" and inside == "front":
             return FOLDER_FRONT + (255,)
-        if part == "dietro" and inside:
+        if part == "back" and inside:
             return FOLDER_BACK + (255,)
         return FOLDER_EDGE + (255,)
     return (0, 0, 0, 0)

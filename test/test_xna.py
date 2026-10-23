@@ -20,7 +20,7 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -37,8 +37,8 @@ def csc(*arguments, cwd):
 
 def resources(entries):
     """.resources with only strings, in ResourceWriter's format (written with the minimal info)."""
-    info = {"lettore": dotnet.DEFAULT_READER, "insieme": dotnet.DEFAULT_RESOURCE_SET, "versione": 2, "tipi": [],
-            "voci": [(k, dotnet.KIND_STRING, v) for k, v in sorted(entries.items())]}
+    info = {"reader": dotnet.DEFAULT_READER, "item_set": dotnet.DEFAULT_RESOURCE_SET, "version": 2, "kinds": [],
+            "entries": [(k, dotnet.KIND_STRING, v) for k, v in sorted(entries.items())]}
     return dotnet.write_resources(info)
 
 
@@ -125,7 +125,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     adapter_xna.game_open = lambda c: False
-    game, work = os.path.join(base, "gioco"), os.path.join(base, "lavoro")
+    game, work = os.path.join(base, "game"), os.path.join(base, "lavoro")
     os.makedirs(work)
     create_game(game, work)
     before = fingerprints(game)
@@ -146,8 +146,8 @@ def main(base):
 
     resource_sets = adapter_xna.find_resources(game)
     check("trova le risorse localizzate (base Gioco.Testi, satellite de)",
-              len(resource_sets) == 1 and resource_sets[0]["basi"] == {"Gioco.Testi": ["de"]}
-              and resource_sets[0]["versione"] == "1.2.0.0")
+              len(resource_sets) == 1 and resource_sets[0]["bases"] == {"Gioco.Testi": ["de"]}
+              and resource_sets[0]["version"] == "1.2.0.0")
     _, texts = adapter_xna.texts_to_translate(game, silent)
     check("testi da tradurre (senza i numeri)", "Start the adventure" in texts and "100" not in texts)
     allowed = adapter_xna.font_chars(game)
@@ -159,20 +159,21 @@ def main(base):
     check("carattere impossibile -> scartato", adapter_xna.adapt_chars("漢字", allowed, "it") is None)
     check("punteggiatura tipografica -> ASCII", adapter_xna.adapt_chars("L’eroe…", allowed, "it") == "L'eroe...")
     check("tab -> spazio, invisibili tolti", adapter_xna.adapt_chars("a\tb​c", allowed, "it") == "a bc")
-    fake = {"lingua_neutra": None, "basi": {"X": ["de", "fr"]}}
+    fake = {"neutral_language": None, "bases": {"X": ["de", "fr"]}}
     check("culture: en e it se il gioco non dichiara la lingua neutra",
               adapter_xna.cultures_to_create(fake, "en", "it") == ["en", "it"])
     check("culture: en-US se il gioco dichiara la lingua neutra 'en'",
-              adapter_xna.cultures_to_create(dict(fake, lingua_neutra="en"), "en", "it") == ["en-US", "it"])
+              adapter_xna.cultures_to_create(dict(fake, neutral_language="en"), "en", "it") == ["en-US", "it"])
     check("culture: niente slot inglese se la lingua neutra e' gia' 'en-US'; niente 'it' se il gioco lo ha",
-              adapter_xna.cultures_to_create(dict(fake, lingua_neutra="en-US", basi={"X": ["it"]}), "en", "it") == [])
+              adapter_xna.cultures_to_create(dict(fake, neutral_language="en-US", bases={"X": ["it"]}),
+                                             "en", "it") == [])
 
     memory = {"Start the adventure": "Inizia l'avventura è qui", "Quit game": "Esci dal gioco",
                "Press [Input:12] to jump\\nfast": "Premi [Input:12] per saltare\\nveloce", "{0} heroes": "{0} eroi"}
-    n = adapter_xna.install(game, "en", "it", "prova", memory, silent)
+    n = adapter_xna.install(game, "en", "it", "test", memory, silent)
     from patchsmith import __version__
     check("manifesto con la versione di PatchSmith (per il controllo dopo aver giocato)",
-              adapter_xna.read_manifest(game).get("patchsmith_versione") == __version__)
+              adapter_xna.read_manifest(game).get("patchsmith_version") == __version__)
     check("satelliti en e it creati (4 testi tradotti + voce lingua)", n == 5
               and os.path.exists(os.path.join(game, "en", "Gioco.resources.dll"))
               and os.path.exists(os.path.join(game, "it", "Gioco.resources.dll")))
@@ -195,7 +196,7 @@ def main(base):
     check("stato: satelliti presenti e integri", sum(r.strip().startswith("OK") for r in lines) == 2)
 
     # reinstallation (reapply): same files, no error
-    adapter_xna.install(game, "en", "it", "prova", memory, silent)
+    adapter_xna.install(game, "en", "it", "test", memory, silent)
     check("riapplica: nessun file in piu'", set(fingerprints(game)) == set(after))
 
     adapter_xna.uninstall(game, silent)
@@ -207,7 +208,7 @@ def main(base):
     os.makedirs(os.path.join(game, "en"))
     open(os.path.join(game, "en", "Gioco.resources.dll"), "wb").write(b"di qualcun altro")
     try:
-        adapter_xna.install(game, "en", "it", "prova", memory, silent)
+        adapter_xna.install(game, "en", "it", "test", memory, silent)
         check("satellite altrui: non sovrascritto", False)
     except adapter_xna.XnaError:
         check("satellite altrui: non sovrascritto", open(os.path.join(game, "en", "Gioco.resources.dll"), "rb").read()
@@ -219,7 +220,7 @@ def main(base):
     sat_de = os.path.join(game, "de", "Gioco.resources.dll")
     forged = {"patchsmith": True,
               "file": {"de/Gioco.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
-              "cartelle_create": ["de"]}
+              "created_folders": ["de"]}
     open(os.path.join(game, adapter_xna.MANIFEST), "w").write(json.dumps(forged))
     adapter_xna.uninstall(game, silent)
     check("manifesto che punta al satellite del gioco con l'impronta giusta: intatto (non ha il marcatore)",
@@ -243,7 +244,7 @@ def main(base):
 
     adapter_xna.os.replace = replace_interrupted
     try:
-        adapter_xna.install(game, "en", "it", "prova", memory, silent)
+        adapter_xna.install(game, "en", "it", "test", memory, silent)
     except KeyboardInterrupt:
         pass
     finally:
@@ -253,10 +254,10 @@ def main(base):
 
     # --- scenarios that came up in the review ---------------------------------------------------
     # manifest lost but our satellites present: they do not count as game languages, status and restore see them
-    adapter_xna.install(game, "en", "it", "prova", memory, silent)
+    adapter_xna.install(game, "en", "it", "test", memory, silent)
     os.remove(os.path.join(game, adapter_xna.MANIFEST))
     check("senza manifesto: i satelliti nostri non contano come lingue del gioco",
-              adapter_xna.find_resources(game)[0]["basi"] == {"Gioco.Testi": ["de"]})
+              adapter_xna.find_resources(game)[0]["bases"] == {"Gioco.Testi": ["de"]})
     lines = []
     adapter_xna.state(game, lines.append)
     check("senza manifesto: lo stato li segnala", any("without a manifest" in r for r in lines))
@@ -266,12 +267,12 @@ def main(base):
     # replacement interrupted, then language change, then restore: nothing is left behind
     adapter_xna.os.replace = replace_interrupted
     try:
-        adapter_xna.install(game, "en", "it", "prova", memory, silent)
+        adapter_xna.install(game, "en", "it", "test", memory, silent)
     except KeyboardInterrupt:
         pass
     finally:
         adapter_xna.os.replace = real_replace
-    adapter_xna.install(game, "en", "es", "prova", {"Start the adventure": "Empezar"}, silent)
+    adapter_xna.install(game, "en", "es", "test", {"Start the adventure": "Empezar"}, silent)
     check("cambio lingua dopo un'interruzione: c'e' solo il satellite es (oltre a en)",
               os.path.exists(os.path.join(game, "es", "Gioco.resources.dll"))
               and not os.path.exists(os.path.join(game, "it")))
@@ -281,9 +282,9 @@ def main(base):
     # manifest that lists the official satellite with its fingerprint: a new installation does not touch it
     forged = {"patchsmith": True,
               "file": {"de/Gioco.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
-              "cartelle_create": ["de"]}
+              "created_folders": ["de"]}
     open(os.path.join(game, adapter_xna.MANIFEST), "w").write(json.dumps(forged))
-    adapter_xna.install(game, "en", "it", "prova", memory, silent)
+    adapter_xna.install(game, "en", "it", "test", memory, silent)
     check("installa con manifesto alterato: il satellite ufficiale de resta", os.path.exists(sat_de)
               and fingerprints(game)["de" + os.sep + "Gioco.resources.dll"]
               == before["de" + os.sep + "Gioco.resources.dll"])
@@ -291,7 +292,7 @@ def main(base):
 
     # invalid hand-typed language: error before writing anything
     try:
-        adapter_xna.install(game, "English", "Italian", "prova", memory, silent)
+        adapter_xna.install(game, "English", "Italian", "test", memory, silent)
         check("lingua non valida: rifiutata", False)
     except adapter_xna.XnaError:
         check("lingua non valida: rifiutata senza scrivere nulla", fingerprints(game) == before)
@@ -306,7 +307,7 @@ def main(base):
 
     adapter_xna.open = broken_open
     try:
-        adapter_xna.install(game, "en", "it", "prova", memory, silent)
+        adapter_xna.install(game, "en", "it", "test", memory, silent)
     except OSError:
         pass
     finally:
@@ -339,7 +340,7 @@ def main(base):
               "a" in found and "A" in found and "è" not in found)
 
     # game update: the status reports it
-    adapter_xna.install(game, "en", "it", "prova", memory, silent)
+    adapter_xna.install(game, "en", "it", "test", memory, silent)
     open(os.path.join(game, "Gioco.exe"), "ab").write(b"\x00")
     lines = []
     adapter_xna.state(game, lines.append)

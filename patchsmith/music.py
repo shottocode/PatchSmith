@@ -130,14 +130,14 @@ def _wav(samples, bit=8):
     return output.getvalue()
 
 
-def _track(tempo, chords, melody, low, rhythm, sixteenths=False, melody_duty=0.25, melody_shape="quadra",
+def _track(tempo, chords, melody, low, rhythm, sixteenths=False, melody_duty=0.25, melody_shape="square",
            echo=None, arpeggio_octave=4, arpeggio_volume=0.16, drums_volume=0.5):
     """The track as WAV: eco = (delay steps, volume) on the melody, which "wraps around" the track (at the end of the
     loop the echo continues at the start: no gap when it starts again)."""
     step = 60.0 / tempo / 2  # an eighth
     measures = len(chords)
     length = int(measures * 8 * step * SAMPLE_RATE)
-    if melody_shape == "triangolo":
+    if melody_shape == "triangle":
         entry = _triangle(0.75)
     else:
         entry = _square(melody_duty, 0.5 if melody_duty < 0.5 else 0.42, 0.12, 0.7, vibrato=True)
@@ -161,13 +161,13 @@ def mine():
                  A4:3 B4:1 C5:4   B4:2 G4:2 E4:4   F#4:2 A4:2 D#5:4   B4:4 r:4"""
     bass_lines = {"Em": "E2:6 E3:2", "C": "C2:6 C3:2", "Am": "A1:6 A2:2", "B": "B1:6 B2:2"}
     low = " ".join(bass_lines[a] for a in chords)
-    return _track(76, chords, melody, low, "k.....h.", melody_shape="triangolo", echo=(4, 0.4),
+    return _track(76, chords, melody, low, "k.....h.", melody_shape="triangle", echo=(4, 0.4),
                   arpeggio_octave=3, arpeggio_volume=0.12, drums_volume=0.3)
 
 
-TRACKS = {"miniera": mine}
+TRACKS = {"mine": mine}
 _READY = {}  # track -> PCM samples already generated
-_state = {"voluta": False, "uscita": None, "buffer": None, "intestazione": None, "winmm": None}
+_state = {"wanted": False, "output": None, "buffer": None, "header": None, "winmm": None}
 _lock = threading.Lock()
 _prepare_lock = threading.Lock()
 
@@ -180,7 +180,7 @@ def _ready_file(track):
     return os.path.join(tempfile.gettempdir(), "PatchSmith", "musica-%s-%s.pcm" % (track, fingerprint))
 
 
-def prepare(track="miniera"):
+def prepare(track="mine"):
     """The track's samples ready to play: already in memory, from the file of the previous time or generated (a couple
     of seconds; then the file is written). The window calls it when it opens, in a thread, even with the music off:
     that way the button with the note starts it right away."""
@@ -207,23 +207,23 @@ def prepare(track="miniera"):
         return pcm
 
 
-def launch(track="miniera"):
+def launch(track="mine"):
     """Starts the track in a loop without blocking the window (in a thread: if it is not ready yet, see prepara, it
     starts as soon as it is). Without waveOut (not Windows) or without an audio output nothing plays."""
-    _state["voluta"] = True
+    _state["wanted"] = True
     threading.Thread(target=_prepare_and_play, args=(track,), daemon=True).start()
 
 
 def stop():
     with _lock:
-        _state["voluta"] = False
+        _state["wanted"] = False
         _close()
 
 
 def _prepare_and_play(track):
     pcm = prepare(track)
     with _lock:
-        if _state["voluta"] and _state["uscita"] is None:  # (turned off while it was being prepared: nothing)
+        if _state["wanted"] and _state["output"] is None:  # (turned off while it was being prepared: nothing)
             _open(pcm)
 
 
@@ -265,7 +265,7 @@ def _open(pcm):
         return False
     header.dwFlags |= 0x04 | 0x08  # WHDR_BEGINLOOP | WHDR_ENDLOOP: this block repeats
     header.dwLoops = 0xFFFFFFFF
-    _state.update(uscita=output, buffer=buffer, intestazione=header, winmm=winmm)
+    _state.update(output=output, buffer=buffer, header=header, winmm=winmm)
     if winmm.waveOutWrite(output, ctypes.byref(header), size) != 0:
         _close()
         return False
@@ -273,24 +273,24 @@ def _open(pcm):
 
 
 def _close():
-    output, winmm = _state["uscita"], _state["winmm"]
+    output, winmm = _state["output"], _state["winmm"]
     if output is None:
         return
     winmm.waveOutReset(output)
-    winmm.waveOutUnprepareHeader(output, ctypes.byref(_state["intestazione"]), ctypes.sizeof(_state["intestazione"]))
+    winmm.waveOutUnprepareHeader(output, ctypes.byref(_state["header"]), ctypes.sizeof(_state["header"]))
     winmm.waveOutClose(output)
-    _state.update(uscita=None, buffer=None, intestazione=None)
+    _state.update(output=None, buffer=None, header=None)
 
 
 def _played():
     """Bytes played by the open output (loop repetitions count too), or None: for the tests."""
-    if _state["uscita"] is None:
+    if _state["output"] is None:
         return None
 
     class MmTime(ctypes.Structure):
         _fields_ = [("wType", ctypes.c_uint), ("value_", ctypes.c_ulong), ("rest", ctypes.c_ulong)]
     tempo = MmTime(4, 0, 0)  # TIME_BYTES
     _state["winmm"].waveOutGetPosition.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint]
-    if _state["winmm"].waveOutGetPosition(_state["uscita"], ctypes.byref(tempo), ctypes.sizeof(tempo)) != 0:
+    if _state["winmm"].waveOutGetPosition(_state["output"], ctypes.byref(tempo), ctypes.sizeof(tempo)) != 0:
         return None
     return tempo.value_

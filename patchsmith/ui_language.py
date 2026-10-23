@@ -2,7 +2,7 @@
 
 The program's texts are written in English in the code. The other languages are in
 patchsmith/ui_language/<code>.json:
-    {"nome": "Italiano", "bandiera": {"verticali": [...]}, "testi": {"English text": "translation", ...}}
+    {"name": "Italiano", "flag": {"vertical": [...]}, "texts": {"English text": "translation", ...}}
 Translation happens when the window shows a text (hook_tk: buttons, labels, titles, menus, values of drop-down
 menus; TextVar for status lines; translate() for the log), also for texts with values inside: an entry with %s, %d...
 ("Game texts: %d, already translated: %d") works as a template for all the lines of that form. Texts without a
@@ -11,7 +11,7 @@ retranslate() puts the ones already shown back in the new language without reope
 
 To add a language: the command line command "interface --create fr" (translates all the texts with the local
 translator; those already in the file stay) and then review the file patchsmith/ui_language/fr.json by hand. The flag
-is described with stripes ({"verticali": [colori]} or {"orizzontali": [colori]}) or with a 24x16 PNG image next to
+is described with stripes ({"vertical": [colori]} or {"horizontal": [colori]}) or with a 24x16 PNG image next to
 the file ({"file": "fr.png"}).
 """
 import ast
@@ -20,16 +20,18 @@ import os
 import re
 import weakref
 
+from . import legacy
+
 FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_language")
 SOURCE = "en"
-ENGLISH = {"nome": "English", "bandiera": {"tipo": "gb"}}
+ENGLISH = {"name": "English", "flag": {"kind": "gb"}}
 # placeholders of the program's texts: %s, %d, %5.1f, %r, %(nome)s, %%
 _MARKER = re.compile(r"%(?:\([^)]*\))?[-+ #0]*(?:\d+)?(?:\.\d+)?[sdrifxXceEgG%]")
 # what each placeholder matches in a line already written
 _VALUE = {"d": r"-?\d[\d.,']*", "i": r"-?\d[\d.,']*", "f": r"-?[\d.,]+", "x": r"[0-9a-fA-F]+", "%": r"%"}
 # at the start of log lines: indentation and markers ("! ", "~ ", "* ", "- ", "== ") that stay as they are
 _PREFIX = re.compile(r"^(\s*(?:(?:!|~|\*|-|==)\s+)?)(.*?)(\s*)$", re.S)
-_state = {"codice": SOURCE, "testi": {}, "modelli": None}
+_state = {"code": SOURCE, "texts": {}, "models": None}
 _catalogs = {}  # texts_of
 VERBATIM = "⁠"  # at the start of a text: it stays as it is in every language (e.g. the language names in their menu)
 
@@ -37,7 +39,7 @@ VERBATIM = "⁠"  # at the start of a text: it stays as it is in every language 
 # --- available languages ---------------------------------------------------------------------------------------------
 
 def languages():
-    """{code: {"nome", "bandiera"}}: English (the language of the code) and the files in patchsmith/ui_language/."""
+    """{code: {"name", "flag"}}: English (the language of the code) and the files in patchsmith/ui_language/."""
     output = {SOURCE: ENGLISH}
     try:
         names = sorted(os.listdir(FOLDER))
@@ -49,18 +51,18 @@ def languages():
             continue
         try:
             with open(os.path.join(FOLDER, name), encoding="utf-8") as f:
-                data = json.load(f)
+                data = legacy.load(f)
         except (OSError, ValueError):
             continue
-        output[code] = {"nome": data.get("nome") or code, "bandiera": data.get("bandiera") or {}}
+        output[code] = {"name": data.get("name") or code, "flag": data.get("flag") or {}}
     return output
 
 
 def default_language():
-    """The interface language if none was chosen: PATCHSMITH_INTERFACCIA, then the Windows one if PatchSmith has it
+    """The interface language if none was chosen: PATCHSMITH_INTERFACE, then the Windows one if PatchSmith has it
     (today Italian), otherwise English. A language chosen with the flag is saved in settings.json and wins."""
     available = languages()
-    choice = os.environ.get("PATCHSMITH_INTERFACCIA")
+    choice = os.environ.get("PATCHSMITH_INTERFACE") or os.environ.get("PATCHSMITH_INTERFACCIA")  # (old name)
     if choice in available:
         return choice
     from .language import windows_language
@@ -75,7 +77,7 @@ def texts_of(code):
     if code not in _catalogs:
         try:
             with open(os.path.join(FOLDER, code + ".json"), encoding="utf-8") as f:
-                _catalogs[code] = json.load(f).get("testi") or {}
+                _catalogs[code] = legacy.load(f).get("texts") or {}
         except (OSError, ValueError):
             _catalogs[code] = {}
     return _catalogs[code]
@@ -87,15 +89,15 @@ def set_(code):
     if code != SOURCE:
         try:
             with open(os.path.join(FOLDER, code + ".json"), encoding="utf-8") as f:
-                texts = json.load(f).get("testi") or {}
+                texts = legacy.load(f).get("texts") or {}
         except (OSError, ValueError):
             code = SOURCE
-    _state.update(codice=code, testi={k: v for k, v in texts.items() if isinstance(v, str) and v}, modelli=None)
+    _state.update(code=code, texts={k: v for k, v in texts.items() if isinstance(v, str) and v}, models=None)
     return code
 
 
 def current():
-    return _state["codice"]
+    return _state["code"]
 
 
 # --- translation -----------------------------------------------------------------------------------------------------
@@ -119,9 +121,9 @@ def _template_regex(key):
 
 
 def _models():
-    if _state["modelli"] is None:
+    if _state["models"] is None:
         models = {}
-        for key, value_ in _state["testi"].items():
+        for key, value_ in _state["texts"].items():
             if not _MARKER.sub("", key).strip():  # placeholders only ("%s", "%s%s"): it would match everything
                 continue
             r = _template_regex(key)
@@ -133,8 +135,8 @@ def _models():
             items.sort(key=lambda m: -m[0])
         # last fallback: two pieces separated by ": " or in parentheses, each translated on its own
         models[None] = [(0,) + _template_regex(k) + (k,) for k in ("%s: %s", "%s (%s)", "%s - %s")]
-        _state["modelli"] = models
-    return _state["modelli"]
+        _state["models"] = models
+    return _state["models"]
 
 
 def _fill(translation, markers, values):
@@ -157,9 +159,9 @@ def _fill(translation, markers, values):
 
 
 def _translate_core(text, depth=0):
-    if not text or not _state["testi"]:
+    if not text or not _state["texts"]:
         return text
-    t = _state["testi"].get(text)
+    t = _state["texts"].get(text)
     if t is not None:
         return t
     models = _models()
@@ -219,7 +221,7 @@ def _translate_piece(text, depth=0):
     m = _PREFIX.match(text)
     prefix, core, tail = m.group(1), m.group(2), m.group(3)
     if not re.search(r"[A-Za-zÀ-ÿ]{2}", core):  # numbers and symbols: only an entry of the file (e.g. "A:" -> "To:")
-        return prefix + _state["testi"].get(core, core) + tail if core else text
+        return prefix + _state["texts"].get(core, core) + tail if core else text
     return prefix + _translate_core(core, depth) + tail
 
 
@@ -227,7 +229,7 @@ def translate(text):
     """The text in the interface language (line by line; what is not in the file stays as it is)."""
     if isinstance(text, str) and text.startswith(VERBATIM):
         return text[len(VERBATIM):]
-    if not isinstance(text, str) or _state["codice"] == SOURCE or not _state["testi"] or not text.strip():
+    if not isinstance(text, str) or _state["code"] == SOURCE or not _state["texts"] or not text.strip():
         return text
     whole = _translate_piece(text)
     if whole != text or "\n" not in text:
@@ -261,7 +263,7 @@ def hook_tk():
     original_title = tkinter.Wm.wm_title
 
     def _translate_options(cnf):
-        if not cnf or _state["codice"] == SOURCE and not any(
+        if not cnf or _state["code"] == SOURCE and not any(
                 isinstance(cnf.get(k), str) and cnf[k].startswith(VERBATIM) for k in _TEXT_OPTIONS):
             return cnf
         cnf = dict(cnf)
@@ -344,7 +346,7 @@ def TextVar(*args, **kw):
 def flag(code, master=None):
     """The language's flag as a Tkinter image (24x16), or None."""
     import tkinter
-    info = languages().get(code, {}).get("bandiera") or {}
+    info = languages().get(code, {}).get("flag") or {}
     width, height = 24, 16
     if info.get("file"):
         try:
@@ -352,7 +354,7 @@ def flag(code, master=None):
         except tkinter.TclError:
             pass
     img = tkinter.PhotoImage(master=master, width=width, height=height)
-    if info.get("tipo") == "gb":  # simplified Union Jack
+    if info.get("kind") == "gb":  # simplified Union Jack
         img.put("#012169", to=(0, 0, width, height))
         for x in range(width):  # white diagonals with the red ones on top
             y = round(x * (height - 1) / (width - 1))
@@ -365,9 +367,9 @@ def flag(code, master=None):
         img.put("#c8102e", to=(0, height // 2 - 2, width, height // 2 + 2))
         img.put("#c8102e", to=(width // 2 - 2, 0, width // 2 + 2, height))
         return img
-    stripes, vertical = info.get("verticali"), True
+    stripes, vertical = info.get("vertical"), True
     if not stripes:
-        stripes, vertical = info.get("orizzontali"), False
+        stripes, vertical = info.get("horizontal"), False
     if not stripes:
         img.put("#888888", to=(0, 0, width, height))
         return img
@@ -393,9 +395,11 @@ def _looks_like_text(s):
     if re.fullmatch(r"[\w.\-/\\:]+", core) and ("_" in core or "/" in core or "\\" in core):
         return False
     if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|\)\s*->|\[[^\]]*\]\?"
-                 r"|^#|==|^if .*:$"
+                 r"|^#|==|^if .*:$|^for \w+ in .+:$|^[a-z_][\w.]* = |\b[a-z_]\w*\.[a-z_]\w*\("
                  r"|(?<![\w%])_[a-z]\w*", core):
         return False  # code (e.g. the script for Godot) or regular expressions
+    if re.match(r"[A-Z][a-z]+=\S", core):
+        return False  # a line of a configuration file (Program=...)
     if re.search(r"\w\|\w", core):
         return False  # alternatives of a regular expression (a|b)
     words = core.split()
@@ -410,7 +414,7 @@ def program_texts(folder=None):
     folder = folder or os.path.dirname(os.path.abspath(__file__))
     texts = set()
     for name in sorted(os.listdir(folder)):
-        if not name.endswith(".py"):
+        if not name.endswith(".py") or name == "legacy.py":  # (legacy: the names of the data, old and new)
             continue
         with open(os.path.join(folder, name), encoding="utf-8") as f:
             tree = ast.parse(f.read())
@@ -433,7 +437,7 @@ def program_texts(folder=None):
 
 
 def create_language(code, name, translator, log=print, flag_info=None, maximum=None):
-    """Creates or completes patchsmith/ui_language/<codice>.json by translating with 'traduttore' (e.g. backend.Local)
+    """Creates or completes patchsmith/ui_language/<codice>.json by translating with 'translator' (e.g. backend.Local)
     the program's texts that are missing; those already in the file (also fixed by hand) stay. Returns how many it
     added."""
     from .backend import BackendError
@@ -442,10 +446,10 @@ def create_language(code, name, translator, log=print, flag_info=None, maximum=N
     path = os.path.join(FOLDER, code + ".json")
     try:
         with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+            data = legacy.load(f)
     except (OSError, ValueError):
-        data = {"nome": name, "bandiera": flag_info or {}, "testi": {}}
-    texts = data.setdefault("testi", {})
+        data = {"name": name, "flag": flag_info or {}, "texts": {}}
+    texts = data.setdefault("texts", {})
     missing = [t for t in program_texts() if t not in texts]
     for t in [t for t in missing if obvious_language(t, SOURCE)]:
         texts[t] = t  # already in another language (e.g. English instructions for the local translator): stays as is

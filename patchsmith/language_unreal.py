@@ -114,7 +114,7 @@ def _pak_names(path):
 
 
 def game_languages(folder):
-    """({lingue}, progetto) of the game's texts (not the engine's or plugins'), or (None, progetto) if unknown."""
+    """({languages}, progetto) of the game's texts (not the engine's or plugins'), or (None, progetto) if unknown."""
     languages, project, read_items = set(), None, 0
     for path in adapter_unreal._paks(folder):
         names = _pak_names(path)
@@ -257,8 +257,8 @@ def read_internationalization(path):
 
 def set_culture(path, tag):
     """Sets the language 'tag' in [Internationalization]. Returns the changes made (for the restore):
-    ['riga', n, key, old value] for each language line changed (n = position among the section's language
-    lines), ['aggiunta', 'Culture'] for the added line, ['sezione', [added lines], line ending added]
+    ['line', n, key, old value] for each language line changed (n = position among the section's language
+    lines), ['added', 'Culture'] for the added line, ['section', [added lines], line ending added]
     if the section was not there. Empty list if everything was already in place."""
     if not os.access(path, os.W_OK):
         raise UnrealLanguageError("the settings file is read-only: I don't modify it")
@@ -286,7 +286,7 @@ def set_culture(path, tag):
         for n, (i, kv) in enumerate(language_lines):
             if kv.group(4) != tag:
                 lines[i][0] = kv.group(1) + kv.group(2) + kv.group(3) + tag + kv.group(5)
-                changes.append(["riga", n, kv.group(2).strip(), kv.group(4)])
+                changes.append(["line", n, kv.group(2).strip(), kv.group(4)])
     elif start is not None:
         where = end
         while where > start + 1 and lines[where - 1][0].strip() == "":
@@ -296,7 +296,7 @@ def set_culture(path, tag):
         else:  # last line of the file without a line ending: the new one takes its place at the end
             lines[where - 1][1] = line_break
             lines.insert(where, ["Culture=" + tag, ""])
-        changes.append(["aggiunta", "Culture"])
+        changes.append(["added", "Culture"])
     else:
         line_break_added = bool(lines) and lines[-1][1] == ""
         if line_break_added:
@@ -304,7 +304,7 @@ def set_culture(path, tag):
         new_lines = ([[""]] if lines and lines[-1][0].strip() else []) + [["[Internationalization]"],
                                                                           ["Culture=" + tag]]
         lines += [[c[0], line_break] for c in new_lines]
-        changes += [["aggiunta", "Culture"], ["sezione", [c[0] for c in new_lines], line_break_added]]
+        changes += [["added", "Culture"], ["section", [c[0] for c in new_lines], line_break_added]]
     if changes:
         _write(path, _merge(lines), encoding, bom)
     return changes
@@ -315,11 +315,11 @@ def _from_old_log(changes):
     new_lines = []
     for key, old in changes:
         if key == "[sezione]":
-            new_lines.append(["sezione", [r for r in old.split("\n") if r], False])
+            new_lines.append(["section", [r for r in old.split("\n") if r], False])
         elif old is None:
-            new_lines.append(["aggiunta", key])
+            new_lines.append(["added", key])
         else:
-            new_lines.append(["riga", None, key, old])
+            new_lines.append(["line", None, key, old])
     return new_lines
 
 
@@ -330,14 +330,14 @@ def restore_culture(path, changes, tag):
     if not os.access(path, os.W_OK):
         raise UnrealLanguageError("the settings file is read-only")
     changes = [list(m) for m in changes]
-    if changes and changes[0][0] not in ("riga", "aggiunta", "sezione"):
+    if changes and changes[0][0] not in ("line", "added", "section"):
         changes = _from_old_log(changes)
     changed_lines = {}
     for m in changes:
-        if m[0] == "riga":
+        if m[0] == "line":
             changed_lines.setdefault(m[1], []).append((m[2], m[3]))
-    additions = {m[1].lower() for m in changes if m[0] == "aggiunta"}
-    added_section = next((m for m in changes if m[0] == "sezione"), None)
+    additions = {m[1].lower() for m in changes if m[0] == "added"}
+    added_section = next((m for m in changes if m[0] == "section"), None)
 
     text, encoding, bom = _read(path)
     lines = _lines(text)

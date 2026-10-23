@@ -2,9 +2,9 @@
 
 Generated here, with no downloaded audio files and no third-party rights: each sound is a sequence of notes written as
 an in-memory WAV (16 bit, mono). They all have the same "voice" (a full square wave and, an octave below, a triangle
-wave, with notes that fade out) and the same duration (DURATION). Three sounds: "fatto" (operation finished), "errore"
-and "domanda" (PatchSmith is waiting for a choice); the window plays them if they are on (the speaker button, off by
-default). Plus "clic", very short, for every button pressed.
+wave, with notes that fade out) and the same duration (DURATION). Three sounds: "done" (operation finished), "error"
+and "question" (PatchSmith is waiting for a choice); the window plays them if they are on (the speaker button, off by
+default). Plus "click", very short, for every button pressed.
 """
 import io
 import math
@@ -24,7 +24,7 @@ C5, D5 = 523.25, 587.33
 
 def _waveform(shape, phase):
     f = phase % 1.0
-    if shape == "quadra":
+    if shape == "square":
         return 1.0 if f < 0.5 else -1.0
     return 4 * f - 1 if f < 0.5 else 3 - 4 * f  # triangle
 
@@ -48,8 +48,8 @@ def _note(samples, start, duration, frequency, shape, volume, decay, slide=None,
 
 def _voice(samples, start, duration, frequency, decay, slide=None, vibrato=False):
     """The voice of all sounds: a square wave and, an octave below, a triangle wave."""
-    _note(samples, start, duration, frequency, "quadra", 0.6, decay, slide, vibrato)
-    _note(samples, start, duration, frequency / 2, "triangolo", 0.6, decay,
+    _note(samples, start, duration, frequency, "square", 0.6, decay, slide, vibrato)
+    _note(samples, start, duration, frequency / 2, "triangle", 0.6, decay,
           slide / 2 if slide else None, vibrato)
 
 
@@ -91,7 +91,7 @@ def done():
 
 def question():
     """Question waiting: a high and a low note bouncing ("ping-pong-ping-pong"), neither rising nor falling: it
-    cannot be mistaken for "fatto" (rises) or for "errore" (falls)."""
+    cannot be mistaken for "done" (rises) or for "error" (falls)."""
     c = []
     for i, start in enumerate((0.0, 0.13, 0.26, 0.39)):
         _voice(c, start, 0.12 if i < 3 else 0.3, D5 if i % 2 == 0 else A4, 0.1 if i < 3 else 0.14)
@@ -102,12 +102,12 @@ def click():
     """A button pressed (and sounds just turned on): two micro-"beeps", like pressing and releasing. Shorter and
     quieter than the others: it is a confirmation, not a warning."""
     c = []
-    _note(c, 0.0, 0.02, E4 * 2, "quadra", 0.6, 0.007)
-    _note(c, 0.03, 0.02, A4 * 2, "quadra", 0.6, 0.007)
+    _note(c, 0.0, 0.02, E4 * 2, "square", 0.6, 0.007)
+    _note(c, 0.03, 0.02, A4 * 2, "square", 0.6, 0.007)
     return _wav(c, duration=0.06, volume=0.16)
 
 
-SOUNDS = {"fatto": done, "errore": error, "domanda": question, "clic": click}
+SOUNDS = {"done": done, "error": error, "question": question, "click": click}
 _READY = {}  # the WAVs already generated
 
 
@@ -117,7 +117,7 @@ def _play(data):
 
 
 def play(name):
-    """Plays 'nome' (fatto, errore, domanda) without blocking the window: generated and played in a thread. On a
+    """Plays 'name' (fatto, errore, domanda) without blocking the window: generated and played in a thread. On a
     system without winsound (not Windows) it plays nothing. True if it started."""
     try:
         import winsound  # noqa: F401

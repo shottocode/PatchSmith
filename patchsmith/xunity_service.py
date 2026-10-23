@@ -11,8 +11,8 @@ installed (the Fast model, if present: the graphics card is needed by the game t
 
 XUnity stops using an endpoint after 5 errors in a row: that is why a line that no translator can translate well is
 NOT an error. The answer (200) is the best translation if it has the {{A}} placeholders intact and is in the right
-language ("rilassata"), otherwise the original ("rifiutata"); a line that an online translator could send only much
-later ("rinviata") also gets the original. Error (500) only if no translator answers, 503 while the game is closing
+language ("relaxed"), otherwise the original ("rejected"); a line that an online translator could send only much
+later ("deferred") also gets the original. Error (500) only if no translator answers, 503 while the game is closing
 (no translation with the translator that is shutting down).
 
 Every requested line ends up in the journal memory/<gioco>.requests.jsonl (see journal_path): a JSON line with ts,
@@ -35,13 +35,14 @@ import urllib.parse
 import urllib.request
 import zlib
 
-from . import shared_file, interruption, language
+from . import shared_file, interruption, language, legacy
 from .backend import BackendError, _unchanged, translation_problems
 from .project import Project, _to_translate, data_folder, capitalize_like
 from .text import reassemble_lines, restore_placeholders
 
 URL_PATH = "/translate"
-GROUP_URL_PATH = "/traduci-gruppo"  # several lines together (live translation of web games)
+GROUP_URL_PATH = "/translate-group"  # several lines together (live translation of web games)
+OLD_GROUP_URL_PATH = "/traduci-gruppo"  # the same, from the scripts installed by earlier versions
 MAX_GROUP = 60
 MAX_BODY = 1_000_000
 GAME_CHECK = 3.0  # seconds between one check of the game's process and the next
@@ -52,12 +53,12 @@ MAX_JOURNAL = 2_000_000  # bytes: then the journal becomes <nome>.requests.jsonl
 # outcomes in the journal: translated (and saved in the translation memory); fallback answer (not in the translation
 # memory); original because rejected by all translators; original because the online translators ask to wait too
 # long; no translator reachable (500); game closing (503)
-JOURNAL_OUTCOMES = ("ok", "rilassata", "rifiutata", "rinviata", "errore", "interrotta")
-NAMES = {"locale": "local translator", "google": "Google", "deepl": "DeepL", "mymemory": "MyMemory",
-        "finto": "test translator"}
+JOURNAL_OUTCOMES = ("ok", "relaxed", "rejected", "deferred", "error", "interrupted")
+NAMES = {"local": "local translator", "google": "Google", "deepl": "DeepL", "mymemory": "MyMemory",
+        "fake": "test translator"}
 _XUNITY = re.compile(r"\{\{[^{}]*\}\}")  # XUnity's placeholders ({{A}}): they must all come back
 # problems (backend.translation_problems) saying that the answer is not a translation in the target language
-_UNTRANSLATED = {"vuota", "wrong script", "letters from another language", "not translated", "model refusal"}
+_UNTRANSLATED = {"empty", "wrong script", "letters from another language", "not translated", "model refusal"}
 # frequent words of the target language that in the lists of language._WORDS are only among those of other languages:
 # in an Italian answer "se", "tu", "su", "no" do not mean that it is Spanish (see language.obvious_language)
 _ALSO_IN_TARGET = language.ALSO_IN
@@ -99,7 +100,7 @@ def journal_path(profile_name):
 
 
 def read_journal(profile_name):
-    """The journal's lines (the old one's too, .1), oldest first: [{ts, testo, esito, risposta...}]. Unreadable lines
+    """The journal's lines (the old one's too, .1), oldest first: [{ts, text, outcome, risposta...}]. Unreadable lines
     (e.g. half written by a game closed abruptly) are skipped."""
     lines = []
     for path in (journal_path(profile_name) + ".1", journal_path(profile_name)):
@@ -107,10 +108,10 @@ def read_journal(profile_name):
             with open(path, encoding="utf-8", errors="replace") as f:
                 for line in f:
                     try:
-                        data = json.loads(line)
+                        data = legacy.loads(line)
                     except ValueError:
                         continue
-                    if isinstance(data, dict) and isinstance(data.get("testo"), str):
+                    if isinstance(data, dict) and isinstance(data.get("text"), str):
                         lines.append(data)
         except OSError:
             continue
@@ -119,7 +120,7 @@ def read_journal(profile_name):
 
 class Deferred(BackendError):
     """An online translator asks to wait more than MAX_WAIT to stay within the cautious margins: XUnity does not
-    wait that long, the line is postponed (answer with the original, in the journal as 'rinviata')."""
+    wait that long, the line is postponed (answer with the original, in the journal as 'deferred')."""
 
 
 def _short_wait(seconds):
@@ -132,7 +133,7 @@ def _short_wait(seconds):
 def _settings():
     try:
         with open(data_folder("settings.json"), encoding="utf-8") as f:
-            data = json.load(f)
+            data = legacy.load(f)
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
@@ -148,19 +149,19 @@ def _chosen_online(profile):
 
 
 def expected_translators(profile):
-    """The translators the service would use now, in order: 'locale' if it is installed, the chosen online translator
+    """The translators the service would use now, in order: 'local' if it is installed, the chosen online translator
     (DeepL only with the key) if it is not paused, 'google' if it is not paused. Empty list: none."""
     from . import ollama
     from .backend import credentials
     from .limiter import Limiter
     names = []
     try:
-        if ollama.state() == "pronto":
-            names.append("locale")
+        if ollama.state() == "ready":
+            names.append("local")
     except OSError:
         pass
     for name in _chosen_online(profile):
-        if name == "deepl" and not credentials()["chiave_deepl"]:
+        if name == "deepl" and not credentials()["deepl_key"]:
             continue
         if Limiter(name, log=None).pause() is None:
             names.append(name)
@@ -174,8 +175,8 @@ def create_translator(name, log=print):
     online translators (see _short_wait) and a single retry after a network error."""
     from . import ollama
     from .backend import Local, create_backend
-    if name == "locale":
-        if ollama.state() != "pronto":
+    if name == "local":
+        if ollama.state() != "ready":
             raise BackendError("The local translator is not installed.")
         return Local("4b" if ollama.model_present("4b") else ollama.default_model(), log=log)
     translator = create_backend(name, log)
@@ -238,15 +239,16 @@ class _HttpServer(http.server.ThreadingHTTPServer):
 
 class _Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
-        """POST /traduci-gruppo {"from", "to", "testi": [...]} -> {"traduzioni": {testo: traduzione}, "riprova": [...]}:
-        several lines together, for the live translation of web games (adapter_web_live)."""
+        """POST /translate-group {"from", "to", "texts": [...]} -> {"translations": {text: translation}, "retry":
+        [...]}: several lines together, for the live translation of web games (adapter_web_live). The scripts installed
+        by earlier versions send "testi" to /traduci-gruppo and read "traduzioni" and "riprova": they get them too."""
         service = self.server.service
-        if urllib.parse.urlsplit(self.path).path != GROUP_URL_PATH:
+        if urllib.parse.urlsplit(self.path).path not in (GROUP_URL_PATH, OLD_GROUP_URL_PATH):
             return self._reply(404, "")
         try:
             length = int(self.headers.get("Content-Length") or 0)
             data = json.loads(self.rfile.read(min(length, MAX_BODY)).decode("utf-8"))
-            texts = [t for t in data.get("testi", []) if isinstance(t, str)][:MAX_GROUP]
+            texts = [t for t in data.get("texts", data.get("testi", [])) if isinstance(t, str)][:MAX_GROUP]
             src_lang, a = str(data.get("from") or "en"), str(data.get("to") or "it")
         except (ValueError, AttributeError, UnicodeDecodeError):
             return self._reply(400, "invalid request")
@@ -255,8 +257,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:  # unexpected: the script retries later
             service.log("! group of %d phrases: %s: %s" % (len(texts), type(e).__name__, e))
             translations, to_retry = {}, texts
-        body = json.dumps({"traduzioni": {t: service.adapt(v, a) for t, v in translations.items()},
-                            "riprova": to_retry}, ensure_ascii=False)
+        translations = {t: service.adapt(v, a) for t, v in translations.items()}
+        body = json.dumps({"translations": translations, "retry": to_retry,
+                           "traduzioni": translations, "riprova": to_retry}, ensure_ascii=False)
         self._reply(200, body, "application/json; charset=utf-8")
 
     def do_GET(self):
@@ -289,7 +292,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 response = service.adapt(response, a)
         except Exception as e:  # unexpected: XUnity retries the line later
             service.log("! %r: %s: %s" % (text[:80], type(e).__name__, e))
-            service.record(text, src_lang, a, "errore", reason="%s: %s" % (type(e).__name__, e))
+            service.record(text, src_lang, a, "error", reason="%s: %s" % (type(e).__name__, e))
             code, response = 500, "not translated"
         self._reply(code, response)
 
@@ -306,8 +309,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
 
 class Service:
-    """porta=None: the game's port (port_for). backend: for the tests, a ready translator or a list of
-    (nome, traduttore) to try in a row; None = the row of expected_translators. pid: the game's process to
+    """port=None: the game's port (port_for). backend: for the tests, a ready translator or a list of
+    (name, translator) to try in a row; None = the row of expected_translators. pid: the game's process to
     follow (when it closes the service stops)."""
 
     def __init__(self, profile_path, port=None, pid=None, log=print, backend=None, test=False):
@@ -315,7 +318,7 @@ class Service:
         # one line at a time during play: no second rounds (the other model would load the game's graphics card)
         # and no problems.json; the journal records the rejected lines and they are re-translated with the game closed
         self.project.recovery = False
-        self.name = self.project.profile["nome"]
+        self.name = self.project.profile["name"]
         self.port = port or port_for(self.name)
         self.pid = pid
         self.log = log
@@ -346,7 +349,7 @@ class Service:
             elif isinstance(self._backend, (list, tuple)):
                 chain = list(self._backend)
             else:
-                chain = [(getattr(self._backend, "name", "prova"), self._backend)]
+                chain = [(getattr(self._backend, "name", "test"), self._backend)]
             ready = []
             for name, translator in chain:
                 if hasattr(translator, "_ensure_server"):
@@ -374,20 +377,20 @@ class Service:
         memory = self.project.memory
         already = memory.get(text)
         if isinstance(already, str) and already:  # already translated: without waiting for the translators
-            self.record(text, src_lang, a, "ok", "memoria", response=already)
+            self.record(text, src_lang, a, "ok", "memory", response=already)
             return 200, already
         if self._part_of_translation(text):
-            self.record(text, src_lang, a, "ok", "gia' tradotta", response=text)
+            self.record(text, src_lang, a, "ok", "already_translated", response=text)
             return 200, text
         if not self._ready.wait(MAX_STARTUP):
-            self.record(text, src_lang, a, "rinviata", reason="the translators are still starting up", response=text)
+            self.record(text, src_lang, a, "deferred", reason="the translators are still starting up", response=text)
             return 200, text
         with self._lock:  # one line at a time (XUnity sends one at a time, but someone else might send more)
             if self.closing.is_set():
                 return self._while_closing(text, src_lang, a)
             already = memory.get(text)
             if isinstance(already, str) and already:
-                self.record(text, src_lang, a, "ok", "memoria", response=already)
+                self.record(text, src_lang, a, "ok", "memory", response=already)
                 return 200, already
             return self._translate(text, src_lang, a)
 
@@ -405,7 +408,7 @@ class Service:
         return piece in self._translated
 
     def answer_group(self, texts, src_lang, a):
-        """({testo: traduzione}, [texts to request later]) for several lines together: those already in the
+        """({text: translation}, [texts to request later]) for several lines together: those already in the
         translation memory right away, the others with a single group translation per translator (the local
         translator does more than one at a time on the graphics card); those the group does not translate go one at a
         time, like answer()."""
@@ -419,10 +422,10 @@ class Service:
                 continue
             already = memory.get(t)
             if isinstance(already, str) and already:
-                self.record(t, src_lang, a, "ok", "memoria", response=already)
+                self.record(t, src_lang, a, "ok", "memory", response=already)
                 translations[t] = already
             elif self._part_of_translation(t):
-                self.record(t, src_lang, a, "ok", "gia' tradotta", response=t)
+                self.record(t, src_lang, a, "ok", "already_translated", response=t)
             else:
                 missing.append(t)
         if not missing:
@@ -443,9 +446,9 @@ class Service:
                     v = memory.get(t)
                     if isinstance(v, str) and v:
                         self.translated_count += 1
-                        self.record(t, src_lang, a, "ok", name if p.last_group is not None else "comune", response=v)
+                        self.record(t, src_lang, a, "ok", name if p.last_group is not None else "shared", response=v)
                         translations[t] = v
-                if isinstance(p.last_error, Deferred) or p.translation_outcome == "TRADUTTORE_BLOCCATO":
+                if isinstance(p.last_error, Deferred) or p.translation_outcome == "TRANSLATOR_BLOCKED":
                     continue
         for t in [t for t in missing if t not in translations]:  # one at a time: fallback, rejects and journal
             if self.closing.is_set():
@@ -460,15 +463,15 @@ class Service:
         return translations, to_retry
 
     def _while_closing(self, text, src_lang, a):
-        self.record(text, src_lang, a, "interrotta", reason="the game is closing")
+        self.record(text, src_lang, a, "interrupted", reason="the game is closing")
         return 503, "closing"
 
     def adapt(self, response, a):
         """The answer for XUnity without the characters the game's fonts cannot draw (profilo
-        ["caratteri_mancanti"], found by the after-play check): è -> e'. The translation memory and the journal keep
+        ["missing_chars"], found by the after-play check): è -> e'. The translation memory and the journal keep
         the real translation."""
         from .characters import adapt_without
-        excluded = self.project.profile.get("caratteri_mancanti")
+        excluded = self.project.profile.get("missing_chars")
         return (adapt_without(response, set(excluded), a) or response) if excluded else response
 
     def _translate(self, text, src_lang, a):
@@ -488,12 +491,12 @@ class Service:
             translated = memory.get(text)
             if isinstance(translated, str) and translated:
                 self.translated_count += 1
-                self.record(text, src_lang, a, "ok", name if p.last_group is not None else "comune",
+                self.record(text, src_lang, a, "ok", name if p.last_group is not None else "shared",
                             response=translated)
                 return 200, translated
             if isinstance(p.last_error, Deferred):
                 deferred.append((name, str(p.last_error)))
-            elif p.last_error is not None or p.translation_outcome == "TRADUTTORE_BLOCCATO":
+            elif p.last_error is not None or p.translation_outcome == "TRANSLATOR_BLOCKED":
                 errors.append((name, str(p.last_error or p.translation_reason)))
             else:  # it answered, but the translation did not pass the checks
                 answered.append((name, translator, p.last_group))
@@ -505,18 +508,18 @@ class Service:
             relaxed = self._relaxed(translator, group, text, src_lang, a)
             if relaxed:
                 self.log("  ~ phrase translated without all the checks (to be rechecked): %r" % text[:80])
-                self.record(text, src_lang, a, "rilassata", name, reason, response=relaxed)
+                self.record(text, src_lang, a, "relaxed", name, reason, response=relaxed)
                 return 200, relaxed
             self.log("  ! phrase left untranslated (no acceptable translation): %r" % text[:80])
-            self.record(text, src_lang, a, "rifiutata", name, reason, response=text)
+            self.record(text, src_lang, a, "rejected", name, reason, response=text)
             return 200, text
         if deferred:
-            self.record(text, src_lang, a, "rinviata", deferred[0][0], "; ".join(reasons), response=text)
+            self.record(text, src_lang, a, "deferred", deferred[0][0], "; ".join(reasons), response=text)
             return 200, text
         reason = "; ".join(reasons) or ("translators not ready (%s)" % self._error if self._error else
                                        "no translator available")
         self.log("! %r not translated: %s" % (text[:80], reason))
-        self.record(text, src_lang, a, "errore", reason=reason)
+        self.record(text, src_lang, a, "error", reason=reason)
         return 500, "not translated"
 
     def _relaxed(self, translator, group, text, src_lang, a):
@@ -524,11 +527,11 @@ class Service:
         translated separately (only once, only where it has not been done already) and, for the lines still without a
         translation, the local translator's rejected proposal. None if an XUnity {{A}} placeholder is missing or if
         the answer is not in the target language: then the answer is the original."""
-        if not group or text not in group["divisi"]:
+        if not group or text not in group["split"]:
             return None
-        parts, protected, mapping = group["divisi"][text], group["protetti"], dict(group["mappa"])
+        parts, protected, mapping = group["split"][text], group["protected"], dict(group["mapping"])
         missing = [n for _, n, _ in parts if n and _to_translate(n) and n not in mapping]
-        in_pieces = [n for n in missing if protected[n][1] and n not in group.get("ripiegati", ())]
+        in_pieces = [n for n in missing if protected[n][1] and n not in group.get("fallen_back", ())]
         if in_pieces:
             try:
                 for n, r in self.project._translate_in_pieces(_NoClose(translator), in_pieces, src_lang, a).items():
@@ -556,10 +559,10 @@ class Service:
 
     def record(self, text, src_lang, a, outcome, backend=None, reason="", response=None):
         """A line in the journal of the requested lines (see percorso_diario)."""
-        line = {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "testo": text, "da": src_lang, "a": a,
-                "esito": outcome, "backend": backend, "motivo": reason}
+        line = {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "text": text, "from": src_lang, "to": a,
+                "outcome": outcome, "backend": backend, "reason": reason}
         if response is not None:
-            line["risposta"] = response
+            line["response"] = response
         data = (json.dumps(line, ensure_ascii=False) + "\n").encode("utf-8")
         with self._journal_lock:
             try:

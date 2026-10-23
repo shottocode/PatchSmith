@@ -7,7 +7,7 @@ They are read without changing anything:
   in Properties > Details): they are read as data, the program is not started;
 - from Steam: the game's name in its manifest, if the game is installed from Steam.
 
-They end up in the game profile (profilo["non_tradurre"]) and Project protects them like the game's codes
+They end up in the game profile (profile["do_not_translate"]) and Project protects them like the game's codes
 (text.protect).
 """
 import os
@@ -137,7 +137,7 @@ def names_of_game(folder, log=None):
         from . import steam
         installed = steam.game_installed(folder)
         if installed:
-            found.append(installed.get("nome"))
+            found.append(installed.get("name"))
     except Exception:  # noqa: BLE001 - Steam missing or unreadable: do without it
         pass
     output = []

@@ -68,9 +68,9 @@ def _command(profile_path, profile_name):
     from . import adapter_unity, xunity_service
     from .project import PROJECT_FOLDER
     port = xunity_service.port_for(profile_name)
-    return port, {"programma": adapter_unity._windowless_python(), "cartella": PROJECT_FOLDER,
-                   "argomenti": ["-I", os.path.join(PROJECT_FOLDER, "smith.py"), "servizio-xunity", "--profilo",
-                                 os.path.abspath(profile_path), "--porta", str(port)]}
+    return port, {"program": adapter_unity._windowless_python(), "folder": PROJECT_FOLDER,
+                   "arguments": ["-I", os.path.join(PROJECT_FOLDER, "smith.py"), "xunity-service", "--profile",
+                                 os.path.abspath(profile_path), "--port", str(port)]}
 
 
 def install(folder, profile_path, profile_name, src_lang, a, translations, log=print, active=True):
@@ -90,11 +90,11 @@ def install(folder, profile_path, profile_name, src_lang, a, translations, log=p
         with open(backup, "rb") as f:  # already ours: start again from the saved original
             original = f.read()
     else:  # first time, or the game put back its own preload.js (an update): the backup is of this one
-        project.create_backup(preload, extra={"creati": [DICTIONARY_NAME, CONFIG_NAME], "web_vivo": True})
+        project.create_backup(preload, extra={"created": [DICTIONARY_NAME, CONFIG_NAME], "web_live": True})
         original = current
     port, command = _command(profile_path, profile_name)
-    config = {"dizionario": DICTIONARY_NAME, "porta": port if active else 0, "da": src_lang, "a": a,
-              "comando": command if active else None}
+    config = {"dictionary": DICTIONARY_NAME, "port": port if active else 0, "from": src_lang, "to": a,
+              "command": command if active else None}
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "injector_live.js"), encoding="utf-8") as f:
         script = f.read().replace("/*__CONFIG__*/{}", json.dumps(config, ensure_ascii=True))
     dictionary = {k: v for k, v in translations.items() if isinstance(k, str) and isinstance(v, str) and v and v != k}
@@ -106,12 +106,12 @@ def install(folder, profile_path, profile_name, src_lang, a, translations, log=p
         write_atomic(preload, new)
     info = project.read_info(preload) or {}
     fingerprint = hashlib.sha256(new).hexdigest()
-    if fingerprint not in info.get("hash_scritti", []):
-        info["hash_scritti"] = (info.get("hash_scritti") or [])[-(project.MAX_FINGERPRINTS - 1):] + [fingerprint]
+    if fingerprint not in info.get("written_hashes", []):
+        info["written_hashes"] = (info.get("written_hashes") or [])[-(project.MAX_FINGERPRINTS - 1):] + [fingerprint]
         project.save_info(preload, info)
     log("  Live translation installed in %s (with backup): %d translations ready%s" % (
         os.path.relpath(preload, folder), len(dictionary), ", the others arrive as you play" if active else
         " (translator while playing: off)"))
-    if not os.path.exists(command["programma"]) and sys.platform.startswith("win"):
-        log("  ! I can't find Python (%s): the new phrases will stay untranslated" % command["programma"])
+    if not os.path.exists(command["program"]) and sys.platform.startswith("win"):
+        log("  ! I can't find Python (%s): the new phrases will stay untranslated" % command["program"])
     return len(dictionary)

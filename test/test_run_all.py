@@ -2,7 +2,7 @@
 
 Usage: python -I test/test_run_all.py <empty_temp_folder>
 Covers:
-- each test has its own data (PATCHSMITH_DATI) and its own user folders, inside its folder, without the
+- each test has its own data (PATCHSMITH_DATA) and its own user folders, inside its folder, without the
   PATCHSMITH_* and OLLAMA_* variables of whoever runs the tests: a test does not see what another one left behind;
 - the output goes into the log and the exit code is kept;
 - a test that runs too long is stopped together with the processes it started, and the runner does not hang;
@@ -26,17 +26,17 @@ OUTCOMES = []
 # fake test that starts a child process (it inherits the output, like a test server) and then never ends
 HUNG = r"""
 import subprocess, sys, time
-figlio = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(120)"])
+child = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(120)"])
 with open(sys.argv[1], "w") as f:
-    f.write(str(figlio.pid))
-print("avviato", flush=True)
+    f.write(str(child.pid))
+print("started", flush=True)
 time.sleep(120)
 """
 
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def inside(path, folder):
@@ -45,22 +45,22 @@ def inside(path, folder):
 
 
 def test_environment(base):
-    os.environ["PATCHSMITH_DATI"] = os.path.join(base, "dati-di-chi-lancia")
+    os.environ["PATCHSMITH_DATA"] = os.path.join(base, "dati-di-chi-lancia")
     os.environ["OLLAMA_HOST"] = "127.0.0.1:1"
     singular = run_all.environment(os.path.join(base, "prove", "prova_uno"))
     two = run_all.environment(os.path.join(base, "prove", "prova_due"))
-    env_vars = ("PATCHSMITH_DATI", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "USERPROFILE")
+    env_vars = ("PATCHSMITH_DATA", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "USERPROFILE")
     check("ambiente: dati e cartelle dell'utente dentro la cartella della prova, gia' create",
               all(inside(singular[v], os.path.join(base, "prove", "prova_uno")) and os.path.isdir(singular[v])
                   for v in env_vars))
     check("ambiente: due prove non condividono dati ne' cartelle dell'utente",
               all(os.path.normcase(singular[v]) != os.path.normcase(two[v]) for v in env_vars))
     check("ambiente: niente PATCHSMITH_* e OLLAMA_* di chi lancia le prove",
-              "OLLAMA_HOST" not in singular and not inside(singular["PATCHSMITH_DATI"], os.environ["PATCHSMITH_DATI"])
+              "OLLAMA_HOST" not in singular and not inside(singular["PATCHSMITH_DATA"], os.environ["PATCHSMITH_DATA"])
               and not [k for k in singular if k.upper().startswith("PATCHSMITH_")
-                       and k not in ("PATCHSMITH_DATI", "PATCHSMITH_INTERFACCIA")]
-              and singular.get("PATCHSMITH_INTERFACCIA") == "en")
-    del os.environ["PATCHSMITH_DATI"], os.environ["OLLAMA_HOST"]
+                       and k not in ("PATCHSMITH_DATA", "PATCHSMITH_INTERFACE")]
+              and singular.get("PATCHSMITH_INTERFACE") == "en")
+    del os.environ["PATCHSMITH_DATA"], os.environ["OLLAMA_HOST"]
 
 
 def test_run(base):
@@ -69,11 +69,11 @@ def test_run(base):
     test_env = run_all.environment(folder)
     log_file = os.path.join(folder, "registro.txt")
     code, output, _ = run_all.run_command(
-        [sys.executable, "-I", "-c", "import os, sys; print('dati=' + os.environ['PATCHSMITH_DATI']); sys.exit(3)"],
+        [sys.executable, "-I", "-c", "import os, sys; print('dati=' + os.environ['PATCHSMITH_DATA']); sys.exit(3)"],
         test_env, folder, log_file)
     with open(log_file, encoding="utf-8") as f:
         written = f.read()
-    check("esegui: codice di uscita, uscita e registro", code == 3 and "dati=" + test_env["PATCHSMITH_DATI"] in output
+    check("esegui: codice di uscita, uscita e registro", code == 3 and "dati=" + test_env["PATCHSMITH_DATA"] in output
               and "dati=" in written and written.startswith("$ "))
 
     pid_file = os.path.join(folder, "figlio.pid")
@@ -85,7 +85,7 @@ def test_run(base):
                                             maximum=3)
     duration = time.time() - start
     check("prova troppo lunga: fermata, il runner non resta bloccato (%.0f s)" % duration,
-              code is None and duration < 60 and "avviato" in output and "(fermata: oltre 3 s)" in output)
+              code is None and duration < 60 and "started" in output and "(fermata: oltre 3 s)" in output)
     try:
         with open(pid_file, encoding="utf-8") as f:
             pid = int(f.read())
@@ -101,7 +101,7 @@ def test_run(base):
 
 def test_snapshot(base):
     saved_items = project.PROJECT_FOLDER, project.DATA_ROOT
-    root = os.path.join(base, "programma")
+    root = os.path.join(base, "program")
     for rel, text in (("profiles/gioco.json", "{}"), ("memory/gioco.it.json", "{}"), ("settings.json", "{}"),
                        ("components/altro.txt", "x")):
         p = os.path.join(root, *rel.split("/"))
@@ -152,7 +152,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    project.DATA_ROOT = os.path.join(base, "dati")  # to be safe: these tests do not write data
+    project.DATA_ROOT = os.path.join(base, "data_folder")  # to be safe: these tests do not write data
     test_environment(base)
     test_run(base)
     test_snapshot(base)

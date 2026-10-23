@@ -28,11 +28,11 @@ ZIP_URL = "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-win
 ZIP_SIZE = 1469916992
 SHA256_ZIP = "7485a1172f8527db4342a63521b9342fc466185ff0855da378cc864ecf6354cf"
 MODELS = {
-    "4b": {"nome": "translategemma:4b-it-q4_K_M", "impronta": "c49d986b0764", "gb": 3.3,
-           "etichetta": "Fast (TranslateGemma 4B)", "secondi_per_testo": 0.25, "secondi_avvio": 30,
-           "parallele": 4},  # test on RTX 3060 Ti: 4 lines together 0.10 s per line against 0.14
-    "12b": {"nome": "translategemma:12b-it-q4_K_M", "impronta": "c2f9a9ca1ec7", "gb": 8.1,
-            "etichetta": "Quality (TranslateGemma 12B)", "secondi_per_testo": 2.5, "secondi_avvio": 80},
+    "4b": {"name": "translategemma:4b-it-q4_K_M", "fingerprint": "c49d986b0764", "gb": 3.3,
+           "label": "Fast (TranslateGemma 4B)", "seconds_per_text": 0.25, "startup_seconds": 30,
+           "parallel": 4},  # test on RTX 3060 Ti: 4 lines together 0.10 s per line against 0.14
+    "12b": {"name": "translategemma:12b-it-q4_K_M", "fingerprint": "c2f9a9ca1ec7", "gb": 8.1,
+            "label": "Quality (TranslateGemma 12B)", "seconds_per_text": 2.5, "startup_seconds": 80},
 }
 MODEL_LICENSE = "https://ai.google.dev/gemma/terms"
 _NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -61,7 +61,7 @@ def installed():
 
 def model_present(key):
     """True if the model is already downloaded (its manifest is checked, without starting the server)."""
-    name, tag = MODELS[key]["nome"].split(":")
+    name, tag = MODELS[key]["name"].split(":")
     return os.path.isfile(os.path.join(models_folder(), "manifests", "registry.ollama.ai", "library", name, tag))
 
 
@@ -243,11 +243,11 @@ def default_model():
 
 
 def state():
-    """'pronto', 'manca il modello' or 'non installato' (for the interface)."""
+    """'ready', 'manca il modello' or 'non installato' (for the interface)."""
     if not installed():
         return "not installed"
     present = [k for k in MODELS if model_present(k)]
-    return "pronto" if present else "the model is missing"
+    return "ready" if present else "the model is missing"
 
 
 # --- Job Object: the server dies with PatchSmith ---------------------------------------------------
@@ -484,7 +484,7 @@ def download_description(selected):
     for k in selected:
         if not model_present(k):
             lines.append("%s: %s, %.1f GB, from the official Ollama registry (ollama.com). Gemma Terms of Use License "
-                         "(%s): by downloading it, you agree to the terms" % (MODELS[k]["etichetta"], MODELS[k]["nome"],
+                         "(%s): by downloading it, you agree to the terms" % (MODELS[k]["label"], MODELS[k]["name"],
                                                                 MODELS[k]["gb"], MODEL_LICENSE))
     return lines
 
@@ -512,11 +512,11 @@ def _download_models(selected, log):
     with Server(log) as server:
         for k in selected:
             if model_present(k):
-                log("  %s: Already downloaded" % MODELS[k]["etichetta"])
+                log("  %s: Already downloaded" % MODELS[k]["label"])
                 continue
-            log("  Downloading %s (%.1f GB)..." % (MODELS[k]["etichetta"], MODELS[k]["gb"]))
+            log("  Downloading %s (%.1f GB)..." % (MODELS[k]["label"], MODELS[k]["gb"]))
             parts, last = {}, -10.0
-            for pull_state in server.stream("/api/pull", {"model": MODELS[k]["nome"], "stream": True}):
+            for pull_state in server.stream("/api/pull", {"model": MODELS[k]["name"], "stream": True}):
                 if "error" in pull_state:
                     raise LocalError("Model download failed: %s" % pull_state["error"])
                 if pull_state.get("digest") and pull_state.get("total"):
@@ -526,9 +526,9 @@ def _download_models(selected, log):
                         last = done
                         log("    %.0f%%" % done)
             present = {m.get("name"): m.get("digest", "") for m in server.call("/api/tags").get("models", [])}
-            if not present.get(MODELS[k]["nome"], "").startswith(MODELS[k]["impronta"]):
-                log("  ! %s: hash different from the expected one (has the model been updated?)" % MODELS[k]["nome"])
-            log("  %s ready." % MODELS[k]["etichetta"])
+            if not present.get(MODELS[k]["name"], "").startswith(MODELS[k]["fingerprint"]):
+                log("  ! %s: hash different from the expected one (has the model been updated?)" % MODELS[k]["name"])
+            log("  %s ready." % MODELS[k]["label"])
 
 
 def _install_program(log):

@@ -26,7 +26,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -156,11 +156,11 @@ def main(base):
     write(os.path.join(short, "bin", "dds.exe"), b"MZ")
     r = steam.identify_from_executables(short)
     check("Steam: nome corto con percorso esatto, maiuscole diverse -> riconosciuto, cartella simile",
-              r and r["appid"] == "506" and r["cartella_simile"])
+              r and r["appid"] == "506" and r["similar_folder"])
     r = official_language.detect(short, "it")
     lines = official_language.message(r, "it")
     check("cartella riconosciuta e confermata: lingua presente; menu Lingua di Steam solo se c'e'",
-              r["presente"] is True and r["selezionabile_steam"] is False
+              r["present"] is True and r["steam_selectable"] is False
               and not any("Properties" in x for x in lines) and any("isn't a Steam installation" in x for x in lines))
     lines = official_language.message(r, "it", ["I have set Italian (it) in the game settings."], True)
     check("messaggio: dopo un'impostazione riuscita niente istruzioni contraddittorie",
@@ -169,7 +169,7 @@ def main(base):
     write(os.path.join(rng, "SetteGame.exe"), b"MZ")
     r = official_language.detect(rng, "it")
     check("Steam: riconoscimento non confermato dal nome della cartella -> solo una nota, nessun blocco",
-              r["presente"] is None and r["note"] and r["steam_conosciuto"]["appid"] == "507")
+              r["present"] is None and r["notes"] and r["steam_known"]["appid"] == "507")
     steam_game = os.path.join(library, "steamapps", "common", "Gioco Steam")
     os.makedirs(steam_game)
     write(os.path.join(library, "steamapps", "appmanifest_508.acf"),
@@ -192,7 +192,7 @@ def main(base):
     steam._build_index = old_folder
     check("Steam: appinfo.vdf letto una volta sola", len(reads) == 1)
     intact = read_file(appinfo_file)
-    for name, data in (("troncato", intact[:100]), ("vuoto", b""),
+    for name, data in (("truncated", intact[:100]), ("vuoto", b""),
                        ("tabella fuori dal file", intact[:8] + struct.pack("<q", 10 ** 9) + intact[16:])):
         write(appinfo_file, data)
         steam._CACHE.clear()
@@ -206,7 +206,7 @@ def main(base):
         warnings = []
         try:
             r = official_language.detect(short, "it", log=warnings.append)
-            ok = r["presente"] is None
+            ok = r["present"] is None
         except Exception:
             ok = False
         check("Steam: appinfo.vdf %s -> ErroreSteam, e il rilevamento continua" % name,
@@ -237,7 +237,7 @@ def main(base):
     check("Unreal: cinese per scrittura (zh-TW -> zh-Hant; mai zh-Hans al posto di zh-Hant)",
               language_unreal.target_tag({"zh-Hant", "en"}, "zh-TW") == "zh-Hant"
               and language_unreal.target_tag({"zh-Hans", "en"}, "zh-TW") is None
-              and official_language.languages_in_files(ue11, "Unreal", "zh-CN")[1]["trovata"] is False)
+              and official_language.languages_in_files(ue11, "Unreal", "zh-CN")[1]["found"] is False)
     game_gus = os.path.join(ue, "Proj", "Saved", "Config", "Windows", "GameUserSettings.ini")
     write(game_gus, b"[Internationalization]\r\nLanguage=en\r\n")
     check("Unreal: impostazioni cercate anche nella cartella del gioco",
@@ -275,7 +275,7 @@ def main(base):
               read_file(test) == b"[Internationalization]\r\nLanguage=en\r\nLanguage=de\r\n")
     gus = os.path.join(os.environ["LOCALAPPDATA"], "Proj", "Saved", "Config", "WindowsNoEditor", "GameUserSettings.ini")
     write(gus, b"\xff\xfe" + "[Internationalization]\r\nLanguage=en\r\n".encode("utf-16-le") + b"\x00")
-    detection = {"motore": {"tipo": "unreal", "progetto": "Proj", "tag": "it", "trovata": True}}
+    detection = {"engine": {"kind": "unreal", "project": "Proj", "tag": "it", "found": True}}
     try:
         done, lines = official_language.set_(ue, detection, "it", silent)
         ok = not done and any("menu" in x for x in lines)
@@ -302,7 +302,7 @@ def main(base):
     os.chmod(gus, stat.S_IREAD | stat.S_IWRITE)
     os.remove(os.path.join(ue, "Proj", "Content", "Paks", "zz_Patchsmith_it_999_P.pak"))
     check("Ripristina originali: impostazioni di sola lettura -> continua, avvisa e tiene il registro", ok)
-    check("Ripristina da riga di comando con la cartella del gioco", cli.main(["ripristina", ue]) == 0
+    check("Ripristina da riga di comando con la cartella del gioco", cli.main(["restore", ue]) == 0
               and not official_language.is_set(ue) and read_file(gus) == original_gus)
     os.remove(gus)
     done, lines = official_language.set_(ue, detection, "it", silent)
@@ -313,7 +313,7 @@ def main(base):
     write(gus, original_gus)
 
     # translate anyway: no detection, and the language set before goes back to how it was
-    path, outcome = automatic.prepare(ue, "auto", "it", "finto", silent)
+    path, outcome = automatic.prepare(ue, "auto", "it", "fake", silent)
     set_before = official_language.is_set(ue) and b"Language=it" in read_file(gus)
     real_detect = official_language.detect
 
@@ -321,7 +321,7 @@ def main(base):
         raise AssertionError("rileva non deve essere chiamato")
     official_language.detect = do_not_call
     try:
-        path, outcome = automatic.prepare(ue, "auto", "it", "finto", silent, translate_anyway=True)
+        path, outcome = automatic.prepare(ue, "auto", "it", "fake", silent, translate_anyway=True)
         ok = path is not None and not official_language.is_set(ue) and read_file(gus) == original_gus
     except AssertionError:
         ok = False
@@ -329,9 +329,9 @@ def main(base):
     check("Traduci comunque: niente rilevamento, lingua rimessa com'era, traduzione preparata",
               set_before and ok)
     check("Riga di comando: 'auto' con la lingua ufficiale gestita esce con 0",
-              cli.main(["auto", ue, "--a", "it", "--backend", "finto"]) == 0)
+              cli.main(["auto", ue, "--a", "it", "--backend", "fake"]) == 0)
     write(os.path.join(ue, "patchsmith-unreal.json"), b"{}")
-    path, outcome = automatic.prepare(ue, "auto", "it", "finto", silent)
+    path, outcome = automatic.prepare(ue, "auto", "it", "fake", silent)
     check("Lingua ufficiale con una traduzione di PatchSmith ancora installata: lo dice",
               outcome.get("traduzione_installata")
               and any("is still installed" in x for x in outcome["lingua_ufficiale_righe"]))
@@ -379,7 +379,7 @@ def main(base):
     present, dm = official_language.languages_in_files(un, "Unity", "it")
     language_unity.i2_languages = real_i2
     check("Unity: un errore nella lettura di I2 non fa perdere Unity Localization",
-              present == {"it"} and dm["trovata"])
+              present == {"it"} and dm["found"])
     import winreg
     key = "Software\\PatchsmithTest2\\Gioco"
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key) as k:
@@ -410,10 +410,10 @@ def main(base):
     latin = set(chr(c) for c in range(32, 127)) | set("àèéùÀÈÉÙíóúÍÓÚ")
     write(os.path.join(gm, "data.win"), test_gamemaker.data_win([("fn_testo", latin)]))
     write(os.path.join(gm, "Gioco.exe"), b"MZ")
-    path, outcome = automatic.prepare(gm, "auto", "it", "finto", silent)
-    path2, _ = automatic.prepare(gm, "auto", "it", "finto", silent, translate_anyway=True)
+    path, outcome = automatic.prepare(gm, "auto", "it", "fake", silent)
+    path2, _ = automatic.prepare(gm, "auto", "it", "fake", silent, translate_anyway=True)
     check("GameMaker: italiano nei file -> lingua ufficiale; con 'traduci comunque' si traduce",
-              path is None and outcome.get("lingua_ufficiale") and path2 is not None)
+              path is None and outcome.get("official_language") and path2 is not None)
 
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))

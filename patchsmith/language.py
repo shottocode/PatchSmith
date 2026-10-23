@@ -137,7 +137,7 @@ _WRITING_SYSTEMS = [  # (language, character ranges)
     ("ko", [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)]),
     ("kana", [(0x3040, 0x30FF), (0x31F0, 0x31FF)]),
     ("han", [(0x4E00, 0x9FFF), (0x3400, 0x4DBF)]),
-    ("cirillico", [(0x0400, 0x04FF)]),
+    ("cyrillic", [(0x0400, 0x04FF)]),
     ("el", [(0x0370, 0x03FF)]),
     ("ar", [(0x0600, 0x06FF)]),
     ("he", [(0x0590, 0x05FF)]),
@@ -189,7 +189,7 @@ def _writing_system(c):
         for a, b in ranges:
             if a <= o <= b:
                 return name
-    return "latino" if c.isalpha() else None
+    return "latin" if c.isalpha() else None
 
 
 def detect(texts, maximum=200_000):
@@ -211,10 +211,10 @@ def detect(texts, maximum=200_000):
         return "zh-CN", "Chinese ideograms"
     for language in ("ko", "el", "ar", "he", "th", "hi"):
         if counts.get(language, 0) / letters > 0.3:
-            return language, "alfabeto"
-    if counts.get("cirillico", 0) / letters > 0.3:
+            return language, "alphabet"
+    if counts.get("cyrillic", 0) / letters > 0.3:
         ukrainian = sum(sample.count(c) for c in "ієїґІЄЇҐ")
-        return ("uk" if ukrainian > 0.005 * counts["cirillico"] else "ru"), "Cyrillic alphabet"
+        return ("uk" if ukrainian > 0.005 * counts["cyrillic"] else "ru"), "Cyrillic alphabet"
 
     words = re.findall(r"[^\W\d_]+", sample.lower())
     if not words:
@@ -225,5 +225,6 @@ def detect(texts, maximum=200_000):
     if quota < 0.03:
         return "en", "unknown words: I'll use English"
     second = sorted(scores.values())[-2]
-    confidence = "alta" if scores[best] > 1.5 * max(second, 1) else "media"
-    return best, "common words (reliability %s)" % confidence
+    if scores[best] > 1.5 * max(second, 1):
+        return best, "common words (high reliability)"
+    return best, "common words (medium reliability)"

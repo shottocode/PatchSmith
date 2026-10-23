@@ -23,7 +23,7 @@ NAME = "prova-unity-test"
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -53,8 +53,8 @@ def create_zip(path, entries):
         for name, content in entries.items():
             z.writestr(name, content)
     data = open(path, "rb").read()
-    return {"url": "file://non-usato", "file": os.path.basename(path), "dimensione": len(data),
-            "sha256": hashlib.sha256(data).hexdigest(), "versione": "prova", "licenza": "-"}
+    return {"url": "file://non-usato", "file": os.path.basename(path), "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(), "version": "test", "license": "-"}
 
 
 def prepare_components(folder):
@@ -153,18 +153,19 @@ def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
-    project.DATA_ROOT = os.path.join(base, "dati")  # the fake game's translation memory: never among the real data
+    # the fake game's translation memory: never among the real data
+    project.DATA_ROOT = os.path.join(base, "data_folder")
     adapter_unity.is_running = lambda *_: False
-    prepare_components(os.path.join(base, "componenti"))
+    prepare_components(os.path.join(base, "components"))
     memory = adapter_unity._memory_folder(NAME)
     if os.path.exists(memory):
         shutil.rmtree(memory)
 
-    game = os.path.join(base, "gioco")
+    game = os.path.join(base, "game")
     create_game(game)
     before = sorted(os.listdir(game))
     info = adapter_unity.analyze(game)
-    check("analisi: mono x64 Unity 6000.3.12f1", (info["backend"], info["architettura"], info["versione_unity"])
+    check("analisi: mono x64 Unity 6000.3.12f1", (info["backend"], info["architecture"], info["unity_version"])
               == ("mono", "x64", "6000.3.12f1"))
 
     # 1) installation with detected language
@@ -182,8 +183,8 @@ def main(base):
         check("Unity 6: BepInEx parte al primo MonoBehaviour (niente crash all'avvio)",
                   "Type = MonoBehaviour" in f.read())
     m = adapter_unity.read_manifest(game)
-    check("manifesto completo (changelog escluso)", m and not m["in_corso"] and len(m["file"]) == 8
-              and m["radice_prima"] == before and not os.path.exists(os.path.join(game, "changelog.txt")))
+    check("manifesto completo (changelog escluso)", m and not m["in_progress"] and len(m["file"]) == 8
+              and m["root_before"] == before and not os.path.exists(os.path.join(game, "changelog.txt")))
 
     # 2) simulate the game's first start
     os.makedirs(os.path.join(game, "BepInEx", "Translation", "it", "Text"))
@@ -205,9 +206,9 @@ def main(base):
     check("stato: BepInEx e XUnity caricati, 2 frasi", any("OK  BepInEx has been launched" in r for r in lines)
               and any("OK  XUnity loaded" in r for r in lines)
               and any("Translated phrases so far: 2" in r for r in lines))
-    check("stato: com'e' andato l'avvio del traduttore di PatchSmith (scritto dal plugin)",
-              adapter_unity.read_service_state(game).get("Esito") == "python-mancante"
-              and any("last game start: python-mancante (2026-10-18 04:29:33)" in r for r in lines))
+    check("stato: com'e' andato l'avvio del traduttore di PatchSmith (plugin di una versione precedente)",
+              adapter_unity.read_service_state(game).get("Outcome") == "python-missing"
+              and any("last game start: python-missing (2026-10-18 04:29:33)" in r for r in lines))
 
     # 3) already installed: language change without losing the other keys
     adapter_unity.install(game, "en", "es", NAME, silent)
@@ -275,7 +276,7 @@ def main(base):
     create_game(game3)
     before3 = sorted(os.listdir(game3))
     good = components.CATALOG["xunity_bepinex5"]
-    components.CATALOG["xunity_bepinex5"] = create_zip(os.path.join(base, "componenti", "cattivo.zip"),
+    components.CATALOG["xunity_bepinex5"] = create_zip(os.path.join(base, "components", "cattivo.zip"),
                                                       {"../fuori.dll": b"x", "BepInEx/plugins/a.dll": b"y"})
     try:
         adapter_unity.install(game3, "en", "it", NAME, silent)
@@ -317,15 +318,15 @@ def main(base):
         pass
     adapter_unity._write_entry, adapter_unity._remove = real_write, real_remove
     m3 = adapter_unity.read_manifest(game3)
-    check("interruzione dura: manifesto con l'elenco completo", m3 and m3["in_corso"] and len(m3["file"]) == 8)
+    check("interruzione dura: manifesto con l'elenco completo", m3 and m3["in_progress"] and len(m3["file"]) == 8)
     adapter_unity.uninstall(game3, NAME, silent)
     check("interruzione dura: ripristino pulisce tutto", sorted(os.listdir(game3)) == before3)
 
     # 9c) tampered manifest: nothing is deleted
     game4 = os.path.join(base, "gioco-manifesto-alterato")
     create_game(game4)
-    forged = {"versione": 2, "patchsmith": True, "radice_prima": [], "cartelle_create": ["Gioco_Data"],
-             "file": {"../fuori.txt": "0" * 64}, "in_corso": False}
+    forged = {"version": 2, "patchsmith": True, "root_before": [], "created_folders": ["Gioco_Data"],
+             "file": {"../fuori.txt": "0" * 64}, "in_progress": False}
     open(os.path.join(game4, adapter_unity.MANIFEST), "w").write(json.dumps(forged))
     try:
         adapter_unity.uninstall(game4, NAME, silent)
@@ -412,18 +413,18 @@ def test_live(base):
         game = os.path.join(base, "dal-vivo", name)
         create_game(game)
         path = os.path.join(automatic.PROFILES_FOLDER, name + ".json")
-        scan.save_json(path, dict({"nome": name, "cartella_gioco": game.replace(os.sep, "/"),
-                                             "motore": "unity", "lingua_origine": "en", "lingua_destinazione": "it",
+        scan.save_json(path, dict({"name": name, "game_folder": game.replace(os.sep, "/"),
+                                             "engine": "unity", "source_language": "en", "target_language": "it",
                                              "backend": "google", "file": []}, **(profile or {})))
         return game, path
 
     def full(path, **arguments):
         d = {}
         automatic.unity_full(path, silent, outcome=d, **arguments)
-        return d.get("esito")
+        return d.get("outcome")
 
     try:
-        ollama.state = lambda: "pronto"
+        ollama.state = lambda: "ready"
         adapter_unity._compile_plugin = _fake_plugin
         game, path = unity("con-servizio", {"backend": "xunity-google"})  # game profile from an earlier version
         e = full(path, backend="google")
@@ -431,31 +432,31 @@ def test_live(base):
         check("Google scelto, traduttore locale installato: frasi nuove al traduttore di PatchSmith "
                   "(CustomTranslate, niente anti-spam, testi lunghi), esito 'locale'",
                   "Endpoint=CustomTranslate" in c and "DisableSpamChecks=True" in c
-                  and "MaxCharactersPerTranslation=2500" in c and e.live == "locale"
+                  and "MaxCharactersPerTranslation=2500" in c and e.live == "local"
                   and adapter_unity.service_installed(game))
         with open(path, encoding="utf-8") as f:
             stored = json.load(f)
         check("profilo: il traduttore scelto al posto di 'xunity-google'", stored.get("backend") == "google")
         check("finestra: 'Frasi nuove mentre giochi: PatchSmith, con il traduttore locale'",
-                  "New phrases while playing: PatchSmith, with the local translator" in outcome.window(e)["testo"])
+                  "New phrases while playing: PatchSmith, with the local translator" in outcome.window(e)["text"])
         automatic.restore(game, silent)
         check("ripristina: niente piu' XUnity ne' plugin", not adapter_unity.manifest_present(game))
         d = {}
         automatic.reapply(game, silent, outcome=d)
         check("riapplica dopo ripristina: di nuovo il traduttore di PatchSmith, non Google (U6)",
                   "Endpoint=CustomTranslate" in config(game) and adapter_unity.service_installed(game)
-                  and d["esito"].live == "locale")
+                  and d["outcome"].live == "local")
 
         ollama.state = lambda: "non installato"
         game, path = unity("senza-locale")
         e = full(path, backend="google")
         check("senza traduttore locale: comunque il traduttore di PatchSmith (con Google e le sue pause), "
                   "esito 'online'", "Endpoint=CustomTranslate" in config(game) and e.live == "online")
-        limiter.Limiter("google", log=None).blocked(429, "prova")
+        limiter.Limiter("google", log=None).blocked(429, "test")
         e = full(path, network=False)
         check("... con Google in pausa e niente altro: esito 'nessuno' con 'Installa il traduttore locale'",
-                  "Endpoint=CustomTranslate" in config(game) and e.live == "nessuno"
-                  and "installa_locale" in e.actions and e.extra.get("dal_vivo_nota") == "senza_traduttore")
+                  "Endpoint=CustomTranslate" in config(game) and e.live == "none"
+                  and "install_local" in e.actions and e.extra.get("live_note") == "no_translator")
 
         adapter_unity._compile_plugin = real_compile
         adapter_unity._csc = lambda: None  # the C# compiler is missing: the plugin cannot be prepared
@@ -464,7 +465,7 @@ def test_live(base):
         c = config(game)
         check("senza compilatore e con Google in pausa: nessun GoogleTranslateV2 (Endpoint vuoto), esito "
                   "'nessuno' con 'Crea rapporto'", "GoogleTranslateV2" not in c and "\nEndpoint=\n" in c
-                  and e.live == "nessuno" and "crea_rapporto" in e.actions
+                  and e.live == "none" and "create_report" in e.actions
                   and not adapter_unity.service_installed(game))
         game, path = unity("installa-in-pausa")
         adapter_unity.install(game, "en", "it", "installa-in-pausa", silent, local=path)
@@ -475,13 +476,13 @@ def test_live(base):
         e = full(path, backend="google")
         check("senza compilatore, Google libero: XUnity con Google da solo, esito 'google' con la spiegazione",
                   "Endpoint=GoogleTranslateV2" in config(game) and e.live == "google"
-                  and e.extra.get("dal_vivo_nota") == "plugin_google")
+                  and e.extra.get("live_note") == "plugin_google")
 
         class BlockGoogle(backend.Fake):
             """Translates, but meanwhile Google blocks the requests (like a 429 during the pre-translation)."""
 
             def translate_lines(self, lines, origin, dest_lang):
-                limiter.Limiter("google", log=None).blocked(429, "prova")
+                limiter.Limiter("google", log=None).blocked(429, "test")
                 return super().translate_lines(lines, origin, dest_lang)
 
         automatic.create_backend = lambda name, log=print: BlockGoogle()
@@ -491,7 +492,7 @@ def test_live(base):
         e = full(path, backend="google")
         check("Google bloccato durante la pre-traduzione: XUnity non lo usa per le frasi nuove (Endpoint vuoto)",
                   "GoogleTranslateV2" not in config(game) and "\nEndpoint=\n" in config(game)
-                  and e.live == "nessuno" and e.translated_items == 2)
+                  and e.live == "none" and e.translated_items == 2)
         if os.path.exists(state):
             os.remove(state)
 
@@ -504,17 +505,18 @@ def test_live(base):
         with open(path, encoding="utf-8") as f:
             stored = json.load(f)
         check("prepara: i nomi del gioco (azienda, anche senza 'LLC', e titolo da app.info) nel profilo, da non "
-                  "tradurre", stored.get("non_tradurre", [])[:3] == ["Cup Dog Games LLC", "Cup Dog Games", "Rubinite"])
+                  "tradurre",
+                  stored.get("do_not_translate", [])[:3] == ["Cup Dog Games LLC", "Cup Dog Games", "Rubinite"])
         # a name removed by hand (a title one wants translated) does not come back; one added by hand stays
-        stored["non_tradurre"] = [n for n in stored["non_tradurre"] if n != "Rubinite"] + ["Lanterna"]
+        stored["do_not_translate"] = [n for n in stored["do_not_translate"] if n != "Rubinite"] + ["Lanterna"]
         with open(path, "w", encoding="utf-8") as f:
             json.dump(stored, f)
         automatic.prepare(game, "auto", "it", "google", silent)
         with open(path, encoding="utf-8") as f:
             stored = json.load(f)
         check("prepara: un nome tolto a mano da 'non_tradurre' non torna, uno aggiunto a mano resta",
-                  "Rubinite" not in stored["non_tradurre"] and "Lanterna" in stored["non_tradurre"]
-                  and "Cup Dog Games" in stored["non_tradurre"] and "Rubinite" in stored.get("nomi_trovati", []))
+                  "Rubinite" not in stored["do_not_translate"] and "Lanterna" in stored["do_not_translate"]
+                  and "Cup Dog Games" in stored["do_not_translate"] and "Rubinite" in stored.get("found_names", []))
 
         test_live_cache(base, unity, full)
     finally:
@@ -530,7 +532,7 @@ def test_live_cache(base, unity, full):
     from patchsmith import auto as automatic, backend, xunity_service
 
     class DictTranslator(backend.Backend):
-        name = "prova"
+        name = "test"
 
         def translate_lines(self, lines, origin, dest_lang):
             return [{"Open the door to the castle": "Apri la porta del castello",
@@ -545,16 +547,16 @@ def test_live_cache(base, unity, full):
     game, path = unity("cache-da-correggere")
     full(path, backend="google")  # installation and pre-translation
     name = "cache-da-correggere"
-    memory = project.memory_path({"nome": name, "lingua_destinazione": "it"})
+    memory = project.memory_path({"name": name, "target_language": "it"})
     saved_count = {"Collect {{A}} coins": "Raccogli monete"}  # machine-written, but it lost the {{A}}
     os.makedirs(os.path.dirname(memory), exist_ok=True)
     for p in (memory, memory[:-5] + ".automatiche.json"):
         with open(p, "w", encoding="utf-8") as f:
             json.dump(saved_count, f)
     with open(xunity_service.journal_path(name), "w", encoding="utf-8") as f:
-        for text, journal_outcome in (("Open the door to the castle", "rifiutata"),
-                                      ("Hold {{A}}s to leap", "rinviata")):
-            f.write(json.dumps({"testo": text, "esito": journal_outcome, "risposta": text}) + "\n")
+        for text, journal_outcome in (("Open the door to the castle", "rejected"),
+                                      ("Hold {{A}}s to leap", "deferred")):
+            f.write(json.dumps({"text": text, "outcome": journal_outcome, "response": text}) + "\n")
     cache = os.path.join(game, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
     with open(cache, "a", encoding="utf-8") as f:
         f.write("Open the door to the castle=Open the door to the castle\nCollect {{A}} coins=Raccogli monete\n"
@@ -573,7 +575,7 @@ def test_live_cache(base, unity, full):
               entries["Open the door to the castle"] == "Apri la porta del castello"
               and entries["Collect {{A}} coins"] == "Raccogli {{A}} monete"
               and entries["Hold {{A}}s to leap"] == "Tieni premuto {{A}}s per saltare"
-              and e.extra.get("cache_corrette") == 3)
+              and e.extra.get("cache_fixed") == 3)
     check("cache: la riga cambiata a mano (anche se sembra sbagliata) e il nome restano come sono",
               entries["Talk to the guard and the king"] == "Parla con the guard and the king"
               and entries["Xbox Series"] == "Xbox Series")
@@ -589,7 +591,7 @@ def test_live_cache(base, unity, full):
     check("cache: una riga cambiata dopo il controllo non si sostituisce; quella attesa si'",
               entries["Quit"] == "Esci (a mano)"
               and entries["Talk to the guard and the king"] == "Parla con la guardia e il re"
-              and counts == {"aggiunte": 0, "sostituite": 1})
+              and counts == {"additions": 0, "replaced": 1})
 
 
 if __name__ == "__main__":

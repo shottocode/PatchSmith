@@ -6,132 +6,132 @@
  */
 (function () {
   "use strict";
-  var DIZIONARIO = /*__DIZIONARIO__*/{};
-  var mappa = new Map();
-  Object.keys(DIZIONARIO).forEach(function (k) { mappa.set(k, DIZIONARIO[k]); });
-  if (!mappa.size) return;
+  var DICTIONARY = /*__DICTIONARY__*/{};
+  var map = new Map();
+  Object.keys(DICTIONARY).forEach(function (k) { map.set(k, DICTIONARY[k]); });
+  if (!map.size) return;
 
-  var ATTRIBUTI = ["title", "placeholder", "aria-label", "alt"];
-  var IGNORA = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1, CODE: 1, PRE: 1 };
-  var scrittiTesto = new WeakMap(); // text node -> value written by us
-  var scrittiAttr = new WeakMap(); // element -> {attribute: value written by us}
+  var ATTRIBUTES = ["title", "placeholder", "aria-label", "alt"];
+  var IGNORE = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1, CODE: 1, PRE: 1 };
+  var writtenText = new WeakMap(); // text node -> value written by us
+  var writtenAttr = new WeakMap(); // element -> {attribute: value written by us}
 
-  function traduci(s) {
+  function translate(s) {
     // no minimum length: in Japanese/Chinese/Korean a menu can be 1-2 characters
     if (typeof s !== "string" || !s || s.length > 2000) return null;
-    var t = mappa.get(s);
+    var t = map.get(s);
     if (t === undefined) {
-      var nucleo = s.replace(/\s+/g, " ").trim();
-      if (!nucleo) return null;
-      t = mappa.get(nucleo);
+      var core = s.replace(/\s+/g, " ").trim();
+      if (!core) return null;
+      t = map.get(core);
       if (t === undefined) return null;
     }
-    var inizio = s.length - s.replace(/^\s+/, "").length;
-    var fine = s.replace(/\s+$/, "").length;
-    return s.slice(0, inizio) + t + s.slice(fine);
+    var start = s.length - s.replace(/^\s+/, "").length;
+    var end = s.replace(/\s+$/, "").length;
+    return s.slice(0, start) + t + s.slice(end);
   }
 
   // Key names (<kbd>, class="key"...): they stay untranslated, as on the keyboard.
-  var CLASSI_TASTO = ["key", "kbd", "keycap", "hotkey", "keybind", "shortcut-key"];
-  function contestoTasto(el) {
+  var KEY_CLASSES = ["key", "kbd", "keycap", "hotkey", "keybind", "shortcut-key"];
+  function keyContext(el) {
     for (var i = 0; el && el.nodeType === 1 && i < 3; i++, el = el.parentNode) {
       if (el.nodeName === "KBD") return true;
-      for (var j = 0; el.classList && j < CLASSI_TASTO.length; j++) {
-        if (el.classList.contains(CLASSI_TASTO[j])) return true;
+      for (var j = 0; el.classList && j < KEY_CLASSES.length; j++) {
+        if (el.classList.contains(KEY_CLASSES[j])) return true;
       }
     }
     return false;
   }
 
-  function nodoTesto(n) {
+  function textNode(n) {
     var p = n.parentNode;
-    if (!p || IGNORA[p.nodeName]) return;
-    var attuale = n.nodeValue;
-    if (scrittiTesto.get(n) === attuale) return;
-    var t = traduci(attuale);
-    if (t === null || t === attuale || p.isContentEditable || contestoTasto(p)) return;
+    if (!p || IGNORE[p.nodeName]) return;
+    var current = n.nodeValue;
+    if (writtenText.get(n) === current) return;
+    var t = translate(current);
+    if (t === null || t === current || p.isContentEditable || keyContext(p)) return;
     // <option> without value: its value is the text, which the game may read as data
     if (p.nodeName === "OPTION" && !p.hasAttribute("value")) p.setAttribute("value", p.value);
-    scrittiTesto.set(n, t);
+    writtenText.set(n, t);
     n.nodeValue = t;
   }
 
-  function attributo(el, nome, v) {
-    var scritti = scrittiAttr.get(el);
-    if (scritti && scritti[nome] === v) return;
-    var t = traduci(v);
+  function attribute(el, name, v) {
+    var written = writtenAttr.get(el);
+    if (written && written[name] === v) return;
+    var t = translate(v);
     if (t === null || t === v) return;
-    if (!scritti) { scritti = {}; scrittiAttr.set(el, scritti); }
-    scritti[nome] = t;
-    el.setAttribute(nome, t);
+    if (!written) { written = {}; writtenAttr.set(el, written); }
+    written[name] = t;
+    el.setAttribute(name, t);
   }
 
-  function elemento(el) {
+  function element(el) {
     if (!el.getAttribute) return;
-    for (var i = 0; i < ATTRIBUTI.length; i++) {
-      var v = el.getAttribute(ATTRIBUTI[i]);
-      if (v) attributo(el, ATTRIBUTI[i], v);
+    for (var i = 0; i < ATTRIBUTES.length; i++) {
+      var v = el.getAttribute(ATTRIBUTES[i]);
+      if (v) attribute(el, ATTRIBUTES[i], v);
     }
     // <input> buttons: only if the value is not sent as data (no name attribute)
     if (el.nodeName === "INPUT" && (el.type === "button" || el.type === "submit") && !el.name && el.value) {
-      var tv = traduci(el.value);
+      var tv = translate(el.value);
       if (tv !== null && tv !== el.value) el.value = tv;
     }
   }
 
-  function visita(radice) {
-    if (!radice) return;
-    if (radice.nodeType === 3) { nodoTesto(radice); return; }
-    if (radice.nodeType !== 1 && radice.nodeType !== 9 && radice.nodeType !== 11) return;
-    if (radice.nodeType === 1) {
-      if (IGNORA[radice.nodeName]) return;
-      elemento(radice);
+  function visit(root) {
+    if (!root) return;
+    if (root.nodeType === 3) { textNode(root); return; }
+    if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
+    if (root.nodeType === 1) {
+      if (IGNORE[root.nodeName]) return;
+      element(root);
     }
-    var w = document.createTreeWalker(radice, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
     var n;
     while ((n = w.nextNode())) {
-      if (n.nodeType === 3) nodoTesto(n); else elemento(n);
+      if (n.nodeType === 3) textNode(n); else element(n);
     }
   }
 
-  var osservatore = new MutationObserver(function (mutazioni) {
-    var aggiunti = new Set();
-    for (var i = 0; i < mutazioni.length; i++) {
-      var m = mutazioni[i];
-      if (m.type === "characterData") nodoTesto(m.target);
-      else if (m.type === "attributes") elemento(m.target);
-      else for (var j = 0; j < m.addedNodes.length; j++) aggiunti.add(m.addedNodes[j]);
+  var observer = new MutationObserver(function (mutations) {
+    var added = new Set();
+    for (var i = 0; i < mutations.length; i++) {
+      var m = mutations[i];
+      if (m.type === "characterData") textNode(m.target);
+      else if (m.type === "attributes") element(m.target);
+      else for (var j = 0; j < m.addedNodes.length; j++) added.add(m.addedNodes[j]);
     }
     // visit only the added nodes whose ancestor was not already added in the same round
-    aggiunti.forEach(function (n) {
-      for (var a = n.parentNode; a; a = a.parentNode) if (aggiunti.has(a)) return;
-      if (n.isConnected !== false) visita(n);
+    added.forEach(function (n) {
+      for (var a = n.parentNode; a; a = a.parentNode) if (added.has(a)) return;
+      if (n.isConnected !== false) visit(n);
     });
   });
-  osservatore.observe(document.documentElement || document, {
+  observer.observe(document.documentElement || document, {
     subtree: true, childList: true, characterData: true,
-    attributes: true, attributeFilter: ATTRIBUTI.concat(["value"])
+    attributes: true, attributeFilter: ATTRIBUTES.concat(["value"])
   });
 
   // Text drawn on canvas (HTML5 games: Phaser, RPG Maker MV/MZ, ...)
   var C = window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype;
   if (C) {
-    ["fillText", "strokeText", "measureText"].forEach(function (nome) {
-      var originale = C[nome];
-      if (typeof originale !== "function") return;
-      C[nome] = function (testo) {
-        var t = typeof testo === "string" ? traduci(testo) : null;
-        if (t === null) return originale.apply(this, arguments);
-        var argomenti = Array.prototype.slice.call(arguments);
-        argomenti[0] = t;
-        return originale.apply(this, argomenti);
+    ["fillText", "strokeText", "measureText"].forEach(function (name) {
+      var original = C[name];
+      if (typeof original !== "function") return;
+      C[name] = function (text) {
+        var t = typeof text === "string" ? translate(text) : null;
+        if (t === null) return original.apply(this, arguments);
+        var args = Array.prototype.slice.call(arguments);
+        args[0] = t;
+        return original.apply(this, args);
       };
     });
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () { visita(document.documentElement); });
+    document.addEventListener("DOMContentLoaded", function () { visit(document.documentElement); });
   } else {
-    visita(document.documentElement);
+    visit(document.documentElement);
   }
 })();

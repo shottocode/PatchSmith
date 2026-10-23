@@ -25,7 +25,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -129,15 +129,15 @@ def main(base, real_game=None):
             check("scheda: eseguibile %s -> rifiutato" % name, True)
     r = official_language.detect(game, "it")
     check("rilevamento: italiano presente dai file del gioco (senza Steam)",
-              r["presente"] is True and r["motore"]["tipo"] == "scheda")
+              r["present"] is True and r["engine"]["kind"] == "sheet")
 
     # --- without consent: only the proposal, nothing written
-    path, outcome = automatic.prepare(outer, "auto", "it", "finto", silent)
+    path, outcome = automatic.prepare(outer, "auto", "it", "fake", silent)
     check("senza consenso: proposta, nessun file toccato",
-              path is None and outcome.get("serve_consenso") and fingerprints(game) == originals
+              path is None and outcome.get("needs_consent") and fingerprints(game) == originals
               and any("1 byte" in x and game in x for x in outcome["lingua_ufficiale_righe"])
               and not any("I can't set it myself" in x for x in outcome["lingua_ufficiale_righe"]))
-    fake = dict(r, steam_conosciuto={"appid": "1", "nome": "x", "eseguibile": "x.exe"})
+    fake = dict(r, steam_known={"appid": "1", "name": "x", "executable": "x.exe"})
     check("messaggio: se la scheda spiega il rifiuto, niente 'Non posso impostarla io' contraddittorio",
               not any("I can't" in x for x in official_language.message(fake, "it", ["motivo e rimedio"], False)))
 
@@ -151,7 +151,7 @@ def main(base, real_game=None):
     system.game_open = lambda c: True
     done, lines = official_language.set_(game, r, "it", silent, consent=True)
     check("gioco aperto -> rifiuto, nessun file toccato, salvataggi non copiati, consenso ricordato",
-              done is False and fingerprints(game) == originals and not configurator.note(game, "salvataggi_copiati")
+              done is False and fingerprints(game) == originals and not configurator.note(game, "saves_copied")
               and configurator.has_consent(game))
     system.game_open = lambda c: False
     fourth = os.path.join(game, kh.EXECUTABLES[3])
@@ -159,7 +159,7 @@ def main(base, real_game=None):
     done, lines = official_language.set_(game, r, "it", silent, consent=True)
     os.chmod(fourth, stat.S_IREAD | stat.S_IWRITE)
     check("un eseguibile di sola lettura -> nessuno modificato",
-              done is False and fingerprints(game) == originals and not configurator.lever(game, "lingua"))
+              done is False and fingerprints(game) == originals and not configurator.lever(game, "language"))
     real_atomic_write = adapter_webjson.write_atomic
     for rng, final in (("scrittura del terzo eseguibile", ".exe"),
                        ("backup del terzo eseguibile", project.INFO_SUFFIX)):
@@ -176,39 +176,39 @@ def main(base, real_game=None):
         adapter_webjson.write_atomic = real_atomic_write
         check("guasto durante %s -> tutto com'era (file, backup, registro)" % rng,
                   done is False and len(calls) >= 3 and fingerprints(game) == originals
-                  and not configurator.lever(game, "lingua")
+                  and not configurator.lever(game, "language")
                   and not [n for n in os.listdir(game) if "patchsmith" in n])
     check("il consenso dato resta anche se la modifica non e' riuscita", configurator.has_consent(game))
 
     # --- with consent
-    path, outcome = automatic.prepare(outer, "auto", "it", "finto", silent, consent=True)
+    path, outcome = automatic.prepare(outer, "auto", "it", "fake", silent, consent=True)
     changes = {n: byte_diff(os.path.join(game, n), os.path.join(game, n + project.BACKUP_SUFFIX))
              for n in kh.EXECUTABLES}
     check("con consenso: 1 byte cambiato in ognuno dei 6 eseguibili (valore 6 = italiano), con backup",
-              outcome.get("lingua_impostata") is True and all(c == [0x411] for c in changes.values())
+              outcome.get("language_set") is True and all(c == [0x411] for c in changes.values())
               and all(kh.language_byte(open(os.path.join(game, n), "rb").read())[1] == 6 for n in kh.EXECUTABLES))
     check("protezione e altri file non toccati",
               fingerprint(os.path.join(game, "KINGDOM HEARTS HD 1.5+2.5 ReMIX.exe")) == protection)
     check("consenso salvato per il gioco, registro della leva, salvataggi copiati",
-              configurator.has_consent(game) and configurator.lever(game, "lingua")["stato"] == "applicata"
-              and os.path.isdir(str(configurator.note(game, "salvataggi_copiati"))))
+              configurator.has_consent(game) and configurator.lever(game, "language")["state"] == "applied"
+              and os.path.isdir(str(configurator.note(game, "saves_copied"))))
     check("messaggio: attivata, senza 'Non posso impostarla io' e senza 'traduzione installata'",
               any("I activated" in x for x in outcome["lingua_ufficiale_righe"])
               and not any("I can't" in x for x in outcome["lingua_ufficiale_righe"])
               and not outcome.get("traduzione_installata"))
     after = fingerprints(game)
-    path, outcome = automatic.prepare(game, "auto", "it", "finto", silent)
+    path, outcome = automatic.prepare(game, "auto", "it", "fake", silent)
     check("seconda analisi: gia' attivo, niente riscritto",
-              outcome.get("lingua_impostata") is True and fingerprints(game) == after
+              outcome.get("language_set") is True and fingerprints(game) == after
               and any("already active" in x for x in outcome["lingua_ufficiale_righe"]))
 
     # --- game update: an executable goes back to original but different; with the saved consent it is reapplied
     new = fake_pe(signature=b"versione 2")
     open(os.path.join(game, kh.EXECUTABLES[1]), "wb").write(new)
-    path, outcome = automatic.prepare(game, "auto", "it", "finto", silent)
+    path, outcome = automatic.prepare(game, "auto", "it", "fake", silent)
     p1 = os.path.join(game, kh.EXECUTABLES[1])
     check("aggiornamento: riapplicato da solo (consenso gia' dato), il nuovo originale ha il suo backup",
-              outcome.get("lingua_impostata") is True and kh.language_byte(open(p1, "rb").read())[1] == 6
+              outcome.get("language_set") is True and kh.language_byte(open(p1, "rb").read())[1] == 6
               and open(p1 + project.BACKUP_SUFFIX, "rb").read() == new
               and os.path.exists(p1 + project.BACKUP_SUFFIX + ".1"))
 
@@ -222,25 +222,25 @@ def main(base, real_game=None):
     check("Ripristina originali: eseguibili identici (l'aggiornato al suo nuovo originale), niente backup "
               "rimasti, leva tolta, consenso conservato",
               fingerprints(game) == expectations and not [n for n in os.listdir(game) if ".patchsmith" in n]
-              and not configurator.lever(game, "lingua") and configurator.has_consent(game)
+              and not configurator.lever(game, "language") and configurator.has_consent(game)
               and not official_language.is_set(game))
     check("riga di comando: auto con il consenso gia' dato riattiva ed esce con 0",
-              cli.main(["auto", game, "--a", "it", "--backend", "finto"]) == 0
+              cli.main(["auto", game, "--a", "it", "--backend", "fake"]) == 0
               and all(kh.language_byte(open(os.path.join(game, n), "rb").read())[1] == 6 for n in kh.EXECUTABLES))
-    check("riga di comando: ripristina con la cartella", cli.main(["ripristina", game]) == 0
+    check("riga di comando: ripristina con la cartella", cli.main(["restore", game]) == 0
               and fingerprints(game) == expectations)
 
     # --- cases found by the review
-    automatic.prepare(game, "auto", "it", "finto", silent)  # consent already given: activates
+    automatic.prepare(game, "auto", "it", "fake", silent)  # consent already given: activates
     new2 = fake_pe(signature=b"versione 3")
     p2 = os.path.join(game, kh.EXECUTABLES[2])
     open(p2, "wb").write(new2)
     check("eseguibile aggiornato dal gioco, poi Ripristina: chiuso al primo colpo, resta il file nuovo",
-              automatic.restore(game, silent) is True and not configurator.lever(game, "lingua")
+              automatic.restore(game, silent) is True and not configurator.lever(game, "language")
               and open(p2, "rb").read() == new2 and not [n for n in os.listdir(game) if ".patchsmith" in n])
     expectations[kh.EXECUTABLES[2]] = hashlib.sha256(new2).hexdigest()
 
-    automatic.prepare(game, "auto", "it", "finto", silent)
+    automatic.prepare(game, "auto", "it", "fake", silent)
     italian = fingerprints(game)
     calls = []
 
@@ -254,7 +254,7 @@ def main(base, real_game=None):
     done, lines = official_language.set_(game, official_language.detect(game, "fr"), "fr", silent, consent=True)
     adapter_webjson.write_atomic = real_atomic_write
     check("guasto passando al francese -> si torna all'italiano di prima (non all'originale), leva conservata",
-              done is False and fingerprints(game) == italian and configurator.lever(game, "lingua")["valore"] == "it"
+              done is False and fingerprints(game) == italian and configurator.lever(game, "language")["value"] == "it"
               and any("as it was" in x for x in lines))
 
     automatic.restore(game, silent)
@@ -272,18 +272,18 @@ def main(base, real_game=None):
         passed = True
     adapter_webjson.write_atomic = real_atomic_write
     check("interruzione (Ctrl+C) durante la scrittura -> file com'erano, nessuna leva a meta'",
-              passed and fingerprints(game) == now and not configurator.lever(game, "lingua")
+              passed and fingerprints(game) == now and not configurator.lever(game, "language")
               and not [n for n in os.listdir(game) if ".patchsmith" in n])
 
-    automatic.prepare(game, "auto", "it", "finto", silent)
+    automatic.prepare(game, "auto", "it", "fake", silent)
     log_file = configurator.read_file(game)
-    log_file["leve"]["lingua"]["stato"] = "in_corso"  # as if the process had died halfway
+    log_file["levers"]["language"]["state"] = "in_progress"  # as if the process had died halfway
     configurator._save(game, log_file)
     messages = []
     done, lines = official_language.set_(game, official_language.detect(game, "it"), "it", messages.append)
     check("operazione rimasta a meta': la volta dopo rimette gli originali e riapplica",
               any("interrupted" in m for m in messages) and done is True
-              and configurator.lever(game, "lingua")["stato"] == "applicata")
+              and configurator.lever(game, "language")["state"] == "applied")
 
     def blocked_write(path, data):
         if path.endswith(kh.EXECUTABLES[4]):
@@ -316,24 +316,24 @@ def main(base, real_game=None):
               os.access(read_only + project.BACKUP_SUFFIX, os.W_OK))
     os.chmod(read_only, stat.S_IREAD | stat.S_IWRITE)
 
-    automatic.prepare(game, "auto", "it", "finto", silent)
-    path, outcome = automatic.prepare(game, "auto", "it", "finto", silent, translate_anyway=True)
+    automatic.prepare(game, "auto", "it", "fake", silent)
+    path, outcome = automatic.prepare(game, "auto", "it", "fake", silent, translate_anyway=True)
     check("'traduci comunque' senza nulla da tradurre: la lingua attivata resta",
-              path is None and configurator.lever(game, "lingua")
+              path is None and configurator.lever(game, "language")
               and kh.language_byte(open(os.path.join(game, kh.EXECUTABLES[0]), "rb").read())[1] == 6)
     automatic.restore(game, silent)
     configurator.smart_app_control = lambda: 1
     check("riga di comando: attivazione rifiutata con --modifica-eseguibili -> uscita 2",
-              cli.main(["auto", game, "--a", "it", "--backend", "finto", "--modifica-eseguibili"]) == 2)
+              cli.main(["auto", game, "--a", "it", "--backend", "fake", "--modifica-eseguibili"]) == 2)
     configurator.smart_app_control = lambda: 0
 
     two_copies = os.path.join(base, "due copie")
     create_game(os.path.join(two_copies, "copia A"))
     create_game(os.path.join(two_copies, "copia B"))
     before = {d: fingerprints(os.path.join(two_copies, d)) for d in ("copia A", "copia B")}
-    path, outcome = automatic.prepare(two_copies, "auto", "it", "finto", silent, consent=True)
+    path, outcome = automatic.prepare(two_copies, "auto", "it", "fake", silent, consent=True)
     check("due copie del gioco nella cartella: nessuna modifica, chiede di sceglierne una",
-              outcome.get("lingua_impostata") is False
+              outcome.get("language_set") is False
               and any("2 copies" in x for x in outcome["lingua_ufficiale_righe"])
               and all(fingerprints(os.path.join(two_copies, d)) == before[d] for d in before))
 
@@ -354,7 +354,7 @@ def main(base, real_game=None):
     steam.steam_folder = lambda: steam_root
     steam._CACHE.clear()
     before = fingerprints(os.path.join(shared, "KH Steam"))
-    path, outcome = automatic.prepare(shared, "auto", "it", "finto", silent, consent=True)
+    path, outcome = automatic.prepare(shared, "auto", "it", "fake", silent, consent=True)
     steam.steam_folder = lambda: None
     check("installato da Steam (scelta la cartella sopra): menu Lingua di Steam, eseguibili non toccati",
               any("Properties > General > Language" in x for x in outcome.get("lingua_ufficiale_righe", []))

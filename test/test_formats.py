@@ -38,7 +38,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -86,7 +86,7 @@ def mock(r):
 
 
 class Translator(backend.Backend):
-    name = "dizionario"
+    name = "dictionary"
 
     def __init__(self):
         self.received = []
@@ -98,7 +98,7 @@ class Translator(backend.Backend):
 
 
 def prepare_data(base):
-    project.DATA_ROOT = os.path.join(base, "dati")  # never the real data
+    project.DATA_ROOT = os.path.join(base, "data_folder")  # never the real data
     automatic.PROFILES_FOLDER = None
     os.environ["LOCALAPPDATA"] = os.path.join(base, "appdata")
     steam.steam_folder = lambda: None
@@ -255,7 +255,7 @@ def test_door(base):
               found == {"localization/stringsEN.json": "en", "localization/stringsFR.json": "fr",
                           "localization/stringsDE.json": "de"})
     check("lingue nei file: senza italiano non c'e' la lingua ufficiale",
-              official_language.languages_in_files(game, "GameMaker", "it")[1]["trovata"] is False)
+              official_language.languages_in_files(game, "GameMaker", "it")[1]["found"] is False)
     lines = []
     allowed = adapter_gamemaker.font_chars(game, lines.append)
     check("font: non contano quello giapponese (con ç ê ñ Œ œ) ne' scribble_fallback_font: è e ò ammesse",
@@ -267,13 +267,13 @@ def test_door(base):
     translator = Translator()
     automatic.create_backend = lambda name, log=print: translator
     log_file = []
-    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "dizionario", log_file.append)
+    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "dictionary", log_file.append)
     profile = json.load(open(path, encoding="utf-8"))
     entry = profile["file"][0] if profile.get("file") else {}
     check("profilo GameMaker: solo stringsEN.json, file di lingua con le chiavi delle sezioni",
-              profile.get("motore") == "gamemaker" and [v["percorso"] for v in profile["file"]]
-              == ["localization/stringsEN.json"] and entry.get("localizzazione")
-              and "menu._play" in entry.get("includi", []) and "menu._id" not in entry.get("includi", []))
+              profile.get("engine") == "gamemaker" and [v["path"] for v in profile["file"]]
+              == ["localization/stringsEN.json"] and entry.get("localization")
+              and "menu._play" in entry.get("include", []) and "menu._id" not in entry.get("include", []))
     written = read_bytes(os.path.join(loc, "stringsEN.json"))
     data = adapter_webjson.read_lenient(written.decode("utf-8"))
     check("tradotte anche le etichette di una parola (Play, QUIT, OK, return) e il nome della lingua",
@@ -299,9 +299,9 @@ def test_door(base):
     with_it = os.path.join(base, "Porta con italiano")
     door_game(with_it, ("EN", "FR", "IT"))
     _, engine_data = official_language.languages_in_files(with_it, "GameMaker", "it")
-    path, _, outcome = automatic.analyze_and_translate(with_it, "auto", "it", "dizionario", silent)
+    path, _, outcome = automatic.analyze_and_translate(with_it, "auto", "it", "dictionary", silent)
     check("stringsIT.json (anche con commenti): lingua ufficiale trovata, nessuna traduzione automatica",
-              engine_data.get("trovata") is True and path is None and outcome["esito"].code == "UFFICIALE")
+              engine_data.get("found") is True and path is None and outcome["outcome"].code == "OFFICIAL")
 
 
 # --- 3. CSV tables ---------------------------------------------------------------------------------
@@ -413,11 +413,11 @@ def test_csv(base):
     megaloot_game(game)
     before = fingerprints(game)
     original = read_bytes(os.path.join(game, "translations.csv"))
-    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "dizionario", silent)
+    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "dictionary", silent)
     profile = json.load(open(path, encoding="utf-8")) if path else {}
     check("GameMaker con tabella CSV: profilo con la colonna english (content.csv non e' una tabella di lingua)",
-              profile.get("motore") == "gamemaker" and profile.get("file") == [
-                  {"percorso": "translations.csv", "formato": "csv", "localizzazione": True, "colonna": "english"}])
+              profile.get("engine") == "gamemaker" and profile.get("file") == [
+                  {"path": "translations.csv", "format": "csv", "localization": True, "column": "english"}])
     written = read_bytes(os.path.join(game, "translations.csv")).decode("utf-8")
     lines_o, lines_s = MEGALOOT.split("\n"), written.split("\n")
     other_ones = all(a.split(",")[:1] + a.split(",")[2:] == b.split(",")[:1] + b.split(",")[2:]
@@ -439,7 +439,7 @@ def test_csv(base):
     write_bytes(os.path.join(line_break, "data.win"), test_gamemaker.data_win([("fntMain", LATIN)]))
     write_bytes(os.path.join(line_break, "Tabella.exe"), b"MZ")
     log_file = []
-    automatic.analyze_and_translate(line_break, "auto", "it", "dizionario", log_file.append)
+    automatic.analyze_and_translate(line_break, "auto", "it", "dictionary", log_file.append)
     written = read_bytes(os.path.join(line_break, "translations.csv")).decode("utf-8")
     check("tabella: la traduzione con un a capo in piu' resta in originale (scritto nel registro), le altre si "
               "scrivono", written == "id,english,french\nchest,Open the old chest,Ouvrir le vieux coffre\n"
@@ -449,10 +449,10 @@ def test_csv(base):
 
     with_it = os.path.join(base, "Megaloot con italiano")
     megaloot_game(with_it, italian=True)
-    path, _, outcome = automatic.analyze_and_translate(with_it, "auto", "it", "dizionario", silent)
+    path, _, outcome = automatic.analyze_and_translate(with_it, "auto", "it", "dictionary", silent)
     check("colonna italian piena: lingua ufficiale (nessuna traduzione automatica)",
-              path is None and outcome["esito"].code == "UFFICIALE"
-              and official_language.languages_in_files(with_it, "GameMaker", "it")[1]["trovata"] is True)
+              path is None and outcome["outcome"].code == "OFFICIAL"
+              and official_language.languages_in_files(with_it, "GameMaker", "it")[1]["found"] is True)
 
     # generic search (web game): the table becomes an entry of the game profile
     web = os.path.join(base, "web con csv")
@@ -461,11 +461,11 @@ def test_csv(base):
     write_bytes(os.path.join(web, "lang", "sorgente.csv"), MEGALOOT.encode("utf-8"))
     write_bytes(os.path.join(web, "lang", "sorgente.csv.import"), b"[remap]\n")  # Godot source: not touched
     candidates, others = scan.scan_folder(web, silent)
-    profile = scan.create_profile("web-csv", web, candidates, "auto", "it", "finto")
+    profile = scan.create_profile("web-csv", web, candidates, "auto", "it", "fake")
     check("ricerca generica: tabella CSV come voce del profilo (il sorgente di Godot no)",
-              [v for v in profile["file"] if v.get("formato") == "csv"] == [
-                  {"percorso": "lang/translations.csv", "formato": "csv", "colonna": "english", "localizzazione": True}]
-              and "lang/sorgente.csv" not in [c["percorso"] for c in candidates]
+              [v for v in profile["file"] if v.get("format") == "csv"] == [
+                  {"path": "lang/translations.csv", "format": "csv", "column": "english", "localization": True}]
+              and "lang/sorgente.csv" not in [c["path"] for c in candidates]
               and "lang/sorgente.csv" not in [p for items in others.values() for p in items])
 
 
@@ -482,17 +482,17 @@ def test_generic(base):
     without_e = set(chr(c) for c in range(32, 127)) | set("àéìòù")  # game font without è
     write_bytes(os.path.join(game, "data.win"), test_gamemaker.data_win([("fntMain", without_e)]))
     write_bytes(os.path.join(game, "Isola.exe"), b"MZ")
-    _, outcome = automatic.prepare(game, "auto", "it", "dizionario", silent)
+    _, outcome = automatic.prepare(game, "auto", "it", "dictionary", silent)
     check("GameMaker senza file di lingua riconosciuti: si propone la traduzione sperimentale",
-              outcome["esito"].code == "NON_SUPPORTATO" and "sperimentale" in outcome["esito"].actions)
+              outcome["outcome"].code == "NOT_SUPPORTED" and "experimental" in outcome["outcome"].actions)
     log_file = []
-    path, outcome = automatic.prepare(game, "auto", "it", "dizionario", log_file.append, force=True)
+    path, outcome = automatic.prepare(game, "auto", "it", "dictionary", log_file.append, force=True)
     profile = json.load(open(path, encoding="utf-8"))
     entry = profile["file"][0]
     check("profilo generico con il motore (gamemaker) e il file {chiave: testo} come file di lingua",
-              profile.get("motore") == "gamemaker" and profile.get("motore_gioco") == "gamemaker"
-              and entry["percorso"] == "texts/ui.json" and entry.get("localizzazione")
-              and "item_wood" in entry["includi"] and "btn_play" in entry["includi"] and "icon" not in entry["includi"])
+              profile.get("engine") == "gamemaker" and profile.get("game_engine") == "gamemaker"
+              and entry["path"] == "texts/ui.json" and entry.get("localization")
+              and "item_wood" in entry["include"] and "btn_play" in entry["include"] and "icon" not in entry["include"])
     p = project.Project(path, silent)
     p.translate(Translator())
     data = json.load(open(os.path.join(game, "texts", "ui.json"), encoding="utf-8"))
@@ -504,12 +504,12 @@ def test_generic(base):
 
     # before point 8 a generic game profile did not have the engine: it gets it at the next analysis
     old = dict(profile)
-    old.pop("motore")
-    old.pop("motore_gioco")
+    old.pop("engine")
+    old.pop("game_engine")
     scan.save_json(path, old)
-    automatic.prepare(game, "auto", "it", "dizionario", silent, force=True)
+    automatic.prepare(game, "auto", "it", "dictionary", silent, force=True)
     check("profilo generico vecchio senza motore: aggiornato", json.load(open(path, encoding="utf-8")).get(
-        "motore") == "gamemaker")
+        "engine") == "gamemaker")
 
     # a data file with a list of objects (like the PluginInfo.json of Wwise sounds: name, type and library of each
     # effect) is not a text table even if many values look like words: 'Effect' or 'Windows' translated would break
@@ -533,25 +533,25 @@ def test_generic(base):
     write_bytes(os.path.join(audio_data, "Saves", "progress.json"), json.dumps(
         {"slot%02d" % i: ("Forest Camp", "High", "On", "level_%d" % i)[i % 4] for i in range(24)}).encode("utf-8"))
     candidates, _ = scan.scan_folder(audio_data, silent)
-    profile = scan.create_profile("audio", audio_data, candidates, "auto", "it", "finto")
-    entries = {v["percorso"]: v for v in profile["file"]}
+    profile = scan.create_profile("audio", audio_data, candidates, "auto", "it", "fake")
+    entries = {v["path"]: v for v in profile["file"]}
     check("ricerca generica: un elenco di oggetti (PluginInfo.json) e un salvataggio {chiave: testo} non sono "
               "file di lingua e restano fuori; la tabella a sezioni si' (anche Play, Quit, OK)",
               "Audio/PluginInfo.json" not in entries and "Saves/progress.json" not in entries
-              and entries.get("text/menu.json", {}).get("localizzazione")
-              and {"menu._play", "menu._ok"} <= set(entries["text/menu.json"]["includi"]))
+              and entries.get("text/menu.json", {}).get("localization")
+              and {"menu._play", "menu._ok"} <= set(entries["text/menu.json"]["include"]))
     check("famiglia di file per lingua con un elenco di oggetti: non e' un file di lingua (gli id e i tipi non si "
               "traducono, i nomi si')", not adapter_gamemaker.language_json_files(audio_data)
-              and not entries.get("items/en.json", {}).get("localizzazione")
-              and entries.get("items/en.json", {}).get("includi") == ["items[].name"])
+              and not entries.get("items/en.json", {}).get("localization")
+              and entries.get("items/en.json", {}).get("include") == ["items[].name"])
 
     # XNA: generic game profile with the detected engine (the game's XNB fonts are simulated: ASCII only)
     xna = os.path.join(base, "Isola XNA")
     write_bytes(os.path.join(xna, "Content", "lang.json"), json.dumps(UI).encode("utf-8"))
     candidates, _ = scan.scan_folder(xna, silent)
-    profile = scan.create_profile("isola-xna", xna, candidates, "auto", "it", "dizionario", engine="XNA")
+    profile = scan.create_profile("isola-xna", xna, candidates, "auto", "it", "dictionary", engine="XNA")
     check("profilo generico XNA: motore_gioco xna, senza motore (non e' il percorso delle risorse .NET)",
-              profile.get("motore_gioco") == "xna" and "motore" not in profile)
+              profile.get("game_engine") == "xna" and "engine" not in profile)
     path = os.path.join(automatic.profiles_folder(), "isola-xna.json")
     scan.save_json(path, profile)
     real = adapter_xna.font_chars
@@ -648,10 +648,10 @@ def test_unreal(base):
     profiles_before = sorted(os.listdir(automatic.profiles_folder())) if os.path.isdir(
         automatic.profiles_folder()) else []
     log_file = []
-    result = automatic._prepare_unreal(unlabeled, None, "auto", "it", {"risultati": []}, log_file.append)
-    reason = result[1]["esito"].reason
+    result = automatic._prepare_unreal(unlabeled, None, "auto", "it", {"results": []}, log_file.append)
+    reason = result[1]["outcome"].reason
     check("Unreal senza .locres: non supportato con il motivo, nessun profilo lasciato",
-              result[0] is None and result[1]["esito"].code == "NON_SUPPORTATO" and ".locres" in reason
+              result[0] is None and result[1]["outcome"].code == "NOT_SUPPORTED" and ".locres" in reason
               and "can't translate yet" in reason and sorted(os.listdir(automatic.profiles_folder()) if os.path.isdir(
                   automatic.profiles_folder()) else []) == profiles_before)
     mixed = os.path.join(base, "Unreal con pak rotto")
@@ -660,7 +660,7 @@ def test_unreal(base):
     skipped = []
     sources = adapter_unreal.find_locres(mixed, skipped)
     log_file = []
-    path, outcome = automatic._prepare_unreal(mixed, None, "auto", "it", {"risultati": []}, log_file.append)
+    path, outcome = automatic._prepare_unreal(mixed, None, "auto", "it", {"results": []}, log_file.append)
     check("un pak illeggibile si salta: il .locres degli altri si trova e il profilo si crea",
               [s[1] for s in sources] == ["Proj/Content/Localization/Game/en/Game.locres"]
               and len(skipped) == 1 and "Proj-Rotto.pak" in skipped[0] and path and os.path.exists(path)
@@ -687,7 +687,7 @@ def test_unreal(base):
               [s[1] for s in sources] == ["Proj/Content/Localization/Game/en/Game.locres"] and culture == "en"
               and sorted(texts) == ["Quit", "Start Game"] and n == 2 and patch.mount == "../../../"
               and sorted(patch.entries) == ["Proj/Content/Localization/Game/en/Game.locres"]
-              and [s for s, _ in translated["stringhe"]] == ["Inizia la partita", "Esci"])
+              and [s for s, _ in translated["strings"]] == ["Inizia la partita", "Esci"])
     german = os.path.join(base, "Unreal tedesco")
     write_bytes(os.path.join(german, "Proj", "Content", "Paks", "pakchunk0-WindowsNoEditor.pak"), fake_unreal.pak_v9(
         [("Proj/Content/Localization/Game/Game.locmeta", fake_unreal.locmeta("de"))]))
@@ -703,10 +703,10 @@ def test_unreal(base):
                 fake_unreal.pak_v9([("Proj/Content/Maps/Level.umap", b"mappa" * 50)]))
     write_bytes(os.path.join(loose, "Proj", "Content", "Localization", "Game", "en", "Game.locres"),
                 fake_unreal.locres_v2(entries))
-    _, outcome = automatic._prepare_unreal(loose, None, "auto", "it", {"risultati": []}, silent)
+    _, outcome = automatic._prepare_unreal(loose, None, "auto", "it", {"results": []}, silent)
     check("Unreal con i .locres fuori dagli archivi: il motivo non dice che non ci sono testi localizzati",
-              outcome["esito"].code == "NON_SUPPORTATO"
-              and "doesn't yet know how to translate" in outcome["esito"].reason)
+              outcome["outcome"].code == "NOT_SUPPORTED"
+              and "doesn't yet know how to translate" in outcome["outcome"].reason)
 
 
 def mounted_pak(mount, file):
@@ -746,9 +746,9 @@ def test_log(base):
               and any("too large" in r and "testi.json" in r for r in lines))
     candidates, _ = scan.scan_folder(folder, silent)
     lines = []
-    profile = scan.create_profile("saltati", folder, candidates, "auto", "it", "finto", log=lines.append)
+    profile = scan.create_profile("saltati", folder, candidates, "auto", "it", "fake", log=lines.append)
     check("file con pochi testi fuori dal profilo, scritti nel registro con i numeri",
-              [v["percorso"] for v in profile["file"]] == ["testi.json"]
+              [v["path"] for v in profile["file"]] == ["testi.json"]
               and any("pochi.json (1 texts" in r for r in lines))
 
 

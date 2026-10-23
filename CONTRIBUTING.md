@@ -8,12 +8,13 @@ Thanks for your interest! Bug reports, games that do not work, translations of t
 
 ## Italian left in the code
 
-Names, comments, docstrings, interface texts, file names, the command line and the documentation are in English; the Italian interface comes from `patchsmith/ui_language/it.json` (English text → Italian text). PatchSmith started as a personal Italian project, so a few things are still in Italian (the [glossary](#glossary) below covers the words you will meet most often):
+Names, comments, docstrings, interface texts, the keys and codes of the saved data, the command line and the documentation are in English; the Italian interface comes from `patchsmith/ui_language/it.json` (English text → Italian text). PatchSmith started as a personal Italian project, so a few things are still in Italian, on purpose:
 
-- **The keys saved in user files** (settings, profiles, translation memory: `"cartella_gioco"`, `"non_tradurre"`, `"lingua_destinazione"`...) and the codes stored in them (outcomes like `"GIOCO_APERTO"`, actions like `"riapplica"`). They are a file format: do not rename them.
-- **Markers written into games**, such as the first comment of `patchsmith/injector_live.js` ("Patchsmith - traduzione dal vivo"): PatchSmith recognizes its own files by them, so they must never change.
+- **Files written by earlier versions** have Italian keys and codes (`"cartella_gioco"`, `"lingua_destinazione"`, `"GIOCO_APERTO"`...). `patchsmith/legacy.py` renames them when PatchSmith reads its own files (`legacy.load`, `legacy.upgrade`), so profiles, settings, check states and the files left in translated games keep working; at startup the profiles, records and settings are also rewritten with the English names (`project.migrate_formats`, a copy of each original stays next to it with `.italian-keys`). Read every new structured file through `legacy`, never translation memories (game text → translation: a game text can be any word).
+- **Names of files and markers**: the suffixes of the data files (`.controllo.json`, `.problemi.json`, `.automatiche.json`, `.origine.json`, `.da_scrivere.json`, `.richieste.jsonl`), the files written into games (`.patchsmith-originale` backups, `patchsmith-dizionario.json`, `patchsmith-vivo.json`, `patchsmith-traduzione.*`, `patchsmith-servizio.cfg`, the GUID of the BepInEx plugin) and the first comment of `patchsmith/injector_live.js` ("Patchsmith - traduzione dal vivo"). PatchSmith finds its own files by them, in games translated by any version: they must never change. The same holds for the names of some logs (`logs/<date>-controllo.log`, `-interfaccia.log`) and for the prefixes of the signals that the after-play check remembers (`tolti:`, `sorgenti:`...): new names would make it redo the checks and fixes already done.
+- **The two C# sources compiled ahead of time** (`patchsmith/launcher.cs` for `PatchSmith.exe`, `components/plugin/PatchsmithUIToolkit.cs`) still use some Italian names.
 
-Write new names, comments and docstrings in English.
+Write new names, comments, docstrings and data keys in English.
 
 Issues and pull requests can be in English or Italian.
 
@@ -64,48 +65,6 @@ Please add or update a test with every change, and run the whole suite before op
 - **Only translations are shared**, never game files.
 - **Interface texts:** write the English text in the code and add its Italian translation to `patchsmith/ui_language/it.json` (`test_ui_language` checks that every text is there, with the same placeholders). Write singular and plural as two whole sentences, not sentences built from pieces: pieces cannot be translated.
 - **Style:** lines up to 120 characters; keep each file's line endings (the repository stores files as they are).
-
-## Glossary
-
-The Italian words you will meet most often in the data keys and the stored codes.
-
-| Italian | English | Notes |
-|---|---|---|
-| `gioco`, `motore` | game, engine | |
-| `cartella`, `percorso`, `radice` | folder, path, root | `cartella_gioco`: the game's folder |
-| `file`, `dati`, `voce`, `voci` | file, data, entry, entries | |
-| `profilo` | game profile | JSON in `profiles/`: which files and texts of a game PatchSmith translates |
-| `memoria` | translation memory | JSON in `memory/`: original text → translation, per game; `memoria comune`: shared by all games |
-| `testo`, `testi`, `riga`, `righe` | text, texts, line, lines | |
-| `lingua`, `da` / `a` | language, from / to | `lingua_destinazione`: target language |
-| `originale`, `tradotto`, `traduzione` | original, translated, translation | `rimasti in originale`: left untranslated |
-| `traduttore`, `backend`, `modello` | translator, translation backend, model | `traduttore locale`: Ollama + TranslateGemma on the user's PC |
-| `traduci`, `applica`, `riapplica`, `ripristina` | translate, apply, reapply, restore | the main operations |
-| `rileva`, `rilevamento`, `scansiona` | detect, detection, scan | |
-| `segnaposto` | placeholder | `%s`, `{0}`, `<color>`: protected during translation |
-| `caratteri`, `lettere` | characters, letters | `caratteri mancanti`: letters the game's fonts cannot draw |
-| `backup`, `manifesto`, `impronta` | backup, manifest, fingerprint (hash) | |
-| `controllo`, `controlla` | after-play check, check | `problema`, `rimedio`, `sicuro`: problem found, its fix, safe to apply on its own; `segnale`: what the check saw, so the same problem is not reported twice |
-| `esito` | outcome | the result of an operation as the interface shows it (`Esito`) |
-| `correzioni` | fixes made by hand | the **Fix translations…** window |
-| `scartate`, `scartato` | rejected | translations that failed the checks |
-| `automatiche` | machine translations | as opposed to fixes made by hand (`a mano`) |
-| `dal vivo` | live | translating new lines while the game runs |
-| `registro`, `rapporto` | log, report | **Create report** |
-| `impostazioni` | settings | `settings.json` |
-| `componenti` | downloaded components | BepInEx, XUnity.AutoTranslator, Ollama and its models |
-| `servizio` | service | the small local server that translates new lines for XUnity |
-| `configuratore`, `leva` | configurator, lever | reversible changes to a game's options (for example its language) |
-| `scheda` | game sheet | knowledge about one specific game (`games.py`) |
-| `lingua ufficiale` | official language | the game already has the target language |
-| `preliminari` | preliminary checks | before starting: game closed, disk space, translator ready |
-| `interfaccia`, `finestra`, `pulsante`, `etichetta` | interface, window/dialog, button, label | |
-| `tema`, `suoni`, `musica` | theme, sounds, music | |
-| `prova`, `finto` | test (or trial), fake | `backend finto`: the offline test translator |
-| `nome`, `codice`, `chiave`, `valore`, `elenco` | name, code, key, value, list | |
-| `stato`, `uscita`, `inizio`, `fine` | state/status, output/exit, start, end | |
-| `nuovo`, `vecchio`, `mancanti`, `trovati` | new, old, missing, found | |
-| `leggi`, `scrivi`, `salva`, `trova`, `crea` | read, write, save, find, create | |
 
 ## License
 

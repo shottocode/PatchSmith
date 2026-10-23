@@ -140,11 +140,11 @@ def _write(path, data):
 
 
 def save_merging(path, data, base):
-    """Saves 'dati' (a dictionary) to the file, keeping the changes made in the meantime by other programs.
+    """Saves 'data' (a dictionary) to the file, keeping the changes made in the meantime by other programs.
 
-    base: the content of the file as it was when 'dati' was read (or last saved): only the entries added, changed or
+    base: the content of the file as it was when 'data' was read (or last saved): only the entries added, changed or
     removed compared to it are written. If two programs change the same entry, the last one wins.
-    'dati' is updated with the others' entries. Returns the new content of the file (or None if there was nothing to
+    'data' is updated with the others' entries. Returns the new content of the file (or None if there was nothing to
     save)."""
     changed = {k: v for k, v in data.items() if k not in base or base[k] != v}
     removed = [k for k in base if k not in data]
@@ -196,7 +196,7 @@ class MergingFile:
 
 
 def clean_temp_files(folder, age=OLD_TEMP_AGE):
-    """Removes the .tmp files left in 'cartella' by an interrupted save (program closed halfway), older than 'eta'
+    """Removes the .tmp files left in 'folder' by an interrupted save (program closed halfway), older than 'eta'
     seconds. Returns how many it removed."""
     dropped = 0
     try:

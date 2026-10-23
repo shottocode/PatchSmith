@@ -18,7 +18,7 @@ OUTCOMES = []
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def silent(_):
@@ -85,10 +85,10 @@ def main(base):
     # line format and block format
     ui = adapter_lines.read_file(os.path.join(game, "Localization", "english_ui.txt"))
     npc = adapter_lines.read_file(os.path.join(game, "Localization", "english_npc.txt"))
-    check("file a righe: modo, testi, commento e numeri esclusi", ui.mode == "righe" and
+    check("file a righe: modo, testi, commento e numeri esclusi", ui.mode == "lines" and
               [t for _, t in ui.units] == ["Fight", "Switch", "What should ", " do next?",
                                            "Hey /name/, you have /curr/ dosh/n/Spend it!"])
-    check("file a blocchi: sezioni (anche due per voce) e '.' isolato", npc.mode == "blocchi" and
+    check("file a blocchi: sezioni (anche due per voce) e '.' isolato", npc.mode == "blocks" and
               [t for _, t in npc.units] == ["Whoa! You have a Dokimon with you??\nBe careful!",
                                             "Don't mess with us!", "Well, I suppose I lost.."])
     check("riscrittura senza modifiche identica (CRLF e LF)", ui.serialize({}) == UI.encode()
@@ -103,9 +103,9 @@ def main(base):
     variants = adapter_lines.LinesFile("0\tFight\r\n1\u3000Switch\r\n2 Catch\r\n".encode("utf-8"))
     check("separatori tab e spazio ideografico riconosciuti e conservati",
               [t for _, t in variants.units] == ["Fight", "Switch", "Catch"]
-              and variants.serialize({("riga", 0): "Combatti"}).startswith("0\tCombatti\r\n".encode()))
+              and variants.serialize({("line", 0): "Combatti"}).startswith("0\tCombatti\r\n".encode()))
     closers = adapter_lines.LinesFile("1\nHi there\n. \n2\nBye now\n\uff0e\n3\nOk then\n.\n".encode("utf-8"))
-    check("chiusure '. ' e '\uff0e' riconosciute", closers.mode == "blocchi" and len(closers.units) == 3)
+    check("chiusure '. ' e '\uff0e' riconosciute", closers.mode == "blocks" and len(closers.units) == 3)
     section = npc.units[0]
     check("riga che comincerebbe con un numero (ruberebbe un'altra voce): scartata",
               not adapter_lines.is_valid(section[0], section[1], "100 cose\nAttento!")
@@ -119,9 +119,9 @@ def main(base):
               and adapter_gamemaker.repair("Hey /name/!", "Ciao!") is None
               and adapter_gamemaker.repair("How is it, /name/?\nOk", "Come va, /name/\nOk") == "Come va, /name/ \nOk")
     check("caratteri di controllo o separatori di riga Unicode: traduzione scartata",
-              not adapter_lines.is_valid(("riga", 0), "Fight", "Combatti ora")
-              and not adapter_lines.is_valid(("riga", 0), "Fight", "Comb\x0catti")
-              and adapter_lines.is_valid(("riga", 0), "Fight", "Combatti\tora"))
+              not adapter_lines.is_valid(("line", 0), "Fight", "Combatti ora")
+              and not adapter_lines.is_valid(("line", 0), "Fight", "Comb\x0catti")
+              and adapter_lines.is_valid(("line", 0), "Fight", "Combatti\tora"))
     check("lingua dal percorso: codici brevi solo in posizioni sicure",
               adapter_gamemaker.path_language("Localization/english_ui.txt") == "en"
               and adapter_gamemaker.path_language("lang/it/ui.txt") == "it"
@@ -140,7 +140,7 @@ def main(base):
     check("italiano: ì->í, ò->ó, ù->ú se il font non li ha; virgolette semplici",
               chars.adapt_chars("Così può più \u201cciao\u201d", allowed, "it") == 'Cosí puó piú "ciao"')
     check("gamemaker.font: nomi letti",
-              [f["nome"] for f in gamemaker.font(open(os.path.join(game, "data.win"), "rb").read())[0]]
+              [f["name"] for f in gamemaker.font(open(os.path.join(game, "data.win"), "rb").read())[0]]
               == ["fn_testo", "fn_altro", "fn_numeri"])
     check("italiano: à è restano se il font li ha; l'acuto solo per i o u",
               chars.adapt_chars("è già", set(chars.ASCII) | set("áéíóú"), "it") == "e' gia'")
@@ -167,9 +167,9 @@ def main(base):
     project.DATA_ROOT = project.PROJECT_FOLDER  # the user's data here too
     automatic.PROFILES_FOLDER = os.path.join(base, "patchsmith", "profiles")
     automatic.adapter_gamemaker  # noqa: B018 (imported)
-    path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "finto", silent)
+    path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
     check("analizza e traduci: completato, profilo GameMaker", completed and path
-              and '"motore": "gamemaker"' in open(path, encoding="utf-8").read())
+              and '"engine": "gamemaker"' in open(path, encoding="utf-8").read())
     written = open(os.path.join(game, "Localization", "english_ui.txt"), "rb").read().decode()
     check("file tradotto: struttura intatta, spazio iniziale e codici conservati",
               "0 [it] Fight\r\n" in written and "5  [it] do next?\r\n" in written and "/name/" in written
@@ -214,7 +214,7 @@ def main(base):
     os.makedirs(os.path.join(game, "Localization", "italian"))
     open(os.path.join(game, "Localization", "italian", "ui.txt"), "wb").write(
         b"0 Combatti\r\n1 Cambia\r\n2 Cattura\r\n3 Fuggi\r\n4 Cosa deve fare \r\n5  ora?\r\n")
-    path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "finto", silent)
+    path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
     check("lingua gia' presente nel gioco: niente traduzione", not completed
               and not os.path.exists(os.path.join(game, "Localization", "english_ui.txt.patchsmith-originale")))
 

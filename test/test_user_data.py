@@ -1,8 +1,8 @@
-"""User data folder (PATCHSMITH_DATI) separate from the program.
+"""User data folder (PATCHSMITH_DATA) separate from the program.
 
 Usage: python -I test/test_user_data.py <empty_temp_folder>
 Covers:
-- with PATCHSMITH_DATI, game profiles, translation memory, settings, translator status, language and configurator
+- with PATCHSMITH_DATA, game profiles, translation memory, settings, translator status, language and configurator
   logs, and saves go there; downloaded components, plugin, rules and smith.py stay next to the program;
 - without the variable everything stays as before (next to the program), also for whoever changes
   PROJECT_FOLDER;
@@ -36,34 +36,34 @@ from patchsmith import (adapter_unity, auto as automatic, backend, components,
                         configurator, gui, limiter,
                         official_language, ollama, project,
                         detection)
-profile = {"nome": "gioco", "lingua_destinazione": "it"}
+profile = {"name": "gioco", "target_language": "it"}
 print(json.dumps({
-    "dati": {
-        "profili": automatic.profiles_folder(),
-        "memoria": project.memory_path(profile),
-        "comune": project.shared_path("en", "it"),
-        "memoria_unity": adapter_unity._memory_folder("gioco"),
-        "impostazioni": gui._settings(),
-        "stato_servizi": limiter.state_path(),
-        "configurazioni": configurator._log_file(sys.argv[1]),
-        "lingue": official_language._log_file(sys.argv[1]),
-        "registri": project.data_folder("logs"),
+    "data": {
+        "profiles": automatic.profiles_folder(),
+        "memory": project.memory_path(profile),
+        "shared": project.shared_path("en", "it"),
+        "unity_memory": adapter_unity._memory_folder("gioco"),
+        "settings": gui._settings(),
+        "services": limiter.state_path(),
+        "configurations": configurator._log_file(sys.argv[1]),
+        "languages": official_language._log_file(sys.argv[1]),
+        "logs": project.data_folder("logs"),
     },
-    "programma": {
-        "componenti": components.folder(),
+    "program": {
+        "components": components.folder(),
         "plugin": adapter_unity.SERVICE_SOURCE,
         "ollama": ollama.folder(),
-        "regole": detection.DATA_FOLDER,
+        "rules": detection.DATA_FOLDER,
     },
-    # solo con i dati di prova: le credenziali vere dell'utente non si leggono
-    "chiave_deepl": backend.credentials()["chiave_deepl"] if project.DATA_ROOT else None,
+    # only with the test data: the user's real credentials are not read
+    "deepl_key": backend.credentials()["deepl_key"] if project.DATA_ROOT else None,
 }))
 """
 
 
 def check(name, condition):
     OUTCOMES.append((name, bool(condition)))
-    print(("OK    " if condition else "ERRORE") + "  " + name)
+    print(("OK    " if condition else "ERROR ") + "  " + name)
 
 
 def inside(path, folder):
@@ -72,14 +72,14 @@ def inside(path, folder):
 
 
 def environment(base, data=None):
-    """Environment of the child processes: test user folders, PATCHSMITH_DATI only if given."""
+    """Environment of the child processes: test user folders, PATCHSMITH_DATA only if given."""
     test_env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PATCHSMITH_", "OLLAMA_"))}
     for env_var, rel in (("LOCALAPPDATA", "Local"), ("APPDATA", "Roaming"), ("TEMP", "Temp"), ("TMP", "Temp"),
                            ("USERPROFILE", "utente")):
         test_env[env_var] = os.path.join(base, "ambiente", rel)
         os.makedirs(test_env[env_var], exist_ok=True)
     if data:
-        test_env["PATCHSMITH_DATI"] = data
+        test_env["PATCHSMITH_DATA"] = data
     return test_env
 
 
@@ -111,20 +111,20 @@ def test_paths(base):
     data = os.path.join(base, "dati-variabile")
     os.makedirs(data)
     with open(os.path.join(data, "settings.json"), "w", encoding="utf-8") as f:
-        json.dump({"chiave_deepl": "chiave-di-prova"}, f)
+        json.dump({"deepl_key": "chiave-di-prova"}, f)
     with_data = paths(base, data)
-    respected = bool(with_data) and all(inside(p, data) for p in with_data["dati"].values())
-    check("PATCHSMITH_DATI: tutti i dati dell'utente nella sua cartella", respected)
+    respected = bool(with_data) and all(inside(p, data) for p in with_data["data"].values())
+    check("PATCHSMITH_DATA: tutti i dati dell'utente nella sua cartella", respected)
     if with_data and not respected:
-        print("   fuori:", {k: p for k, p in with_data["dati"].items() if not inside(p, data)})
-    check("PATCHSMITH_DATI: impostazioni (chiave DeepL) lette da li'",
-              with_data and with_data["chiave_deepl"] == "chiave-di-prova")
-    check("PATCHSMITH_DATI: componenti, plugin, traduttore locale e regole restano accanto al programma",
-              with_data and all(inside(p, project.PROJECT_FOLDER) for p in with_data["programma"].values()))
+        print("   fuori:", {k: p for k, p in with_data["data"].items() if not inside(p, data)})
+    check("PATCHSMITH_DATA: impostazioni (chiave DeepL) lette da li'",
+              with_data and with_data["deepl_key"] == "chiave-di-prova")
+    check("PATCHSMITH_DATA: componenti, plugin, traduttore locale e regole restano accanto al programma",
+              with_data and all(inside(p, project.PROJECT_FOLDER) for p in with_data["program"].values()))
     unlabeled = paths(base, None)
-    check("senza PATCHSMITH_DATI: i dati restano accanto al programma, come prima",
-              unlabeled and all(inside(p, project.PROJECT_FOLDER) for p in unlabeled["dati"].values())
-              and os.path.dirname(unlabeled["dati"]["profili"]) == project.PROJECT_FOLDER)
+    check("senza PATCHSMITH_DATA: i dati restano accanto al programma, come prima",
+              unlabeled and all(inside(p, project.PROJECT_FOLDER) for p in unlabeled["data"].values())
+              and os.path.dirname(unlabeled["data"]["profiles"]) == project.PROJECT_FOLDER)
 
     # whoever moves PROJECT_FOLDER (old test scripts) also moves the data, if the variable is not set
     saved_items = project.PROJECT_FOLDER, project.DATA_ROOT
@@ -142,7 +142,7 @@ def test_command_line(base):
     game = os.path.join(base, "giochi", "Lantern Keeper")
     rel = fake_web_game.create(game)
     originals = fingerprints(game)
-    code, output = smith(base, data, "auto", game, "--backend", "finto", "--a", "it")
+    code, output = smith(base, data, "auto", game, "--backend", "fake", "--a", "it")
     profiles = os.listdir(os.path.join(data, "profiles")) if os.path.isdir(os.path.join(data, "profiles")) else []
     check("smith auto: tradotto, profilo e memoria nella cartella dei dati",
               code == 0 and profiles == ["lantern-keeper.json"]
@@ -150,10 +150,10 @@ def test_command_line(base):
               and os.path.exists(os.path.join(game, *rel.split("/")) + project.BACKUP_SUFFIX))
     if code:
         print("\n".join(output.strip().splitlines()[-10:]))
-    code, output = smith(base, data, "stato", "lantern-keeper", "--esempi", "1")
+    code, output = smith(base, data, "status", "lantern-keeper", "--esempi", "1")
     check("smith stato: il profilo si trova per nome nella cartella dei dati",
               code == 0 and "Testi unici" in output)
-    code, _ = smith(base, data, "ripristina", game)
+    code, _ = smith(base, data, "restore", game)
     check("smith ripristina: gioco identico all'originale", code == 0 and fingerprints(game) == originals)
 
 
@@ -167,31 +167,31 @@ def test_xunity_service(base):
     try:
         adapter_unity._compile_plugin = lambda *_: None  # no compiler: only the command matters here
         project.DATA_ROOT = os.path.join(base, "dati-servizio")
-        adapter_unity.enable_service(game, {"dati": game}, profile, "gioco")
+        adapter_unity.enable_service(game, {"data_folder": game}, profile, "game")
     finally:
         adapter_unity._compile_plugin = compile_plugin
         project.DATA_ROOT = saved
     with open(os.path.join(game, *adapter_unity.SERVICE_CONFIG.split("/")), encoding="utf-8") as f:
         lines = dict(r.split("=", 1) for r in f.read().splitlines() if "=" in r and not r.startswith("#"))
     check("servizio per XUnity: smith.py e cartella del programma, profilo con il suo percorso",
-              ('"%s"' % SMITH) in lines.get("Argomenti", "") and ('--profilo "%s"' % profile) in lines["Argomenti"]
-              and lines.get("Cartella") == project.PROJECT_FOLDER)
+              ('"%s"' % SMITH) in lines.get("Arguments", "") and ('--profile "%s"' % profile) in lines["Arguments"]
+              and lines.get("Folder") == project.PROJECT_FOLDER)
 
 
 def test_gui_settings(base):
-    """_salva_impostazioni with a data folder that does not exist yet (first time with PATCHSMITH_DATI)."""
+    """_salva_impostazioni with a data folder that does not exist yet (first time with PATCHSMITH_DATA)."""
     saved = project.DATA_ROOT
     project.DATA_ROOT = os.path.join(base, "dati-gui", "nuova")
     try:
         mock = types.SimpleNamespace(
-            _chosen="locale", folder=types.SimpleNamespace(get=lambda: "C:/Giochi/Finto"),
+            _chosen="local", folder=types.SimpleNamespace(get=lambda: "C:/Giochi/Finto"),
             src_lang=types.SimpleNamespace(get=lambda: "auto"), _target_lang=lambda: "it", theme_choice="auto",
             deepl_key="", email_mymemory="", _model_key=lambda: "4b")
         gui.App._save_settings(mock)
         with open(os.path.join(project.DATA_ROOT, "settings.json"), encoding="utf-8") as f:
             saved_count = json.load(f)
         check("interfaccia: impostazioni salvate nella cartella dei dati (creata se manca)",
-                  saved_count.get("cartella") == "C:/Giochi/Finto" and saved_count.get("backend") == "locale")
+                  saved_count.get("folder") == "C:/Giochi/Finto" and saved_count.get("backend") == "local")
     except OSError as e:
         check("interfaccia: impostazioni salvate nella cartella dei dati (creata se manca): %s" % e, False)
     finally:
@@ -225,7 +225,9 @@ def test_english_names(base):
             return open(p, encoding="utf-8").read() if os.path.isfile(p) else None
         new_items = {"profiles/gioco.json": "{}", "memory/gioco.it.json": '{"a": "b"}',
                  "memory/copies/vecchia/x.json": "{}",
-                 "logs/op.log": "log", "settings.json": '{"tema": "scuro"}', "services.json": "{}",
+                 "logs/op.log": "log", "services.json": "{}",
+                 # settings.json with the English names (migrate_formats), the original kept next to it
+                 "settings.json": '{\n  "theme": "dark"\n}', "settings.json.italian-keys": '{"tema": "scuro"}',
                  "components/ollama/ollama.exe": "exe", "components/plugin/Patchsmith.UIToolkit.dll": "dll",
                  "components/plugin/PatchsmithServizio.cs": "cs"}
         leftovers = [n for n in ("profili", "memoria", "registri", "componenti", "impostazioni.json") if
@@ -247,11 +249,11 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    project.DATA_ROOT = os.path.join(base, "dati")  # this process too: never the real data
+    project.DATA_ROOT = os.path.join(base, "data_folder")  # this process too: never the real data
     if test_paths(base):
         test_command_line(base)
     else:  # if the variable were not honored, the command line would write among the real data
-        check("riga di comando non provata: PATCHSMITH_DATI non rispettata", False)
+        check("riga di comando non provata: PATCHSMITH_DATA non rispettata", False)
     test_xunity_service(base)
     test_gui_settings(base)
     test_english_names(base)

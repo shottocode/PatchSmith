@@ -217,7 +217,7 @@ class CSVFile:
         return self._cell(pos[0], self.key) if self.key is not None else ""
 
     def references(self, pos, codes):
-        """{codice: testo} of the official translations of the same text (the columns of those languages)."""
+        """{code: text} of the official translations of the same text (the columns of those languages)."""
         output = {}
         for i, c in self.languages.items():
             if c in codes and c not in output and i != pos[1]:

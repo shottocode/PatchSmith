@@ -7,7 +7,7 @@ or with no answer, it uses a default value: 1 (English). The game has no other l
 launch parameters, registry or configuration files). The texts of all these languages are already installed in the
 packages (Image/<dt|en>/*.hed + *.pkg).
 
-Lever "lingua": in every executable the default value is changed (1 byte: `mov ebx,1` -> `mov ebx,<codice>`).
+Lever "language": in every executable the default value is changed (1 byte: `mov ebx,1` -> `mov ebx,<codice>`).
 The answer "english" (or no answer) thus leads to the chosen language; French, German, Spanish and Italian chosen
 by the platform are still respected. The game works as with the language chosen by Steam: same texts, menus, fonts
 and images with writing; the voices stay the original ones.
@@ -149,14 +149,14 @@ def language_byte(data):
     sections = _sections(data)
     found = list(PATTERN.finditer(data))
     if len(found) != 1:
-        raise SheetError("language location %s" % ("not found" if not found else "ambiguo"))
+        raise SheetError("language location not found" if not found else "language location ambiguous")
     m = found[0]
     code = _section_of(sections, m.start())
     if not code or not code[5] & 0x20000000:
         raise SheetError("the language location is not in the code")
     t = data.find(TABLE)
     if t < 0 or data.find(TABLE, t + 1) >= 0:
-        raise SheetError("language table %s" % ("not found" if t < 0 else "ambigua"))
+        raise SheetError("language table not found" if t < 0 else "language table ambiguous")
     table_section = _section_of(sections, t)
     if not table_section or table_section[5] & 0x20000000:
         raise SheetError("language table out of place")
@@ -196,7 +196,7 @@ def analyze(root):
 def _copy_saves(root, log):
     """Backup copy of the saves (only read) in PatchSmith's folder, the first time. The copy appears only if it is
     complete."""
-    if configurator.note(root, "salvataggi_copiati"):
+    if configurator.note(root, "saves_copied"):
         return
     source = saves_folder()
     if not os.path.isdir(source):
@@ -215,7 +215,7 @@ def _copy_saves(root, log):
     except BaseException:
         shutil.rmtree(temp_path, ignore_errors=True)
         raise
-    configurator.mark(root, "salvataggi_copiati", dest_lang)
+    configurator.mark(root, "saves_copied", dest_lang)
     log("  Save backup: %s" % dest_lang)
 
 
@@ -241,7 +241,7 @@ def set_language(root, dest_lang, consent=False, log=print):
         lines = ["I don't recognize this version of the %s executable (%s): I'm not making any changes. Alternatively, "
                  "%s."
                  % (NAME, e, in_platform)]
-        if configurator.lever(root, "lingua"):
+        if configurator.lever(root, "language"):
             lines.append("Some executables still have PatchSmith's change: press 'Restore originals'.")
         return False, lines
     unknown = [n for n, _, _, v in periods if v not in _VALUES]
@@ -274,9 +274,9 @@ def set_language(root, dest_lang, consent=False, log=print):
         _copy_saves(root, log)
     except OSError as e:
         log("  ! Copying the saves failed (%s): continuing, the saves are not touched." % e)
-    plans = [{"percorso": p, "modifiche": [(o, bytes([v]), bytes([code]))]} for _, p, o, v in periods]
+    plans = [{"path": p, "changes": [(o, bytes([v]), bytes([code]))]} for _, p, o, v in periods]
     try:
-        writes = configurator.apply_bytes(root, "lingua", plans, log, value_=dest_lang,
+        writes = configurator.apply_bytes(root, "language", plans, log, value_=dest_lang,
                                              description="default language in the executables (%s)" % ID)
     except (configurator.ConfiguratorError, OSError) as e:
         return False, ["I was unable to activate %s: %s" % (name, e)]
