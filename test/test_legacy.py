@@ -66,10 +66,10 @@ OLD_MANIFEST = {"patchsmith": True, "versione": 1, "data": "2026-10-20", "in_cor
                 "file": {"dati": "h1", "memoria": "h2", "testo": "h3"}, "cartelle_create": ["dati"]}
 NEW_MANIFEST = {"patchsmith": True, "version": 1, "date": "2026-10-20", "in_progress": False,
                 "file": {"dati": "h1", "memoria": "h2", "testo": "h3"}, "created_folders": ["dati"]}
-SAMPLES = [("profilo", OLD_PROFILE, NEW_PROFILE), ("impostazioni", OLD_SETTINGS, NEW_SETTINGS),
-           ("stato del controllo", OLD_STATE, NEW_STATE), ("riga del diario", OLD_JOURNAL, NEW_JOURNAL),
-           ("registro della lingua", OLD_RECORD, NEW_RECORD), ("informazioni del backup", OLD_INFO, NEW_INFO),
-           ("manifesto", OLD_MANIFEST, NEW_MANIFEST)]
+SAMPLES = [("profile", OLD_PROFILE, NEW_PROFILE), ("settings", OLD_SETTINGS, NEW_SETTINGS),
+           ("check state", OLD_STATE, NEW_STATE), ("journal line", OLD_JOURNAL, NEW_JOURNAL),
+           ("language record", OLD_RECORD, NEW_RECORD), ("backup info", OLD_INFO, NEW_INFO),
+           ("manifest", OLD_MANIFEST, NEW_MANIFEST)]
 
 
 def check(name, condition):
@@ -91,16 +91,16 @@ def read_bytes(path):
 def test_upgrade():
     for label, old, new in SAMPLES:
         up = legacy.upgrade(old)
-        check("%s: chiavi e codici inglesi%s" % (label, "" if up == new else " (%s)" % up), up == new)
-        check("%s: gia' nuovo, resta com'e'" % label, legacy.upgrade(new) == new)
+        check("%s: English keys and codes%s" % (label, "" if up == new else " (%s)" % up), up == new)
+        check("%s: already new, stays as it is" % label, legacy.upgrade(new) == new)
     entries = {"nome": {"dove": "gioco", "motivo": "x", "tentativi": 2}, "data": {"dove": "memoria"}}
-    check("testi con un problema: i testi restano (anche se sono parole come 'nome'), le voci si aggiornano",
+    check("texts with a problem: the texts stay (even when they are words like 'nome'), the entries are upgraded",
           legacy.upgrade_entries(entries) == {"nome": {"where": "game", "reason": "x", "attempts": 2},
                                               "data": {"where": "memory"}})
-    check("'da' da solo (il danese) non cambia; 'da' e 'a' insieme si'",
+    check("'da' alone (Danish) does not change; 'da' and 'a' together do",
           legacy.upgrade({"da": "Dansk", "it": "Italiano"}) == {"da": "Dansk", "it": "Italiano"}
           and legacy.upgrade({"da": "en", "a": "it"}) == {"from": "en", "to": "it"})
-    check("stato del plugin: chiavi ed esiti",
+    check("plugin state: keys and outcomes",
           legacy.upgrade({"Esito": "python-mancante", "Data": "d", "Processo": "1", "Programma": "p",
                           "Dettaglio": ""}) == {"Outcome": "python-missing", "Date": "d", "Process": "1",
                                                 "Program": "p", "Detail": ""})
@@ -108,10 +108,10 @@ def test_upgrade():
     code_chains = {f: [c for c in codes.values() if c in codes] for f, codes in legacy.CODES.items()}
     signal_chains = [s for s in list(legacy.SIGNALS.values()) + list(legacy.SIGNAL_PREFIXES.values())
                      if s in legacy.SIGNALS or s in legacy.SIGNAL_PREFIXES]
-    check("nessun nome nuovo e' anche un nome vecchio (%s %s %s)"
+    check("no new name is also an old name (%s %s %s)"
           % (chains, {f: c for f, c in code_chains.items() if c}, signal_chains),
           not chains and not any(code_chains.values()) and not signal_chains)
-    check("riga di comando: --backend finto e locale (nomi di prima)",
+    check("command line: --backend finto and locale (earlier names)",
           cli._backend_name("finto") == "fake" and cli._backend_name("locale") == "local"
           and cli._backend_name("deepl") == "deepl")
 
@@ -124,37 +124,37 @@ def test_readers(base):
     path = os.path.join(automatic.profiles_folder(), "lantern-keeper.json")
     write(path, profile)
     found = automatic.find_profile(game)
-    check("profilo di prima: trovato dalla sua cartella", found and os.path.normcase(found) == os.path.normcase(path))
-    check("profilo di prima: letto con i nomi nuovi",
+    check("earlier profile: found by its folder", found and os.path.normcase(found) == os.path.normcase(path))
+    check("earlier profile: read with the new names",
           automatic._read_profile(path)["target_language"] == "it" and project.Project(path).profile["live"]
           == "service")
     menu = os.path.join(game, "data", "menu.json")
     write(menu, "{}")
     write(menu + project.INFO_SUFFIX, OLD_INFO)
     info = project.read_info(menu)
-    check("informazioni del backup di prima: lette (impronta dell'originale)",
+    check("earlier backup info: read (hash of the original)",
           info and info["original_hash"] == "aa" and info["prior"] == {"dati": "cc"})
     write(checks.state_path(path), OLD_STATE)
     state = checks.read_state(path)
-    check("stato del controllo di prima: letto",
+    check("earlier check state: read",
           state.get("last_check") == "2026-10-20T10:00:00" and state["remedies"].get("GAME_OPEN"))
     write(xunity_service.journal_path("lantern-keeper"),
           json.dumps(OLD_JOURNAL) + "\n" + json.dumps(NEW_JOURNAL) + "\n")
     lines = xunity_service.read_journal("lantern-keeper")
-    check("diario del traduttore dal vivo, righe di prima e di adesso", lines == [NEW_JOURNAL, NEW_JOURNAL])
+    check("live translator's journal, earlier and current lines", lines == [NEW_JOURNAL, NEW_JOURNAL])
     plugin = os.path.join(game, *adapter_unity.SERVICE_STATE.split("/"))
     write(plugin, "# plugin\r\nEsito=cfg-mancante\r\nData=2026-10-18 04:29:33\r\nDettaglio=x\r\n")
     cfg = os.path.join(game, *adapter_unity.SERVICE_CONFIG.split("/"))
     write(cfg, 'Programma=C:\\Python\\pythonw.exe\r\nArgomenti=-I "smith.py" servizio-xunity --profilo "p.json" '
                '--porta 51234\r\nCartella=C:\\PatchSmith\r\n')
-    check("plugin di BepInEx compilato da una versione precedente: stato e comando letti",
+    check("BepInEx plugin compiled by an earlier version: state and command read",
           adapter_unity.read_service_state(game) == {"Outcome": "cfg-missing", "Date": "2026-10-18 04:29:33",
                                                      "Detail": "x"}
           and adapter_unity.read_service_command(game).get("Program") == "C:\\Python\\pythonw.exe"
           and adapter_unity.read_service_command(game).get("Folder") == "C:\\PatchSmith")
     os.makedirs(os.path.join(game, "BepInEx", "plugins", "Patchsmith"), exist_ok=True)
     open(os.path.join(game, *adapter_unity.SERVICE_PLUGIN.split("/")), "wb").write(b"dll")
-    check("indirizzo del traduttore dal comando di prima (--porta)",
+    check("translator address from the earlier command (--porta)",
           adapter_unity.service_url(game) == xunity_service.address(51234))
     del data
 
@@ -180,20 +180,20 @@ def test_migrate(base):
     before = {rel: read_bytes(os.path.join(root, *rel.split("/"))) for rel in list(old_files) + list(untouched)}
     rewritten = project.migrate_formats()
     names = sorted(os.path.relpath(p, root).replace(os.sep, "/") for p in rewritten)
-    check("migrazione: riscritti profili, stato del controllo, registri e impostazioni (%s)" % names,
+    check("migration: profiles, check state, records and settings rewritten (%s)" % names,
           names == sorted(old_files))
     upgraded = all(json.loads(read_bytes(os.path.join(root, *rel.split("/"))).decode("utf-8"))
                    == legacy.upgrade(content) for rel, content in old_files.items())
     kept = all(read_bytes(os.path.join(root, *rel.split("/")) + project.FORMAT_BACKUP_SUFFIX) == before[rel]
                for rel in old_files)
-    check("migrazione: nomi inglesi, l'originale accanto (%s)" % project.FORMAT_BACKUP_SUFFIX, upgraded and kept)
-    check("migrazione: memorie delle traduzioni e file del traduttore dal vivo non toccati",
+    check("migration: English names, original kept next to it (%s)" % project.FORMAT_BACKUP_SUFFIX, upgraded and kept)
+    check("migration: translation memories and the live translator's files not touched",
           all(read_bytes(os.path.join(root, *rel.split("/"))) == before[rel] for rel in untouched))
     again = project.migrate_formats()
-    check("migrazione: la seconda volta niente da fare, copie di prima intatte",
+    check("migration: nothing to do the second time, earlier copies intact",
           again == [] and all(read_bytes(os.path.join(root, *rel.split("/")) + project.FORMAT_BACKUP_SUFFIX)
                               == before[rel] for rel in old_files))
-    check("migrazione: la lista dei giochi ignora le copie di prima",
+    check("migration: the list of games ignores the earlier copies",
           [os.path.basename(p) for p, _ in automatic.list_profiles()] == ["gioco.json"])
 
 
@@ -206,7 +206,7 @@ def main(base):
     project.DATA_ROOT = os.path.join(base, "dati-migrazione")
     test_migrate(base)
     ok = sum(1 for _, r in OUTCOMES if r)
-    print("\nRISULTATO: %d/%d controlli superati" % (ok, len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (ok, len(OUTCOMES)))
     return ok == len(OUTCOMES)
 
 

@@ -1,11 +1,11 @@
 """Runs all the tests (test/test_*.py), each with python -I, with PatchSmith's data in a temporary folder.
 
 Usage: python -I test/run_all.py [--work FOLDER] [--safety COPY JSON_FILE] [--keep] [test ...]
-- each test gets an empty folder of its own (prove/<name>), holding its own PatchSmith data (game profiles,
+- each test gets an empty folder of its own (tests/<name>), holding its own PatchSmith data (game profiles,
   translation memory, settings, logs...: the PATCHSMITH_DATA folder) and its own %LOCALAPPDATA%, %APPDATA%, %TEMP%
   and user folder: the games' real options, crashes and saves are not touched, and a test does not see what
   another one left behind;
-- each test's output goes to registri/<name>.txt; a test that runs longer than MAX_SECONDS is stopped, together
+- each test's output goes to logs/<name>.txt; a test that runs longer than MAX_SECONDS is stopped, together
   with the processes it started;
 - test_gui runs on a fake web game created here (PatchSmith's window opens for a few seconds), with some
   pre-existing settings that the test must put back as they were;
@@ -42,7 +42,7 @@ def tests(choices):
     choices = [os.path.basename(s)[:-3] if s.endswith(".py") else s for s in choices]  # also "test_unity.py"
     unknowns = [n for n in choices if n not in names]
     if unknowns:
-        raise SystemExit("Prove sconosciute: %s" % ", ".join(unknowns))
+        raise SystemExit("Unknown tests: %s" % ", ".join(unknowns))
     return [n for n in names if not choices or n in choices]
 
 
@@ -70,9 +70,8 @@ def environment(folder):
     """Environment variables of a test: PatchSmith data and Windows user folders all of its own, inside its folder
     (without the PATCHSMITH_* and OLLAMA_* of whoever runs the tests)."""
     test_env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PATCHSMITH_", "OLLAMA_"))}
-    folders = {"PATCHSMITH_DATA": "data_folder", "LOCALAPPDATA": "utente/AppData/Local",
-                "APPDATA": "utente/AppData/Roaming",
-                "TEMP": "utente/Temp", "TMP": "utente/Temp", "USERPROFILE": "utente"}
+    folders = {"PATCHSMITH_DATA": "data", "LOCALAPPDATA": "user/AppData/Local", "APPDATA": "user/AppData/Roaming",
+               "TEMP": "user/Temp", "TMP": "user/Temp", "USERPROFILE": "user"}
     for env_var, rel in folders.items():
         test_env[env_var] = os.path.join(folder, *rel.split("/"))
         os.makedirs(test_env[env_var], exist_ok=True)
@@ -113,7 +112,7 @@ def run_command(command, test_env, cwd, log_file, maximum=None):
         f.seek(src_lang)
         output = f.read().decode("utf-8", "replace")
     if code is None:
-        note = "\n(fermata: oltre %d s)\n" % maximum
+        note = "\n(stopped: over %d s)\n" % maximum
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(note)
         output += note
@@ -121,14 +120,14 @@ def run_command(command, test_env, cwd, log_file, maximum=None):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Esegue tutte le prove di PatchSmith senza toccare i dati veri.")
-    ap.add_argument("tests", nargs="*", help="solo queste (es. test_unity)")
+    ap = argparse.ArgumentParser(description="Runs all of PatchSmith's tests without touching the real data.")
+    ap.add_argument("tests", nargs="*", help="only these (e.g. test_unity)")
     ap.add_argument("--work", "--lavoro", dest="work", metavar="FOLDER",
-                    help="cartella di lavoro (vuota o da creare); predefinita: una cartella temporanea")
-    ap.add_argument("--safety", "--sicurezza", dest="confidence", nargs=2, metavar=("COPIA", "FILE_JSON"),
-                    help="copia di un gioco e file JSON relativo per test_safety (la copia viene modificata)")
-    ap.add_argument("--keep", "--tieni", dest="keep_lang", action="store_true",
-                    help="non cancellare la cartella di lavoro alla fine")
+                    help="work folder (empty or to be created); default: a temporary folder")
+    ap.add_argument("--safety", "--sicurezza", dest="safety", nargs=2, metavar=("COPY", "JSON_FILE"),
+                    help="copy of a game and relative JSON file for test_safety (the copy is modified)")
+    ap.add_argument("--keep", "--tieni", dest="keep", action="store_true",
+                    help="do not delete the work folder at the end")
     a = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -136,24 +135,24 @@ def main(argv=None):
     if a.work:
         work = os.path.abspath(a.work)
         if os.path.exists(work) and os.listdir(work):
-            raise SystemExit("La cartella di lavoro deve essere vuota: %s" % work)
+            raise SystemExit("The work folder must be empty: %s" % work)
         os.makedirs(work, exist_ok=True)
     else:
-        work = tempfile.mkdtemp(prefix="patchsmith-prove-")
-    logs = os.path.join(work, "registri")
+        work = tempfile.mkdtemp(prefix="patchsmith-tests-")
+    logs = os.path.join(work, "logs")
     os.makedirs(logs)
-    print("Cartella di lavoro: %s (ogni prova in prove\\<nome>, con i suoi dati di prova in prove\\<nome>\\dati)"
-          % work, flush=True)
+    print("Work folder: %s (each test in tests\\<name>, with its test data in tests\\<name>\\data)" % work,
+          flush=True)
     before = snapshot()
 
-    outcomes = {}  # name -> (state, seconds, output); state: "OK", "ERROR", "SALTATA"
+    outcomes = {}  # name -> (state, seconds, output); state: "OK", "ERROR", "SKIPPED"
     for name in items:
         log_file = os.path.join(logs, name + ".txt")
-        folder = os.path.join(work, "prove", name)
+        folder = os.path.join(work, "tests", name)
         script = os.path.join(HERE, name + ".py")
-        if name == "test_safety" and not a.confidence:
-            outcomes[name] = ("SALTATA", 0, "serve la copia di un gioco: --sicurezza <copia> <file.json>")
-            print("SALTATA  %-28s serve la copia di un gioco: --sicurezza <copia> <file.json>" % name, flush=True)
+        if name == "test_safety" and not a.safety:
+            outcomes[name] = ("SKIPPED", 0, "needs a copy of a game: --safety <copy> <file.json>")
+            print("SKIPPED  %-28s needs a copy of a game: --safety <copy> <file.json>" % name, flush=True)
             continue
         os.makedirs(folder)
         test_env = environment(folder)
@@ -163,17 +162,17 @@ def main(argv=None):
             # pre-existing settings, as for someone who already uses PatchSmith: the test must put them back as
             # they were
             with open(os.path.join(test_env["PATCHSMITH_DATA"], "settings.json"), "w", encoding="utf-8") as f:
-                json.dump({"version": 2, "nota": "impostazioni di prima della prova"}, f)
+                json.dump({"version": 2, "note": "settings from before the test"}, f)
             arguments = [game]
         elif name == "test_safety":
-            copy_dir = os.path.abspath(a.confidence[0])
+            copy_dir = os.path.abspath(a.safety[0])
             code, output, _ = run_command([sys.executable, "-I", os.path.join(os.path.dirname(HERE), "smith.py"),
                                         "auto", copy_dir, "--backend", "fake"], test_env, folder, log_file)
             if code != 0:
                 outcomes[name] = ("ERROR", 0, output)
-                print("ERROR    %-28s prerequisito `smith auto` non riuscito (codice %s)" % (name, code), flush=True)
+                print("ERROR    %-28s prerequisite `smith auto` failed (code %s)" % (name, code), flush=True)
                 continue
-            arguments = [copy_dir, a.confidence[1]]
+            arguments = [copy_dir, a.safety[1]]
         elif name in NO_ARGUMENTS:
             arguments = []
         else:
@@ -181,8 +180,8 @@ def main(argv=None):
         code, output, seconds = run_command([sys.executable, "-I", script] + arguments, test_env, folder, log_file)
         state = "OK" if code == 0 else "ERROR"
         outcomes[name] = (state, seconds, output)
-        note = "" if code == 0 else "  (fermata: oltre %d s)" % MAX_SECONDS if code is None else \
-            "  (codice %s)" % code
+        note = "" if code == 0 else "  (stopped: over %d s)" % MAX_SECONDS if code is None else \
+            "  (code %s)" % code
         print("%-8s %-28s %5.1f s%s" % (state, name, seconds, note), flush=True)
 
     after = snapshot()
@@ -190,22 +189,22 @@ def main(argv=None):
     failed = [n for n, (state, _, _) in outcomes.items() if state == "ERROR"]
     for name in failed:
         lines = outcomes[name][2].strip().splitlines()
-        print("\n--- %s (ultime righe; tutto in %s)" % (name, os.path.join(logs, name + ".txt")))
+        print("\n--- %s (last lines; everything in %s)" % (name, os.path.join(logs, name + ".txt")))
         print("\n".join(lines[-15:]))
     if changed_files:
-        print("\nATTENZIONE: durante le prove sono cambiati dei dati veri di PatchSmith (se nel frattempo stavi usando "
-              "PatchSmith o giocando con la traduzione dal vivo, puo' essere stato quello):")
+        print("\nWARNING: some of PatchSmith's real data changed during the tests (if you were using PatchSmith or "
+              "playing with the live translation in the meantime, that may have been it):")
         print("\n".join("  " + p for p in changed_files[:20]))
-    ran = [n for n, (state, _, _) in outcomes.items() if state != "SALTATA"]
-    skipped_texts = [n for n, (state, _, _) in outcomes.items() if state == "SALTATA"]
-    print("\nRISULTATO: %d prove superate su %d%s; dati veri %s" % (
-        len(ran) - len(failed), len(ran), " (saltate: %s)" % ", ".join(skipped_texts) if skipped_texts else "",
-        "CAMBIATI" if changed_files else "invariati"))
+    ran = [n for n, (state, _, _) in outcomes.items() if state != "SKIPPED"]
+    skipped = [n for n, (state, _, _) in outcomes.items() if state == "SKIPPED"]
+    print("\nRESULT: %d of %d tests passed%s; real data %s" % (
+        len(ran) - len(failed), len(ran), " (skipped: %s)" % ", ".join(skipped) if skipped else "",
+        "CHANGED" if changed_files else "unchanged"))
     ok = not failed and not changed_files
-    if ok and not a.keep_lang and not a.work:
+    if ok and not a.keep and not a.work:
         shutil.rmtree(work, ignore_errors=True)
     else:
-        print("Cartella di lavoro conservata: %s" % work)
+        print("Work folder kept: %s" % work)
     return 0 if ok else 1
 
 

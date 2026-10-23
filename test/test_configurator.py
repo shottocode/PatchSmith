@@ -93,7 +93,7 @@ def byte_diff(a, b):
 def main(base, real_game=None):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
-        raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
+        raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base)
     project.PROJECT_FOLDER = os.path.join(base, "patchsmith")
     project.DATA_ROOT = project.PROJECT_FOLDER  # the user's data here too
@@ -114,43 +114,43 @@ def main(base, real_game=None):
     protection = fingerprint(os.path.join(game, "KINGDOM HEARTS HD 1.5+2.5 ReMIX.exe"))
 
     # --- recognition
-    check("scheda: riconosciuta dalla cartella del gioco e da quella sopra",
+    check("sheet: recognized from the game's folder and from the one above",
               kh.identify(game) == game and kh.identify(outer) == game and kh.identify(base) is None)
-    check("scheda: lingue dei testi installate (dall'indice .hed)", kh.present_languages(game) == {"en", "it", "fr"})
-    check("scheda: punto della lingua trovato e verificato",
+    check("sheet: installed text languages (from the .hed index)", kh.present_languages(game) == {"en", "it", "fr"})
+    check("sheet: language spot found and verified",
               kh.language_byte(fake_pe())[1] == 1 and kh.language_byte(fake_pe(6))[1] == 6)
-    for name, data in (("doppio", fake_pe(double=True)), ("senza confronto con 'english'",
+    for name, data in (("with the pattern twice", fake_pe(double=True)), ("without the comparison with 'english'",
                                                            fake_pe(no_compare=True)),
-                       ("non PE", b"ciao" * 100)):
+                       ("not PE", b"ciao" * 100)):
         try:
             kh.language_byte(data)
-            check("scheda: eseguibile %s -> rifiutato" % name, False)
+            check("sheet: executable %s -> refused" % name, False)
         except kh.SheetError:
-            check("scheda: eseguibile %s -> rifiutato" % name, True)
+            check("sheet: executable %s -> refused" % name, True)
     r = official_language.detect(game, "it")
-    check("rilevamento: italiano presente dai file del gioco (senza Steam)",
+    check("detection: Italian present from the game's files (without Steam)",
               r["present"] is True and r["engine"]["kind"] == "sheet")
 
     # --- without consent: only the proposal, nothing written
     path, outcome = automatic.prepare(outer, "auto", "it", "fake", silent)
-    check("senza consenso: proposta, nessun file toccato",
+    check("without consent: proposal, no file touched",
               path is None and outcome.get("needs_consent") and fingerprints(game) == originals
               and any("1 byte" in x and game in x for x in outcome["official_language_lines"])
               and not any("I can't set it myself" in x for x in outcome["official_language_lines"]))
     fake = dict(r, steam_known={"appid": "1", "name": "x", "executable": "x.exe"})
-    check("messaggio: se la scheda spiega il rifiuto, niente 'Non posso impostarla io' contraddittorio",
+    check("message: if the sheet explains the refusal, no contradictory 'I can't set it myself'",
               not any("I can't" in x for x in official_language.message(fake, "it", ["motivo e rimedio"], False)))
 
     # --- refusals: nothing written
     configurator.smart_app_control = lambda: 1
     done, lines = official_language.set_(game, r, "it", silent, consent=True)
-    check("Smart App Control attivo -> rifiuto prima di chiedere il consenso, nessun file toccato",
+    check("Smart App Control on -> refused before asking for consent, no file touched",
               done is False and fingerprints(game) == originals and any("Smart App Control" in x for x in lines)
               and not configurator.has_consent(game))
     configurator.smart_app_control = lambda: 0
     system.game_open = lambda c: True
     done, lines = official_language.set_(game, r, "it", silent, consent=True)
-    check("gioco aperto -> rifiuto, nessun file toccato, salvataggi non copiati, consenso ricordato",
+    check("game open -> refused, no file touched, saves not copied, consent remembered",
               done is False and fingerprints(game) == originals and not configurator.note(game, "saves_copied")
               and configurator.has_consent(game))
     system.game_open = lambda c: False
@@ -158,47 +158,47 @@ def main(base, real_game=None):
     os.chmod(fourth, stat.S_IREAD)
     done, lines = official_language.set_(game, r, "it", silent, consent=True)
     os.chmod(fourth, stat.S_IREAD | stat.S_IWRITE)
-    check("un eseguibile di sola lettura -> nessuno modificato",
+    check("one read-only executable -> none modified",
               done is False and fingerprints(game) == originals and not configurator.lever(game, "language"))
     real_atomic_write = adapter_webjson.write_atomic
-    for rng, final in (("scrittura del terzo eseguibile", ".exe"),
-                       ("backup del terzo eseguibile", project.INFO_SUFFIX)):
+    for rng, final in (("writing the third executable", ".exe"),
+                       ("backing up the third executable", project.INFO_SUFFIX)):
         calls = []
 
         def failing_write(path, data, final=final, calls=calls):
             if path.endswith(final) and "patchsmith" + os.sep + "configurazioni" not in path:
                 calls.append(path)
                 if len(calls) == 3:
-                    raise OSError("disco pieno (simulato)")
+                    raise OSError("disk full (simulated)")
             real_atomic_write(path, data)
         adapter_webjson.write_atomic = failing_write
         done, lines = official_language.set_(game, r, "it", silent, consent=True)
         adapter_webjson.write_atomic = real_atomic_write
-        check("guasto durante %s -> tutto com'era (file, backup, registro)" % rng,
+        check("failure while %s -> everything as it was (files, backups, log)" % rng,
                   done is False and len(calls) >= 3 and fingerprints(game) == originals
                   and not configurator.lever(game, "language")
                   and not [n for n in os.listdir(game) if "patchsmith" in n])
-    check("il consenso dato resta anche se la modifica non e' riuscita", configurator.has_consent(game))
+    check("the consent given stays even if the change failed", configurator.has_consent(game))
 
     # --- with consent
     path, outcome = automatic.prepare(outer, "auto", "it", "fake", silent, consent=True)
     changes = {n: byte_diff(os.path.join(game, n), os.path.join(game, n + project.BACKUP_SUFFIX))
              for n in kh.EXECUTABLES}
-    check("con consenso: 1 byte cambiato in ognuno dei 6 eseguibili (valore 6 = italiano), con backup",
+    check("with consent: 1 byte changed in each of the 6 executables (value 6 = Italian), with backup",
               outcome.get("language_set") is True and all(c == [0x411] for c in changes.values())
               and all(kh.language_byte(open(os.path.join(game, n), "rb").read())[1] == 6 for n in kh.EXECUTABLES))
-    check("protezione e altri file non toccati",
+    check("protection and other files not touched",
               fingerprint(os.path.join(game, "KINGDOM HEARTS HD 1.5+2.5 ReMIX.exe")) == protection)
-    check("consenso salvato per il gioco, registro della leva, salvataggi copiati",
+    check("consent saved for the game, lever record, saves copied",
               configurator.has_consent(game) and configurator.lever(game, "language")["state"] == "applied"
               and os.path.isdir(str(configurator.note(game, "saves_copied"))))
-    check("messaggio: attivata, senza 'Non posso impostarla io' e senza 'traduzione installata'",
+    check("message: activated, without 'I can't set it myself' and without 'translation installed'",
               any("I activated" in x for x in outcome["official_language_lines"])
               and not any("I can't" in x for x in outcome["official_language_lines"])
               and not outcome.get("translation_installed"))
     after = fingerprints(game)
     path, outcome = automatic.prepare(game, "auto", "it", "fake", silent)
-    check("seconda analisi: gia' attivo, niente riscritto",
+    check("second analysis: already active, nothing rewritten",
               outcome.get("language_set") is True and fingerprints(game) == after
               and any("already active" in x for x in outcome["official_language_lines"]))
 
@@ -207,27 +207,27 @@ def main(base, real_game=None):
     open(os.path.join(game, kh.EXECUTABLES[1]), "wb").write(new)
     path, outcome = automatic.prepare(game, "auto", "it", "fake", silent)
     p1 = os.path.join(game, kh.EXECUTABLES[1])
-    check("aggiornamento: riapplicato da solo (consenso gia' dato), il nuovo originale ha il suo backup",
+    check("update: reapplied by itself (consent already given), the new original has its backup",
               outcome.get("language_set") is True and kh.language_byte(open(p1, "rb").read())[1] == 6
               and open(p1 + project.BACKUP_SUFFIX, "rb").read() == new
               and os.path.exists(p1 + project.BACKUP_SUFFIX + ".1"))
 
     # --- restore
     system.game_open = lambda c: True
-    check("ripristino con il gioco aperto -> non tocca nulla", automatic.restore(game, silent) is False
+    check("restore with the game open -> nothing touched", automatic.restore(game, silent) is False
               and kh.language_byte(open(p1, "rb").read())[1] == 6)
     system.game_open = lambda c: False
     automatic.restore(outer, silent)
     expectations = dict(originals, **{kh.EXECUTABLES[1]: hashlib.sha256(new).hexdigest()})
-    check("Ripristina originali: eseguibili identici (l'aggiornato al suo nuovo originale), niente backup "
-              "rimasti, leva tolta, consenso conservato",
+    check("Restore originals: identical executables (the updated one to its new original), no backups "
+              "left, lever removed, consent kept",
               fingerprints(game) == expectations and not [n for n in os.listdir(game) if ".patchsmith" in n]
               and not configurator.lever(game, "language") and configurator.has_consent(game)
               and not official_language.is_set(game))
-    check("riga di comando: auto con il consenso gia' dato riattiva ed esce con 0",
+    check("command line: auto with consent already given reactivates and exits with 0",
               cli.main(["auto", game, "--a", "it", "--backend", "fake"]) == 0
               and all(kh.language_byte(open(os.path.join(game, n), "rb").read())[1] == 6 for n in kh.EXECUTABLES))
-    check("riga di comando: ripristina con la cartella", cli.main(["restore", game]) == 0
+    check("command line: restore with the folder", cli.main(["restore", game]) == 0
               and fingerprints(game) == expectations)
 
     # --- cases found by the review
@@ -235,7 +235,7 @@ def main(base, real_game=None):
     new2 = fake_pe(signature=b"versione 3")
     p2 = os.path.join(game, kh.EXECUTABLES[2])
     open(p2, "wb").write(new2)
-    check("eseguibile aggiornato dal gioco, poi Ripristina: chiuso al primo colpo, resta il file nuovo",
+    check("executable updated by the game, then Restore: done at the first try, the new file stays",
               automatic.restore(game, silent) is True and not configurator.lever(game, "language")
               and open(p2, "rb").read() == new2 and not [n for n in os.listdir(game) if ".patchsmith" in n])
     expectations[kh.EXECUTABLES[2]] = hashlib.sha256(new2).hexdigest()
@@ -248,12 +248,12 @@ def main(base, real_game=None):
         if path.endswith(".exe"):
             calls.append(path)
             if len(calls) == 3:
-                raise OSError("file in uso (simulato)")
+                raise OSError("file in use (simulated)")
         real_atomic_write(path, data)
     adapter_webjson.write_atomic = broken_at_third
     done, lines = official_language.set_(game, official_language.detect(game, "fr"), "fr", silent, consent=True)
     adapter_webjson.write_atomic = real_atomic_write
-    check("guasto passando al francese -> si torna all'italiano di prima (non all'originale), leva conservata",
+    check("failure switching to French -> back to the previous Italian (not to the original), lever kept",
               done is False and fingerprints(game) == italian and configurator.lever(game, "language")["value"] == "it"
               and any("as it was" in x for x in lines))
 
@@ -271,7 +271,7 @@ def main(base, real_game=None):
     except KeyboardInterrupt:
         passed = True
     adapter_webjson.write_atomic = real_atomic_write
-    check("interruzione (Ctrl+C) durante la scrittura -> file com'erano, nessuna leva a meta'",
+    check("interruption (Ctrl+C) while writing -> files as they were, no lever left halfway",
               passed and fingerprints(game) == now and not configurator.lever(game, "language")
               and not [n for n in os.listdir(game) if ".patchsmith" in n])
 
@@ -281,24 +281,24 @@ def main(base, real_game=None):
     configurator._save(game, log_file)
     messages = []
     done, lines = official_language.set_(game, official_language.detect(game, "it"), "it", messages.append)
-    check("operazione rimasta a meta': la volta dopo rimette gli originali e riapplica",
+    check("operation left halfway: the next time puts back the originals and reapplies",
               any("interrupted" in m for m in messages) and done is True
               and configurator.lever(game, "language")["state"] == "applied")
 
     def blocked_write(path, data):
         if path.endswith(kh.EXECUTABLES[4]):
-            raise PermissionError("in uso da un altro programma (simulato)")
+            raise PermissionError("in use by another program (simulated)")
         real_atomic_write(path, data)
     adapter_webjson.write_atomic = blocked_write
     messages = []
     outcome_r = automatic.restore(game, messages.append)
     adapter_webjson.write_atomic = real_atomic_write
     values = {n: kh.language_byte(open(os.path.join(game, n), "rb").read())[1] for n in kh.EXECUTABLES}
-    check("Ripristina con un eseguibile bloccato: gli altri tornano originali, avviso e risultato False",
+    check("Restore with a locked executable: the others go back to original, warning and result False",
               outcome_r is False and values[kh.EXECUTABLES[4]] == 6
               and all(v == 1 for n, v in values.items() if n != kh.EXECUTABLES[4])
               and any("Still to put back" in m for m in messages))
-    check("... ripetendo si completa", automatic.restore(game, silent) is True and fingerprints(game) == expectations)
+    check("... repeating completes it", automatic.restore(game, silent) is True and fingerprints(game) == expectations)
 
     one_folder = os.path.join(base, "una cartella")
     os.makedirs(one_folder)
@@ -306,24 +306,24 @@ def main(base, real_game=None):
         adapter_webjson.write_atomic(one_folder, b"x")
     except OSError:
         pass
-    check("scrittura atomica fallita: nessun temporaneo lasciato",
+    check("failed atomic write: no temp file left",
               not os.path.exists(one_folder + adapter_webjson.TMP_SUFFIX))
     read_only = os.path.join(base, "sola lettura.json")
     open(read_only, "wb").write(b"{}")
     os.chmod(read_only, stat.S_IREAD)
     project.create_backup(read_only)
-    check("backup di un file di sola lettura: riuscito e il backup resta scrivibile",
+    check("backup of a read-only file: succeeds and the backup stays writable",
               os.access(read_only + project.BACKUP_SUFFIX, os.W_OK))
     os.chmod(read_only, stat.S_IREAD | stat.S_IWRITE)
 
     automatic.prepare(game, "auto", "it", "fake", silent)
     path, outcome = automatic.prepare(game, "auto", "it", "fake", silent, translate_anyway=True)
-    check("'traduci comunque' senza nulla da tradurre: la lingua attivata resta",
+    check("'Translate anyway' with nothing to translate: the activated language stays",
               path is None and configurator.lever(game, "language")
               and kh.language_byte(open(os.path.join(game, kh.EXECUTABLES[0]), "rb").read())[1] == 6)
     automatic.restore(game, silent)
     configurator.smart_app_control = lambda: 1
-    check("riga di comando: attivazione rifiutata con --modifica-eseguibili -> uscita 2",
+    check("command line: activation refused with --modifica-eseguibili -> exit 2",
               cli.main(["auto", game, "--a", "it", "--backend", "fake", "--modifica-eseguibili"]) == 2)
     configurator.smart_app_control = lambda: 0
 
@@ -332,7 +332,7 @@ def main(base, real_game=None):
     create_game(os.path.join(two_copies, "copia B"))
     before = {d: fingerprints(os.path.join(two_copies, d)) for d in ("copia A", "copia B")}
     path, outcome = automatic.prepare(two_copies, "auto", "it", "fake", silent, consent=True)
-    check("due copie del gioco nella cartella: nessuna modifica, chiede di sceglierne una",
+    check("two copies of the game in the folder: no change, asks to choose one",
               outcome.get("language_set") is False
               and any("2 copies" in x for x in outcome["official_language_lines"])
               and all(fingerprints(os.path.join(two_copies, d)) == before[d] for d in before))
@@ -356,7 +356,7 @@ def main(base, real_game=None):
     before = fingerprints(os.path.join(shared, "KH Steam"))
     path, outcome = automatic.prepare(shared, "auto", "it", "fake", silent, consent=True)
     steam.steam_folder = lambda: None
-    check("installato da Steam (scelta la cartella sopra): menu Lingua di Steam, eseguibili non toccati",
+    check("installed from Steam (folder above chosen): Steam's Language menu, executables not touched",
               any("Properties > General > Language" in x for x in outcome.get("official_language_lines", []))
               and fingerprints(os.path.join(shared, "KH Steam")) == before)
 
@@ -366,7 +366,7 @@ def main(base, real_game=None):
     open(os.path.join(other, kh.EXECUTABLES[2]), "wb").write(fake_pe(no_compare=True))
     before = fingerprints(other)
     done, lines = official_language.set_(other, official_language.detect(other, "it"), "it", silent, consent=True)
-    check("versione sconosciuta di un eseguibile -> nessun file modificato, spiegazione",
+    check("unknown version of an executable -> no file modified, explanation",
               done is False and fingerprints(other) == before and any("I don't recognize" in x for x in lines))
 
     # --- test on copies of the real executables (the game's folder is not touched)
@@ -378,23 +378,23 @@ def main(base, real_game=None):
             if os.path.exists(os.path.join(real_game, n)):
                 shutil.copy2(os.path.join(real_game, n), copy_dir)
         actual = fingerprints(copy_dir)
-        check("gioco vero (copie): lingue dei testi installate", kh.present_languages(copy_dir) >= {"en", "it"})
+        check("real game (copies): installed text languages", kh.present_languages(copy_dir) >= {"en", "it"})
         r = official_language.detect(copy_dir, "it")
         done, lines = official_language.set_(copy_dir, r, "it", silent, consent=True)
         changes = {n: byte_diff(os.path.join(copy_dir, n), os.path.join(copy_dir, n + project.BACKUP_SUFFIX))
                  for n in actual}
         periods = {n: kh.language_byte(open(os.path.join(copy_dir, n), "rb").read()) for n in actual}
-        check("gioco vero (copie): esattamente 1 byte per eseguibile, ora vale 6 (italiano)",
+        check("real game (copies): exactly 1 byte per executable, now 6 (Italian)",
                   done is True and len(actual) == 6 and all(c and len(c) == 1 and c[0] == periods[n][0]
                                                            for n, c in changes.items())
                   and all(v == 6 for _, v in periods.values()))
         for n, (o, _) in sorted(periods.items()):
             print("        %-45s byte 0x%X" % (n, o))
         automatic.restore(copy_dir, silent)
-        check("gioco vero (copie): ripristino identico", fingerprints(copy_dir) == actual)
+        check("real game (copies): identical restore", fingerprints(copy_dir) == actual)
 
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
 
 

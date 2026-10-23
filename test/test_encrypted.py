@@ -53,16 +53,16 @@ def main(base):
                        "steam_settings/achievements.json": achievements}.items():
         write(os.path.join(game, *name.split("/")), data)
     outcome = detection.detect(game)
-    check("Electron riconosciuto anche senza LICENSE.electron.txt; GemShell come archivio cifrato",
+    check("Electron recognized even without LICENSE.electron.txt; GemShell as an encrypted archive",
               outcome["main_engine"] == "Electron" and detection.encrypted_container(outcome) == "GemShell")
     before = fingerprints(game)
     lines = []
     path, outcome = automatic.prepare(game, "auto", "it", "fake", lines.append)
     e = outcome.get("outcome")
-    check("file cifrati: non supportato, spiegato (nessuna traduzione sperimentale), nessun profilo",
+    check("encrypted files: not supported, explained (no experimental translation), no profile",
               path is None and e is not None and e.code == "NOT_SUPPORTED" and "encrypted" in e.reason
               and "experimental" not in (e.actions or []))
-    check("file cifrati: nessun file del gioco cambiato (neanche quello dell'emulatore di Steam)",
+    check("encrypted files: no game file changed (not even the Steam emulator's)",
               fingerprints(game) == before)
 
     # ordinary web game with a Steam emulator folder next to it: only the game is translated
@@ -72,11 +72,11 @@ def main(base):
     write(os.path.join(web, "steam_settings", "achievements.json"), achievements)
     candidates, others = scan.scan_folder(web, lambda _m: None)
     paths = [c["path"] for c in candidates] + [a if isinstance(a, str) else a.get("path", "") for a in others]
-    check("cartella di un emulatore di Steam (steam_settings) mai scansionata",
+    check("Steam emulator folder (steam_settings) never scanned",
               not any("steam_settings" in p for p in paths) and any("testi.json" in p for p in paths))
 
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return 1 if failed else 0
 
 

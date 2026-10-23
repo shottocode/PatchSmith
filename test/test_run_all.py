@@ -45,17 +45,17 @@ def inside(path, folder):
 
 
 def test_environment(base):
-    os.environ["PATCHSMITH_DATA"] = os.path.join(base, "dati-di-chi-lancia")
+    os.environ["PATCHSMITH_DATA"] = os.path.join(base, "runner-data")
     os.environ["OLLAMA_HOST"] = "127.0.0.1:1"
-    singular = run_all.environment(os.path.join(base, "prove", "prova_uno"))
-    two = run_all.environment(os.path.join(base, "prove", "prova_due"))
+    singular = run_all.environment(os.path.join(base, "tests", "test_one"))
+    two = run_all.environment(os.path.join(base, "tests", "test_two"))
     env_vars = ("PATCHSMITH_DATA", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "USERPROFILE")
-    check("ambiente: dati e cartelle dell'utente dentro la cartella della prova, gia' create",
-              all(inside(singular[v], os.path.join(base, "prove", "prova_uno")) and os.path.isdir(singular[v])
+    check("environment: the user's data and folders inside the test's folder, already created",
+              all(inside(singular[v], os.path.join(base, "tests", "test_one")) and os.path.isdir(singular[v])
                   for v in env_vars))
-    check("ambiente: due prove non condividono dati ne' cartelle dell'utente",
+    check("environment: two tests share neither data nor user folders",
               all(os.path.normcase(singular[v]) != os.path.normcase(two[v]) for v in env_vars))
-    check("ambiente: niente PATCHSMITH_* e OLLAMA_* di chi lancia le prove",
+    check("environment: none of the PATCHSMITH_* and OLLAMA_* of whoever runs the tests",
               "OLLAMA_HOST" not in singular and not inside(singular["PATCHSMITH_DATA"], os.environ["PATCHSMITH_DATA"])
               and not [k for k in singular if k.upper().startswith("PATCHSMITH_")
                        and k not in ("PATCHSMITH_DATA", "PATCHSMITH_INTERFACE")]
@@ -64,28 +64,28 @@ def test_environment(base):
 
 
 def test_run(base):
-    folder = os.path.join(base, "esegui")
+    folder = os.path.join(base, "run")
     os.makedirs(folder)
     test_env = run_all.environment(folder)
-    log_file = os.path.join(folder, "registro.txt")
+    log_file = os.path.join(folder, "log.txt")
     code, output, _ = run_all.run_command(
-        [sys.executable, "-I", "-c", "import os, sys; print('dati=' + os.environ['PATCHSMITH_DATA']); sys.exit(3)"],
+        [sys.executable, "-I", "-c", "import os, sys; print('data=' + os.environ['PATCHSMITH_DATA']); sys.exit(3)"],
         test_env, folder, log_file)
     with open(log_file, encoding="utf-8") as f:
         written = f.read()
-    check("esegui: codice di uscita, uscita e registro", code == 3 and "dati=" + test_env["PATCHSMITH_DATA"] in output
-              and "dati=" in written and written.startswith("$ "))
+    check("run: exit code, output and log", code == 3 and "data=" + test_env["PATCHSMITH_DATA"] in output
+              and "data=" in written and written.startswith("$ "))
 
-    pid_file = os.path.join(folder, "figlio.pid")
-    script = os.path.join(folder, "appesa.py")
+    pid_file = os.path.join(folder, "child.pid")
+    script = os.path.join(folder, "hung.py")
     with open(script, "w", encoding="utf-8") as f:
         f.write(HUNG)
     start = time.time()
     code, output, _ = run_all.run_command([sys.executable, "-I", script, pid_file], test_env, folder, log_file,
                                             maximum=3)
     duration = time.time() - start
-    check("prova troppo lunga: fermata, il runner non resta bloccato (%.0f s)" % duration,
-              code is None and duration < 60 and "started" in output and "(fermata: oltre 3 s)" in output)
+    check("test too long: stopped, the runner is not blocked (%.0f s)" % duration,
+              code is None and duration < 60 and "started" in output and "(stopped: over 3 s)" in output)
     try:
         with open(pid_file, encoding="utf-8") as f:
             pid = int(f.read())
@@ -95,7 +95,7 @@ def test_run(base):
         if pid is None or not xunity_service.process_alive(pid):
             break
         time.sleep(0.1)
-    check("prova troppo lunga: fermati anche i processi che aveva avviato",
+    check("test too long: the processes it started are stopped too",
               pid is not None and not xunity_service.process_alive(pid))
 
 
@@ -111,7 +111,7 @@ def test_snapshot(base):
     try:
         project.PROJECT_FOLDER, project.DATA_ROOT = root, None
         before = run_all.snapshot()
-        check("istantanea: dati dell'utente si', componenti no",
+        check("snapshot: the user's data yes, components no",
                   os.path.join(root, "profiles", "gioco.json") in before
                   and os.path.join(root, "settings.json") in before
                   and not any("components" in p for p in before))
@@ -122,7 +122,7 @@ def test_snapshot(base):
         os.remove(os.path.join(root, "settings.json"))
         after = run_all.snapshot()
         changed_files = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
-        check("istantanea: si accorge di un file cambiato, aggiunto e tolto", changed_files == {
+        check("snapshot: it notices a file changed, added and removed", changed_files == {
             os.path.join(root, "memory", "gioco.it.json"), os.path.join(root, "memory", "nuovo.it.json"),
             os.path.join(root, "settings.json")})
     finally:
@@ -131,34 +131,34 @@ def test_snapshot(base):
 
 def test_names():
     all_items = run_all.tests([])
-    check("nomi: anche con .py", run_all.tests(["test_unity.py"]) == ["test_unity"])
+    check("names: also with .py", run_all.tests(["test_unity.py"]) == ["test_unity"])
     try:
-        run_all.tests(["prova_che_non_esiste"])
+        run_all.tests(["test_that_does_not_exist"])
         unknown = False
     except SystemExit:
         unknown = True
-    check("nomi: una prova sconosciuta si segnala", unknown)
+    check("names: an unknown test is reported", unknown)
     unlabeled = set()  # the tests that do not read arguments from the command line
     for name in all_items:
         with open(os.path.join(HERE, name + ".py"), encoding="utf-8") as f:
             if not re.search(r"sys\.argv\[", f.read()):
                 unlabeled.add(name)
-    check("prove senza argomenti: l'elenco del runner e' giusto (%s)" % ", ".join(sorted(unlabeled)),
+    check("tests without arguments: the runner's list is right (%s)" % ", ".join(sorted(unlabeled)),
               unlabeled == run_all.NO_ARGUMENTS)
 
 
 def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
-        raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
+        raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base, exist_ok=True)
-    project.DATA_ROOT = os.path.join(base, "data_folder")  # to be safe: these tests do not write data
+    project.DATA_ROOT = os.path.join(base, "data")  # to be safe: these tests do not write data
     test_environment(base)
     test_run(base)
     test_snapshot(base)
     test_names()
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
 
 

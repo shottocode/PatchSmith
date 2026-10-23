@@ -95,11 +95,11 @@ TABLE_FR = "localization-string-tables-french(fr)_assets_all.bundle"
 # --- Unity fonts -------------------------------------------------------------------------------------------------
 
 def test_font(base):
-    check("font .ttf: caratteri della tabella cmap (formato 4)",
+    check("font .ttf: characters of the cmap table (format 4)",
               font_unity.ttf_chars(fake.ttf("abcè€")) == set("abcè€")
               and font_unity.ttf_chars(b"non e' un font") is None)
     data = fake.tmp_font_data("Pixel SDF", ASCII + "é", 0)
-    check("font TextMeshPro senza albero dei campi: tabella dei caratteri riconosciuta dalla forma",
+    check("TextMeshPro font without the field tree: character table recognized by its shape",
               {chr(c) for c in font_unity.tmp_table(b"\x07" * 37 + data)} == set(ASCII + "é")
               and font_unity._object_name(data) == "Pixel SDF" and font_unity.tmp_table(b"\x01\x00" * 99) is None)
     # game with a font in the bundle (with the tree) and one in resources.assets (without), a dynamic one with its .ttf
@@ -110,10 +110,10 @@ def test_font(base):
     game_data = os.path.join(game, "Gioco_Data")
     found = font_unity.game_fonts(game_data)
     names = sorted((f["name"], f["mode"]) for f in found["tmp"])
-    check("font del gioco: quello del bundle (con il modo) e quello di resources.assets (senza albero)",
+    check("game fonts: the one in the bundle (with the mode) and the one in resources.assets (without tree)",
               names == [("Testi SDF", None), ("Titoli SDF", 0)] and found["complete"])
     allowed, reason = font_unity.allowed_chars(game_data)
-    check("regola: un carattere va bene se almeno un font lo ha (à da uno, ü dall'altro), è no",
+    check("rule: a character is fine if at least one font has it (à from one, ü from the other), è is not",
               allowed is not None and {"à", "ü"} <= allowed and "è" not in allowed
               and "2 TextMeshPro fonts" in reason)
     # dynamic font: its .ttf counts
@@ -121,21 +121,21 @@ def test_font(base):
     fake.il2cpp_game(dynamic, {"fonts_assets_all.bundle": fake.bundle([("CAB-d", fake.font_file(
         [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)], [("Corpo", ASCII + "àèéìòù")]))])})
     allowed, reason = font_unity.allowed_chars(os.path.join(dynamic, "Gioco_Data"))
-    check("font dinamico: valgono anche i caratteri del suo .ttf (è si disegna)",
+    check("dynamic font: the characters of its .ttf count too (è can be drawn)",
               allowed is not None and "è" in allowed and "dynamic" in reason)
     without_ttf = os.path.join(base, "senza-ttf")
     fake.il2cpp_game(without_ttf, {"fonts_assets_all.bundle": fake.bundle([("CAB-d", fake.font_file(
         [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)]))])})
     empty_game = os.path.join(base, "senza-font")
     fake.il2cpp_game(empty_game, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)])})
-    check("non si sa (nessun limite): font dinamici senza .ttf, nessun font TextMeshPro",
+    check("unknown (no limit): dynamic fonts without .ttf, no TextMeshPro font",
               font_unity.allowed_chars(os.path.join(without_ttf, "Gioco_Data"))[0] is None
               and font_unity.allowed_chars(os.path.join(empty_game, "Gioco_Data"))[0] is None)
     # the result stays in the cache file until the game files change
     cache = os.path.join(base, "cache", "font.json")
     first = font_unity.allowed_chars(game_data, cache=cache)
     real = font_unity.game_fonts
-    font_unity.game_fonts = lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("letti di nuovo"))
+    font_unity.game_fonts = lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("read again"))
     try:
         second = font_unity.allowed_chars(game_data, cache=cache)
         reread = True
@@ -147,7 +147,7 @@ def test_font(base):
     with open(bundle, "wb") as f:  # a game update: the font now also has è
         f.write(fake.bundle([("CAB-f", fake.font_file([("Titoli SDF", ASCII + "üè", 0)]))]))
     third = font_unity.allowed_chars(game_data, cache=cache)
-    check("cache: la seconda volta non rilegge i font; dopo un aggiornamento del gioco si, e ora è va bene",
+    check("cache: the second time the fonts are not read again; after a game update they are, and now è is fine",
               reread and second == first and "è" not in first[0] and third[0] is not None and "è" in third[0]
               and read_json(cache)["ranges"])
 
@@ -166,7 +166,7 @@ def test_unity_localization(base):
     profile, _full, e = automatic.analyze_and_translate(game, "en", "it", backend="fake", log=silent)
     name = read_json(profile)["name"]
     cache = project.data_folder("memory", "%s.unity" % name, "font.json")
-    check("Unity Localization: traduzione senza accenti scritta com'e'; font letti e tenuti in font.json",
+    check("Unity Localization: translation without accents written as it is; fonts read and kept in font.json",
               e["outcome"].code == "OK" and os.path.exists(cache) and [t for _, t in adapter_unity_loc.TablesFile(
                   os.path.join(folder, TABLE_EN)).texts()] == ["[it] " + t for t in EN])
     memory = _test_memory(profile)
@@ -177,13 +177,13 @@ def test_unity_localization(base):
     d = {}
     automatic.reapply(game, lines.append, test=True, outcome=d)
     texts = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(folder, TABLE_EN)).texts()]
-    check("font senza è: nella tabella è diventa e' (é resta: il font ce l'ha); in memoria resta è; la tabella "
-              "francese non si tocca", texts[3] == "La porta e' chiusa. Trova prima la chiave, perché serve."
+    check("font without è: in the table è becomes e' (é stays: the font has it); in memory è stays; the French "
+              "table is not touched", texts[3] == "La porta e' chiusa. Trova prima la chiave, perché serve."
               and read_json(memory)[EN[3]].startswith("La porta è") and fingerprint(os.path.join(folder, TABLE_FR))
               == fr_before and any("don't have" in r and "è" in r and "é" not in r for r in lines))
     problems = read_json(project.problems_path(read_json(profile), test=True))
-    check("un carattere che non si puo' adattare (→): resta l'originale, in problemi.json con il carattere da "
-              "non usare; l'esito lo dice (testo adattato e traduzione scartata)",
+    check("a character that cannot be adapted (→): the original stays, in problemi.json with the character "
+              "to avoid; the outcome says so (text adapted and translation discarded)",
               texts[4] == EN[4] and problems.get(EN[4], {}).get("where") == "game"
               and "→" in problems[EN[4]].get("do_not_use", "") and d["outcome"].extra.get("font_adapted") == 1
               and '"è" becomes "e"' in "\n".join(outcome._attempts_text(d["outcome"])))
@@ -193,7 +193,7 @@ def test_unity_localization(base):
     scan.save_json(profile, p)
     automatic.reapply(game, silent, test=True, outcome={})
     texts = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(folder, TABLE_EN)).texts()]
-    check("caratteri mancanti nel profilo: adattati anche se un font li ha (perché -> perche')",
+    check("missing characters in the profile: adapted even if a font has them (perché -> perche')",
               texts[3] == "La porta e' chiusa. Trova prima la chiave, perche' serve.")
     # with a font that has all the letters: no change
     good = os.path.join(base, "loc-buono")
@@ -206,12 +206,12 @@ def test_unity_localization(base):
     data[EN[3]] = "La porta è chiusa. Trova prima la chiave, perché serve."
     write_json(memory_b, data)
     automatic.reapply(good, silent, test=True, outcome={})
-    check("font con tutte le lettere italiane: la traduzione resta com'e'",
+    check("font with all the Italian letters: the translation stays as it is",
               [t for _, t in adapter_unity_loc.TablesFile(os.path.join(folder_b, TABLE_EN)).texts()][3]
               == data[EN[3]])
     # an unexpected error while reading the fonts does not stop the writing: no limit, as before
     real = font_unity.allowed_chars
-    font_unity.allowed_chars = lambda *_a, **_k: (_ for _ in ()).throw(KeyError("bundle strano"))
+    font_unity.allowed_chars = lambda *_a, **_k: (_ for _ in ()).throw(KeyError("odd bundle"))
     d = {}
     try:
         done = automatic.reapply(good, silent, test=True, outcome=d)
@@ -219,7 +219,7 @@ def test_unity_localization(base):
         done = False
     finally:
         font_unity.allowed_chars = real
-    check("errore imprevisto nella lettura dei font: le traduzioni si scrivono lo stesso, senza limiti",
+    check("unexpected error while reading the fonts: the translations are written anyway, without limits",
               done and d["outcome"].code == "OK" and [t for _, t in adapter_unity_loc.TablesFile(
                   os.path.join(folder_b, TABLE_EN)).texts()][3] == data[EN[3]])
 
@@ -266,20 +266,20 @@ def _fake_components(folder):
 
 def test_log(base):
     found = checks.missing_chars([os.path.join(SIGNALS, "unity-tmp-caratteri-mancanti.log")])
-    check("registro vero: caratteri mancanti nei font (anche fuori dal piano base) con il nome del font",
+    check("real log: characters missing from the fonts (also outside the basic plane) with the font name",
               set(found) == {"\u00d9", "\u2011", "\U0001F41A", "\u10e6"} and found["\u00d9"] == {"slkscr"})
     old = os.path.join(base, "vecchio.log")
     write(old, "Character with ASCII value of 232 was not found in the Font Asset Glyph Table.\n")
-    check("registro di TextMeshPro vecchio: 'ASCII value of 232' -> è",
+    check("old TextMeshPro log: 'ASCII value of 232' -> è",
               set(checks.missing_chars([old])) == {"è"})
-    check("lettere mancanti sostituite solo con caratteri semplici: è -> e', ò -> o' (non ó: del font non si sa), "
-              "trattino ‑ -> '-'; un'emoji non si puo' sostituire",
+    check("missing letters replaced only with simple characters: è -> e', ò -> o' (not ó: the font may lack it), "
+              "hyphen ‑ -> '-'; an emoji cannot be replaced",
               chars.adapt_without("Può è pre‑ordine", {"ò", "è", "‑"}, "it") == "Puo' e' pre-ordine"
               and chars.adapt_without("ok \U0001F41A", {"\U0001F41A"}, "it") is None
               and chars.adapt_without("niente", {"è"}, "it") == "niente")
     copy_dir = os.path.join(base, "copy_dir")
     text = open(os.path.join(SIGNALS, "unity-tmp-caratteri-mancanti.log"), encoding="utf-8").read()
-    check("copia del gioco riconosciuta anche senza 'Mono path' (giochi IL2CPP: 'Discovering subsystems')",
+    check("game copy recognized even without 'Mono path' (IL2CPP games: 'Discovering subsystems')",
               checks.of_this_copy(text.replace("C:/Giochi/Cast n Chill",
                                                       copy_dir.replace("\\", "/")), copy_dir) is True
               and checks.of_this_copy(text, copy_dir) is False)
@@ -293,7 +293,7 @@ def test_log(base):
                                     "live": "google", "file": []})
     adapter_unity.install(game, "en", "it", name, silent, local=False)
     cfg = os.path.join(game, *adapter_unity.CONFIG_BEPINEX.split("/"))
-    check("installazione: BepInEx scrive nel suo registro anche i messaggi di Unity (WriteUnityLog = true)",
+    check("installation: BepInEx also writes Unity's messages to its log (WriteUnityLog = true)",
               adapter_unity.unity_log_enabled(game) and "WriteUnityLog = true" in open(cfg).read())
     before = time.time() - 600
     after = time.time() - 120
@@ -315,45 +315,45 @@ def test_log(base):
     whole = snapshot(base)
     problems = checks.check(path, apply=False, log=silent)
     font = next((p for p in problems if p.code == "MISSING_FONT_CHARS"), None)
-    check("controllo in sola lettura: lettere mancanti trovate (si correggerebbero da sole), nulla scritto",
+    check("read-only check: missing letters found (they would be fixed automatically), nothing written",
               font is not None and font.state == "to_fix" and "«è»" in font.message
               and "One sentence with those letters" in font.message and snapshot(base) == whole
               and "missing_chars" not in read_json(path))
     problems = checks.check(path, apply=True, log=silent)
     font = next((p for p in problems if p.code == "MISSING_FONT_CHARS"), None)
     lines = open(cache, encoding="utf-8").read()
-    check("correzione: la riga scritta da PatchSmith adattata (è -> e'), quella cambiata a mano no, caratteri "
-              "annotati nel profilo; in memoria resta è",
+    check("fix: the line written by PatchSmith adapted (è -> e'), not the one changed by hand, characters "
+              "noted in the profile; in memory è stays",
               font is not None and font.state == "fixed" and "The door is locked=La porta e' chiusa" in lines
               and "Hand line=Riga è cambiata a mano" in lines and read_json(path)["missing_chars"] == "è"
               and read_json(memory)["The door is locked"] == "La porta è chiusa")
     problems = checks.check(path, apply=True, log=silent)
-    check("secondo controllo: nulla da rifare", not any(p.code == "MISSING_FONT_CHARS" for p in problems))
+    check("second check: nothing to redo", not any(p.code == "MISSING_FONT_CHARS" for p in problems))
     # from now on: the new cache lines and the live translator's answers avoid è
     adapter_unity.write_xunity_cache(game, "it", {"New line": "Novità è qui"}, silent,
                                       excluded=read_json(path)["missing_chars"])
     s = xunity_service.Service(path, port=1, log=silent, backend=backend.Fake())
     ours_now, _ = automatic.our_values(read_json(path), read_json(memory), {})
-    check("da adesso: nuove righe della cache e risposte dal vivo senza è (é, à e ì restano); la riga adattata "
-              "e' riconosciuta come scritta da PatchSmith",
+    check("from now on: new cache lines and live answers without è (é, à and ì stay); the adapted line "
+              "is recognized as written by PatchSmith",
               "New line=Novità e' qui" in open(cache, encoding="utf-8").read()
               and s.adapt("Perché è così", "it") == "Perché e' così"
               and "La porta e' chiusa" in ours_now["The door is locked"])
     # a fix made in "Fix translations" with a letter the fonts do not have: with "Reapply" it goes into the cache
-    # adapted, and counts as written (not "lasciata com'era")
+    # adapted, and counts as written (not "left as it was")
     data = read_json(memory)
     data["Quit"] = "Esci è"
     write_json(memory, data)
     corrections.mark_to_write(read_json(path), {"Quit": (None, "Esci è")})
     log_lines, d = [], {}
     automatic.reapply(game, log_lines.append, outcome=d)
-    check("Riapplica con le lettere mancanti: la correzione a mano scritta adattata nella cache e contata come "
-              "scritta", "Quit=Esci e'" in open(cache, encoding="utf-8").read()
+    check("Reapply with the missing letters: the hand fix written adapted to the cache and counted as "
+              "written", "Quit=Esci e'" in open(cache, encoding="utf-8").read()
               and d["outcome"].extra.get("fixes_written") == 1
-              and not any("lasciate com'erano" in r for r in log_lines))
+              and not any("left as they were" in r for r in log_lines))
     # an unexpected error in the font check does not hide the game's other problems
     real = adapter_unity.xunity_cache_entries
-    adapter_unity.xunity_cache_entries = lambda *_a, **_k: (_ for _ in ()).throw(KeyError("cache strana"))
+    adapter_unity.xunity_cache_entries = lambda *_a, **_k: (_ for _ in ()).throw(KeyError("odd cache"))
     write(log, "[Info   :   BepInEx] Chainloader startup complete\n[Warning: Unity Log] The character with Unicode "
                 "value \\u00F9 was not found in the [Pixel SDF] font asset or any potential fallbacks.\n")
     write(cfg, "[Logging.Disk]\nWriteUnityLog = false\n")
@@ -365,14 +365,14 @@ def test_log(base):
         problems, ok = [], False
     finally:
         adapter_unity.xunity_cache_entries = real
-    check("errore imprevisto nel controllo delle lettere: solo una riga nel registro, gli altri problemi restano",
+    check("unexpected error in the letter check: only one line in the log, the other problems stay",
               ok and any(p.code == "CONFIGURATION" for p in problems)
               and any("Font letter check failed" in r for r in log_lines))
     # an earlier configuration (WriteUnityLog off): the check puts it back
     write(cfg, "[Logging.Disk]\nWriteUnityLog = false\n")
     problems = checks.check(path, apply=False, log=silent)
     conf = next((p for p in problems if p.code == "CONFIGURATION"), None)
-    check("installazione di prima con WriteUnityLog spento: il controllo lo riaccende (CONFIGURAZIONE)",
+    check("earlier installation with WriteUnityLog off: the check turns it back on (CONFIGURATION)",
               conf is not None and "WriteUnityLog" in conf.detail and "letters missing" in conf.message)
     # BepInEx.cfg with non-UTF-8 bytes (a comment written by hand): it is switched on all the same, the rest stays
     # the same
@@ -381,7 +381,7 @@ def test_log(base):
     has_changed = adapter_unity.enable_unity_log(game)
     with open(cfg, "rb") as f:
         raw = f.read()
-    check("BepInEx.cfg con byte non UTF-8: WriteUnityLog acceso, il commento resta byte per byte",
+    check("BepInEx.cfg with non-UTF-8 bytes: WriteUnityLog on, the comment stays byte for byte",
               has_changed and b"# commento \xe8 a mano" in raw and b"WriteUnityLog = true" in raw
               and b"WriteUnityLog = false" not in raw)
 
@@ -406,13 +406,13 @@ def test_localization_log(base):
     log_file = os.path.join(os.environ["USERPROFILE"], "AppData", "LocalLow", "Studio Finto", "Gioco Finto",
                             "Player.log")
     write(log_file, text, time.time() - 60)
-    check("Player.log nei segnali dei giochi con Unity Localization (il controllo all'apertura lo vede)",
+    check("Player.log in the signals of games with Unity Localization (the check at startup sees it)",
               "unity:Player.log" in checks.signals(profile))
     problems = checks.check(profile, apply=True, log=silent)
     font = next((x for x in problems if x.code == "MISSING_FONT_CHARS"), None)
     texts = [t for _, t in adapter_unity_loc.TablesFile(os.path.join(folder, TABLE_EN)).texts()]
-    check("Unity Localization: ò mancante annotato nel profilo e tabella riscritta (Può -> Puo'); i caratteri che "
-              "ci sono solo nei testi del gioco (Ù, ღ) non contano",
+    check("Unity Localization: missing ò noted in the profile and table rewritten (Può -> Puo'); characters "
+              "found only in the game's texts (Ù, ღ) do not count",
               font is not None and font.state == "fixed" and "«ò»" in font.message and "Ù" not in font.message
               and "ò" in read_json(profile)["missing_chars"] and texts[1] == "Puo' continuare")
 
@@ -436,7 +436,7 @@ def test_unreal(base):
         return g, paks
     g, paks = game("unreal-fr", [("fr", "Démarrer"), ("ja", "ゲーム開始")])
     allowed = adapter_unreal.allowed_chars(g, set("Start Game"), {"en"})
-    check("Unreal: con il francese (é) il font ha il Latino-1 (anche ì, ò); il giapponese non conta",
+    check("Unreal: with French (é) the font has Latin-1 (also ì, ò); Japanese does not count",
               allowed is not None and set("àèìòù") <= allowed and "ゲ" not in allowed and "→" not in allowed)
     memory = {"Start Game": "Inizia la partita è ò", "Quit": "Esci", "Next -> page": "Pagina → successiva ★"}
     refused = {}
@@ -444,11 +444,11 @@ def test_unreal(base):
     was_read = adapter_unreal.Pak(os.path.join(paks, adapter_unreal.pak_name("it")))
     texts = [s for s, _ in adapter_unreal.read_locres(was_read.read_file(
         "Proj/Content/Localization/Game/en/Game.locres"))["strings"]]
-    check("Unreal: lettere italiane scritte; un carattere che nessuna lingua del gioco usa e non si puo' "
-              "adattare (★) lascia l'originale e torna a chi chiama (problemi.json)",
+    check("Unreal: Italian letters written; a character no language of the game uses and that cannot be "
+              "adapted (★) leaves the original and goes back to the caller (problemi.json)",
               "Inizia la partita è ò" in texts and "Next -> page" in texts and "★" in refused.get("Next -> page", ""))
     g2, _ = game("unreal-en", [("de", "Spiel starten")])
-    check("Unreal: solo inglese, o altre lingue senza lettere accentate: nessun indizio, nessun limite",
+    check("Unreal: English only, or other languages without accented letters: no clue, no limit",
               adapter_unreal.allowed_chars(g2, set("Start Game"), {"en"}) is None
               and adapter_unreal._adapt("Novità ★", set(), None, "it") == "Novità ★")
 
@@ -507,9 +507,9 @@ def _without_shared():
 
 
 def test_length(base):
-    check("spazio di un'etichetta: con le traduzioni ufficiali (o lo spazio del gioco) 1,3 volte l'originale + 2 "
-              "o la piu' lunga di quelle; senza, solo i casi evidenti (doppio e 7 caratteri in piu': 'Back' 10, "
-              "'Credits' 13); frasi lunghe e testi su piu' righe esclusi",
+    check("space of a label: with the official translations (or the game's space) 1.3 times the original + 2 "
+              "or the longest of them; without, only the obvious cases (double and 7 more characters: 'Back' 10, "
+              "'Credits' 13); long sentences and multi-line texts excluded",
               project.label_space("Back") == 10 and project.label_space("Credits") == 13
               and project.label_space("Credits", ["Crédits"]) == 12
               and project.label_space("Credits", ["Mitwirkende und Danksagungen"]) == 28
@@ -524,15 +524,15 @@ def test_length(base):
     asked = [(t, n) for t, n in b.requests if n]
     problems = p.problems()
     machine = read_json(p._machine_path())
-    check("etichette troppo lunghe chieste di nuovo con il numero massimo di caratteri (non le altre, non la "
-              "frase lunga): resta la piu' corta valida, anche tra le traduzioni automatiche",
+    check("labels too long asked again with the maximum number of characters (not the others, not the long "
+              "sentence): the shortest valid one stays, also among the machine translations",
               sorted(asked) == [("Credits", 13), ("Main Menu", 17), ("Quest Log", 17)]
               and p.memory["Credits"] == "Crediti" and p.memory["Quest Log"] == "Missioni"
               and machine["Credits"] == "Crediti" and p.memory["Back"] == "Indietro"
               and p.memory["Settings"] == "Impostazioni" and p.shortened == 3)
     extra = automatic._extra_attempts(p)
-    check("ancora troppo lunga: in problemi.json con il testo originale come chiave ('lunghezza', con la "
-              "traduzione e lo spazio); l'esito conta le accorciate e quella annotata adesso",
+    check("still too long: in problemi.json with the original text as key ('length', with the translation "
+              "and the space); the outcome counts the shortened ones and the one noted now",
               extra.get("shortened") == 3 and extra.get("too_long") == 1
               and problems.get("Main Menu", {}).get("where") == "length"
               and problems["Main Menu"].get("value") == "Menu principale gioco"
@@ -541,18 +541,18 @@ def test_length(base):
     b2 = Labels()
     p2 = Project(path, silent)
     p2.translate_texts(texts, b2, "en", "it")
-    check("una volta sola: la volta dopo nessuna richiesta (la troppo lunga resta annotata, e l'esito non la "
-              "ridice a ogni traduzione)", b2.requests == [] and "too_long" not in automatic._extra_attempts(p2)
+    check("only once: the next time no request (the too long one stays noted, and the outcome does not repeat "
+              "it at every translation)", b2.requests == [] and "too_long" not in automatic._extra_attempts(p2)
               and Project(path, silent).problems()["Main Menu"]["where"] == "length")
     # written to the game, it stays noted as long as the translation is that one
     p = Project(path, silent)
     p._refused, p._applied = {}, {"Main Menu", "Credits"}
     p._record_applied()
-    check("scritta nel gioco: resta nell'elenco finche' la traduzione non cambia",
+    check("written to the game: it stays in the list as long as the translation does not change",
               p.problems()["Main Menu"]["where"] == "length")
     items = corrections.load(path)
     entry = next(x for x in items.entries if x.text == "Main Menu")
-    check("'Correggi traduzioni': nell'elenco 'Troppo lunghi' con il testo originale",
+    check("'Fix translations': in the 'Too long' list with the original text",
               "long" in entry.problems and "too long" in entry.problems["long"]
               and entry in items.apply_filter("long"))
     # fixed by hand: not asked again
@@ -560,38 +560,38 @@ def test_length(base):
     p.fix({"Back": "Torna indietro alla schermata"})
     b3 = Labels()
     Project(path, silent).translate_texts(texts, b3, "en", "it")
-    check("una correzione a mano lunga non si chiede di nuovo al traduttore", b3.requests == [])
+    check("a long fix made by hand is not sent to the translator again", b3.requests == [])
     # translators that do not know about a maximum space: only noted, no extra requests
     _without_shared()
     path2 = _profile(base, "etichette-online")
     online = NoContext()
     p2 = Project(path2, silent)
     p2.translate_texts(texts, online, "en", "it")
-    check("con un traduttore online: nessuna richiesta in piu', le etichette lunghe annotate per 'Troppo lunghi'",
+    check("with an online translator: no extra requests, the long labels noted for 'Too long'",
               sorted(online.requests) == sorted(texts) and p2.problems().get("Credits", {}).get("where") == "length")
     # longer official translations: there is room
     path3 = _profile(base, "etichette-ufficiali")
     b4 = Labels()
     Project(path3, silent).translate_texts(["Credits"], b4, "en", "it", contexts={
         "Credits": {"key": "menu_credits", "references": {"de": "Mitwirkende Personen"}}})
-    check("con una traduzione ufficiale piu' lunga ('Mitwirkende Personen') 'Riconoscimenti' ci sta",
+    check("with a longer official translation ('Mitwirkende Personen') 'Riconoscimenti' fits",
               [n for _, n in b4.requests if n] == [])
     # the local translator's real prompt
     loc = backend.Local("4b", log=silent, server=object())
-    check("traduttore locale: il numero massimo di caratteri nel prompt solo quando lo si chiede",
+    check("local translator: the maximum number of characters in the prompt only when requested",
               "at most 12 characters" in loc._context_text({"width": 12}, "it")
               and "at most" not in loc._context_text({"key": "menu", "space": 12}, "it"))
     # the outcome
     e = outcome.Outcome(code="OK", extra={"shortened": 2, "too_long": 1})
     text = "\n".join(outcome._attempts_text(e))
-    check("esito: etichette accorciate e quella ancora lunga, con 'Correggi traduzioni' > 'Troppo lunghi'",
+    check("outcome: shortened labels and the one still long, with 'Fix translations' > 'Too long'",
               "2 labels were too long for their space" in text
               and "A label might not fit" in text
               and outcome.to_fix(e) and outcome.fixes_filter(e) == "long")
     singular = "\n".join(outcome._attempts_text(outcome.Outcome(code="OK", extra={"shortened": 1})))
-    check("esito con un'etichetta sola: 'lo spazio che ha nel gioco' (non 'che hanno')",
+    check("outcome with a single label: 'its space in the game' (not 'their space')",
               "A label was too long for its space in the game: I asked for a shorter one." in singular)
-    check("'Correggi traduzioni': il motivo si legge bene (caratteri e spazio)",
+    check("'Fix translations': the reason reads well (characters and space)",
               "too long: 21 characters, usually about 17 fit" in entry.problems["long"])
     # noted with an online translator, then with the local one: asked shorter once
     _without_shared()
@@ -602,7 +602,7 @@ def test_length(base):
     p5.translate_texts(texts, b5, "en", "it")
     b6 = Labels()
     Project(path4, silent).translate_texts(texts, b6, "en", "it")
-    check("annotate con un traduttore online: con il traduttore locale si chiedono piu' corte, una volta sola",
+    check("noted with an online translator: with the local translator shorter ones are asked, only once",
               sorted(t for t, n in b5.requests if n) == ["Credits", "Main Menu", "Quest Log"]
               and p5.memory["Credits"] == "Crediti" and b6.requests == []
               and Project(path4, silent).problems()["Main Menu"].get("requested") is True)
@@ -610,7 +610,7 @@ def test_length(base):
     b7 = Labels()
     p7 = Project(path4, silent)
     p7.retranslate(["Main Menu"], b7, "en", "it", round_=3)
-    check("'Ritraduci' di un'etichetta troppo lunga: chiesta con il suo spazio (17 caratteri)",
+    check("'Re-translate' of a label too long: asked with its space (17 characters)",
               b7.requests == [("Main Menu", 17)])
     # an unexpected error while shortening the labels does not stop the translation (it is an extra)
 
@@ -623,8 +623,8 @@ def test_length(base):
     log_lines = []
     p8 = Project(_profile(base, "etichette-errore"), log_lines.append)
     remaining = p8.translate_texts(texts, Broken(), "en", "it")
-    check("errore imprevisto mentre si accorciano le etichette: traduzione finita, traduzioni salvate, una riga "
-              "nel registro", remaining == 0 and p8.memory["Credits"] == "Riconoscimenti"
+    check("unexpected error while shortening the labels: translation finished, translations saved, one line "
+              "in the log", remaining == 0 and p8.memory["Credits"] == "Riconoscimenti"
               and any("shorter labels failed" in r for r in log_lines))
 
 
@@ -660,15 +660,15 @@ def test_local_length(base):
     b = backend.Local("4b", log=silent, server=server)
     p = Project(_profile(base, "etichette-locale"), silent)
     p.translate_texts(["Credits", "Play"], b, "en", "it")
-    check("traduttore locale vero (server finto): 'Credits' chiesto di nuovo con il massimo di 13 caratteri nel "
-              "prompt, resta 'Crediti'", p.memory["Credits"] == "Crediti"
+    check("real local translator (fake server): 'Credits' asked again with the maximum of 13 characters in the "
+              "prompt, 'Crediti' stays", p.memory["Credits"] == "Crediti"
               and sum("at most 13 characters" in x for x in server.prompt) == 1)
 
 
 def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
-        raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
+        raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base, exist_ok=True)
     for env_var, name in (("TEMP", "temp"), ("TMP", "temp"), ("USERPROFILE", "utente"),
                             ("LOCALAPPDATA", "appdata"), ("APPDATA", "appdata-roaming")):
@@ -693,9 +693,9 @@ def main(base):
         except Exception as e:  # noqa: BLE001 - a broken test does not stop the others
             import traceback
             traceback.print_exc()
-            check("%s: errore imprevisto (%s: %s)" % (name, type(e).__name__, e), False)
+            check("%s: unexpected error (%s: %s)" % (name, type(e).__name__, e), False)
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
 
 

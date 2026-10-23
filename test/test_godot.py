@@ -122,7 +122,7 @@ def main(base):
     tables = adapter_godot.tables(pck)
     en = adapter_godot.table_texts(pck.read_file(tables["en"]))
     de = adapter_godot.table_texts(pck.read_file(tables["de"]))
-    check("PCK incorporato, tabelle per lingua; OptimizedTranslation (anche smaz) e Translation lette (%s, %s)"
+    check("embedded PCK, tables per language; OptimizedTranslation (smaz too) and Translation read (%s, %s)"
               % (ascii(en), ascii(de)), pck.version() == "4.4.1" and sorted(tables) == ["de", "en"]
               and en == ("en", ["the drill is ready", "Upgrade", "Unlock [color=40ff40]overdrive[/color] mode"])
               and de[0] == "de" and sorted(de[1]) == ["Der Bohrer ist bereit", "Verbessern"])
@@ -136,17 +136,18 @@ def main(base):
         override = f.read()
     with open(os.path.join(folder, adapter_godot.DICTIONARY), encoding="utf-8") as f:
         dictionary = json.load(f)
-    check("Analizza e traduci: profilo godot, override.cfg con l'autoload, script e traduzioni accanto all'eseguibile",
+    check("Analyze and translate: godot profile, override.cfg with the autoload, script and translations next "
+              "to the executable",
               completed and profile.get("engine") == "godot" and outcome["outcome"].code == "OK"
               and '[autoload]' in override and 'PatchsmithTraduzione="*res://patchsmith-traduzione.gd"' in override
               and os.path.exists(os.path.join(folder, adapter_godot.SCRIPT))
               and dictionary["language"] == "en" and dictionary["additions"] == ["it"]
               and dictionary["texts"].get("Upgrade", "").startswith("[it]")
               and "[color=40ff40]" in dictionary["texts"].get("Unlock [color=40ff40]overdrive[/color] mode", ""))
-    check("il pacchetto del gioco non e' cambiato", fingerprints(folder)["drill.exe"] == before["drill.exe"])
+    check("the game's package has not changed", fingerprints(folder)["drill.exe"] == before["drill.exe"])
     automatic.reapply(folder, lines.append, test=True, outcome={})
     automatic.restore(folder, lines.append, outcome={})
-    check("Riapplica e poi Ripristina originali: cartella identica a prima", fingerprints(folder) == before)
+    check("Reapply and then Restore originals: folder identical to before", fingerprints(folder) == before)
 
     # the game's own override.cfg: kept and put back
     another = os.path.join(base, "DrillConOverride")
@@ -156,7 +157,7 @@ def main(base):
     with open(os.path.join(another, "override.cfg"), encoding="utf-8") as f:
         merged = f.read()
     automatic.restore(another, lines.append, outcome={})
-    check("override.cfg del gioco: le sue impostazioni restano, poi rimesso identico",
+    check("the game's override.cfg: its settings stay, then put back identical",
               "window/size/mode=3" in merged and "PatchsmithTraduzione" in merged and fingerprints(another) == before)
 
     # Italian already in the game
@@ -164,11 +165,11 @@ def main(base):
     game(ita, with_italian=True)
     before = fingerprints(ita)
     path, completed, outcome = automatic.analyze_and_translate(ita, "auto", "it", "fake", lines.append)
-    check("tabella in italiano gia' nel gioco: lingua ufficiale, nessun file scritto",
+    check("Italian table already in the game: official language, no file written",
               not completed and outcome["outcome"].code == "OFFICIAL" and fingerprints(ita) == before)
 
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return 1 if failed else 0
 
 

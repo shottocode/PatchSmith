@@ -114,15 +114,15 @@ def test_paths(base):
         json.dump({"deepl_key": "chiave-di-prova"}, f)
     with_data = paths(base, data)
     respected = bool(with_data) and all(inside(p, data) for p in with_data["data"].values())
-    check("PATCHSMITH_DATA: tutti i dati dell'utente nella sua cartella", respected)
+    check("PATCHSMITH_DATA: all the user's data in its folder", respected)
     if with_data and not respected:
-        print("   fuori:", {k: p for k, p in with_data["data"].items() if not inside(p, data)})
-    check("PATCHSMITH_DATA: impostazioni (chiave DeepL) lette da li'",
+        print("   outside:", {k: p for k, p in with_data["data"].items() if not inside(p, data)})
+    check("PATCHSMITH_DATA: settings (DeepL key) read from there",
               with_data and with_data["deepl_key"] == "chiave-di-prova")
-    check("PATCHSMITH_DATA: componenti, plugin, traduttore locale e regole restano accanto al programma",
+    check("PATCHSMITH_DATA: components, plugin, local translator and rules stay next to the program",
               with_data and all(inside(p, project.PROJECT_FOLDER) for p in with_data["program"].values()))
     unlabeled = paths(base, None)
-    check("senza PATCHSMITH_DATA: i dati restano accanto al programma, come prima",
+    check("without PATCHSMITH_DATA: the data stays next to the program, as before",
               unlabeled and all(inside(p, project.PROJECT_FOLDER) for p in unlabeled["data"].values())
               and os.path.dirname(unlabeled["data"]["profiles"]) == project.PROJECT_FOLDER)
 
@@ -130,7 +130,7 @@ def test_paths(base):
     saved_items = project.PROJECT_FOLDER, project.DATA_ROOT
     try:
         project.PROJECT_FOLDER, project.DATA_ROOT = os.path.join(base, "altrove"), None
-        check("RADICE_DATI vuota: i dati seguono CARTELLA_PROGETTO",
+        check("DATA_ROOT empty: the data follows PROJECT_FOLDER",
                   project.data_folder("memory") == os.path.join(base, "altrove", "memory"))
     finally:
         project.PROJECT_FOLDER, project.DATA_ROOT = saved_items
@@ -144,17 +144,17 @@ def test_command_line(base):
     originals = fingerprints(game)
     code, output = smith(base, data, "auto", game, "--backend", "fake", "--a", "it")
     profiles = os.listdir(os.path.join(data, "profiles")) if os.path.isdir(os.path.join(data, "profiles")) else []
-    check("smith auto: tradotto, profilo e memoria nella cartella dei dati",
+    check("smith auto: translated, game profile and memory in the data folder",
               code == 0 and profiles == ["lantern-keeper.json"]
               and os.path.exists(os.path.join(data, "memory", "lantern-keeper.it.prova.json"))
               and os.path.exists(os.path.join(game, *rel.split("/")) + project.BACKUP_SUFFIX))
     if code:
         print("\n".join(output.strip().splitlines()[-10:]))
     code, output = smith(base, data, "status", "lantern-keeper", "--esempi", "1")
-    check("smith stato: il profilo si trova per nome nella cartella dei dati",
+    check("smith status: the game profile is found by name in the data folder",
               code == 0 and "Testi unici" in output)
     code, _ = smith(base, data, "restore", game)
-    check("smith ripristina: gioco identico all'originale", code == 0 and fingerprints(game) == originals)
+    check("smith restore: game identical to the original", code == 0 and fingerprints(game) == originals)
 
 
 def test_xunity_service(base):
@@ -173,7 +173,7 @@ def test_xunity_service(base):
         project.DATA_ROOT = saved
     with open(os.path.join(game, *adapter_unity.SERVICE_CONFIG.split("/")), encoding="utf-8") as f:
         lines = dict(r.split("=", 1) for r in f.read().splitlines() if "=" in r and not r.startswith("#"))
-    check("servizio per XUnity: smith.py e cartella del programma, profilo con il suo percorso",
+    check("service for XUnity: smith.py and the program's folder, game profile with its path",
               ('"%s"' % SMITH) in lines.get("Arguments", "") and ('--profile "%s"' % profile) in lines["Arguments"]
               and lines.get("Folder") == project.PROJECT_FOLDER)
 
@@ -190,10 +190,10 @@ def test_gui_settings(base):
         gui.App._save_settings(mock)
         with open(os.path.join(project.DATA_ROOT, "settings.json"), encoding="utf-8") as f:
             saved_count = json.load(f)
-        check("interfaccia: impostazioni salvate nella cartella dei dati (creata se manca)",
+        check("interface: settings saved in the data folder (created if missing)",
                   saved_count.get("folder") == "C:/Giochi/Finto" and saved_count.get("backend") == "local")
     except OSError as e:
-        check("interfaccia: impostazioni salvate nella cartella dei dati (creata se manca): %s" % e, False)
+        check("interface: settings saved in the data folder (created if missing): %s" % e, False)
     finally:
         project.DATA_ROOT = saved
 
@@ -232,13 +232,13 @@ def test_english_names(base):
                  "components/plugin/PatchsmithServizio.cs": "cs"}
         leftovers = [n for n in ("profili", "memoria", "registri", "componenti", "impostazioni.json") if
                    os.path.exists(os.path.join(root, n))]
-        check("nomi inglesi: dati spostati (%s), nulla perso, componenti uniti, nessuna cartella vecchia (%s)"
+        check("English names: data moved (%s), nothing lost, components merged, no old folder (%s)"
                   % (sorted(moved_names), leftovers), all(read_file(r) == t for r, t in new_items.items())
                   and not leftovers and before == os.path.join(root, "profili", "gioco.json"))
         again = project.migrate_data()
         located = cli._profile(os.path.join("C:\\", "vecchio", "PatchSmith", "profili", "gioco.json"))
-        check("nomi inglesi: la seconda volta niente da fare; il profilo chiesto con il percorso di prima "
-                  "(dal comando dentro un gioco gia' tradotto) si trova", again == []
+        check("English names: nothing to do the second time; the game profile asked for with the old path "
+                  "(from the command inside an already translated game) is found", again == []
                   and located == os.path.join(root, "profiles", "gioco.json"))
     finally:
         project.PROJECT_FOLDER, project.DATA_ROOT = saved_items
@@ -247,18 +247,18 @@ def test_english_names(base):
 def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
-        raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
+        raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base, exist_ok=True)
     project.DATA_ROOT = os.path.join(base, "data_folder")  # this process too: never the real data
     if test_paths(base):
         test_command_line(base)
     else:  # if the variable were not honored, the command line would write among the real data
-        check("riga di comando non provata: PATCHSMITH_DATA non rispettata", False)
+        check("command line not tested: PATCHSMITH_DATA not honored", False)
     test_xunity_service(base)
     test_gui_settings(base)
     test_english_names(base)
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
 
 

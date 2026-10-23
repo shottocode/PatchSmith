@@ -597,7 +597,7 @@ Coming with the same framework: resolution, windowed/fullscreen mode and FPS lim
 ## Tests
 
 **All the tests together:** `python -I test/run_all.py`. Each test gets its own empty folder, with its own profiles, memory and settings inside (a temporary `PATCHSMITH_DATA` folder just for it). `%LOCALAPPDATA%`, `%APPDATA%`, `%TEMP%` and the user folder are test folders of its own too. So the options, saves and crashes of real games are never touched, and a test does not see what another one left behind.
-- Each test's output goes into `registri/<test>.txt`, in the work folder. A test lasting more than 15 minutes is stopped, together with the programs it started.
+- Each test's output goes into `logs/<test>.txt`, in the work folder. A test lasting more than 15 minutes is stopped, together with the programs it started.
 - At the end it checks that PatchSmith's real data (profiles, memory, settings…) did not change.
 - The work folder is deleted if everything passes; `--keep` keeps it, `--work <folder>` chooses it (for example on another disk).
 - With names it runs only those tests: `python -I test/run_all.py test_unity test_xna`.

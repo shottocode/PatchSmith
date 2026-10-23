@@ -47,10 +47,10 @@ def main(folder, rel_json):
 
     # 1) same game chosen from the parent folder: must reuse the game profile
     parent = os.path.dirname(folder)
-    check("cartella superiore -> stesso profilo", automatic.find_profile(parent) == automatic.find_profile(folder))
+    check("parent folder -> same game profile", automatic.find_profile(parent) == automatic.find_profile(folder))
     automatic.analyze_and_translate(parent, backend="fake", log=silent)
-    check("nessun profilo duplicato", len(list(automatic.list_profiles())) == profiles_before)
-    check("backup invariato dopo il secondo giro", fingerprint(backup) == original)
+    check("no duplicate game profile", len(list(automatic.list_profiles())) == profiles_before)
+    check("backup unchanged after the second run", fingerprint(backup) == original)
 
     # 2) game update after the patch: the new file becomes the original
     with open(backup, encoding="utf-8") as f:
@@ -62,8 +62,8 @@ def main(folder, rel_json):
         f.write(new_bytes)
     automatic.reapply(folder, silent, test=True)
     info = json.load(open(data + INFO_SUFFIX, encoding="utf-8"))
-    check("aggiornamento: nuovo originale registrato", fingerprint(backup) == hashlib.sha256(new_bytes).hexdigest())
-    check("aggiornamento: vecchio originale conservato", info["prior"] and
+    check("update: new original recorded", fingerprint(backup) == hashlib.sha256(new_bytes).hexdigest())
+    check("update: old original kept", info["prior"] and
               os.path.exists(os.path.join(os.path.dirname(data), info["prior"][0])))
 
     # 3) tampered backup: no writes, no destructive restore
@@ -74,25 +74,25 @@ def main(folder, rel_json):
     before = fingerprint(data)
     try:
         automatic.reapply(folder, silent, test=True)
-        check("backup alterato: riapplica si ferma", False)
+        check("tampered backup: reapply stops", False)
     except RuntimeError:
-        check("backup alterato: riapplica si ferma", True)
+        check("tampered backup: reapply stops", True)
     automatic.restore(folder, silent)
-    check("backup alterato: il file del gioco non viene toccato", fingerprint(data) == before)
-    check("backup alterato: backup e info restano per il controllo manuale",
+    check("tampered backup: the game's file is not touched", fingerprint(data) == before)
+    check("tampered backup: backup and info stay for the manual check",
               os.path.exists(backup) and os.path.exists(data + INFO_SUFFIX))
     with open(backup, "wb") as f:
         f.write(good)
 
     # 4) full restore: everything goes back to original, none of our files left
     automatic.restore(folder, silent)
-    check("ripristino: file dati = originale (aggiornato)", fingerprint(data) == hashlib.sha256(new_bytes).hexdigest())
+    check("restore: data file = original (updated)", fingerprint(data) == hashlib.sha256(new_bytes).hexdigest())
     remaining = [os.path.join(r, f) for r, _, fs in os.walk(folder) for f in fs if "patchsmith-" in f]
-    check("ripristino: nessun file patchsmith-* rimasto", not remaining and not find_info(folder))
+    check("restore: no patchsmith-* file left", not remaining and not find_info(folder))
     if remaining:
-        print("   rimasti:", remaining)
+        print("   left:", remaining)
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
 
 

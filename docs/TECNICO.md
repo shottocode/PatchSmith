@@ -595,7 +595,7 @@ In arrivo con lo stesso impianto: risoluzione, modalità finestra/schermo intero
 ## Test
 
 **Tutte le prove insieme:** `python -I test/run_all.py`. Ogni prova riceve una cartella vuota sua, con dentro i suoi profili, la sua memoria e le sue impostazioni (una cartella `PATCHSMITH_DATA` temporanea solo per lei). Anche `%LOCALAPPDATA%`, `%APPDATA%`, `%TEMP%` e la cartella dell'utente sono cartelle di prova sue. Così le opzioni, i salvataggi e i crash dei giochi veri non si toccano, e una prova non vede quello che ha lasciato un'altra.
-- L'uscita di ogni prova va in `registri/<prova>.txt`, nella cartella di lavoro. Una prova che dura più di 15 minuti si ferma, insieme ai programmi che ha avviato.
+- L'uscita di ogni prova va in `logs/<prova>.txt`, nella cartella di lavoro. Una prova che dura più di 15 minuti si ferma, insieme ai programmi che ha avviato.
 - Alla fine controlla che i dati veri di PatchSmith (profili, memoria, impostazioni…) non siano cambiati.
 - La cartella di lavoro si cancella se tutto va bene; `--keep` la conserva, `--work <cartella>` la sceglie (ad esempio su un altro disco).
 - Con dei nomi esegue solo quelle prove: `python -I test/run_all.py test_unity test_xna`.

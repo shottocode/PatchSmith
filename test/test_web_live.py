@@ -96,7 +96,7 @@ const server = http.createServer((req, res) => {
 def test_script(base, preload, port):
     node = shutil.which("node")
     if not node:
-        print("(Node.js non c'e': lo script nella pagina non e' stato provato)")
+        print("(Node.js not found: the script in the page was not tested)")
         return
     # the script as PatchSmith writes it, with the fake translator's port and without the Python command
     with open(preload, encoding="utf-8") as f:
@@ -113,13 +113,13 @@ def test_script(base, preload, port):
     os.remove(page)
     with open(output, encoding="utf-8") as f:
         r = json.load(f)
-    check("nella pagina: frasi tradotte dal dizionario e dal traduttore (numeri tolti e rimessi), tasti e numeri "
-              "come sono (%s)" % r["values"],
+    check("in the page: sentences translated by the dictionary and the translator (numbers removed and put back), "
+              "keys and numbers as they are (%s)" % r["values"],
               r["values"] == ["Clicca o premi Z per attaccare il drago!", "IT Elapsed: 1.28 minutes", "Q", "999,999",
                               "IT Settings"] and r["title"] == "IT Close")
-    check("frasi nuove chieste in un solo gruppo, mai le traduzioni gia' scritte (%s)" % r["requests"],
+    check("new sentences requested in a single group, never the translations already written (%s)" % r["requests"],
               len(r["requests"]) == 1 and sorted(r["requests"][0]) == ["Close", "Elapsed: {{A}} minutes", "Settings"])
-    check("frase in attesa nascosta per poco, poi visibile e tradotta (%r -> %r)" % (r["hidden"], r["after"]),
+    check("pending sentence hidden briefly, then visible and translated (%r -> %r)" % (r["hidden"], r["after"]),
               r["hidden"] == "hidden" and r["after"] == "")
 
 
@@ -137,9 +137,9 @@ def main(base):
     with open(preload, encoding="utf-8") as f:
         written = f.read()
     profile = json.load(open(path, encoding="utf-8")) if path else {}
-    check("file cifrati con preload.js in chiaro: traduzione dal vivo (profilo web-vivo), esito OK",
+    check("encrypted files with preload.js in plain text: live translation (web-live game profile), outcome OK",
               completed and profile.get("engine") == "web-live" and outcome["outcome"].code == "OK")
-    check("preload.js: originale in testa, script in fondo; backup verificato; dizionario e comando accanto",
+    check("preload.js: original at the top, script at the bottom; backup verified; dictionary and command next to it",
               written.startswith(PRELOAD.rstrip("\n")) and adapter_web_live.MARKER in written
               and os.path.exists(preload + project.BACKUP_SUFFIX)
               and os.path.exists(os.path.join(os.path.dirname(preload), adapter_web_live.CONFIG_NAME))
@@ -154,7 +154,7 @@ def main(base):
         dictionary = json.load(f)
     with open(preload, encoding="utf-8") as f:
         rewritten = f.read()
-    check("Riapplica: dizionario con le traduzioni salvate, script una volta sola",
+    check("Reapply: dictionary with the saved translations, script only once",
               dictionary.get("{{A}} minutes") == "{{A}} minuti" and rewritten.count(adapter_web_live.MARKER) == 1)
     test_script(base, preload, 47999)
     # "No" at the end of Analyze and translate: no translator in the preload, only the dictionary; "Yes": on again
@@ -165,21 +165,21 @@ def main(base):
     automatic.set_live(game, True, lines.append)
     with open(preload, encoding="utf-8") as f:
         is_on = f.read()
-    check("traduzione mentre giochi spenta (solo dizionario, nessun traduttore avviato) e poi riaccesa",
+    check("translation while you play turned off (only the dictionary, no translator started) and then back on",
               '"port": 0' in off_button and '"command": null' in off_button and profile_off["live"] == "none"
               and '"port": 0' not in is_on and "xunity-service" in is_on
               and automatic.live_translation(game)[1] is True and is_on.count(adapter_web_live.MARKER) == 1)
     # the game puts back its own preload.js: the after-play check notices it
     write(preload, PRELOAD)
     problems = checks.check(path, apply=False, log=lambda _m: None, retranslate=False)
-    check("preload.js rimesso dal gioco: il controllo dopo aver giocato propone di rimettere la traduzione",
+    check("preload.js put back by the game: the after-play check offers to put the translation back",
               any(p.code == "RESTORED_BY_GAME" for p in problems))
     automatic.reapply(game, lines.append, test=True, outcome={})
     automatic.restore(game, lines.append, outcome={})
-    check("Ripristina originali: cartella del gioco identica a prima (preload.js, nessun file di PatchSmith)",
+    check("Restore originals: game folder identical to before (preload.js, no PatchSmith files)",
               fingerprints(game) == before)
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return 1 if failed else 0
 
 

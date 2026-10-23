@@ -40,7 +40,7 @@ def main():
         outcome = found == expected and put_back_text == s
         ok += outcome
         print(("OK    " if outcome else "ERROR ") + "  %r -> %r %s" % (s, shielded, found))
-    print("\nRISULTATO: %d/%d controlli superati" % (ok, len(CASES)))
+    print("\nRESULT: %d/%d checks passed" % (ok, len(CASES)))
     return ok == len(CASES)
 
 

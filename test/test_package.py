@@ -30,7 +30,7 @@ def main(base):
     base = os.path.abspath(base)
     os.makedirs(base)
     if not sys.platform.startswith("win"):
-        print("Solo Windows: niente da provare.")
+        print("Windows only: nothing to test.")
         return 0
     lines = []
     folder, archive = package.prepare(os.path.join(base, "rilascio"), log=lines.append)
@@ -47,24 +47,24 @@ def main(base):
     tcl = [n for n in os.listdir(os.path.join(runtime, "tcl")) if n.startswith("libtcl") and n.endswith(".zip")
            or os.path.isfile(os.path.join(runtime, "tcl", n, "init.tcl"))]
     if not tcl:
-        absent.append("runtime/tcl: libreria di Tcl")
-    check("pacchetto: programma, PatchSmith.exe e Python portatile con Tkinter e ._pth (mancano: %s)" % absent,
+        absent.append("runtime/tcl: Tcl library")
+    check("package: program, PatchSmith.exe and portable Python with Tkinter and ._pth (missing: %s)" % absent,
               not absent and len(pth) == 1)
     unwanted = [n for n in project.USER_DATA + ("test", "_temporanei") if os.path.exists(os.path.join(folder, n))]
     components = [n for n in os.listdir(os.path.join(folder, "components")) if n != "plugin"] + \
         [n for n in os.listdir(os.path.join(folder, "components", "plugin")) if not n.endswith(".cs")]
     lib = [n for n in ("test", "site-packages", "idlelib") if os.path.exists(os.path.join(runtime, "Lib", n))]
-    check("niente dati di chi lo usa, prove, componenti scaricati o parti di Python inutili (%s)"
+    check("no user data, tests, downloaded components or unneeded parts of Python (%s)"
               % (unwanted + components + lib), not unwanted and not components and not lib)
     with zipfile.ZipFile(archive) as z:
         names = z.namelist()
     in_package = sum(len([f for f in file]) for r, c, file in os.walk(folder) if "__pycache__" not in r)
-    check("zip: solo la cartella PatchSmith, senza __pycache__, con tutti i file del pacchetto (%d)" % len(names),
+    check("zip: only the PatchSmith folder, without __pycache__, with all the package's files (%d)" % len(names),
               all(n.startswith("PatchSmith/") for n in names) and not any("__pycache__" in n for n in names)
               and len(names) == in_package and "PatchSmith/runtime/pythonw.exe" in names)
     r = subprocess.run([os.path.join(runtime, "python.exe"), "-I", os.path.join(folder, "smith.py"), "-h"],
                        capture_output=True, timeout=60, cwd=base)
-    check("smith.py con il Python portatile", r.returncode == 0 and b"pacchetto" in r.stdout)
+    check("smith.py with the portable Python", r.returncode == 0 and b"pacchetto" in r.stdout)
     # PatchSmith.exe: with an installed Python it still chooses the package's one
     with open(os.path.join(folder, "PatchSmith.pyw"), "w", encoding="utf-8") as f:
         f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partito.txt'), 'w')"
@@ -76,7 +76,7 @@ def main(base):
             break
         time.sleep(0.25)
     used_path = open(started_file, encoding="utf-8").read() if os.path.isfile(started_file) else None
-    check("PatchSmith.exe apre PatchSmith con il Python portatile (%s)" % used_path,
+    check("PatchSmith.exe opens PatchSmith with the portable Python (%s)" % used_path,
               used_path and os.path.normcase(used_path) == os.path.normcase(os.path.join(runtime, "pythonw.exe")))
     # a package someone has worked in: its data stays
     os.makedirs(os.path.join(folder, "profiles"))
@@ -90,11 +90,11 @@ def main(base):
         inside = False
     except package.PackageError:
         inside = True
-    check("un pacchetto con dei dati dentro non si cancella; mai dentro la cartella del programma",
+    check("a package with data inside is not deleted; never inside the program's folder",
               was_refused and os.path.isdir(os.path.join(folder, "profiles")) and inside
               and not os.path.exists(os.path.join(package.PROGRAM, "rilascio")))
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return 1 if failed else 0
 
 

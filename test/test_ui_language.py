@@ -34,7 +34,7 @@ def check(name, condition):
 def test_translation():
     ui.set_("it")
     t = ui.translate
-    check("testi uguali, con valori dentro, pezzi dentro, prefissi del registro, ripieghi e righe non nel file",
+    check("identical texts, with values inside, pieces inside, log prefixes, fallbacks and lines not in the file",
               t("Create report") == "Crea rapporto"
               and t("Translated 400 of 1654 (24%)...") == "Tradotti 400 di 1654 (24%)..."
               and t("  ! The game is open: close it and try again.") == "  ! Il gioco e' aperto: chiudilo e riprova."
@@ -50,7 +50,7 @@ def test_translation():
     entries.update(test)
     ui._state["models"] = None
     try:
-        check("messaggio di piu' frasi: tradotto a gruppi di frasi, quelle che non ci sono restano",
+        check("message of several sentences: translated in groups of sentences, those not in the file stay",
                   t("à, è are missing. I'll add them. 3 sentences are left.")
                   == "Mancano à, è. Le metto io. 3 frasi sono rimaste."
                   and t("The game is open: close it and try again. A new sentence.")
@@ -60,9 +60,9 @@ def test_translation():
             del entries[k]
         ui._state["models"] = None
     ui.set_("en")
-    check("in inglese (la lingua del codice) nessuna traduzione", ui.translate("Create report") == "Create report")
+    check("in English (the code's language) no translation", ui.translate("Create report") == "Create report")
     languages = ui.languages()
-    check("lingue disponibili: inglese (dal codice) e italiano (dal file)",
+    check("available languages: English (from the code) and Italian (from the file)",
               languages["en"]["name"] == "English" and languages["it"]["name"] == "Italiano")
     # first start: the Windows language if PatchSmith has it (Italian), otherwise English; the chosen one is saved
     real, before = language.windows_language, os.environ.pop("PATCHSMITH_INTERFACE", None)
@@ -75,7 +75,7 @@ def test_translation():
         language.windows_language = real
         if before is not None:
             os.environ["PATCHSMITH_INTERFACE"] = before
-    check("lingua al primo avvio: quella di Windows se c'e' (italiano), altrimenti inglese (%s)" % defaults,
+    check("language at first start: the Windows one if available (Italian), otherwise English (%s)" % defaults,
               defaults == {"it-IT": "it", "en-US": "en", "fr-FR": "en", "de-DE": "en", None: "en"})
 
 
@@ -84,18 +84,18 @@ def test_file():
         texts = json.load(f)["texts"]
     mismatched = [k for k, v in texts.items() if collections.Counter(ui._MARKER.findall(k))
                != collections.Counter(ui._MARKER.findall(v))]
-    check("file italiano: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(texts), mismatched[:3]),
+    check("Italian file: %d texts, every translation with the same placeholders (%s)" % (len(texts), mismatched[:3]),
               len(texts) > 1000 and not mismatched)
     # the code's texts that are not English (markers written into games, words to recognize the languages) stay as
     # they are, and the code (e.g. the script for Godot) is not among the texts to translate
     changed_files = [k for k, v in texts.items() if language.obvious_language(k.replace("e.g.", ""), "en")
                      and v != k]
     code = [k for k in texts if k.startswith("if ") or "==" in k or k.startswith("the and of ")]
-    check("file italiano: testi in altre lingue lasciati com'erano (%s), niente codice (%s)"
+    check("Italian file: texts in other languages left as they were (%s), no code (%s)"
           % (changed_files[:2], code[:2]), not changed_files and not code)
     missing = [k for k in ui.program_texts() if k not in texts]
-    check("file italiano: c'e' ogni testo del programma (%d mancanti: %s)" % (len(missing), missing[:2]), not missing)
-    check("testi del programma: niente codice ne' elenchi di parole",
+    check("Italian file: every program text is there (%d missing: %s)" % (len(missing), missing[:2]), not missing)
+    check("program texts: no code or word lists",
               not ui._looks_like_text("if not _done:") and not ui._looks_like_text("if f == null:")
               and not ui._looks_like_text(" ".join(sorted(language._WORDS["en"])))
               and ui._looks_like_text("The game is open: close it and try again.")
@@ -191,16 +191,16 @@ def test_sounds(app, root):
     durations = [wave.open(io.BytesIO(sounds.SOUNDS[n]())).getnframes() / sounds.SAMPLE_RATE
                  for n in ("done", "error", "question")]
     click = wave.open(io.BytesIO(sounds.click())).getnframes() / sounds.SAMPLE_RATE
-    check("suoni: spenti di default, accesi (con il clic) e ricordati dal pulsante; alla fine di un'operazione "
-              "la prima finestra suona \"fatto\" se e' un'informazione o un tradotto in parte (non al controllo "
-              "all'apertura); ogni altra finestra sempre, errori come errori e il resto come domande (%s); durata %s"
+    check("sounds: off by default, turned on (with the click) and remembered by the button; at the end of an operation "
+              "the first window plays \"fatto\" if it is information or a partial translation (not at the check "
+              "at startup); every other window always, errors as errors and the rest as questions (%s); duration %s"
               % (events, durations),
               sounds_off and saved_sounds is True and is_on and after_error == ["error", "question"]
               and events == ["error", "question", "question", "question", "done", "question", "question", "question",
                               "error", "done"]
               and sounds_off_after
               and all(abs(d - sounds.DURATION) < 0.001 for d in durations) and click < 0.1)
-    check("clic dei pulsanti (anche in un'altra finestra), non per quelli disattivati ne' a suoni spenti (%s)"
+    check("button clicks (also in another window), not for disabled ones nor with sounds off (%s)"
               % button_clicks, button_clicks == ["click", []])
 
 
@@ -244,13 +244,13 @@ def test_music(app):
         tempfile.tempdir = old_folder
     melody = re.search(r'melody = """(.*?)"""', inspect.getsource(music.mine), re.S).group(1)
     measures = [sum(p for _n, p in music._read(b)) for b in re.split(r"\s{3,}", melody.strip())]
-    check("musica: spenta di default, accesa e spenta dal pulsante con la nota e ricordata (%s); loop senza stacchi "
-              "(%s byte suonati da un blocco di %d); Miniera di %d battute da 8 ottavi" % (calls, played,
+    check("music: off by default, turned on and off by the button with the note and remembered (%s); seamless loop "
+              "(%s bytes played from a block of %d); Miniera with %d bars of 8 eighths" % (calls, played,
                                                                                          len(silent), len(measures)),
               music_off and saved_music is True and music_off_after and calls == ["avvia", "ferma"]
               and (not modal_open or played and played > 2 * len(silent)) and music._state["output"] is None
               and measures == [8] * 16)
-    check("musica pronta in anticipo: generata e salvata la prima volta, poi letta dal file (%.3f s)" % seconds,
+    check("music ready in advance: generated and saved the first time, then read from the file (%.3f s)" % seconds,
               generated and written_lang and loaded == generated and seconds < 0.5)
 
 
@@ -264,7 +264,7 @@ def test_window(base):
     try:
         app = gui.App(root)
         buttons = [str(w.cget("text")) for w in app.buttons if isinstance(w, gui.ttk.Button)]
-        check("finestra in inglese: pulsanti (%s), traduttore, lingue Da/A e ritorno al codice" % buttons[:4],
+        check("window in English: buttons (%s), translator, From/To languages and back to the code" % buttons[:4],
                   "Analyze and translate" in buttons and "Create report" in buttons
                   and app.translator.get() == "Free Google (unofficial)" and app._chosen == "google"
                   and app.src_lang.get() == "Detect automatically"
@@ -273,17 +273,17 @@ def test_window(base):
         root.update()
         heights = (app.btn_browse.winfo_height(), app.folder_entry.winfo_height())
         positions = (app.btn_browse.winfo_rooty(), app.folder_entry.winfo_rooty())
-        check("'Browse…' alto quanto il campo della cartella e alla stessa altezza (%s, %s)" % (heights, positions),
+        check("'Browse…' as tall as the folder field and level with it (%s, %s)" % (heights, positions),
                   heights[0] == heights[1] and positions[0] == positions[1])
         equal_count = all(_pixel_png(os.path.join(icon.FOLDER, "%d.png" % side)) == icon.draw(side)
                      for side in (16, 32))
-        check("icona (martello e cartella) sulla finestra e per quelle che si aprono dopo; le immagini sono quelle che "
-                  "disegna icon.py", len(getattr(root, "_patchsmith_icon", ())) == 6 and equal_count)
+        check("icon (hammer and folder) on the window and for those opened later; the images are the ones "
+                  "drawn by icon.py", len(getattr(root, "_patchsmith_icon", ())) == 6 and equal_count)
         app._languages_menu()
         entries = [str(v.cget("text")).strip() for _c, v in app._language_entries]
         modal_open = app._language_dropdown is not None
         app._languages_menu()  # again: it closes
-        check("bandierina con la tendina delle lingue (%s), nomi nella loro lingua; si apre e si chiude" % entries,
+        check("little flag with the language drop-down (%s), names in their own language; opens and closes" % entries,
                   "Italiano (it)" in entries and "English (en)" in entries and app.btn_language.cget("image")
                   and modal_open and app._language_dropdown is None)
         before = app.colors["name"]
@@ -293,7 +293,7 @@ def test_window(base):
         with open(gui._settings(), encoding="utf-8") as f:
             saved_theme = json.load(f).get("theme")
         app._change_theme()
-        check("pulsante sole/luna: tema scuro <-> chiaro subito (anche il registro), simbolo giusto, ricordato",
+        check("sun/moon button: dark <-> light theme at once (the log too), right symbol, remembered",
                   {before, after} == {"dark", "light"} and saved_theme == after and app.colors["name"] == before
                   and symbol_before == ("☾" if before == "dark" else "☀") and symbol_after != symbol_before
                   and str(app.text.cget("background")) == app.colors["field"])
@@ -312,8 +312,8 @@ def test_window(base):
             buttons = [str(w.cget("text")) for w in app.buttons if isinstance(w, gui.ttk.Button)]
             with open(gui._settings(), encoding="utf-8") as f:
                 saved = json.load(f).get("interface")
-            check("scelta l'italiano: tutta la finestra subito in italiano, senza riaprire PatchSmith (pulsanti %s, "
-                      "traduttore, Da/A con le stesse scelte, registro, riga di stato) e ricordato" % buttons[:2],
+            check("Italian chosen: the whole window in Italian at once, without reopening PatchSmith (buttons %s, "
+                      "translator, From/To with the same choices, log, status line) and remembered" % buttons[:2],
                       not started and root.winfo_exists() and saved == "it"
                       and "Analizza e traduci" in buttons and "Crea rapporto" in buttons
                       and app.translator.get() == "Google gratuito (non ufficiale)" and app._chosen == "google"
@@ -327,7 +327,7 @@ def test_window(base):
             app._change_ui("en")
             root.update()
             buttons = [str(w.cget("text")) for w in app.buttons if isinstance(w, gui.ttk.Button)]
-            check("e di nuovo l'inglese: pulsanti e registro rifatti",
+            check("and English again: buttons and log redone",
                       not started and "Analyze and translate" in buttons
                       and app.src_lang.get() == "Detect automatically"
                       and app.text.get("1.0", "end").strip() == log_en
@@ -370,8 +370,8 @@ def test_executable(base):
             if os.path.isfile(started_file):
                 break
             time.sleep(0.25)
-    check("PatchSmith.exe con l'icona dentro accanto al .pyw (%d byte); non ricompilato se aggiornato; apre il .pyw "
-              "con Python" % len(data), created_one and again and not calls and data[:2] == b"MZ"
+    check("PatchSmith.exe with the icon inside next to the .pyw (%d bytes); not rebuilt if up to date; opens the .pyw "
+              "with Python" % len(data), created_one and again and not calls and data[:2] == b"MZ"
               and b"\x89PNG" in data and os.path.isfile(started_file))
 
 
@@ -388,12 +388,12 @@ def test_command_line(base):
                            errors="replace", env=test_env, timeout=120)
         return r.returncode, r.stdout
     english, alias = run_command(["detect", game], "it"), run_command(["rileva", game], "it")
-    check("riga di comando: 'detect' e il nome di prima 'rileva' fanno lo stesso",
+    check("command line: 'detect' and the former name 'rileva' do the same",
               english[0] == 0 and english == alias)
     code, help_text = run_command(["-h"], "en")
     _, auto_help = run_command(["auto", "-h"], "en")
     _, help_it = run_command(["-h"], "it")
-    check("aiuto in inglese: comandi inglesi con gli alias, spiegazioni tradotte; in italiano resta italiano",
+    check("help in English: English commands with the aliases, translated explanations; in Italian it stays Italian",
               code == 0 and "restore (ripristina)" in help_text and "restores the original game files" in help_text
               and "--force, --forza" in auto_help and "--from LANG" in auto_help
               and "rimette i file originali del gioco" in help_it)
@@ -408,7 +408,7 @@ def main(base):
     test_window(base)
     test_executable(base)
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return 1 if failed else 0
 
 

@@ -70,7 +70,7 @@ def fingerprints(folder):
 def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
-        raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
+        raise SystemExit("The test folder must be empty: %s" % base)
     game = os.path.join(base, "Gioco GM")
     os.makedirs(os.path.join(game, "Localization", "french"))
     for rel, text in (("Localization/english_ui.txt", UI), ("Localization/english_npc.txt", NPC),
@@ -85,44 +85,44 @@ def main(base):
     # line format and block format
     ui = adapter_lines.read_file(os.path.join(game, "Localization", "english_ui.txt"))
     npc = adapter_lines.read_file(os.path.join(game, "Localization", "english_npc.txt"))
-    check("file a righe: modo, testi, commento e numeri esclusi", ui.mode == "lines" and
+    check("line file: mode, texts, comment and numbers excluded", ui.mode == "lines" and
               [t for _, t in ui.units] == ["Fight", "Switch", "What should ", " do next?",
                                            "Hey /name/, you have /curr/ dosh/n/Spend it!"])
-    check("file a blocchi: sezioni (anche due per voce) e '.' isolato", npc.mode == "blocks" and
+    check("block file: sections (also two per entry) and lone '.'", npc.mode == "blocks" and
               [t for _, t in npc.units] == ["Whoa! You have a Dokimon with you??\nBe careful!",
                                             "Don't mess with us!", "Well, I suppose I lost.."])
-    check("riscrittura senza modifiche identica (CRLF e LF)", ui.serialize({}) == UI.encode()
+    check("rewrite without changes is identical (CRLF and LF)", ui.serialize({}) == UI.encode()
               and npc.serialize({}) == NPC.encode())
     try:
         npc.serialize({npc.units[0][0]: "una riga sola"})
-        check("blocco con un numero di righe diverso: rifiutato", False)
+        check("block with a different number of lines: rejected", False)
     except adapter_lines.LinesError:
-        check("blocco con un numero di righe diverso: rifiutato", True)
+        check("block with a different number of lines: rejected", True)
 
     # rules of the game's parser (Dokimon): separators, terminators, numeric prefixes, slashes
     variants = adapter_lines.LinesFile("0\tFight\r\n1\u3000Switch\r\n2 Catch\r\n".encode("utf-8"))
-    check("separatori tab e spazio ideografico riconosciuti e conservati",
+    check("tab and ideographic space separators recognized and kept",
               [t for _, t in variants.units] == ["Fight", "Switch", "Catch"]
               and variants.serialize({("line", 0): "Combatti"}).startswith("0\tCombatti\r\n".encode()))
     closers = adapter_lines.LinesFile("1\nHi there\n. \n2\nBye now\n\uff0e\n3\nOk then\n.\n".encode("utf-8"))
-    check("chiusure '. ' e '\uff0e' riconosciute", closers.mode == "blocks" and len(closers.units) == 3)
+    check("closers '. ' and '\uff0e' recognized", closers.mode == "blocks" and len(closers.units) == 3)
     section = npc.units[0]
-    check("riga che comincerebbe con un numero (ruberebbe un'altra voce): scartata",
+    check("line that would start with a number (it would steal another entry): discarded",
               not adapter_lines.is_valid(section[0], section[1], "100 cose\nAttento!")
               and adapter_lines.is_valid(section[0], section[1], "Wow! Hai un Dokimon??\nAttento!"))
     data, rejected = npc.serialize_robust({section[0]: "Wow!\n.", npc.units[1][0]: "Non scherzare!"})
-    check("una traduzione non valida resta in originale senza bloccare le altre",
+    check("an invalid translation stays in the original without blocking the others",
               rejected == [section[0]] and "Non scherzare!" in data.decode())
-    check("barra in piu' -> '-'; codici identici; codice a fine riga chiuso da uno spazio",
+    check("extra slash -> '-'; identical codes; code at the end of a line closed by a space",
               adapter_gamemaker.repair("Speedup Toggle", "Attiva/disattiva accelerazione")
               == "Attiva-disattiva accelerazione"
               and adapter_gamemaker.repair("Hey /name/!", "Ciao!") is None
               and adapter_gamemaker.repair("How is it, /name/?\nOk", "Come va, /name/\nOk") == "Come va, /name/ \nOk")
-    check("caratteri di controllo o separatori di riga Unicode: traduzione scartata",
+    check("control characters or Unicode line separators: translation discarded",
               not adapter_lines.is_valid(("line", 0), "Fight", "Combatti ora")
               and not adapter_lines.is_valid(("line", 0), "Fight", "Comb\x0catti")
               and adapter_lines.is_valid(("line", 0), "Fight", "Combatti\tora"))
-    check("lingua dal percorso: codici brevi solo in posizioni sicure",
+    check("language from the path: short codes only in safe positions",
               adapter_gamemaker.path_language("Localization/english_ui.txt") == "en"
               and adapter_gamemaker.path_language("lang/it/ui.txt") == "it"
               and adapter_gamemaker.path_language("text/edit_items.txt") is None
@@ -132,17 +132,17 @@ def main(base):
     # file search and fonts
     found = adapter_gamemaker.localization_file(game)
     sources, languages, _ = adapter_gamemaker.choose_sources(found)
-    check("file della lingua originale trovati, il francese no", sources == [
+    check("files of the original language found, the French one not", sources == [
         "Localization/english_npc.txt", "Localization/english_ui.txt"] and languages == {"en", "fr"})
     allowed = adapter_gamemaker.font_chars(game)
-    check("font: caratteri comuni ai font di testo (il font di sole cifre non conta)",
+    check("font: characters common to the text fonts (the digits-only font does not count)",
               allowed is not None and "à" in allowed and "ù" not in allowed and "a" in allowed)
-    check("italiano: ì->í, ò->ó, ù->ú se il font non li ha; virgolette semplici",
+    check("Italian: ì->í, ò->ó, ù->ú if the font lacks them; plain quotes",
               chars.adapt_chars("Così può più \u201cciao\u201d", allowed, "it") == 'Cosí puó piú "ciao"')
-    check("gamemaker.font: nomi letti",
+    check("gamemaker.font: names read",
               [f["name"] for f in gamemaker.font(open(os.path.join(game, "data.win"), "rb").read())[0]]
               == ["fn_testo", "fn_altro", "fn_numeri"])
-    check("italiano: à è restano se il font li ha; l'acuto solo per i o u",
+    check("Italian: à è stay if the font has them; the acute accent only for i o u",
               chars.adapt_chars("è già", set(chars.ASCII) | set("áéíóú"), "it") == "e' gia'")
     # font policy: an ASCII-only font counts; a Korean one without accents does not; an uppercase-only one also covers
     # lowercase
@@ -150,15 +150,15 @@ def main(base):
     os.makedirs(tests)
     korean = set(chr(c) for c in range(32, 127)) | {chr(0xAC00 + i) for i in range(300)}
     uppercase = set(chr(c) for c in range(32, 97)) | set("ÀÈÉÙÍÓÚ")
-    cases = [("solo ASCII + accentato", [("a", latin), ("b", set(chr(c) for c in range(32, 127)))],
+    cases = [("ASCII only + accented", [("a", latin), ("b", set(chr(c) for c in range(32, 127)))],
              lambda a: "a" in a and "è" not in a),
-            ("coreano escluso", [("a", latin), ("k", korean)], lambda a: "è" in a),
-            ("sole maiuscole", [("a", latin), ("m", uppercase)], lambda a: "a" in a and "è" in a)]
+            ("Korean excluded", [("a", latin), ("k", korean)], lambda a: "è" in a),
+            ("uppercase only", [("a", latin), ("m", uppercase)], lambda a: "a" in a and "è" in a)]
     for name, fonts, expected in cases:
         open(os.path.join(tests, "data.win"), "wb").write(data_win(fonts))
         check("font: " + name, expected(adapter_gamemaker.font_chars(tests) or set()))
     open(os.path.join(tests, "data.win"), "wb").write(b"FORM\x10\x00\x00\x00FONT")
-    check("data.win troncato: solo ASCII, nessun errore", adapter_gamemaker.font_chars(tests) == set(chars.ASCII))
+    check("truncated data.win: ASCII only, no error", adapter_gamemaker.font_chars(tests) == set(chars.ASCII))
 
     # full flow with the test translator; game profiles and translation memories in the test folder
     os.makedirs(os.path.join(base, "patchsmith", "profiles"))
@@ -168,20 +168,20 @@ def main(base):
     automatic.PROFILES_FOLDER = os.path.join(base, "patchsmith", "profiles")
     automatic.adapter_gamemaker  # noqa: B018 (imported)
     path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
-    check("analizza e traduci: completato, profilo GameMaker", completed and path
+    check("analyze and translate: completed, GameMaker profile", completed and path
               and '"engine": "gamemaker"' in open(path, encoding="utf-8").read())
     written = open(os.path.join(game, "Localization", "english_ui.txt"), "rb").read().decode()
-    check("file tradotto: struttura intatta, spazio iniziale e codici conservati",
+    check("translated file: structure intact, leading space and codes kept",
               "0 [it] Fight\r\n" in written and "5  [it] do next?\r\n" in written and "/name/" in written
               and "/n/" in written and written.startswith("// commento") and "31 100\r\n" in written)
-    check("il file francese non e' toccato",
+    check("the French file is not touched",
               fingerprints(game)[os.path.join("Localization", "french", "ui.txt")]
               == before[os.path.join("Localization", "french", "ui.txt")])
-    check("riapplica senza rete: ok", automatic.reapply(game, silent, test=True))
+    check("reapply without network: ok", automatic.reapply(game, silent, test=True))
     automatic.restore(game, silent)
-    check("ripristino: cartella del gioco identica a prima", fingerprints(game) == before)
+    check("restore: game folder identical to before", fingerprints(game) == before)
     project.game_open = lambda folder: True
-    check("gioco aperto: non scrivo nulla", not automatic.reapply(game, silent, test=True)
+    check("game open: nothing is written", not automatic.reapply(game, silent, test=True)
               and fingerprints(game) == before)
     project.game_open = lambda folder: False
 
@@ -191,35 +191,35 @@ def main(base):
     open(ui_path, "ab").write(b"99 Aggiunta a mano\r\n")
     log_lines = []
     automatic.reapply(game, log_lines.append, test=True)
-    check("modifica a mano riconosciuta (non scambiata per un aggiornamento del gioco)",
+    check("edit by hand recognized (not mistaken for a game update)",
               any("modified by hand" in r for r in log_lines)
               and not any(f.endswith(".patchsmith-originale.1")
                           for f in os.listdir(os.path.join(game, "Localization"))))
     automatic.restore(game, silent)
-    check("modifica a mano + ripristino: l'originale inglese torna al suo posto, identico",
+    check("edit by hand + restore: the English original goes back in its place, identical",
               fingerprints(game) == before)
 
     # file changed after the translation and never reapplied: restoring does not delete the original
     automatic.reapply(game, silent, test=True)
     open(ui_path, "ab").write(b"98 Cambiato da altri\r\n")
     automatic.restore(game, silent)
-    check("file cambiato da altri: backup dell'originale conservato",
+    check("file changed by others: backup of the original kept",
               open(ui_path + ".patchsmith-originale", "rb").read() == UI.encode())
     os.remove(ui_path + ".patchsmith-originale")
     os.remove(ui_path + project.INFO_SUFFIX)
     open(ui_path, "wb").write(UI.encode())
-    check("... e rimesso a posto a mano la cartella torna identica", fingerprints(game) == before)
+    check("... and once it is put back by hand the folder is identical again", fingerprints(game) == before)
 
     # the game already has Italian: no translation
     os.makedirs(os.path.join(game, "Localization", "italian"))
     open(os.path.join(game, "Localization", "italian", "ui.txt"), "wb").write(
         b"0 Combatti\r\n1 Cambia\r\n2 Cattura\r\n3 Fuggi\r\n4 Cosa deve fare \r\n5  ora?\r\n")
     path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "fake", silent)
-    check("lingua gia' presente nel gioco: niente traduzione", not completed
+    check("language already in the game: no translation", not completed
               and not os.path.exists(os.path.join(game, "Localization", "english_ui.txt.patchsmith-originale")))
 
     failed = [n for n, ok in OUTCOMES if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
 
 

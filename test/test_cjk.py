@@ -31,28 +31,28 @@ def main():
     errors = []
     for t in TEXT:
         if not (is_readable_text(t) and is_ui_text(t)):
-            errors.append("dovrebbe essere testo: %s (dati=%s, menu=%s)" % (t, is_readable_text(t), is_ui_text(t)))
+            errors.append("should be text: %s (data=%s, menu=%s)" % (t, is_readable_text(t), is_ui_text(t)))
     for t in NOT_TEXT:
         if is_readable_text(t) or is_ui_text(t):
-            errors.append("dovrebbe essere escluso: %s" % t)
+            errors.append("should be excluded: %s" % t)
     for t, expected in LATIN.items():
         if is_readable_text(t) != expected:
-            errors.append("alfabeto latino cambiato: %s -> %s" % (t, not expected))
+            errors.append("Latin alphabet changed: %s -> %s" % (t, not expected))
     # extraction from JavaScript: entries of 1-2 characters get as far as the filter
     code = 'a={t:"設定",y:"はい",n:"いいえ",k:"시작",id:"ok",x:"Go"};b=`残り${n}マス`;'
     extracted = [_decode(s) for s in js_literals(code)]
     found = [s for s in extracted if is_ui_text(s)]
     for expected in ("設定", "はい", "いいえ", "시작", "残り", "マス"):
         if expected not in found:
-            errors.append("non estratto dal JavaScript: %s (trovati: %s)" % (expected, found))
+            errors.append("not extracted from the JavaScript: %s (found: %s)" % (expected, found))
     for unwanted in ("ok", "Go"):
         if unwanted in found:
-            errors.append("estratto per errore: %s" % unwanted)
+            errors.append("extracted by mistake: %s" % unwanted)
 
     total = len(TEXT) + len(NOT_TEXT) + len(LATIN) + 8
     for e in errors:
         print("ERROR   " + e)
-    print("RISULTATO: %d/%d controlli superati" % (total - len(errors), total))
+    print("RESULT: %d/%d checks passed" % (total - len(errors), total))
     return not errors
 
 
