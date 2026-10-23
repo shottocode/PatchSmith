@@ -30,8 +30,8 @@ def _waveform(shape, phase):
 
 
 def _note(samples, start, duration, frequency, shape, volume, decay, slide=None, vibrato=False):
-    """Adds a note to the samples (float): inizio and durata in seconds; decadimento: time (s) in which the volume
-    drops to about a third; scivola: frequency reached at the end; vibrato: light, after 80 ms."""
+    """Adds a note to the samples (float): start and duration in seconds; decay: time (s) in which the volume
+    drops to about a third; slide: frequency reached at the end; vibrato: light, after 80 ms."""
     first, count = int(start * SAMPLE_RATE), int(duration * SAMPLE_RATE)
     if len(samples) < first + count:
         samples.extend([0.0] * (first + count - len(samples)))
@@ -54,7 +54,7 @@ def _voice(samples, start, duration, frequency, decay, slide=None, vibrato=False
 
 
 def _wav(samples, bit=6, duration=DURATION, volume=VOLUME):
-    """In-memory WAV lasting 'durata' seconds; the samples are reduced to 'bit' levels (the "grainy" 8-bit sound)."""
+    """In-memory WAV lasting 'duration' seconds; the samples are reduced to 'bit' levels (the "grainy" 8-bit sound)."""
     count = int(duration * SAMPLE_RATE)
     samples = (samples + [0.0] * count)[:count]
     maximum = max(1e-9, max(abs(c) for c in samples))
@@ -117,7 +117,7 @@ def _play(data):
 
 
 def play(name):
-    """Plays 'name' (fatto, errore, domanda) without blocking the window: generated and played in a thread. On a
+    """Plays 'name' (done, error, question, click) without blocking the window: generated and played in a thread. On a
     system without winsound (not Windows) it plays nothing. True if it started."""
     try:
         import winsound  # noqa: F401

@@ -189,7 +189,8 @@ def test_languages(base):
 
 
 def _flow(base, name, bundle_aa, catalog, extra=None, origin="en"):
-    """Analyze and translate (test translator) on a fake IL2CPP game: (gioco, profilo, esito, impronte prima)."""
+    """Analyze and translate (test translator) on a fake IL2CPP game: (game, bundle_folder, profile, outcome,
+    fingerprints before)."""
     game = os.path.join(base, name)
     bundle_folder = fake.il2cpp_game(game, bundle_aa, catalog, extra)
     before = {n: fingerprint(os.path.join(bundle_folder, n)) for n in bundle_aa}
@@ -328,7 +329,7 @@ def test_refusals(base):
     check("anti-cheat (IL2CPP con tabelle): rilevato, ANTICHEAT, nessun bundle scritto",
               any(r["section"] == "AntiCheat" for r in detection.detect(game)["results"])
               and profile is None and outcome["outcome"].code == "ANTICHEAT" and _unchanged(bundle_folder, before))
-    # tables, but not in the source language: the reason says so (not "serve BepInEx 6")
+    # tables, but not in the source language: the reason says so (not "requires BepInEx 6")
     game, bundle_folder, profile, outcome, before = _flow(
         base, "senza-inglese", {"localization-string-tables-french(fr)_assets_all.bundle": table("UI_fr", "fr", FR)},
         ("catalog.json", fake.catalog([])))
@@ -354,7 +355,7 @@ def test_refusals(base):
         ("catalog.json", fake.catalog([])))
     check("italiano gia' nel gioco (nomi 'localization_it'): UFFICIALE, nessun file modificato",
               profile is None and outcome["outcome"].code == "OFFICIAL" and _unchanged(bundle_folder, before))
-    # names without a code: the English table is found from the contents and translated (before: "non supportato")
+    # names without a code: the English table is found from the contents and translated (before: "not supported")
     game, bundle_folder, profile, outcome, before = _flow(
         base, "nomi-senza-codice", {"localization-string-tables-english_assets_all.bundle":
                                     table("UI_en", "en", EN, compression="lz4")},
@@ -404,7 +405,7 @@ def test_real_bundle(base, bundle):
 def _bin_catalog(entries, double=None):
     """Fake catalog.bin like the Addressables 2 one (Big Dig): for each bundle the entry name with the fingerprint,
     the Hash128 fingerprint (16 bytes), the bundle's name (a string with its length in front) and the record of 5
-    numbers (fingerprint, name, CRC, size, common data). doppio: name of a bundle with a second record (ambiguous)."""
+    numbers (fingerprint, name, CRC, size, common data). double: name of a bundle with a second record (ambiguous)."""
     import struct
     data = bytearray(b"\x42\x89\xe3\x0d\x02\x00\x00\x00" + b"\x00" * 24)
 

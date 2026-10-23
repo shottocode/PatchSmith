@@ -5,8 +5,8 @@ a letter (e.g. a "static" atlas made for English, without à è ì ò ù), a sma
 game. Before a translation is written, Project adapts the characters that no font has
 (chars.adapt_chars: è -> e', as for GameMaker and XNA).
 
-Where fonts are looked for: the serialized files of <gioco>_Data (resources.assets, sharedassets, level...),
-date.unity3d and the bundles in StreamingAssets (Addressables). For each TextMeshPro font (TMP_FontAsset) these are
+Where fonts are looked for: the serialized files of <game>_Data (resources.assets, sharedassets, level...),
+data.unity3d and the bundles in StreamingAssets (Addressables). For each TextMeshPro font (TMP_FontAsset) these are
 read:
 - the character table (m_CharacterTable, m_Unicode; in old versions m_glyphInfoList, id) with the field tree
   (type tree, always in bundles). In files without a tree (those of _Data) the table is recognized by its shape:
@@ -48,7 +48,7 @@ _CACHE = {}  # (folder, fingerprint of the files) -> result of game_fonts
 # --- .ttf / .otf files: cmap table -----------------------------------------------------------------------------
 
 def ttf_chars(data, start=0):
-    """The characters (set of str) of the cmap table of a TrueType/OpenType font starting at 'inizio', or None."""
+    """The characters (set of str) of the cmap table of a TrueType/OpenType font starting at 'start', or None."""
     try:
         label = data[start:start + 4]
         if label == b"ttcf":  # font collection: the first one
@@ -167,7 +167,7 @@ def tmp_table(data):
 
 
 def _font_from_tree(tree, data):
-    """(nome, modo, codici) of a TextMeshPro font read with the field tree."""
+    """(name, mode, codes) of a TextMeshPro font read with the field tree."""
     output = []
     try:
         unityfs._read(tree, data, 0, [], output, {"m_Unicode", "id", "m_AtlasPopulationMode"})
@@ -194,7 +194,7 @@ def _is_tmp_font(tree):
 
 
 def _useful_objects(s):
-    """[(oggetto, tipo)] of the objects to read in a serialized file: 'tmp' (TextMeshPro font with the tree),
+    """[(object, kind)] of the objects to read in a serialized file: 'tmp' (TextMeshPro font with the tree),
     'tmp?' (MonoBehaviour without tree, to recognize by its shape), 'font' (.ttf/.otf font)."""
     output = []
     for o in s.objects:
@@ -213,8 +213,8 @@ def _useful_objects(s):
 
 
 def _extract(pieces, wanted):
-    """The bytes of the wanted objects [(inizio, fine, chiave)] (in order, without overlaps) from a file read in
-    consecutive pieces [(posizione, byte)]: {key: byte}. Only the object being read is kept in memory."""
+    """The bytes of the wanted objects [(start, end, key)] (in order, without overlaps) from a file read in
+    consecutive pieces [(position, bytes)]: {key: bytes}. Only the object being read is kept in memory."""
     output, i, buffer, src_lang = {}, 0, bytearray(), None
     for position, piece in pieces:
         while i < len(wanted):
@@ -248,7 +248,7 @@ class _Collector:
         return not self.complete
 
     def serialized_file(self, read_file, size, label):
-        """A serialized file read with leggi(inizio, fine) -> [(posizione, byte)] in pieces."""
+        """A serialized file read with read_file(start, end) -> [(position, bytes)] in pieces."""
         head = b"".join(p for _, p in read_file(0, min(size, 65536)))
         try:
             _ms, _fs, version, data_start = struct.unpack_from(">IIII", head, 0)
@@ -338,8 +338,8 @@ def _to_skip(name, names):
 
 
 def _files_to_read(data_folder):
-    """[(percorso, 'bundle'|'file', dimensione, data)] of the game files where fonts can be: the files of
-    <gioco>_Data (not Unity's Resources folder: the engine's fonts), date.unity3d, the bundles of StreamingAssets."""
+    """[(path, 'bundle'|'file', size, date)] of the game files where fonts can be: the files of
+    <game>_Data (not Unity's Resources folder: the engine's fonts), data.unity3d, the bundles of StreamingAssets."""
     output = []
     try:
         entries = sorted(os.scandir(data_folder), key=lambda e: e.name.lower())
@@ -428,7 +428,7 @@ def _letters(chars):
 
 
 def ranges(chars):
-    """[[primo, ultimo], ...] of the character codes (to save them in little space: CJK fonts have tens of
+    """[[first, last], ...] of the character codes (to save them in little space: CJK fonts have tens of
     thousands of them, almost all consecutive)."""
     output = []
     for c in sorted(ord(x) for x in chars):
@@ -459,7 +459,7 @@ def _read_cache(path, key):
 
 
 def allowed_chars(data_folder, log=None, seconds=MAX_SECONDS, cache=None):
-    """(set of the characters that at least one of the game's fonts can draw, descrizione) or (None, motivo) if it is
+    """(set of the characters that at least one of the game's fonts can draw, description) or (None, reason) if it is
     not known: see the rule at the start of the file. cache: a .json file where the result is kept until the game's
     files change (a game with thousands of bundles can take a few minutes). A reading not finished in time is kept
     too (None: no limit, as before), so as not to redo it at every "Reapply"."""
@@ -487,7 +487,7 @@ def allowed_chars(data_folder, log=None, seconds=MAX_SECONDS, cache=None):
 
 
 def _apply_rule(found):
-    """(caratteri, descrizione) or (None, motivo) from the fonts found (see the rule at the start of the file)."""
+    """(characters, description) or (None, reason) from the fonts found (see the rule at the start of the file)."""
     tmp = found["tmp"]
     if not tmp:
         return None, "no TextMeshPro font"
@@ -513,7 +513,7 @@ def _apply_rule(found):
 
 
 def bundle_data(game_folder, rel_bundle):
-    """The <gioco>_Data folder of a bundle (path relative to the game folder), or None."""
+    """The <game>_Data folder of a bundle (path relative to the game folder), or None."""
     parts = rel_bundle.replace("\\", "/").split("/")
     for k, p in enumerate(parts):
         if p.endswith("_Data"):

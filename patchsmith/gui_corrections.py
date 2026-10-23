@@ -38,7 +38,7 @@ def _count_label(n, one, many):
 
 
 class Window:
-    """The (modal) window above the main one. app: gui.App; elenco: correzioni.Elenco already loaded."""
+    """The (modal) window above the main one. app: gui.App; items: corrections.Items already loaded."""
 
     def __init__(self, app, items, filter_=None):
         self.app = app
@@ -108,7 +108,7 @@ class Window:
         pages.grid(row=3, column=0, sticky="ew", pady=(4, 0))
         self.btn_prev = ttk.Button(pages, text="◀ Previous page", command=lambda: self.change_page(-1))
         self.position = ui.TextVar()
-        self.position_label = ttk.Label(pages, textvariable=self.position, style="Stato.TLabel")
+        self.position_label = ttk.Label(pages, textvariable=self.position, style="Status.TLabel")
         self.btn_next = ttk.Button(pages, text="Next page ▶", command=lambda: self.change_page(1))
 
         editor = ttk.Frame(frame)
@@ -131,14 +131,14 @@ class Window:
         info = ttk.Frame(editor)
         info.grid(row=2, column=1, sticky="ew", pady=(4, 0))
         self.length = ui.TextVar()
-        self.length_label = ttk.Label(info, textvariable=self.length, style="Stato.TLabel")
+        self.length_label = ttk.Label(info, textvariable=self.length, style="Status.TLabel")
         self.length_label.pack(side="left")
         self.warning = ui.TextVar()
         self.warning_label = ttk.Label(info, textvariable=self.warning, foreground=theme.ICONS["warning"][1])
         self.warning_label.pack(side="left", padx=(14, 0))
         # the line's whole problem (in the list column only the beginning is visible)
         self.problem = ui.TextVar()
-        ttk.Label(editor, textvariable=self.problem, style="Stato.TLabel", wraplength=860, justify="left").grid(
+        ttk.Label(editor, textvariable=self.problem, style="Status.TLabel", wraplength=860, justify="left").grid(
             row=3, column=1, sticky="w")
 
         buttons = ttk.Frame(frame)
@@ -500,7 +500,7 @@ class Window:
         self._go_to_translation()
 
     def _save_changes(self, changes):
-        """Saves (correzioni.salva); False if it fails (the window stays open, with the changes)."""
+        """Saves (corrections.save); False if it fails (the window stays open, with the changes)."""
         seen = {t: self.items.entries[self.idx[t]].cache for t in changes} if self.items.unity else None
         try:
             corrections.save(self.items.profile_path, changes, seen, test=self.items.test,

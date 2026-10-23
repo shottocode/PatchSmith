@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PatchSmith: translates the texts of video games directly in the game's files.
 
-Usage:  python -I smith.py <comando> [opzioni]      (python -I smith.py -h for help)
+Usage:  python -I smith.py <command> [options]      (python -I smith.py -h for help)
 """
 import os
 import sys

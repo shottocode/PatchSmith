@@ -41,7 +41,7 @@ def column_language(name):
 
 
 def _csv_cells(text, sep):
-    """[[(inizio, fine, valore, tra_virgolette)]] of the lines, with the CSV rules (quotes, "" inside a quoted cell,
+    """[[(start, end, value, quoted)]] of the lines, with the CSV rules (quotes, "" inside a quoted cell,
     line breaks inside quotes). Raises CSVError if the quotes are not used this way."""
     lines, line, i, n = [], [], 0, len(text)
     cell_end = re.compile("[%s\r\n]" % re.escape(sep))
@@ -113,8 +113,8 @@ class CSVFile:
     """A CSV table that was read: cells with their position in the text, header, language columns."""
 
     def __init__(self, data_bytes, by_hand=False):
-        """a_mano=True: the lines are split the way a game that reads the CSV by hand does, even if the file is a
-        valid CSV (to read back a file rewritten like the original, see serializza)."""
+        """by_hand=True: the lines are split the way a game that reads the CSV by hand does, even if the file is a
+        valid CSV (to read back a file rewritten like the original, see serialize)."""
         try:
             text = data_bytes.decode("utf-8")
         except UnicodeDecodeError as e:
@@ -174,7 +174,7 @@ class CSVFile:
                      if n.strip().lstrip("\ufeff").lower() == search), None)
 
     def source(self, origin="auto"):
-        """(indice, codice) of the column to translate: the one of the 'origine' language (with 'auto' English, if
+        """(index, code) of the column to translate: the one of the 'origin' language (with 'auto' English, if
         present, otherwise the first language), the fullest if there is more than one; (None, None) if there is none."""
         base = (origin or "auto").split("-")[0].lower()
         choices = [i for i, c in self.languages.items() if c.split("-")[0] == ("en" if base == "auto" else base)]
@@ -193,7 +193,7 @@ class CSVFile:
             and self._with_text(i) >= MIN_TEXTS
 
     def full_languages(self, source=None):
-        """The languages whose column is full (at least FULL of the texts of the 'sorgente' column): they are the
+        """The languages whose column is full (at least FULL of the texts of the 'source' column): they are the
         game's official translations. Empty or almost empty columns (languages planned but not translated) do not
         count."""
         source = self.source()[0] if source is None else source
@@ -203,7 +203,7 @@ class CSVFile:
         return {c for i, c in self.languages.items() if self._with_text(i) >= FULL * total}
 
     def texts(self, column):
-        """[((riga, colonna), testo)] of the column's texts (\\r\\n line breaks inside a cell become \\n)."""
+        """[((row, column), text)] of the column's texts (\\r\\n line breaks inside a cell become \\n)."""
         output = []
         for r in range(1, len(self.lines)):
             if column < len(self.lines[r]):
@@ -255,7 +255,7 @@ class CSVFile:
         return value_
 
     def serialize(self, replacements):
-        """Bytes of the file with the cells replaced {(riga, colonna): nuovo testo}: the rest identical. Raises
+        """Bytes of the file with the cells replaced {(row, column): new text}: the rest identical. Raises
         CSVError if a translation would change how the file is read (see unwritable) or if the file read back
         does not match."""
         pieces, last, expectations = [], 0, {}
@@ -289,7 +289,7 @@ def read_file(path):
 
 
 def table(path):
-    """The translation table (FileCSV) of the file, or None if the file is not one (or cannot be read)."""
+    """The translation table (CSVFile) of the file, or None if the file is not one (or cannot be read)."""
     try:
         if os.path.getsize(path) > MAXIMUM:
             return None
@@ -300,8 +300,8 @@ def table(path):
 
 
 def tables(folder):
-    """{relativo: CSVFile} of the folder's CSV translation tables (read only). Files created by PatchSmith and Godot
-    sources are skipped (a .csv with its .csv.import next to it: the game uses the compiled file)."""
+    """{relative path: CSVFile} of the folder's CSV translation tables (read only). Files created by PatchSmith and
+    Godot sources are skipped (a .csv with its .csv.import next to it: the game uses the compiled file)."""
     from . import adapter_webjson
     matches = {}
     for root, dirs, files in os.walk(folder):

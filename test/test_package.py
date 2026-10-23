@@ -4,7 +4,7 @@ Usage: python -I test/test_package.py <test_folder_that_does_not_exist>
 - the package with the program, PatchSmith.exe and runtime/ (Python with Tkinter and the ._pth file), without the data
   of whoever uses PatchSmith, the tests and the downloaded components; the zip with only the PatchSmith folder, without
   __pycache__;
-- the portable Python starts on its own (prepara already tests it) and runs smith.py;
+- the portable Python starts on its own (prepare already tests it) and runs smith.py;
 - PatchSmith.exe chooses the portable Python even with an installed Python (here a test PatchSmith.pyw);
 - a used package (with data inside) is not deleted; the package does not go inside the program's folder.
 """

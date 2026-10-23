@@ -333,8 +333,8 @@ def main(base):
     write(os.path.join(ue, "patchsmith-unreal.json"), b"{}")
     path, outcome = automatic.prepare(ue, "auto", "it", "fake", silent)
     check("Lingua ufficiale con una traduzione di PatchSmith ancora installata: lo dice",
-              outcome.get("traduzione_installata")
-              and any("is still installed" in x for x in outcome["lingua_ufficiale_righe"]))
+              outcome.get("translation_installed")
+              and any("is still installed" in x for x in outcome["official_language_lines"]))
     os.remove(os.path.join(ue, "patchsmith-unreal.json"))
     automatic.restore(ue, silent)
 

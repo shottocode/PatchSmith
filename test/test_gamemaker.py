@@ -1,4 +1,4 @@
-"""Test of the GameMaker adapter with a fake game (localization files + minimal date.win with two fonts).
+"""Test of the GameMaker adapter with a fake game (localization files + minimal data.win with two fonts).
 
 Usage: python -I test/test_gamemaker.py <empty_temp_folder>
 The test's game profiles and translation memories stay in the temporary folder (not in PatchSmith's).

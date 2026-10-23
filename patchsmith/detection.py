@@ -143,7 +143,7 @@ def _keys(rx):
         if not best:
             return None
         keys.add(("contains", best))
-    # The weakest condition is enough: "fine x.dll" makes "fine /x.dll" redundant.
+    # The weakest condition is enough: "end x.dll" makes "end /x.dll" redundant.
     return {a for a in keys if not any(b != a and _implies(a, b) for b in keys)}
 
 
@@ -193,7 +193,7 @@ def _index(expressions):
 
 
 def _filter(expressions, items):
-    """For each regex, the paths of elenco (in the same order) in which search() finds something."""
+    """For each regex, the paths of items (in the same order) in which search() finds something."""
     candidates_for = _index(expressions)
     found = [[] for _ in expressions]
     for path in items:
@@ -296,7 +296,7 @@ def detect(folder):
     """Returns a dictionary with results, web frameworks, web roots and recommendations."""
     rules = load_rules()
     items, truncated = list_files(folder)
-    results = {}  # (sezione, nome) -> {"score", "evidence"}
+    results = {}  # (section, name) -> {"score", "evidence"}
 
     def _add(section, name, evidence, weight, from_rule=False):
         r = results.setdefault((section, name), {"score": 0, "evidence": [], "from_rules": 0})

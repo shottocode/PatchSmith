@@ -164,7 +164,7 @@ If PatchSmith is updated while its window is open, at the next operation a warni
 - for Unity: `BepInEx/LogOutput.log`, the XUnity and BepInEx configuration, the translator's startup state (`BepInEx/patchsmith-servizio-stato.txt`), the end of the live translator's log and journal, `Player.log`, `Player-prev.log` and the `Player.log` of the last crash;
 - for Unreal: the game's log (`%LOCALAPPDATA%\<project>\Saved\Logs\<project>.log`), from which the after-play check tells whether the translation pak was loaded and which language is chosen.
 
-No game files and no saves. If the key or the email had ended up in a log (even inside a web address), in the report they become `<tolto>`; your Windows user folder becomes `%USERPROFILE%`. If the Desktop is not writable (for example with Windows' "Controlled folder access"), the report goes in the `logs/` folder and the dialog says where.
+No game files and no saves. If the key or the email had ended up in a log (even inside a web address), in the report they become `<removed>`; your Windows user folder becomes `%USERPROFILE%`. If the Desktop is not writable (for example with Windows' "Controlled folder access"), the report goes in the `logs/` folder and the dialog says where.
 
 ## From the command line
 

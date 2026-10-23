@@ -34,13 +34,16 @@ OLD_SETTINGS = {"cartella": "C:/Giochi/Lantern Keeper", "da": "auto", "a": "it",
                 "interfaccia": "it", "chiave_deepl": "", "musica": False, "suoni": True, "versione": 2}
 NEW_SETTINGS = {"folder": "C:/Giochi/Lantern Keeper", "from": "auto", "to": "it", "backend": "fake", "theme": "dark",
                 "interface": "it", "deepl_key": "", "music": False, "sounds": True, "version": 2}
-OLD_STATE = {"versione": 1, "ultimo_controllo": "2026-10-20T10:00:00", "visti": {"manifesto": 12.5, "diario": 3},
-             "rimedi": {"GIOCO_APERTO": [{"segnale": "x", "quando": "t", "riuscito": True}], "riconfigura": []},
+OLD_STATE = {"versione": 1, "ultimo_controllo": "2026-10-20T10:00:00",
+             "visti": {"manifesto": 12.5, "diario": 3, "creato:x.json": "1/2"},
+             "rimedi": {"GIOCO_APERTO": [{"segnale": "tolti:a.json", "quando": "t", "riuscito": True}],
+                        "riconfigura": []},
              "ultimo": {"quando": "t", "corretti": 1, "da_fare": 0, "problemi": [
                  {"codice": "CRASH_AVVIO", "gravita": "errore", "messaggio": "...", "stato": "corretto",
                   "azione": "ripristina", "segnale": "crash:1", "sicuro": True, "dettaglio": ""}]}}
-NEW_STATE = {"version": 1, "last_check": "2026-10-20T10:00:00", "seen": {"manifest": 12.5, "journal": 3},
-             "remedies": {"GAME_OPEN": [{"signal": "x", "when": "t", "success": True}], "reconfigure": []},
+NEW_STATE = {"version": 1, "last_check": "2026-10-20T10:00:00",
+             "seen": {"manifest": 12.5, "journal": 3, "created:x.json": "1/2"},
+             "remedies": {"GAME_OPEN": [{"signal": "removed:a.json", "when": "t", "success": True}], "reconfigure": []},
              "last": {"when": "t", "fixed_count": 1, "to_do": 0, "problems": [
                  {"code": "STARTUP_CRASH", "severity": "error", "message": "...", "state": "fixed",
                   "action": "restore", "signal": "crash:1", "safe": True, "detail": ""}]}}
@@ -103,8 +106,11 @@ def test_upgrade():
                                                 "Program": "p", "Detail": ""})
     chains = {k: v for k, v in legacy.KEYS.items() if v in legacy.KEYS}
     code_chains = {f: [c for c in codes.values() if c in codes] for f, codes in legacy.CODES.items()}
-    check("nessun nome nuovo e' anche un nome vecchio (%s %s)" % (chains, {f: c for f, c in code_chains.items() if c}),
-          not chains and not any(code_chains.values()))
+    signal_chains = [s for s in list(legacy.SIGNALS.values()) + list(legacy.SIGNAL_PREFIXES.values())
+                     if s in legacy.SIGNALS or s in legacy.SIGNAL_PREFIXES]
+    check("nessun nome nuovo e' anche un nome vecchio (%s %s %s)"
+          % (chains, {f: c for f, c in code_chains.items() if c}, signal_chains),
+          not chains and not any(code_chains.values()) and not signal_chains)
     check("riga di comando: --backend finto e locale (nomi di prima)",
           cli._backend_name("finto") == "fake" and cli._backend_name("locale") == "local"
           and cli._backend_name("deepl") == "deepl")

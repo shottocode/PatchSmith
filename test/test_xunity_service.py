@@ -1,7 +1,7 @@
 """Tests of the new-lines translator for XUnity (xunity_service), of its installation in the game and of the
 translation memory shared between several programs (shared_file), without graphics card and without network.
 
-Usage: python -I test/test_xunity_service.py <empty_temp_folder> [cartella_Data_di_un_gioco_Unity]
+Usage: python -I test/test_xunity_service.py <empty_temp_folder> [Unity_game_Data_folder]
 - service with the fake translator on 127.0.0.1: answers, XUnity {{A}} placeholders, translation memory, diary of
   the lines, port already in use, closing at the end of the game process (503 while closing), old temp files removed;
 - translators in a queue: one that does not answer is skipped, one that is paused is not called, none reachable = 500;
@@ -311,7 +311,7 @@ def test_queue(tmp):
 
 def test_rejects(tmp):
     """Lines no translator can translate well: 200 with the fallback answer or with the original, never 500."""
-    def line_len(text, _opts):  # very long translation: rejected ("lunghezza anomala"), but Italian and complete
+    def line_len(text, _opts):  # very long translation: rejected ("abnormal length"), but Italian and complete
         return "Tieni premuto " + text.replace("Hold RMB", "RMB") + " " + "per saltare in alto " * 8
 
     b, _ = test_local.local(line_len)
@@ -620,7 +620,7 @@ def test_group(tmp):
 
 
 def test_stop(tmp):
-    """The "Stop the game translator" button: acceso() sees it listening, ferma() closes it."""
+    """The "Stop the game translator" button: is_on() sees it listening, stop() closes it."""
     name = "prova-ferma-traduttore"
     port = xunity_service.port_for(name)
     if port_busy(port):

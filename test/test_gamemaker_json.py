@@ -2,7 +2,7 @@
 
 Usage: python -I test/test_gamemaker_json.py <empty_temp_folder>
 Fake game: local/english.json + official translations, with Forager's conventions ('*' = line break, "U " =
-symbol at the start of a paragraph), date.win with an accented Latin font and ASCII-only fonts (chat, numbers).
+symbol at the start of a paragraph), data.win with an accented Latin font and ASCII-only fonts (chat, numbers).
 Writes only to the temporary folder; no network (fake translator, simulated HTTP requests).
 """
 import hashlib
@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from patchsmith import (adapter_gamemaker, auto as automatic, backend, interruption,
                         official_language, project, steam)
-import test_gamemaker  # noqa: E402  (date.win builder)
+import test_gamemaker  # noqa: E402  (data.win builder)
 
 OUTCOMES = []
 

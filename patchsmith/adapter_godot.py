@@ -5,10 +5,10 @@ reads the table of the source language (OptimizedTranslation: keys in the form o
 smaz; or Translation with the message dictionary), translates the texts and puts next to the executable:
 - override.cfg: the project settings that Godot reads at startup from the executable's folder (the way
   Godot provides to change them without touching the game), with a PatchSmith autoload;
-- patchsmith-translation.gd: the autoload script, which at startup replaces the table of the source language
+- patchsmith-traduzione.gd: the autoload script, which at startup replaces the table of the source language
   with a "bridge" (first the original text from the game's table, then its translation): with the source
   language chosen in the game (usually English) the texts appear translated; it also adds the target language;
-- patchsmith-translation.json: the translations (original text -> translated).
+- patchsmith-traduzione.json: the translations (original text -> translated).
 Everything is listed with its fingerprint in patchsmith-godot.json; "Restore originals" removes the files (and puts
 back an override.cfg of the game, if there was one).
 

@@ -4,7 +4,7 @@ Many GameMaker games read their texts from files included next to the executable
 (Localization/english_ui.txt, Localization/french/ui.txt...). PatchSmith:
 1. finds the files of the original language in the "lines with id" format (adapter_lines);
 2. translates them (translation memory + Google, with codes like /name/ and /n/ protected);
-3. adapts the characters to those of the game's fonts (read from date.win: in GameMaker a character that
+3. adapts the characters to those of the game's fonts (read from data.win: in GameMaker a character that
    the font lacks becomes a small square), for Italian ì -> í, ò -> ó, ù -> ú if the font has the acute ones;
 4. repairs what the game would read wrongly (an extra "/" is taken as the start of a code);
 5. writes them back in place with a verified backup of the originals (as for web games).
@@ -13,7 +13,7 @@ In the game the language of the translated files stays selected (usually English
 Other recognized formats: JSON files per language (local/english.json, also with sections, // comments and trailing
 commas, and with the code attached to the name as in localization/stringsEN.json) and CSV tables with one column per
 language (translations.csv: id,english,french...; see adapter_csv).
-Limits: texts written in the game's code (date.win) are left untranslated; other localization formats are not
+Limits: texts written in the game's code (data.win) are left untranslated; other localization formats are not
 covered.
 """
 import os
@@ -73,7 +73,7 @@ _ATTACHED_CODES = {"br": "pt", "ptbr": "pt", "sc": "zh", "chs": "zh", "tc": "zh-
 
 
 def _attached(word):
-    """(radice, codice) if the word (with its original capitalization) ends with an attached language code
+    """(root, code) if the word (with its original capitalization) ends with an attached language code
     (stringsEN -> ('strings', 'en')), otherwise None."""
     m = _ATTACHED.match(word or "")
     if not m:
@@ -157,7 +157,7 @@ def read_original(path, reader):
 
 
 def localization_file(folder):
-    """{relativo: language or None} of the files in the 'lines with id' format (read-only)."""
+    """{relative path: language or None} of the files in the 'lines with id' format (read-only)."""
     found = {}
     for root, dirs, files in os.walk(folder):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
@@ -248,16 +248,16 @@ def _language_font(font_name, code):
 
 
 def font_chars(folder, log=None, officials=None, source=None):
-    """Characters that the game's text fonts (date.win) can draw, or None if not known.
+    """Characters that the game's text fonts (data.win) can draw, or None if not known.
 
     - fonts with at least 20 Latin letters count, except those for another alphabet: besides ASCII they mostly
       have another script (e.g. a Korean or Japanese font with a few accented letters: at least 100 characters
       of the other script and more than 10 times the accented letters), and except the fallback fonts of
       libraries (scribble_fallback_font: ASCII only, the game does not use it for its texts);
-    - 'ufficiali': accented letters that the game's official translations use (e.g. é, ü, ç). If there are
+    - 'officials': accented letters that the game's official translations use (e.g. é, ü, ç). If there are
       at least 3, a font that has none of them is not used for the translated texts (chat font, numbers font,
       font of another script such as Thai) and does not count, unless its name says it is the font of the
-      'sorgente' language (e.g. fnt_english: it is the one that will draw the translation). A font with a few
+      'source' language (e.g. fnt_english: it is the one that will draw the translation). A font with a few
       accented letters does count instead: it can be the one for the original language's texts, with only the
       letters they use (Another Door: ftPixeloidSans has exactly the Á ç é ô of the English file), and a letter
       it lacks would be a small square;
@@ -394,9 +394,9 @@ def created_by_patchsmith(folder):
 
 
 def language_json_files(folder, log=None):
-    """{relativo: language} of the JSON localization files: {key: text} dictionaries (also split into sections, and
-    also with // comments and trailing commas, which many games accept) with the language in the path, present in at
-    least two languages in the same family (local/{L}.json, lang/{L}/ui.json, localization/strings{L}.json;
+    """{relative path: language} of the JSON localization files: {key: text} dictionaries (also split into sections,
+    and also with // comments and trailing commas, which many games accept) with the language in the path, present
+    in at least two languages in the same family (local/{L}.json, lang/{L}/ui.json, localization/strings{L}.json;
     read-only). Files created by PatchSmith (the added language) do not count. With 'log': the language files that
     cannot be read."""
     by_family, unreadable = {}, []
@@ -471,8 +471,8 @@ _ASTERISK_BETWEEN_WORDS = re.compile(r"[^\W\d_]\*+[^\W\d_]")  # between two lett
 
 def _confirmed(others, spots, test, strong, weak):
     """True if the official translations confirm the convention: at least one language almost always follows it
-    ('prova(valore, posto)' true in at least 'forte' of the places it has) and at least half of the languages follow
-    it at least in part ('debole'): translators remove it where it is not needed (e.g. a word that fits on one line)."""
+    ('test(value, spot)' true in at least 'strong' of the places it has) and at least half of the languages follow
+    it at least in part ('weak'): translators remove it where it is not needed (e.g. a word that fits on one line)."""
     shares = []
     for a in others:
         valid_spots = [p for p in spots if isinstance(a.get(p[0]), str)]
@@ -483,7 +483,7 @@ def _confirmed(others, spots, test, strong, weak):
 
 def markup(data, others):
     """Writing conventions of the source file's texts, confirmed by the majority of the official translations
-    ('altri': the other dictionaries of the same folder): {'line_break': '*' if the asterisk acts as a line break (e.g.
+    ('others': the other dictionaries of the same folder): {'line_break': '*' if the asterisk acts as a line break (e.g.
     "iron*ore"), 'bullet': letter used as a symbol at the start of a paragraph (e.g.
     "U unlocks...**U gain...")}."""
     outcome = {"line_break": None, "bullet": None}
@@ -551,7 +551,7 @@ def _sentence_groups(paragraphs, marker, bullet):
 
 
 def normalize_line_breaks(text, marker=None, bullet=None):
-    """The text as it is translated: the 'segno' line breaks become spaces (the sentence is translated whole),
+    """The text as it is translated: the 'marker' line breaks become spaces (the sentence is translated whole),
     paragraphs (double marker) become lines separated by a blank line, joining the pieces of the same sentence; the
     symbol at the start of a paragraph is removed."""
     if (not marker and not bullet) or "\n" in text:
@@ -567,7 +567,7 @@ def normalize_line_breaks(text, marker=None, bullet=None):
 
 def _balanced_line_breaks(text, segments, marker):
     """Puts the original's line breaks back into the translated text: the same number (or fewer, if there are not
-    enough words), in proportion to the lengths of the original lines, always between two words. 'segno' is the
+    enough words), in proportion to the lengths of the original lines, always between two words. 'marker' is the
     line break marker, or the list of the original separators between one segment and the next (line breaks and
     paragraphs of the same sentence)."""
     separators = [marker] * (len(segments) - 1) if isinstance(marker, str) else list(marker)
@@ -614,7 +614,7 @@ def reassemble_line_breaks(original, translated, marker=None, bullet=None, width
 
 
 def _lines_of(text, marker):
-    """The non-empty lines of the text as the game draws them (line break = segno or '\\n')."""
+    """The non-empty lines of the text as the game draws them (line break = marker or '\\n')."""
     pieces = re.split("%s|\n" % re.escape(marker), text) if marker else text.split("\n")
     return [x.strip() for x in pieces if x.strip()]
 
@@ -865,8 +865,8 @@ def _other_script_text(text):
 
 
 def line_limits(data, others, marker):
-    """{key: [width, lines, uguali]} for each text: the longest line (in characters) and the maximum number
-    of lines among the original and the official translations that use the same font ('altri': their
+    """{key: [width, lines, equal_count]} for each text: the longest line (in characters) and the maximum number
+    of lines among the original and the official translations that use the same font ('others': their
     dictionaries), and how many official translations leave the text the same as the original (e.g. 'vsync:')."""
     output = {}
     if not isinstance(data, dict):

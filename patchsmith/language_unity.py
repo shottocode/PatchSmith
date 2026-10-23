@@ -2,11 +2,11 @@
 
 Detection (read only):
 - I2 Localization: the language lists (name, code, flag) saved in the assets (resources.assets, level*,
-  sharedassets*, also inside date.unity3d); a language with the "disabled" flag does not count;
+  sharedassets*, also inside data.unity3d); a language with the "disabled" flag does not count;
 - Unity Localization: the "Locales" in the Addressables catalog (StreamingAssets/aa).
 
 Setting: only for I2, which saves the chosen language in the PlayerPrefs (Windows registry,
-HKCU\\Software\\<Azienda>\\<Prodotto>, value "I2 Language_h<hash>" = exact name of the language, UTF-8 + NUL).
+HKCU\\Software\\<Company>\\<Product>, value "I2 Language_h<hash>" = exact name of the language, UTF-8 + NUL).
 Only that value is changed, with the game closed and only if the game's key already exists (game started at least
 once), with a backup of the previous value and restore. Unity Localization: instructions.
 """
@@ -49,7 +49,7 @@ def company_product(data):
     return (lines[0].strip() or None), (lines[1].strip() if len(lines) > 1 and lines[1].strip() else None)
 
 
-# --- UnityFS (date.unity3d) -----------------------------------------------------------------------
+# --- UnityFS (data.unity3d) -----------------------------------------------------------------------
 
 def _lz4(src, dim):
     try:
@@ -256,7 +256,7 @@ def _try_list(d, p):
 
 
 def i2_lists(d):
-    """[[(nome, codice, flag)]] of the I2 language lists found in the bytes of an asset."""
+    """[[(name, code, flag)]] of the I2 language lists found in the bytes of an asset."""
     output, seen, last_end = [], set(), -1
     for m in re.finditer(rb"\x02\x00\x00\x00en\x00\x00|\x05\x00\x00\x00en-[A-Z]{2}\x00\x00\x00", d):
         if m.start() < last_end:
@@ -295,7 +295,7 @@ def uses_i2(data):
 def i2_languages(data, after_first=2):
     """[(exact name, code)] of the ACTIVE I2 languages, or None if no lists are found.
     Reads at most _MAXIMUM bytes (files that would exceed it are skipped) and, once the first list is found, only
-    'dopo_la_prima' more files (the lists of the single scenes usually repeat the main one)."""
+    'after_first' more files (the lists of the single scenes usually repeat the main one)."""
     active_langs, matches, read_items, after = {}, False, 0, None
     try:
         entries, close = _asset_file(data)
@@ -382,7 +382,7 @@ def unity_localization_languages(data):
         for m in _LOCALE_TEXT.finditer(b):
             codes.add(m.group(1).decode())
         # binary catalog (catalog.bin): the names are not necessarily under "Locales/"; they count only if the file
-        # uses Unity Localization and each code also has its own "Locale-<codice>" label
+        # uses Unity Localization and each code also has its own "Locale-<code>" label
         if f.endswith(".bin") and (b"Localization.Locale" in b or b"Localization/Locales" in b):
             for m in _LOCALE_BINARY.finditer(b):
                 if b"Locale-" + m.group(1) in b:
@@ -405,7 +405,7 @@ def _registry_key(company, product):
 
 
 def read_pref(company, product, key):
-    """(tipo, byte) of the value, None if the value is missing, False if the game's key is missing."""
+    """(kind, bytes) of the value, None if the value is missing, False if the game's key is missing."""
     if not sys.platform.startswith("win"):
         return False
     import winreg
@@ -436,7 +436,7 @@ def write_pref_string(company, product, key, text):
 
 
 def restore_pref(company, product, key, previous, written):
-    """Puts back the previous value ((tipo, hex) or None = absent), only if the one we wrote is still there."""
+    """Puts back the previous value ((kind, hex) or None = absent), only if the one we wrote is still there."""
     import winreg
     current = read_pref(company, product, key)
     if not current or current[1] != written:
@@ -452,7 +452,7 @@ def restore_pref(company, product, key, previous, written):
 
 
 def _registry_value(kind, byte):
-    """The value in the form winreg wants for that type (leggi_pref always gives it as bytes)."""
+    """The value in the form winreg wants for that type (read_pref always gives it as bytes)."""
     import winreg
     if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
         return byte.decode("utf-8")
@@ -462,7 +462,7 @@ def _registry_value(kind, byte):
 
 
 def i2_entry(entries, dest_lang="it"):
-    """The exact name of the I2 entry [(nome, codice)] for the language 'destinazione', or None: first by code
+    """The exact name of the I2 entry [(name, code)] for the language 'dest_lang', or None: first by code
     (same code, then the language without region, then a variant; never the other Chinese script), then, for
     Italian without a suitable code, by name."""
     from .language import best

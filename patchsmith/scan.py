@@ -87,9 +87,9 @@ def _mark_localization(candidates):
 
 
 def scan_folder(folder, log=print):
-    """Returns (candidati, altri_formati).
+    """Returns (candidates, others).
 
-    candidati: [{"path": rel, "readable_strings": n, "chars": c, "stats": {...}}], plus
+    candidates: [{"path": rel, "readable_strings": n, "chars": c, "stats": {...}}], plus
     "localization" for {key: text} files and "format": "csv" for tables with one column per language.
     The skipped files (too large, unreadable JSON) go to the log with how many they are.
     """
@@ -148,7 +148,7 @@ def create_profile(name, folder, candidates, origin, dest_lang, backend, web_roo
     """Game profile with the files above the threshold and the proposed schemas (can be edited by hand).
 
     web_roots: index.html of web games (relative paths): they become 'web-ui' entries for the menus.
-    motore: the detected engine ('GameMaker', 'XNA'...): for GameMaker and XNA the translations adapt to the characters
+    engine: the detected engine ('GameMaker', 'XNA'...): for GameMaker and XNA the translations adapt to the characters
     of the game's fonts (profile["game_engine"]; GameMaker is also profile["engine"]).
     log: to write which files with few texts are left out.
     """

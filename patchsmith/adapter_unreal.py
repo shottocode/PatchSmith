@@ -2,8 +2,8 @@
 
 1. reads (read only) the game's .pak files and finds the .locres files of the original language,
    for example DDS/Content/Localization/Game/en/Game.locres (the language comes from the .locmeta file);
-2. translates the lines (translation memory + Google), protecting {x} placeholders, <Stile>...</> tags and separators;
-3. writes a NEW patch pak (Content/Paks/zz_Patchsmith_<lingua>_999_P.pak) with the translated .locres files at the
+2. translates the lines (translation memory + Google), protecting {x} placeholders, <Style>...</> tags and separators;
+3. writes a NEW patch pak (Content/Paks/zz_Patchsmith_<language>_999_P.pak) with the translated .locres files at the
    same path: Unreal loads it with a higher priority and shows the translation ("_P" = patch,
    "_999" = high patch number, so it wins even over the official patches "_1_P", "_2_P"...).
 The original paks are never modified: to go back, removing the added pak is enough.
@@ -164,7 +164,7 @@ class Pak:
         return {1: "Zlib", 2: "Gzip"}.get(entry.method, "Custom")
 
     def read_file(self, name):
-        """The data of a file in the pak, from its name in the pak or its full name (see nome_pieno)."""
+        """The data of a file in the pak, from its name in the pak or its full name (see full_name)."""
         entry = self.entries.get(name)
         if entry is None and self.prefix and name.startswith(self.prefix):
             entry = self.entries.get(name[len(self.prefix):])
@@ -200,7 +200,7 @@ def _serialize_entry(version, offset, data, method_width=4):
 
 
 def write_pak(path, model, file, mount=None):
-    """Writes an uncompressed pak with the same format as the 'model' pak. file: [(nome, dati)]. mount: the mount
+    """Writes an uncompressed pak with the same format as the 'model' pak. file: [(name, data)]. mount: the mount
     point (usually the model's; '../../../' with full names)."""
     v, width = model.version, getattr(model, "method_width", 4)
     mount = model.mount if mount is None else mount
@@ -332,10 +332,10 @@ def present_cultures(folder):
 
 
 def find_locres(folder, skipped=None):
-    """[(pak, nome completo, target, cultura)] of the .locres files of the original language (highest-priority
+    """[(pak, full name, target, culture)] of the .locres files of the original language (highest-priority
     version), with full names also from paks with a deeper mount point (see full_name: Pak.read_file accepts them).
-    A pak that cannot be read (newer format, encrypted, corrupted) is skipped, without stopping the others: 'saltati'
-    (a list) receives 'nome: motivo'."""
+    A pak that cannot be read (newer format, encrypted, corrupted) is skipped, without stopping the others: 'skipped'
+    (a list) receives 'name: reason'."""
     read_items = []
     for path in _paks(folder):
         try:
@@ -486,7 +486,7 @@ def culture_chars(folder, excluded_cultures=()):
 
 def allowed_chars(folder, present, native=()):
     """The characters that can be written in the translated .locres files, or None if unknown (no limit): ASCII,
-    those of the original texts ('presenti') and those of the official translations in Latin-script languages.
+    those of the original texts ('present') and those of the official translations in Latin-script languages.
     Unreal's fonts are .ttf/.otf files: if the official translations use accented Latin-1 letters
     (\u00e9, \u00fc, \u00f1...), the font has the whole block (including \u00ec and \u00f2, which French or Spanish do
     not use). Without official translations in Latin-script languages, or if they use no accented letter, there is no
@@ -514,10 +514,10 @@ def _adapt(translation, present, allowed=None, target_lang="it"):
 
 
 def install(folder, a, profile_name, memory, log=print, refused=None):
-    """Writes the patch pak with the translated .locres files using the translations in 'memory' {originale:
-    tradotto}. Returns the number of translated lines inserted. Characters the game's fonts probably lack are
+    """Writes the patch pak with the translated .locres files using the translations in 'memory' {original:
+    translated}. Returns the number of translated lines inserted. Characters the game's fonts probably lack are
     adapted (see allowed_chars: è -> e'); a translation that cannot be adapted stays in the original and goes into
-    'respinte' (if given), {original: chars}, for problems.json."""
+    'refused' (if given), {original: chars}, for problemi.json."""
     folder = os.path.abspath(folder)
     _checks(folder)
     sources = find_locres(folder)

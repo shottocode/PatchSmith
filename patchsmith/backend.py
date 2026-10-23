@@ -24,7 +24,7 @@ MAX_BLOCK = 4000  # characters per request (margin below the roughly 5,000 accep
 class BackendError(Exception):
     """The translation service cannot be reached or rejects the requests.
 
-    codice: the outcome for the interface (see outcome.py), e.g. TRANSLATOR_MISSING; comando: what to type on the
+    code: the outcome for the interface (see outcome.py), e.g. TRANSLATOR_MISSING; command: what to type on the
     command line to fix it (only the command line shows it: the messages talk about the interface's buttons)."""
 
     def __init__(self, message="", code=None, command=None):
@@ -43,7 +43,7 @@ class Backend:
 
 class Fake(Backend):
     """Test backend: does not use the network, puts [it] before the text. Its translations end up in a separate
-    translation memory (*.test.json), so they do not pollute the real one."""
+    translation memory (*.prova.json), so they do not pollute the real one."""
 
     name = "fake"
 
@@ -62,7 +62,7 @@ def clean(text):
 
 
 def _split_long(line, maximum=MAX_BLOCK):
-    """Splits a line that is too long into pieces by sentences (or by spaces) of at most `massimo` characters."""
+    """Splits a line that is too long into pieces by sentences (or by spaces) of at most `maximum` characters."""
     pieces, current = [], ""
     for sentence in re.split(r"(?<=[.!?。！？])\s+", line):
         if len(sentence) > maximum and current:  # the previous sentence first: the order must not change
@@ -235,7 +235,7 @@ class GoogleFree(Backend):
 
 
 def _blocks(pieces, maximum, texts_limit=None):
-    """Indices of the pieces grouped into blocks of at most 'massimo' characters (line breaks included)."""
+    """Indices of the pieces grouped into blocks of at most 'maximum' characters (line breaks included)."""
     blocks, block, length = [], [], 0
     for k, piece in enumerate(pieces):
         if block and (length + len(piece) + 1 > maximum or (texts_limit and len(block) >= texts_limit)):
@@ -381,11 +381,11 @@ class DeepL(Backend):
 # --- MyMemory (public API, no account: 5,000 characters a day, 50,000 with your own email) ------------------
 
 def _split_bytes(line, maximum=480):
-    """Pieces of at most 'massimo' UTF-8 bytes (MyMemory accepts at most 500 bytes per request)."""
+    """Pieces of at most 'maximum' UTF-8 bytes (MyMemory accepts at most 500 bytes per request)."""
     pieces = []
     for piece in _split_long(line, maximum):
         while len(piece.encode("utf-8")) > maximum:
-            # how many characters really fit in 'massimo' bytes (even with mixed text, e.g. Japanese + English)
+            # how many characters really fit in 'maximum' bytes (even with mixed text, e.g. Japanese + English)
             cut = max(1, len(piece.encode("utf-8")[:maximum].decode("utf-8", "ignore")))
             space = piece.rfind(" ", 0, cut)
             cut = space if space > 0 else cut
@@ -518,8 +518,8 @@ PROMPT_TRANSLATEGEMMA = (
     "You are a professional {sl} ({sc}) to {tl} ({tc}) translator. Your goal is to accurately convey the meaning "
     "and nuances of the original {sl} text while adhering to {tl} grammar, vocabulary, and cultural "
     "sensitivities.\nThe text is a string from a video game (item names, skills, menus or dialogue); address the "
-    "player informally.\n{contesto}Produce only the {tl} translation, without any additional explanations or "
-    "commentary. Please translate the following {sl} text into {tl}:\n\n\n{testo}")
+    "player informally.\n{context}Produce only the {tl} translation, without any additional explanations or "
+    "commentary. Please translate the following {sl} text into {tl}:\n\n\n{text}")
 # Context per line (tests on Forager, October 2026: 4B from 43% to 64% good translations, 12B from 73% to 80%):
 # the text's key in the file (without the final number) and the game's official translations, not to be copied.
 KEY_CONTEXT = "In the game's files this text has the identifier \"%s\", a hint of where it appears.\n"
@@ -623,7 +623,7 @@ def _numbers(text):
 
 
 def numbers_difference(original, translated):
-    """(mancano, additional): the numbers of the original that are not in the translation and the extra ones (as values:
+    """(absent, additional): the numbers of the original that are not in the translation and the extra ones (as values:
     "50k" and "50.000" are the same number), written as in the texts."""
     def values(text):
         output = collections.Counter()
@@ -709,7 +709,7 @@ class Local(Backend):
     """Translator on the user's PC: Ollama + TranslateGemma. No quota and no blocks: it goes at the pace of the
     graphics card. One request per line (the TranslateGemma format expects one text at a time), with checks on
     every answer and a second attempt with different parameters; the lines that do not pass the checks stay
-    untranslated (Project retries them right away in another round: see 'giri' in translate_lines). The server
+    untranslated (Project retries them right away in another round: see 'rounds' in translate_lines). The server
     starts at the first line and is closed with close()."""
 
     name = "local"
@@ -742,7 +742,7 @@ class Local(Backend):
         # with a server given from outside (tests) one at a time, unless told otherwise
         self.parallel = max(1, parallel or (ollama.MODELS[model].get("parallel", 1) if server is None else 1))
         self._lock = threading.Lock()
-        # {testo: (traduzione, problemi)}: the best proposal for the texts rejected by the checks. Only if it is a
+        # {text: (translation, problems)}: the best proposal for the texts rejected by the checks. Only if it is a
         # dictionary (the live translator, xunity_service, prepares it to answer XUnity anyway)
         self.rejects = None
 
@@ -836,7 +836,7 @@ class Local(Backend):
     def _attempts(self, text, round_):
         """[(temperature, seed)] of the attempts for a text: at the first round (0) the fixed ones; from the others,
         seeds derived from the text and the attempt number (seed_for), so every round asks new questions even from
-        one run to the next (Project remembers the rounds done in memory/<gioco>.problems.json)."""
+        one run to the next (Project remembers the rounds done in memory/<game>.problemi.json)."""
         if not round_:
             return list(self.ATTEMPTS)
         n = len(self.ROUND_TEMPERATURES)
@@ -867,7 +867,7 @@ class Local(Backend):
     def _chat(self, text, origin, dest_lang, temperature, seed, num_predict, context=""):
         sc, tc = origin, dest_lang
         prompt = PROMPT_TRANSLATEGEMMA.format(sl=self._english_name(sc), sc=sc, tl=self._english_name(tc), tc=tc,
-                                              contesto=context, testo=text)
+                                              context=context, text=text)
         data = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "stream": False,
                 "keep_alive": "30m", "options": {"temperature": temperature, "seed": seed, "num_ctx": self.NUM_CTX,
                                                  "num_predict": num_predict, "top_k": 64, "top_p": 0.95}}
@@ -999,7 +999,7 @@ class Local(Backend):
 
     def translate_lines(self, lines, origin, dest_lang, contexts=None, rounds=None):
         """Translates the lines, 'parallel' at a time (the graphics card processes several together); the order stays
-        that of the lines. With 'Stop' or an error, those already translated are in e.partials. giri: for each line
+        that of the lines. With 'Stop' or an error, those already translated are in e.partials. rounds: for each line
         how many times it has already been tried (0 or missing: first round, see _attempts)."""
         self._ensure_server()
         contexts = list(contexts or [])
@@ -1148,7 +1148,7 @@ EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def verify_translator(name, credential, opener=None):
-    """(ok, messaggio) for the "Check" button: does the DeepL key or the MyMemory email really work?"""
+    """(ok, message) for the "Check" button: does the DeepL key or the MyMemory email really work?"""
     try:
         if name == "deepl":
             used, limit = DeepL(credential, log=lambda _m: None, opener=opener).verify()

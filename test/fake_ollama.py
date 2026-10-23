@@ -6,7 +6,7 @@ Usage (ollama.Server starts it in the tests): python -I fake_ollama.py serve
 - writes the environment it received to PATCHSMITH_FINTO_AMBIENTE (to check the variables passed);
 - with PATCHSMITH_FINTO_LENTO=seconds it waits before answering (slow start);
 - with PATCHSMITH_FINTO_SEMI_SBAGLIATI=42,7,11 it answers with the original (untranslated) to requests with those seeds;
-- with PATCHSMITH_FINTO_RICHIESTE=<file> it appends to the file one JSON line per /api/chat: {testo, seed,
+- with PATCHSMITH_FINTO_RICHIESTE=<file> it appends to the file one JSON line per /api/chat: {text, seed,
   temperature, model} (the log of requests, for the tests).
 """
 import json

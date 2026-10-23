@@ -37,7 +37,7 @@ def fs(s):  # FString, written here independently
 
 
 def locres_v2(entries):
-    """voci: [(namespace, chiave, testo)] -> .locres version 2 with deduplicated strings."""
+    """entries: [(namespace, key, text)] -> .locres version 2 with deduplicated strings."""
     strings, idx = [], {}
     by_ns = {}
     for ns, k, t in entries:

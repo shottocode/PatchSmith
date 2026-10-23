@@ -1,6 +1,6 @@
-"""Reading GameMaker's date.win (read-only, standard library): chunks, strings, fonts.
+"""Reading GameMaker's data.win (read-only, standard library): chunks, strings, fonts.
 
-date.win = "FORM" + size + chunks ("GEN8", "STRG", "FONT", ...), each one name + size + content.
+data.win = "FORM" + size + chunks ("GEN8", "STRG", "FONT", ...), each one name + size + content.
 References between chunks are absolute offsets in the file; strings are length (uint32) + UTF-8 + 0,
 and references point to the text (that is, to the length + 4).
 
@@ -19,7 +19,7 @@ class GameMakerError(ValueError):
 
 
 def pieces(data):
-    """{nome: (content start, size)} of the chunks of a data.win."""
+    """{name: (content start, size)} of the chunks of a data.win."""
     if len(data) < 8 or data[:4] != b"FORM":
         raise GameMakerError("this is not a GameMaker data.win file (it's missing the FORM)")
     end = 8 + struct.unpack_from("<I", data, 4)[0]
@@ -118,7 +118,7 @@ def is_data(path):
 
 
 def roots(folder, depth=2):
-    """Folders (up to 'profondita' levels below the chosen one) that contain a GameMaker data.win."""
+    """Folders (up to 'depth' levels below the chosen one) that contain a GameMaker data.win."""
     matches = []
     base = os.path.abspath(folder)
     for root, dirs, files in os.walk(base):
@@ -202,7 +202,7 @@ def strings(data):
 
 
 def yyc_compiled(data):
-    """True if the game is compiled to native code (YYC): date.win does not have the code (CODE chunk), which is
+    """True if the game is compiled to native code (YYC): data.win does not have the code (CODE chunk), which is
     in the executable together with the strings it uses."""
     return "CODE" not in pieces(data)
 
@@ -270,7 +270,7 @@ def font_sprite_maps(folder, data=None):
 
 
 def folder_mask(folder, relative_path, extension, data=None):
-    """True if the game looks for the '<relativa>/*<estensione>' files by itself (e.g. 'local/*.json'): then a new
+    """True if the game looks for the '<relative_path>/*<extension>' files by itself (e.g. 'local/*.json'): then a new
     language file put there becomes a selectable language in the game. The mask is searched among the game's
     strings (STRG chunk, or the executable if it is compiled with YYC)."""
     masks = {("%s/*%s" % (relative_path, extension)).encode("utf-8"),

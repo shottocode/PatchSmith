@@ -12,7 +12,7 @@ Two kinds of file, recognized by their content:
 
 Only the text is translated: ids, separators, comments, empty lines, section ends and line breaks (CRLF)
 stay identical byte for byte. Lines the format does not allow for (errors in the original files)
-are left untouched. Each translation is checked on its own (valida): one that would change the way
+are left untouched. Each translation is checked on its own (is_valid): one that would change the way
 the game reads the file stays in the original, without blocking the others. After writing, the file
 is read back and its structure compared.
 """
@@ -109,7 +109,7 @@ class LinesFile:
                                                 else _analyze_lines)(self.lines)
 
     def texts(self):
-        """[(posizione, testo)]: posizione = ('line', i) or ('block', i, j) for lines i..j-1."""
+        """[(position, text)]: position = ('line', i) or ('block', i, j) for lines i..j-1."""
         return list(self.units)
 
     def _write(self, replacements):
@@ -137,7 +137,7 @@ class LinesFile:
         return data
 
     def serialize(self, replacements):
-        """Bytes of the file with the texts replaced {posizione: nuovo testo}; structure verified."""
+        """Bytes of the file with the texts replaced {position: new text}; structure verified."""
         return self._write(replacements)
 
     def serialize_robust(self, replacements):
@@ -212,7 +212,7 @@ def read_file(path):
 
 
 def looks_like_localization(path, minimum=5):
-    """True if the file is in the 'lines with an id' format and has at least 'minimo' texts."""
+    """True if the file is in the 'lines with an id' format and has at least 'minimum' texts."""
     try:
         f = read_file(path)
     except (LinesError, OSError):

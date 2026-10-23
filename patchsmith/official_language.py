@@ -43,7 +43,7 @@ def _now():
 # --- detection ------------------------------------------------------------------------------------
 
 def detect(folder, dest_lang, engine=None, log=None):
-    """What is known about the 'destinazione' language in the game.
+    """What is known about the 'dest_lang' language in the game.
 
     {'present': True/False/None, 'sources': [text], 'notes': [text], 'steam': installation info or None,
      'steam_known': game recognized from the executables or None, 'steam_language': current language in Steam,
@@ -245,7 +245,7 @@ def _is_open(folder):
 
 
 def set_(folder, detection, dest_lang, log=print, consent=False):
-    """Sets the language where it can be done safely. Returns (fatto, [lines to show]); fatto is None when the
+    """Sets the language where it can be done safely. Returns (done, [lines to show]); done is None when the
     user's consent is needed (e.g. to modify the executables): then the lines are the proposal."""
     m = detection.get("engine") or {}
     name = language.label(dest_lang)
@@ -345,8 +345,8 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
 
 def set_added_language(folder, name, languages, log=print, source=None, force=False):
     """After adding a language to the game (e.g. local/italian.json of a GameMaker game), sets it in the options
-    saved by the game, with a backup copy and a log for the restore. (fatto, [righe]).
-    If the player chose another language after the previous time, their choice stays. forza=True: the language was
+    saved by the game, with a backup copy and a log for the restore. (done, [lines]).
+    If the player chose another language after the previous time, their choice stays. force=True: the language was
     changed by the game, not by the player (e.g. an update had removed the added language's file and the game went
     back to the original: the after-play check says so)."""
     from . import language_gamemaker

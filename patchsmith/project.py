@@ -325,7 +325,7 @@ def restore_file(path, log):
 
 def _remove_created(folder, name, info, log):
     """Removes a file added by PatchSmith (e.g. local/italian.json). If it has been changed in the meantime (by hand,
-    or it now belongs to someone else) it is not lost: it is set aside as <nome>.patchsmith-modificato, which the game
+    or it now belongs to someone else) it is not lost: it is set aside as <name>.patchsmith-modificato, which the game
     does not load."""
     p = os.path.join(folder, name)
     if not os.path.exists(p):
@@ -442,8 +442,8 @@ def memory_path(profile, test=False):
 
 
 def problems_path(profile, test=False):
-    """A game's texts with a problem (memory/<gioco>.<lingua>.problems.json): {text: {motivo, dove,
-    tentativi, quando, ...}}. 'where': 'translation' (no valid translation, not even after the new attempts),
+    """A game's texts with a problem (memory/<game>.<language>.problemi.json): {text: {reason, where,
+    attempts, when, ...}}. 'where': 'translation' (no valid translation, not even after the new attempts),
     'game' (the saved translation cannot be written to the game: different form, characters the fonts lack),
     'memory' (the saved translation does not pass the current checks and redoing it did not succeed), 'length'
     (short label longer than its space even after asking for a shorter one, see Project._shorten: shown in "Fix
@@ -461,7 +461,7 @@ def shared_origin_path(orig, dest):
 
 
 def protected_pattern(terms):
-    """The expression that finds the game's codes and names in a text (like testo.proteggi), or None."""
+    """The expression that finds the game's codes and names in a text (like text.protect), or None."""
     terms = [t for t in terms or () if t]
     if not terms:
         return None
@@ -516,7 +516,7 @@ def _now():
 
 def _adapt_tmp(translated, original, allowed, excluded, dest):
     """(translation with only the characters the TextMeshPro fonts can draw, '') or (None, characters that cannot
-    be replaced). ammessi: the fonts' characters (font_unity; None if unknown); esclusi: those the game said it
+    be replaced). allowed: the fonts' characters (font_unity; None if unknown); excluded: those the game said it
     does not have (Unity log): replaced only with ASCII characters if nothing is known about the fonts."""
     if allowed is not None:
         item_set = Filter(allowed, excluded, original)
@@ -552,7 +552,7 @@ class Project:
         self.last_error = None
         self.last_group = None
         # False in the live translator (xunity_service): one sentence at a time while playing, no second rounds,
-        # no revalidation nor problems.json (its diary notes the rejected sentences)
+        # no revalidation nor problemi.json (its diary notes the rejected sentences)
         self.recovery = True
         self._min_round = {}  # {text: round}: saved translations to redo already count one round (see _rounds)
         self.last_failed = []  # texts of the last translation left without a valid translation (after new rounds)
@@ -586,7 +586,7 @@ class Project:
                 description, path, e)) from e
 
     def _migrate_old_state(self):
-        """Versions 0.1-0.2 kept the fingerprints in profili/<nome>.stato.json: move them into the game."""
+        """Versions 0.1-0.2 kept the fingerprints in profili/<name>.stato.json: move them into the game."""
         old = os.path.splitext(self.profile_path)[0] + ".stato.json"
         if not os.path.exists(old):
             return
@@ -621,7 +621,7 @@ class Project:
             self.log("  ! List of texts with problems not saved (%s)" % e)
 
     def problems(self):
-        """Copy of the texts with a problem: {text: {reason, where, attempts, ...}} (see percorso_problemi)."""
+        """Copy of the texts with a problem: {text: {reason, where, attempts, ...}} (see problems_path)."""
         return {k: dict(v) for k, v in self._problems.items()}
 
     def _mark_problem(self, text, **fields):
@@ -633,7 +633,7 @@ class Project:
         self._problems[text] = entry
 
     def _read_machine(self):
-        """The machine translations (<memoria>.machine.json): an entry of the translation memory equal to that
+        """The machine translations (<memory>.automatiche.json): an entry of the translation memory equal to that
         one is a machine translation, a different one was fixed by hand (and is not touched). Not kept in the test
         memory."""
         if self._machine is None:
@@ -800,7 +800,7 @@ class Project:
         self._names = tuple(game_names.to_protect(items, self._common_words | game_names.common_words(texts)))
 
     def _protected(self):
-        """The game's codes and names to protect in the texts to translate (testo.proteggi)."""
+        """The game's codes and names to protect in the texts to translate (text.protect)."""
         codes = self.codes if hasattr(self, "profile") else []
         return tuple(sorted(set(codes) | set(getattr(self, "_names", ()))))
 
@@ -811,7 +811,7 @@ class Project:
         - that do not pass the current checks (entry_problems: letters of another language, numbers, different line
           breaks, a game name translated, an official translation of another language copied). Previous versions, and
           Google, did not have these checks;
-        - that could not be written to the game (problems.json, dove 'game': form different from the original,
+        - that could not be written to the game (problemi.json, where 'game': form different from the original,
           characters the game's fonts lack): they are redone with the right instruction (see _with_fixes).
         In addition a text that is only a game name ('Cup Dog Games') and is translated in the translation memory, even
         without a trace of the machine translation (memories of previous versions). After MAX_ATTEMPTS passes a
@@ -981,7 +981,7 @@ class Project:
         return done and not failed
 
     def active_names(self, texts=()):
-        """The game names that stay as they are in the translation of these texts (see _prepara_nomi)."""
+        """The game names that stay as they are in the translation of these texts (see _prepare_names)."""
         self._prepare_names(texts)
         return self._names
 
@@ -1000,11 +1000,11 @@ class Project:
         """The translations fixed by hand with "Fix translations" ({text: translation}):
         - they go into the translation memory (saved with the lock, see shared_file: the sentences added in the
           meantime by the translator started by the game stay);
-        - they leave problems.json if they were left untranslated or suspect (now there is yours); those the game could
+        - they leave problemi.json if they were left untranslated or suspect (now there is yours); those the game could
           not show stay until "Reapply" manages to write them;
         - the short texts go into the shared translation memory as fixes made by hand (see _shared_memory), even those
           that had no machine translation (e.g. left untranslated and translated by you).
-        The machine translation stays in .machine.json: the fix is always recognized and never touched again. A
+        The machine translation stays in .automatiche.json: the fix is always recognized and never touched again. A
         text that was not there (left untranslated, or translated by a version that did not record the machine
         translations: for PatchSmith an entry without a record is a machine translation) enters it with the previous
         translation (empty if there was none), so it too counts as fixed by hand.
@@ -1060,11 +1060,11 @@ class Project:
     def retranslate(self, texts, backend, orig, dest, contexts=None, round_=1):
         """Re-translates the given texts now, as requested with "Fix translations": also those already in the
         translation memory and those fixed by hand (the choice is the user's). If the new translation fails the previous
-        one stays. giro: which round the local translator's seeds start from (1 or more = new seeds and slightly higher
-        temperatures: the same question would give the same answer; 0 = the questions of the first round, for example
-        with the other model). The new translations become machine translations (.machine.json) and the short texts
-        go into the shared translation memory as in a normal translation. Returns (texts with a new translation, texts
-        left as they were)."""
+        one stays. round_: which round the local translator's seeds start from (1 or more = new seeds and slightly
+        higher temperatures: the same question would give the same answer; 0 = the questions of the first round, for
+        example with the other model). The new translations become machine translations (.automatiche.json) and the
+        short texts go into the shared translation memory as in a normal translation. Returns (texts with a new
+        translation, texts left as they were)."""
         unique = [t for t in dict.fromkeys(texts) if isinstance(t, str) and _to_translate(t)]
         self._prepare_names(unique)
         self._current_backend = backend
@@ -1131,12 +1131,12 @@ class Project:
 
     def translate_texts(self, texts, backend, orig, dest, contexts=None, redo=None):
         """Translates the texts not yet in the translation memory and redoes the saved translations that are not good
-        (see _to_redo; in 'rifare' {text: reason} others to redo, if machine translations: e.g. the wrong lines of the
+        (see _to_redo; in 'redo' {text: reason} others to redo, if machine translations: e.g. the wrong lines of the
         XUnity cache), in groups, saving after each group. Returns how many texts are left without a translation.
         - Short texts already translated for other games come from the shared translation memory (see
           _shared_memory).
         - Texts rejected by the checks are retried right away in another way (see _recover); those left
-          without a translation go into problems.json (see problems_path) and next time they are tried with
+          without a translation go into problemi.json (see problems_path) and next time they are tried with
           new parameters.
         - The game names (profile["do_not_translate"]) stay as they are, like the codes."""
         redo_extra = redo
@@ -1211,7 +1211,7 @@ class Project:
     def _still_to_redo(self, redo, before, dest, contexts):
         """{text: reasons} of the saved translations redone now that are still not good: equal to the previous one or
         not passing the current checks (entry_problems: the local translator checks less, for example not the
-        language). They count as a failed attempt (problems.json, 'memory'), so they are not redone at every run
+        language). They count as a failed attempt (problemi.json, 'memory'), so they are not redone at every run
         beyond MAX_ATTEMPTS. Those the game could not show are judged by apply()."""
         still = {}
         if not self.recovery or not redo:
@@ -1237,7 +1237,7 @@ class Project:
         """The shared translation memory of the short texts, updated with the fixes made by hand in this game: a short
         text whose translation in the translation memory differs from the machine translation was fixed with
         'Fix translations', and the fix also holds for the other games (except an entry fixed by hand in another
-        game: the first fix stays). The machine translation stays in .machine.json: so it is always known
+        game: the first fix stays). The machine translation stays in .automatiche.json: so it is always known
         which entries were fixed by hand (and they are not touched)."""
         shared = self._read_json(shared_path(orig, dest), {}, "shared memory file")
         self._machine = None  # read again: the translator started by the game writes it too
@@ -1340,7 +1340,7 @@ class Project:
         to the game stay until apply() manages to write them); those left without a translation enter it,
         with the reason and the passes made (next time the local translator uses new seeds). A saved translation
         to redo that did not succeed stays the previous one, noted; a redone one that is still not good
-        ('ancora', see _still_to_redo) stays noted with the passes made."""
+        ('still', see _still_to_redo) stays noted with the passes made."""
         if not self.recovery:
             return
         still = still or {}
@@ -1383,7 +1383,7 @@ class Project:
     def _long_labels(self, contexts=None, backend=None):
         """{text: space} of the short labels of this translation (short_label) whose translation is longer than
         their space (label_space): only machine translations (now too), not the fixes made by hand,
-        and not those already noted with this same translation (problems.json, 'length'): asked shorter once,
+        and not those already noted with this same translation (problemi.json, 'length'): asked shorter once,
         or noted with an online translator and now again with an online one. Those noted with an online translator
         and now with the local one (backend.uses_context) are asked shorter, once."""
         if not self.recovery or getattr(self, "test", False):
@@ -1413,7 +1413,7 @@ class Project:
         """The short labels too long for their space (e.g. 'Credits' -> 'Riconoscimenti'): with the local translator
         they are asked again once, with the maximum number of characters (context 'width'), and the shortest
         translation that passes the checks stays. Those still too long, and with the other translators (which do not
-        know about a maximum space) all of them, go into problems.json ('length', with the original text as key):
+        know about a maximum space) all of them, go into problemi.json ('length', with the original text as key):
         they are shown in "Fix translations", list "Too long"."""
         try:
             self._ask_shorter(backend, orig, dest, contexts)
@@ -1478,7 +1478,7 @@ class Project:
                                                     if still_long else ""))
 
     def _record_long(self):
-        """The labels still too long go into problems.json ('length'), with the space and the translation; those
+        """The labels still too long go into problemi.json ('length'), with the space and the translation; those
         that fit now leave the list."""
         long_labels = getattr(self, "_too_long", None)
         if not long_labels or not self.recovery:
@@ -1491,7 +1491,7 @@ class Project:
             space, value_, requested = data
             if (self._problems.get(t) or {}).get("where") not in (None, "length"):
                 continue  # a more important problem (not translated, unfit for the game)
-            # chiesta: already asked shorter to the local translator (if not, it is asked with that one:
+            # requested: already asked shorter to the local translator (if not, it is asked with that one:
             # _long_labels)
             self._mark_problem(t, reason="%d characters, usually about %d fit" % (
                 round(_weight(value_)), int(space)), where="length", value=value_, space=int(space),
@@ -1535,7 +1535,7 @@ class Project:
                 self.log("  ! About %d characters are needed, more than the %d per day of %s: part of them gets "
                          "translated today, the rest on the following days (it resumes from where it stopped)."
                          % (sum(requests), backend.quota(), NAMES.get(backend.name, backend.name)))
-        # the rejected proposals of the local translator say why a text did not pass (for problems.json); in the
+        # the rejected proposals of the local translator say why a text did not pass (for problemi.json); in the
         # live translator it prepares them itself (xunity_service)
         own_rejects = self.recovery and getattr(backend, "rejects", False) is None
         if own_rejects:
@@ -1593,7 +1593,7 @@ class Project:
         return failed, not_attempted
 
     def _rounds(self, split_parts):
-        """{line: passes already made} from the attempts noted in problems.json for the texts the line comes from (at
+        """{line: passes already made} from the attempts noted in problemi.json for the texts the line comes from (at
         least one for a saved translation to redo: see translate_texts)."""
         rounds = {}
         if not self.recovery:
@@ -1609,7 +1609,7 @@ class Project:
 
     def _translate_group(self, backend, group, orig, dest, contexts=None, step=0):
         """Translates a group of texts line by line, with the game's codes and names protected, and saves in the
-        translation memory those with all lines translated; returns the others. passo: the rounds already made in this
+        translation memory those with all lines translated; returns the others. step: the rounds already made in this
         translation (0 = the first; after that only the missing lines are asked, with new seeds: see _recover)."""
         split_parts = {t: split_lines(t) for t in group}
         cores_ok = getattr(self, "_cores_ok", {})
@@ -1688,7 +1688,7 @@ class Project:
         repeated with the same parameters, and the answer was the same at every run):
         1. the missing lines split into sentences and into the pieces between the codes, each translated on its own, in
            a single request; the local translator uses new seeds, derived from the text and the round;
-        2. the model stays the chosen one: the texts still rejected go into problems.json ('Fix translations').
+        2. the model stays the chosen one: the texts still rejected go into problemi.json ('Fix translations').
         Returns the texts still without a translation."""
         self.log("  %d texts rejected by the checks: retrying them right away in a different way (separate phrases, "
                  "different parameters)" % len(failed))
@@ -1722,7 +1722,7 @@ class Project:
         return remaining
 
     def _reasons(self, failed):
-        """{text: why it was left without a translation} for problems.json, from the rejected proposals of the local
+        """{text: why it was left without a translation} for problemi.json, from the rejected proposals of the local
         translator (the checks they did not pass)."""
         output = {}
         for t in failed:
@@ -1776,9 +1776,9 @@ class Project:
 
     def apply(self):
         """Writes the translations in the translation memory to the game's files (does not use the network). The account
-        stays in self.last_apply: texts translated (ok) and left untranslated (mancanti), the first originals left
-        (esempi), translations rejected because the game would not show them well, files written, game open.
-        The rejected translations go into problems.json with the reason (see _record_applied)."""
+        stays in self.last_apply: texts translated (ok) and left untranslated (missing), the first originals left
+        (examples), translations rejected because the game would not show them well, files written, game open.
+        The rejected translations go into problemi.json with the reason (see _record_applied)."""
         self.last_apply = {"ok": 0, "missing": 0, "examples": [], "discarded": 0, "writes": 0, "is_open": False}
         self._refused, self._applied = {}, set()
         if self.profile.get("engine") == "gamemaker" and game_open(self.profile["game_folder"]):
@@ -1820,7 +1820,7 @@ class Project:
                                      "do_not_use": "".join(dict.fromkeys(do_not_use or ""))}
 
     def _record_applied(self):
-        """After apply(): the rejected translations go into problems.json (dove 'game', with the reason and the
+        """After apply(): the rejected translations go into problemi.json (where 'game', with the reason and the
         characters not to use); the machine translations will be redone at the next translation with the right
         instruction (see _to_redo), those fixed by hand stay (they are shown in 'Show remaining'). The texts written
         to the game leave the list, except the suspect saved translations ('memory'): they can be written, but stay
@@ -2035,7 +2035,7 @@ class Project:
         return self.profile.get("game_engine") if self.profile.get("game_engine") in ("gamemaker", "xna") else None
 
     def _adapt(self, translated, original, repair=True, lowercase=False):
-        """Translation with only the characters the game's fonts can draw (None: impossible). 'ripara':
+        """Translation with only the characters the game's fonts can draw (None: impossible). 'repair':
         also the rules of the codes between slashes of line-based files (e.g. /name/ in Dokimon). 'lowercase': text of
         a game that writes in lowercase with a sprite font (Forager): the characters of that font apply."""
         font = self._game_fonts()
@@ -2066,7 +2066,7 @@ class Project:
         return is_ready
 
     def _missing_chars(self, translated, original, lowercase=False):
-        """The characters of the translation the game's fonts cannot draw, not even adapted (see _adatta)."""
+        """The characters of the translation the game's fonts cannot draw, not even adapted (see _adapt)."""
         return "".join(c for c in dict.fromkeys(translated)
                        if not c.isspace() and self._adapt(c, original, repair=False, lowercase=lowercase) is None)
 
@@ -2101,7 +2101,7 @@ class Project:
 
     def _tmp_chars(self, entry):
         """The characters the game's TextMeshPro fonts can draw (font_unity), or None if unknown (no
-        limit). Read once per translation; the result stays in memory/<gioco>.unity/font.json until the game's files
+        limit). Read once per translation; the result stays in memory/<game>.unity/font.json until the game's files
         change."""
         if not hasattr(self, "_allowed_tmp"):
             self._allowed_tmp = None
@@ -2127,9 +2127,9 @@ class Project:
         """Rewrites the bundle of the text tables with the translations, first checking that, read back, it has the
         same texts in the same order. A translation without letters would disappear from the table read back: the
         original stays. If the check fails because of another translation, that one is removed (up to
-        MAX_TABLE_REJECTS); the removed ones go into problems.json. The characters no TextMeshPro font of the game can
+        MAX_TABLE_REJECTS); the removed ones go into problemi.json. The characters no TextMeshPro font of the game can
         draw are adapted (chars.adapt_chars: è -> e'); a translation that cannot be adapted stays untranslated
-        and goes into problems.json (the next translation redoes it without those characters)."""
+        and goes into problemi.json (the next translation redoes it without those characters)."""
         f, units = self._load(entry)
         if units is None:
             self.log("  %s: This file no longer exists in the game, so I'm skipping it" % entry["path"])

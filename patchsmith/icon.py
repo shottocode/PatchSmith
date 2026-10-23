@@ -1,8 +1,8 @@
 """PatchSmith's icon: a hammer over a folder (the game's folder, where PatchSmith does its work).
 
 Drawn here, with no downloaded files: run on its own (patchsmith/icon.py) it remakes the images in patchsmith/icon/
-(a PNG for each size and PatchSmith.ico), which the window loads at startup (applica), and PatchSmith.exe
-(eseguibile). The shapes are described on a square of side 1 and each pixel takes the average color of its sub-points
+(a PNG for each size and PatchSmith.ico), which the window loads at startup (apply), and PatchSmith.exe
+(executable). The shapes are described on a square of side 1 and each pixel takes the average color of its sub-points
 (soft edges, transparency around).
 """
 import math
@@ -82,7 +82,7 @@ def _color(x, y):
 
 
 def draw(side):
-    """RGBA pixels (bytes, row by row) of the icon of 'lato' pixels."""
+    """RGBA pixels (bytes, row by row) of the icon of 'side' pixels."""
     steps = max(4, 64 // side)  # sub-points per side of a pixel: more for small icons
     lines = []
     for py in range(side):
@@ -106,7 +106,7 @@ def draw(side):
 
 
 def png(side):
-    """The icon of 'lato' pixels as a PNG file (RGBA)."""
+    """The icon of 'side' pixels as a PNG file (RGBA)."""
     def block(kind, data):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff)
     raw = b"".join(b"\0" + line for line in draw(side))
@@ -115,7 +115,7 @@ def png(side):
 
 
 def ico(images):
-    """Windows .ico file with the given PNG images ({lato: png})."""
+    """Windows .ico file with the given PNG images ({side: png})."""
     head = struct.pack("<HHH", 0, 1, len(images))
     position, entries, data = 6 + 16 * len(images), b"", b""
     for side, content in sorted(images.items()):
@@ -126,7 +126,7 @@ def ico(images):
 
 
 def write(folder=FOLDER):
-    """Remakes the icon images: <lato>.png for each size and PatchSmith.ico."""
+    """Remakes the icon images: <side>.png for each size and PatchSmith.ico."""
     os.makedirs(folder, exist_ok=True)
     images = {side: png(side) for side in SIDES}
     for side, content in images.items():

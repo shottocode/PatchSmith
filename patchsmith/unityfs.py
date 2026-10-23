@@ -93,8 +93,8 @@ def _cstring(data, p):
 
 def _header(read_file, file_size):
     """Header of an AssetBundle: (version, player version, Unity version, flags, blocks, nodes, start of the
-    data). read_file(posizione, quanti) returns the file's bytes; blocks = [(decompresso, compresso, segni)],
-    nodes = [(nome, inizio, dimensione, segni)] with the positions in the decompressed data."""
+    data). read_file(position, count) returns the file's bytes; blocks = [(decompressed, compressed, markers)],
+    nodes = [(name, shift, size, node_flags)] with the positions in the decompressed data."""
     head = read_file(0, 1024)
     if not head.startswith(b"UnityFS\x00"):
         raise UnityError("this is not a UnityFS AssetBundle")
@@ -195,8 +195,8 @@ _LZMA_PIECE = 16 * 1024 * 1024
 
 
 class Index:
-    """An AssetBundle read from the file in pieces, without decompressing all of it (e.g. a date.unity3d of hundreds of
-    MB): only the index of the blocks and of the inner files (self.nodes = [(nome, inizio, dimensione, segni)]);
+    """An AssetBundle read from the file in pieces, without decompressing all of it (e.g. a data.unity3d of hundreds of
+    MB): only the index of the blocks and of the inner files (self.nodes = [(name, shift, size, node_flags)]);
     pieces() returns the decompressed bytes of a part little by little."""
 
     def __init__(self, path):
@@ -266,8 +266,8 @@ class Index:
         yield _decompress(self._read(position, compressed), kind, decompressed)
 
     def pieces(self, start=0, end=None):
-        """Decompressed [(posizione, byte)] covering the data from 'inizio' to 'end' (positions in the decompressed
-        data, e.g. an inner file: inizio, inizio + dimensione). Only the blocks needed are read."""
+        """Decompressed [(position, bytes)] covering the data from 'start' to 'end' (positions in the decompressed
+        data, e.g. an inner file: start, start + size). Only the blocks needed are read."""
         if end is None:
             end = sum(b[0] for b in self.blocks)
         pos_c, pos_u = self.data_start, 0
@@ -436,8 +436,8 @@ class SerializedFile:
         return self.data[self.data_start + o.start:self.data_start + o.start + o.size]
 
     def strings(self, o, values=()):
-        """[(field path, start, end)] of all the object's strings (positions in its data). With 'valori' (names of
-        numeric fields, e.g. 'm_Unicode') also [(percorso, 'value', numero)] of those fields."""
+        """[(field path, start, end)] of all the object's strings (positions in its data). With 'values' (names of
+        numeric fields, e.g. 'm_Unicode') also [(path, 'value', number)] of those fields."""
         tree = self.kinds[o.kind]["tree"]
         if tree is None:
             raise UnityError("the file does not contain the field trees (type tree)")
@@ -451,7 +451,7 @@ class SerializedFile:
         return output
 
     def with_new_texts(self, new_items):
-        """The file with the strings changed: nuovi = {path_id: {(inizio, fine): testo}}. Only those strings are
+        """The file with the strings changed: new_items = {path_id: {(start, end): text}}. Only those strings are
         rewritten; the objects move (aligned to 8 as Unity does) and the object table is updated."""
         head = bytearray(self.data[:self.data_start])
         body = bytearray()
@@ -486,7 +486,7 @@ class SerializedFile:
 
 
 def _read(tree_node, d, p, path, output, values=frozenset()):
-    """Reads the field 'nodo' from position p; records the strings; returns the position after the field."""
+    """Reads the field 'tree_node' from position p; records the strings; returns the position after the field."""
     path = path + [tree_node.name]
     if tree_node.kind == "string":
         n = struct.unpack_from("<i", d, p)[0]

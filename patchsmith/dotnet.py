@@ -240,7 +240,7 @@ class Assembly:
         return 2 if maximum < (1 << (16 - bit)) else 4
 
     def line(self, table, idx):
-        """Raw values of row 'indice' (from 1) of the table."""
+        """Raw values of row 'idx' (from 1) of the table."""
         if not 1 <= idx <= self.lines.get(table, 0):
             raise DotnetError("row %d outside of table %s" % (idx, TABLES[table][0]))
         p = self._start[table] + (idx - 1) * self._row_size[table]
@@ -498,7 +498,7 @@ def _read_resources(data):
 
 
 def write_resources(info, new_lines=None):
-    """Rewrites a version 2 .resources like ResourceWriter. nuove: {name: text} replaces the strings.
+    """Rewrites a version 2 .resources like ResourceWriter. new_lines: {name: text} replaces the strings.
 
     Non-string entries are copied identically. Order and headers as in the file read."""
     if info["version"] != 2:

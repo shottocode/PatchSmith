@@ -1,6 +1,6 @@
 """Tests of "Fix translations" (item 6): the list of a game's translations with its filters, the window
 (keyboard, long list in pages, checks while you type), saving (valid translation memory, machine translations that
-stay the previous ones, shared translation memory, problems.json) and writing into the game on its own ("Reapply"),
+stay the previous ones, shared translation memory, problemi.json) and writing into the game on its own ("Reapply"),
 for a web game, a GameMaker game with the line space and a Unity game (XUnity cache line replaced, the others
 identical; game open; line changed by hand after the fix). Then "Re-translate selected" (new requests, also for
 lines fixed by hand), "Re-translate everything with Quality (12B)" (fixes made by hand stay), the Quality model
@@ -8,8 +8,8 @@ to install, "Start over" (backup copy, shared translation memory), "Open the fil
 for .json files, a damaged translations file, and the "Fix translations" buttons in the end dialogs.
 
 Usage: python -I test/test_corrections.py <empty_temp_folder>
-PatchSmith's data go in <cartella>/dati; fake translators (no network, no Ollama), fake Unity components, no real
-game. PatchSmith's window opens for a few seconds.
+PatchSmith's data go in <folder>/data_folder; fake translators (no network, no Ollama), fake Unity components, no
+real game. PatchSmith's window opens for a few seconds.
 """
 import hashlib
 import json
@@ -35,7 +35,7 @@ from patchsmith import ollama, project, scan, steam, theme  # noqa: E402
 
 OUTCOMES = []
 INSTALLED = ("Translation installed", "Translation partially installed")  # titles of the end dialog (OK, PARTIAL)
-WINDOWS = []  # (titolo, testo, pulsanti) of the choice dialogs and of the notices
+WINDOWS = []  # (title, text, buttons) of the choice dialogs and of the notices
 ANSWERS = []  # the answers to the next choice dialogs (None: OK / Cancel)
 
 
@@ -803,7 +803,7 @@ def test_unity_cache(base, root, app):
 # --- translation memory of a version that did not record machine translations -------------------------------
 
 def test_old_memory(base):
-    """A game translated by a version without .machine.json, to which a few recorded translations are then added
+    """A game translated by a version without .automatiche.json, to which a few recorded translations are then added
     (e.g. the live translator, or a game update): entries without a record are machine translations (as for the
     shared translation memory and the translations to redo), not fixes made by hand. Separate data: new shared
     translation memory."""

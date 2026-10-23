@@ -289,8 +289,8 @@ def web_path(app, root, base):
     zips = glob.glob(os.path.join(glob.escape(report.desktop_folder()), "*.zip"))
     names = zipfile.ZipFile(zips[-1]).namelist() if zips else []
     check("web: 'Crea rapporto' -> 'Rapporto creato' sul Desktop con registri e profilo",
-              end[1] == "Report generated" and any(x.startswith("registri/") for x in names)
-              and any(x.startswith("profilo/") for x in names) and not any(x.endswith(".html") for x in names))
+              end[1] == "Report generated" and any(x.startswith("logs/") for x in names)
+              and any(x.startswith("profile/") for x in names) and not any(x.endswith(".html") for x in names))
     return game
 
 

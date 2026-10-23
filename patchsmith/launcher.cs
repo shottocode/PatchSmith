@@ -1,5 +1,5 @@
 // PatchSmith.exe: opens PatchSmith.pyw (next to this .exe) with the installed Python, like any other program.
-// PatchSmith compiles it (icon.eseguibile) with the Windows C# compiler, with the icon of patchsmith/icon inside.
+// PatchSmith compiles it (icon.executable) with the Windows C# compiler, with the icon of patchsmith/icon inside.
 // Python: the package's portable one (runtime\pythonw.exe, see package.py) if present, then the most recent from
 // 3.10 up registered in Windows (PEP 514: user, then machine), then pythonw.exe in the PATH. If there is none, a
 // dialog explains what to install (in Italian or English, like Windows).
@@ -10,70 +10,70 @@ using System.IO;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-static class Avvio
+static class Launcher
 {
-    static readonly bool Italiano = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "it";
+    static readonly bool Italian = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "it";
 
     [STAThread]
     static int Main()
     {
-        string cartella = AppDomain.CurrentDomain.BaseDirectory;
-        string script = Path.Combine(cartella, "PatchSmith.pyw");
+        string folder = AppDomain.CurrentDomain.BaseDirectory;
+        string script = Path.Combine(folder, "PatchSmith.pyw");
         if (!File.Exists(script))
-            return Errore(Italiano ? "Manca PatchSmith.pyw accanto a PatchSmith.exe: rimetti insieme tutti i file di PatchSmith."
-                                   : "PatchSmith.pyw is missing next to PatchSmith.exe: put all the PatchSmith files back together.");
-        string portatile = Path.Combine(cartella, "runtime", "pythonw.exe");
-        string python = File.Exists(portatile) ? portatile : (DalRegistro() ?? NelPath("pythonw.exe"));
+            return Error(Italian ? "Manca PatchSmith.pyw accanto a PatchSmith.exe: rimetti insieme tutti i file di PatchSmith."
+                                 : "PatchSmith.pyw is missing next to PatchSmith.exe: put all the PatchSmith files back together.");
+        string portable = Path.Combine(folder, "runtime", "pythonw.exe");
+        string python = File.Exists(portable) ? portable : (FromRegistry() ?? InPath("pythonw.exe"));
         if (python == null)
-            return Errore(Italiano ? "PatchSmith ha bisogno di Python 3.10 o più recente (gratuito, da python.org). Installalo, poi riapri PatchSmith."
-                                   : "PatchSmith needs Python 3.10 or newer (free, from python.org). Install it, then open PatchSmith again.");
+            return Error(Italian ? "PatchSmith ha bisogno di Python 3.10 o più recente (gratuito, da python.org). Installalo, poi riapri PatchSmith."
+                                 : "PatchSmith needs Python 3.10 or newer (free, from python.org). Install it, then open PatchSmith again.");
         try
         {
-            var avvio = new ProcessStartInfo(python, "-I \"" + script + "\"");
-            avvio.WorkingDirectory = cartella;
-            avvio.UseShellExecute = false;
-            Process.Start(avvio);
+            var start = new ProcessStartInfo(python, "-I \"" + script + "\"");
+            start.WorkingDirectory = folder;
+            start.UseShellExecute = false;
+            Process.Start(start);
             return 0;
         }
         catch (Exception e)
         {
-            return Errore((Italiano ? "Non riesco ad avviare Python (" : "Cannot start Python (") + python + "): " + e.Message);
+            return Error((Italian ? "Non riesco ad avviare Python (" : "Cannot start Python (") + python + "): " + e.Message);
         }
     }
 
     // pythonw.exe of the most recent Python from 3.10 up, from the keys
     // Software\Python\PythonCore\<version>\InstallPath
-    static string DalRegistro()
+    static string FromRegistry()
     {
-        string scelto = null;
-        Version migliore = new Version(3, 10);
-        foreach (RegistryHive radice in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
-            foreach (RegistryView vista in new[] { RegistryView.Registry64, RegistryView.Registry32 })
+        string chosen = null;
+        Version best = new Version(3, 10);
+        foreach (RegistryHive hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+            foreach (RegistryView view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
             {
                 try
                 {
-                    using (RegistryKey base_ = RegistryKey.OpenBaseKey(radice, vista))
+                    using (RegistryKey base_ = RegistryKey.OpenBaseKey(hive, view))
                     using (RegistryKey core = base_.OpenSubKey(@"Software\Python\PythonCore"))
                     {
                         if (core == null)
                             continue;
-                        foreach (string nome in core.GetSubKeyNames())
+                        foreach (string name in core.GetSubKeyNames())
                         {
-                            Version versione;
-                            if (!Version.TryParse(nome.Split('-')[0], out versione) || versione < migliore)
+                            Version version;
+                            if (!Version.TryParse(name.Split('-')[0], out version) || version < best)
                                 continue;
-                            using (RegistryKey dove = core.OpenSubKey(nome + @"\InstallPath"))
+                            using (RegistryKey where = core.OpenSubKey(name + @"\InstallPath"))
                             {
-                                if (dove == null)
+                                if (where == null)
                                     continue;
-                                string exe = dove.GetValue("WindowedExecutablePath") as string;
-                                string cartella = dove.GetValue("") as string;
-                                if (string.IsNullOrEmpty(exe) && !string.IsNullOrEmpty(cartella))
-                                    exe = Path.Combine(cartella, "pythonw.exe");
-                                if (!string.IsNullOrEmpty(exe) && File.Exists(exe) && (scelto == null || versione > migliore))
+                                string exe = where.GetValue("WindowedExecutablePath") as string;
+                                string folder = where.GetValue("") as string;
+                                if (string.IsNullOrEmpty(exe) && !string.IsNullOrEmpty(folder))
+                                    exe = Path.Combine(folder, "pythonw.exe");
+                                if (!string.IsNullOrEmpty(exe) && File.Exists(exe) && (chosen == null || version > best))
                                 {
-                                    scelto = exe;
-                                    migliore = versione;
+                                    chosen = exe;
+                                    best = version;
                                 }
                             }
                         }
@@ -84,17 +84,17 @@ static class Avvio
                     // unreadable key: try the next one
                 }
             }
-        return scelto;
+        return chosen;
     }
 
-    static string NelPath(string nome)
+    static string InPath(string name)
     {
-        foreach (string cartella in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
+        foreach (string folder in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';'))
         {
             try
             {
-                string p = Path.Combine(cartella.Trim().Trim('"'), nome);
-                if (cartella.Trim().Length > 0 && File.Exists(p))
+                string p = Path.Combine(folder.Trim().Trim('"'), name);
+                if (folder.Trim().Length > 0 && File.Exists(p))
                     return p;
             }
             catch (ArgumentException)
@@ -105,9 +105,9 @@ static class Avvio
         return null;
     }
 
-    static int Errore(string testo)
+    static int Error(string text)
     {
-        MessageBox.Show(testo, "PatchSmith", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        MessageBox.Show(text, "PatchSmith", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         return 1;
     }
 }

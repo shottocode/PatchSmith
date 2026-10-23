@@ -77,7 +77,7 @@ def config(folder):
 
 
 def test_bundle_extraction(game):
-    """estrai_testi with the pieces of today's Unity games (fake bundles, see fake_unity.py)."""
+    """extract_texts with the pieces of today's Unity games (fake bundles, see fake_unity.py)."""
     create_game(game)
     data = os.path.join(game, "Gioco_Data")
     managed = os.path.join(data, "Managed")
@@ -89,7 +89,7 @@ def test_bundle_extraction(game):
     # game code in a module of its own (like SunHaven.Core.dll) and a third-party library (not game texts)
     write("Managed/Gioco.Core.dll", fake.dll(["Harvest the golden wheat before winter", "Talk to the mayor"]))
     write("Managed/Newtonsoft.Json.dll", fake.dll(["Unexpected end when reading the JSON document"]))
-    # compressed date.unity3d (LZ4 in small blocks): a text straddling two blocks; not the images (.resS)
+    # compressed data.unity3d (LZ4 in small blocks): a text straddling two blocks; not the images (.resS)
     long_text = "The ancient bridge collapsed behind you, there is no way back now"
     resources = fake.serialized_strings(["Open the treasure chest", long_text, "Rest at the campfire"])
     cut = resources.index(long_text.encode()) + 10
@@ -353,7 +353,7 @@ def main(base):
               and not any(x in texts for x in ("Paper (17)", "EyeTreeLevel_Grass_0", "Base Layer.Run",
                                                "joystick 4 analog 1")))
 
-    # 9f) pre-translation in today's Unity games: code in other DLLs, compressed date.unity3d, bundles, tables
+    # 9f) pre-translation in today's Unity games: code in other DLLs, compressed data.unity3d, bundles, tables
     test_bundle_extraction(os.path.join(base, "gioco-bundle"))
 
     # 9e) XUnity cache: adds only what is missing, keeps the fixes, does not translate the language names
@@ -496,7 +496,7 @@ def test_live(base):
         if os.path.exists(state):
             os.remove(state)
 
-        # the game's names in the game profile, from app.info (prepara)
+        # the game's names in the game profile, from app.info (prepare)
         game = os.path.join(base, "dal-vivo", "con-nomi")
         create_game(game)
         with open(os.path.join(game, "Gioco_Data", "app.info"), "w", encoding="utf-8") as f:

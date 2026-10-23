@@ -141,7 +141,7 @@ def restore_placeholders(text, placeholders):
 
 
 def split_lines(text):
-    """Splits into lines keeping the leading/trailing spaces: [(prima, nucleo, dopo), ...]."""
+    """Splits into lines keeping the leading/trailing spaces: [(before, core, after), ...]."""
     parts = []
     for line in text.split("\n"):
         core = line.strip()
@@ -155,7 +155,7 @@ def split_lines(text):
 
 
 def reassemble_lines(parts, translations):
-    """Rebuilds the lines using the dictionary {nucleo: translation}."""
+    """Rebuilds the lines using the dictionary {core: translation}."""
     return "\n".join(p + (translations.get(n, n) if n else "") + d for p, n, d in parts)
 
 

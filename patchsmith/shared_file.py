@@ -1,6 +1,6 @@
 """JSON files written by several PatchSmith programs open at the same time: the interface (or the command line) and
 the translator the game starts while it is played (xunity_service). They are a game's translation memory, its machine
-translations (.machine.json) and the translation memory shared by all games (comune.<da>-<a>.json).
+translations (.automatiche.json) and the translation memory shared by all games (comune.<from>-<to>.json).
 
 Before, each one rewrote the whole file with its own copy, and the last one to save erased the sentences added by the
 other. Now whoever saves takes the <file>.lock lock, reads the file again, applies to it only what it changed itself
@@ -42,9 +42,9 @@ except ImportError:  # not Windows (only for completeness: PatchSmith runs on Wi
 
 
 class Lock:
-    """Lock between programs (and between threads) on <percorso>.lock. It is a Windows lock on the file: if the program
-    holding it closes suddenly, Windows releases it by itself. After 'attesa' seconds it goes on without it
-    (preso=False)."""
+    """Lock between programs (and between threads) on <path>.lock. It is a Windows lock on the file: if the program
+    holding it closes suddenly, Windows releases it by itself. After 'wait' seconds it goes on without it
+    (acquired=False)."""
 
     def __init__(self, path, wait=LOCK_WAIT):
         self.path = path + ".lock"
@@ -196,7 +196,7 @@ class MergingFile:
 
 
 def clean_temp_files(folder, age=OLD_TEMP_AGE):
-    """Removes the .tmp files left in 'folder' by an interrupted save (program closed halfway), older than 'eta'
+    """Removes the .tmp files left in 'folder' by an interrupted save (program closed halfway), older than 'age'
     seconds. Returns how many it removed."""
     dropped = 0
     try:

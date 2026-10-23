@@ -2,7 +2,7 @@
 the tests) and what is done from there: saving the fixes, re-translating the chosen texts.
 
 The rows of the list come from:
-- the game's translation memory (memory/<gioco>.<lingua>.json) and the texts with a problem (problems.json: left
+- the game's translation memory (memory/<game>.<language>.json) and the texts with a problem (.problemi.json: left
   untranslated, not suitable for the game, suspicious);
 - games with translated files (web, GameMaker, Unity Localization...): also the texts of the game's files still
   without a translation, and the space each text has in the game (the longest line among the game's versions, see
@@ -13,7 +13,7 @@ The rows of the list come from:
 
 The fixes go into the translation memory with Project.fix (with the lock of the shared memory; short texts also
 into the shared translation memory). For Unity the lines to change in the XUnity cache are noted in
-memory/<gioco>.<lingua>.to_write.json: the next "Reapply" (or "Analyze and translate") writes them with the game
+memory/<game>.<language>.da_scrivere.json: the next "Reapply" (or "Analyze and translate") writes them with the game
 closed, see automatic.unity_full. After saving, the interface starts "Reapply" on its own.
 """
 import collections
@@ -62,10 +62,10 @@ def _now():
 
 
 class Entry:
-    """A row of the list. testo: the original (the translation memory key); memoria: the saved translation (or None);
-    cache: for Unity the line of the XUnity cache (or None); spazio: (text as it is in the file, line break mark,
+    """A row of the list. text: the original (the translation memory key); memory: the saved translation (or None);
+    cache: for Unity the line of the XUnity cache (or None); space: (text as it is in the file, line break mark,
     paragraph start symbol, width, lines, official translations identical to the original) for texts with the space
-    measured in the game; problemi: {filtro: reason} (empty reason = only to look at, e.g. a text with placeholders);
+    measured in the game; problems: {filter: reason} (empty reason = only to look at, e.g. a text with placeholders);
     by_hand: fixed by hand (different from the machine translation)."""
 
     __slots__ = ("text", "memory", "cache", "space", "problems", "by_hand")
@@ -90,7 +90,7 @@ class Entry:
 
 
 class Items:
-    """A game's translations for the "Fix translations" window (see carica)."""
+    """A game's translations for the "Fix translations" window (see load)."""
 
     def __init__(self, profile_path, profile, entries, test, orig, protected, known_machine):
         self.profile_path = profile_path
@@ -102,10 +102,10 @@ class Items:
         self.orig = orig
         self.protected = protected
         # False: the game was translated before PatchSmith remembered the machine translations
-        # (.machine.json): fixes made by hand cannot be recognized
+        # (.automatiche.json): fixes made by hand cannot be recognized
         self.known_machine = known_machine
-        # translations in memory without a note in .machine.json (made by a version that did not note them):
-        # for PatchSmith they are machine translations, but they might have been fixed by hand in the file (see carica)
+        # translations in memory without a note in .automatiche.json (made by a version that did not note them):
+        # for PatchSmith they are machine translations, but they might have been fixed by hand in the file (see load)
         self.unannotated = 0
 
     @property
@@ -118,7 +118,7 @@ class Items:
         return {k: occurrences.get(k, 0) for k, _ in FILTERS}
 
     def apply_filter(self, filter_="all", search=""):
-        """The rows of the filter that contain 'cerca' (in the original or in the translation, case-insensitive). In a
+        """The rows of the filter that contain 'search' (in the original or in the translation, case-insensitive). In a
         filter, first those with a written problem (e.g. among placeholders, first those that do not match)."""
         search = (search or "").casefold().strip()
         output = [x for x in self.entries if filter_ in ("all", None, "") or filter_ in x.problems]
@@ -140,7 +140,7 @@ def _game_cache(profile):
 
 def load(profile_path, test=False, log=None):
     """The list of the game's translations (Items), with the problems of each row. Reads only (Project cleans up the
-    invisible characters left by old versions, as always). prova: the translation memory of the test translator."""
+    invisible characters left by old versions, as always). test: the translation memory of the test translator."""
     log = log or (lambda _m: None)
     p = Project(profile_path, log, test=test)
     profile = p.profile
@@ -178,7 +178,7 @@ def load(profile_path, test=False, log=None):
     protected = tuple(sorted(set(p.codes) | set(p.active_names(list(entries)))))
     pattern = protected_pattern(protected)
     # official translations into other languages (language files with the game's translations): for
-    # "riferimento copiato"
+    # "copied reference"
     references = {t: list((c.get("references") or {}).values()) for t, c in game_contexts(p, game).items()}
     machine = p._read_machine()
     provisional = _provisional(profile["name"]) if unity and not test else {}
@@ -211,7 +211,7 @@ def _provisional(name):
 
 
 def _problems_of(x, problem, dest, pattern, protected, references, machine, provisional, flagged_cache):
-    """The problems of a row ({filtro: reason} in x.problemi): see FILTRI."""
+    """The problems of a row ({filter: reason} in x.problems): see FILTERS."""
     t, tr = x.text, x.translation
     # fixed by hand: different from the noted machine translation. Without a note (translation memories of the
     # versions that did not keep them) it is a machine translation, as for Project._shared_memory and _to_redo;
@@ -308,7 +308,7 @@ def warnings(original, translated, protected=()):
 
 def measure(x, translated):
     """(longest line, width) of the translation as the game writes it, for texts with the measured space (x.space);
-    (None, larghezza) if it does not have the shape of the original; None without a measured space."""
+    (None, width) if it does not have the shape of the original; None without a measured space."""
     if not x.space:
         return None
     raw, marker, bullet, width, lines, _ = x.space
@@ -319,14 +319,14 @@ def measure(x, translated):
 
 
 def too_long(line_len, width):
-    """As in Progetto._applica_json: over 10% (and 2 characters) beyond the longest line among the game's versions."""
+    """As in Project._apply_json: over 10% (and 2 characters) beyond the longest line among the game's versions."""
     return line_len > max(width + 2, 1.1 * width)
 
 
 # --- fixes to write into the XUnity cache (Unity) ------------------------------------------------------------
 
 def to_write_path(profile):
-    """memory/<gioco>.<lingua>.to_write.json: {text: {before, value, when}}, the lines of the XUnity cache to
+    """memory/<game>.<language>.da_scrivere.json: {text: {before, value, when}}, the lines of the XUnity cache to
     change with a fix (or a re-translation) made in "Fix translations". 'before': the translation the line had (None:
     no line, or any line from the translator). automatic.unity_full writes them."""
     return memory_path(profile)[:-len(".json")] + ".da_scrivere.json"
@@ -343,7 +343,7 @@ def _read_to_write(path):
 
 
 def mark_to_write(profile, lines):
-    """righe: {testo: (translation the cache line has now or None, new translation)}. A fix already waiting for the
+    """lines: {text: (translation the cache line has now or None, new translation)}. A fix already waiting for the
     same text keeps its 'before' (the line has not changed yet)."""
     if not lines:
         return
@@ -359,7 +359,7 @@ def mark_to_write(profile, lines):
 
 
 def to_write(profile):
-    """{text: {'before', 'value'}} of the XUnity cache lines to change (see percorso_da_scrivere)."""
+    """{text: {'before', 'value'}} of the XUnity cache lines to change (see to_write_path)."""
     return {t: d for t, d in _read_to_write(to_write_path(profile)).items()
             if isinstance(t, str) and isinstance(d, dict) and isinstance(d.get("value"), str) and d["value"].strip()
             and (d.get("before") is None or isinstance(d.get("before"), str))}
@@ -381,7 +381,7 @@ def written_texts(profile, texts):
 
 def save(profile_path, changes, seen=None, test=False, log=print):
     """Saves the fixes ({text: translation}) made in the window: into the translation memory (Project.fix) and,
-    for Unity, among the lines to write into the XUnity cache (viste: {testo: the cache line the window showed, or
+    for Unity, among the lines to write into the XUnity cache (seen: {text: the cache line the window showed, or
     None}). Returns (texts changed in the translation memory, cache lines to write)."""
     p = Project(profile_path, log, test=test)
     changes = {t: v for t, v in changes.items() if isinstance(v, str) and v.strip()}
@@ -416,8 +416,8 @@ def texts_to_retranslate(items):
 
 
 def game_contexts(p, game):
-    """{text: contesto} (key and official translations) of the game's language files, for the local translator.
-    gioco: Project.game_texts()."""
+    """{text: context} (key and official translations) of the game's language files, for the local translator.
+    game: Project.game_texts()."""
     contexts, by_file = {}, collections.defaultdict(list)
     for v, pos, t, _ in game:
         by_file[id(v)].append((v, pos, t))
@@ -455,12 +455,12 @@ def _new_round():
 
 
 def retranslate(profile_path, texts, translator, log=print, test=False):
-    """Re-translates the texts chosen in the window (testi None: everything, see texts_to_retranslate). The chosen
+    """Re-translates the texts chosen in the window (texts None: everything, see texts_to_retranslate). The chosen
     texts are redone with new requests every time (also those fixed by hand: you chose them; see _new_round);
     "everything" with the normal requests (useful with the other model: Quality gives other answers). For Unity the
     changed lines go among those to write into the XUnity cache: the chosen ones always, with "everything" only those
     that still have PatchSmith's translation.
-    Returns {ritradotte, rimaste, testi, interrotta (the reason, if the translator stopped)}."""
+    Returns {retranslated, remaining_count, texts, interrupted (the reason, if the translator stopped)}."""
     selected = texts is not None
     if not selected:
         texts, _ = texts_to_retranslate(load(profile_path, test, log))

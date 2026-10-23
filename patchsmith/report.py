@@ -4,12 +4,12 @@ happened with a game, without having to dig through folders.
 It contains: the logs of the latest operations (logs/ folder of the data), the game profile, the settings
 WITHOUT the DeepL key and email, the state of the translators, the engine detection, the BepInEx logs and the
 XUnity configuration, the end of the log and of the sentence diary of the live translator, the logs of
-Unity (Player.log, Player-prev.log and the last crash) and of Unreal (<progetto>.log), PatchSmith's manifests in the
-game, the list of texts left untranslated with the reason (problems.json), the fixes not yet written to the game
-(Unity: to_write.json), the letters of the fonts read (Unity Localization: font.json), the result of the after-play
-check (<gioco>.checks.json) and the PatchSmith version.
+Unity (Player.log, Player-prev.log and the last crash) and of Unreal (<project>.log), PatchSmith's manifests in the
+game, the list of texts left untranslated with the reason (problemi.json), the fixes not yet written to the game
+(Unity: da_scrivere.json), the letters of the fonts read (Unity Localization: font.json), the result of the after-play
+check (<game>.controllo.json) and the PatchSmith version.
 It contains no game files and no saves. In the texts the key and the email (even if they ended up in a log by chance)
-become "<tolto>" and the Windows user folder becomes %USERPROFILE%.
+become "<removed>" and the Windows user folder becomes %USERPROFILE%.
 """
 import datetime
 import glob
@@ -29,7 +29,7 @@ MAX_BYTES = 512 * 1024  # of each log the end is kept
 MAX_LOGS = 5  # operation logs (the game's most recent)
 # logs that do not belong to a game: window errors, installation of the local translator, check at startup
 GENERAL_LOGS = ("interfaccia", "traduttore-locale", "controllo")
-REMOVED = "<tolto>"
+REMOVED = "<removed>"
 
 
 def desktop_folder():
@@ -77,7 +77,7 @@ def _secrets():
 def clean(text, secrets):
     """Text without the secrets and with the user folder written as %USERPROFILE%."""
     for s in secrets:
-        # also as it appears in a web address (e.g. the MyMemory email: 'de=nome%40dominio.it')
+        # also as it appears in a web address (e.g. the MyMemory email: 'de=name%40domain.it')
         for shape in dict.fromkeys((s, urllib.parse.quote(s, safe=""), urllib.parse.quote_plus(s))):
             text = re.sub(re.escape(shape), REMOVED, text, flags=re.I)
     home = os.path.expanduser("~").rstrip("\\/")
@@ -133,7 +133,7 @@ def _date(path):
 
 def _unity(root):
     """[(name in the zip, path)] of the Unity logs: Player.log and Player-prev.log (in LocalLow) and the Player.log
-    of the last crash (in %TEMP%), found with the company and product written in <gioco>_Data/app.info."""
+    of the last crash (in %TEMP%), found with the company and product written in <game>_Data/app.info."""
     from . import adapter_unity
     try:
         data = adapter_unity.analyze(root).get("data_folder")
@@ -160,9 +160,9 @@ def _unity(root):
 
 
 def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
-    """Creates the zip and returns its path. cartella: the game's folder (even empty: then only the general
-    data); destinazione: where to write it (default: the Desktop); esito: the last outcome (outcome.Outcome);
-    registri: the operation logs to include (default: the game's latest); extra: extra lines for
+    """Creates the zip and returns its path. folder: the game's folder (even empty: then only the general
+    data); dest_lang: where to write it (default: the Desktop); outcome: the last outcome (outcome.Outcome);
+    logs: the operation logs to include (default: the game's latest); extra: extra lines for
     the summary."""
     from . import adapter_unity, auto as automatic, ollama, detection
     from .project import data_folder, find_info
@@ -196,12 +196,12 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
     # translator and of the after-play check done at startup
     names = [name] + [slug(os.path.basename(d)) for d in (folder, root) if d]
     for p in logs if logs is not None else game_logs(names):
-        add("registri/" + os.path.basename(p), p)
+        add("logs/" + os.path.basename(p), p)
     if found_profile_path:
-        add("profilo/" + os.path.basename(found_profile_path), found_profile_path, tail=False)
+        add("profile/" + os.path.basename(found_profile_path), found_profile_path, tail=False)
         # the after-play check: signals seen, fixes already tried and their outcome
         checks = os.path.splitext(found_profile_path)[0] + ".controllo.json"
-        add("profilo/" + os.path.basename(checks), checks, tail=False)
+        add("profile/" + os.path.basename(checks), checks, tail=False)
     try:
         with open(data_folder("settings.json"), encoding="utf-8") as f:
             texts["settings.json"] = json.dumps(clean_settings(legacy.load(f)), ensure_ascii=False, indent=2)
@@ -209,36 +209,36 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
         problems.append("settings.json: %s" % e)
     add("services.json", data_folder("services.json"), tail=False)
     for n in ("servizio-xunity.log", "server.log"):
-        add("traduttore-locale/" + n, os.path.join(ollama.folder(), n))
+        add("local-translator/" + n, os.path.join(ollama.folder(), n))
     if name:  # the sentences requested while playing (only game texts)
         from .xunity_service import journal_path
-        add("traduttore-locale/" + os.path.basename(journal_path(name)), journal_path(name))
+        add("local-translator/" + os.path.basename(journal_path(name)), journal_path(name))
     if profile.get("name") and profile.get("target_language"):  # the texts left untranslated, with the reason
         from .project import problems_path
         text_problems = problems_path(profile)
-        add("traduzioni/" + os.path.basename(text_problems), text_problems, tail=False)
+        add("translations/" + os.path.basename(text_problems), text_problems, tail=False)
         # Unity: the fixes from "Fix translations" not yet written to the XUnity cache
         from .corrections import to_write_path
-        add("traduzioni/" + os.path.basename(to_write_path(profile)), to_write_path(profile),
+        add("translations/" + os.path.basename(to_write_path(profile)), to_write_path(profile),
                  tail=False)
     if profile.get("name"):  # Unity Localization: the letters the game's fonts can draw (font_unity.py)
-        add("traduzioni/%s.font.json" % profile["name"],
+        add("translations/%s.font.json" % profile["name"],
                  data_folder("memory", "%s.unity" % profile["name"], "font.json"), tail=False)
     modified = []
     if root:
         try:
             lines = []
             detection.print_summary(detection.detect(root), lines.append)
-            texts["rilevamento.txt"] = "\n".join(lines)
+            texts["detection.txt"] = "\n".join(lines)
         except Exception as e:  # the report is made anyway: it is exactly when something goes wrong that it is needed
             problems.append("detection: %s: %s" % (type(e).__name__, e))
         unity = adapter_unity.find_root(root) or root
         for rel in (adapter_unity.BEPINEX_LOG, adapter_unity.CONFIG_XUNITY, adapter_unity.CONFIG_BEPINEX,
                     adapter_unity.SERVICE_CONFIG, adapter_unity.SERVICE_STATE):
-            add("gioco/" + rel, os.path.join(unity, *rel.split("/")))
+            add("game/" + rel, os.path.join(unity, *rel.split("/")))
         for d in dict.fromkeys((root, unity)):
             for manifest in ("patchsmith-unity.json", "patchsmith-unreal.json", "patchsmith-xna.json"):
-                add("gioco/" + manifest, os.path.join(d, manifest), tail=False)
+                add("game/" + manifest, os.path.join(d, manifest), tail=False)
         for zip_name, p in _unity(unity):
             add(zip_name, p)
         # Unreal: the game's log, from which the after-play check understands whether the translation pak was
@@ -269,7 +269,7 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
     if problems:
         overview.append("Not included: " + "; ".join(problems))
     overview.append("Content: " + ", ".join(sorted(texts)))
-    texts["riepilogo.txt"] = "\n".join(overview)
+    texts["summary.txt"] = "\n".join(overview)
 
     dest_lang = dest_lang or desktop_folder()
     os.makedirs(dest_lang, exist_ok=True)

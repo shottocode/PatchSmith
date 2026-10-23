@@ -47,7 +47,7 @@ REASON_TABLES_WITHOUT_SOURCE = ("The game uses Unity Localization text tables, b
 # profile["live"] of Unity games: "service" = PatchSmith translates the new sentences while the game is played
 # (the plugin starts xunity_service; it is the normal choice); "google" = XUnity asks Google by itself (only written
 # by hand)
-LIVE_CHOICES = ("service", "google", "none")  # nessuno: chosen at the end of "Analyze and translate"
+LIVE_CHOICES = ("service", "google", "none")  # none: chosen at the end of "Analyze and translate"
 
 
 def _normalize(path):
@@ -65,7 +65,7 @@ def profiles_folder():
 
 def list_profiles():
     for path in sorted(glob.glob(os.path.join(glob.escape(profiles_folder()), "*.json"))):
-        # <nome>.state.json: fingerprints of versions 0.1-0.2; <nome>.checks.json: the after-play check
+        # <name>.stato.json: fingerprints of versions 0.1-0.2; <name>.controllo.json: the after-play check
         if path.endswith((".stato.json", ".controllo.json")):
             continue
         try:
@@ -126,7 +126,7 @@ _COMMON_EXECUTABLES = {"nw.exe", "electron.exe", "node.exe", "python.exe", "pyth
 
 def identity(folder, steam=True):
     """What recognizes the same game even in another folder (read-only, fast): {'exe': [lowercase names of the game's
-    executables, down to two subfolders], 'unity': 'azienda/prodotto' (Unity's app.info), 'steam': appid (Steam
+    executables, down to two subfolders], 'unity': 'company/product' (Unity's app.info), 'steam': appid (Steam
     manifest, if the game is installed from Steam; with steam=False it is not looked for), 'name': the folder name as
     for the game profile, without the '-2'}. It stays in the game profile (profile['identity']): a moved game is
     recognized even when the previous folder is no longer there."""
@@ -161,10 +161,10 @@ def _without_number(name):
 
 
 def same_game(a, b):
-    """True if the two identities (see identita) belong to the same game. The surest data both have decides: the Unity
+    """True if the two identities (see identity) belong to the same game. The surest data both have decides: the Unity
     product, then the Steam appid, then an executable with the same name; without any of these, the folder name. The
     '-2' is removed only from a game profile's name (from_profile: identity of an old game profile, of which only the
-    name is known): 'gioco-2' as a folder is usually the sequel, not a copy."""
+    name is known): 'game-2' as a folder is usually the sequel, not a copy."""
     for key in ("unity", "steam"):
         if a.get(key) and b.get(key):
             return str(a[key]).lower() == str(b[key]).lower()
@@ -188,9 +188,9 @@ def _count_entries(path):
 
 def same_games(folder, dest_lang=None, test=False):
     """The game profiles of the same game (see same_game) in another folder, with translations saved in the
-    'destinazione' language, when this folder does not have a game profile yet: [{'profile', 'name', 'folder',
+    'dest_lang' language, when this folder does not have a game profile yet: [{'profile', 'name', 'folder',
     'texts', 'moved'}], first the one with the most recently used translation memory. 'moved': that game
-    profile's folder is no longer there (game moved or reinstalled elsewhere). prova=True: the translation memories of
+    profile's folder is no longer there (game moved or reinstalled elsewhere). test=True: the translation memories of
     the test translator ('fake' backend)."""
     if find_profile(folder):
         return []
@@ -245,7 +245,7 @@ def _move_profile(from_profile, folder, log):
 def _copy_translations(from_profile, path, log):
     """The saved translations of the same game in another folder (translation memory and machine translations, the
     test ones too, and the copy of the XUnity cache) become those of this game profile, if it has none yet; the game's
-    names removed or added by hand (non_tradurre) come along too. Returns the entries copied."""
+    names removed or added by hand (do_not_translate) come along too. Returns the entries copied."""
     if _normalize(from_profile) == _normalize(path):
         return 0
     try:
@@ -294,10 +294,10 @@ def _copy_translations(from_profile, path, log):
 
 
 def game_supported(outcome):
-    """(supportato, web).
+    """(supported, web).
 
     web: Electron/NW.js, a web page with no other engines, or RPG Maker MV/MZ (they have an index.html).
-    supportato: translatable automatically. RPG Maker MV/MZ stays experimental (confirmation needed):
+    supported: translatable automatically. RPG Maker MV/MZ stays experimental (confirmation needed):
     its events mix dialogues and plugin commands (often Japanese words used as
     identifiers), which the generic rules cannot tell apart.
     """
@@ -372,9 +372,9 @@ def _prepare_unreal(folder, existing, origin, dest_lang, outcome, log, backend="
 
 
 def unreal_full(profile_path, log=print, network=True, backend="google", outcome=None):
-    """Translates the .locres files (rete=True: new texts too; False: only from the translation memory) and writes the
-    pak. backend="fake": test without network, with the separate test translation memory. The outcome goes into
-    outcome["outcome"]."""
+    """Translates the .locres files (network=True: new texts too; False: only from the translation memory) and writes
+    the pak. backend="fake": test without network, with the separate test translation memory. The outcome goes
+    into outcome["outcome"]."""
     profile = _read_profile(profile_path)
     folder, a = profile["game_folder"], profile["target_language"]
     sources, texts, culture = adapter_unreal.texts_to_translate(folder, log)
@@ -392,7 +392,7 @@ def unreal_full(profile_path, log=print, network=True, backend="google", outcome
     interruption.check()
     refused = {}
     n = adapter_unreal.install(folder, a, profile["name"], project.memory, log, refused=refused)
-    # translations with characters the game's fonts lack: into problems.json as for the other engines (those written
+    # translations with characters the game's fonts lack: into problemi.json as for the other engines (those written
     # by PatchSmith are redone at the next translation without those characters)
     project._refused = {t: {"reason": "characters that the game's fonts can't draw: %s" % " ".join(m),
                               "file": adapter_unreal.pak_name(a), "do_not_use": m} for t, m in refused.items()}
@@ -439,7 +439,7 @@ def _prepare_xna(folder, existing, origin, dest_lang, outcome, log, backend="goo
 
 
 def xna_full(profile_path, log=print, network=True, backend="google", outcome=None):
-    """Translates the .NET resources (rete=True: new texts too; False: only from the translation memory) and writes
+    """Translates the .NET resources (network=True: new texts too; False: only from the translation memory) and writes
     the satellites. The outcome goes into outcome["outcome"]."""
     profile = _read_profile(profile_path)
     folder, a = profile["game_folder"], profile["target_language"]
@@ -520,8 +520,8 @@ def _prepare_godot(folder, existing, origin, dest_lang, outcome, log, backend="g
 
 
 def godot_complete(profile_path, log=print, network=True, backend="google", outcome=None):
-    """Translates the table of the source language (rete=True) and puts override.cfg, the script and the translations
-    next to the executable (see adapter_godot). rete=False: only the translations already in memory (Reapply)."""
+    """Translates the table of the source language (network=True) and puts override.cfg, the script and the translations
+    next to the executable (see adapter_godot). network=False: only the translations already in memory (Reapply)."""
     profile = _read_profile(profile_path)
     folder, a, entry = profile["game_folder"], profile["target_language"], profile["godot"]
     if system.game_open(folder):
@@ -675,7 +675,7 @@ def _json_entries(folder, found, sources, log, dest_lang=None):
     for rel in sources:
         # from the original (backup), not from the file already translated by a previous version
         data = adapter_gamemaker.read_original(os.path.join(folder, *rel.split("/")), read_file)
-        others = []  # (codice, relativo, dati) of the official translations of the same file
+        others = []  # (code, relative path, data) of the official translations of the same file
         for other in found:
             if other not in sources and adapter_gamemaker.family(other) == adapter_gamemaker.family(rel):
                 try:
@@ -729,7 +729,7 @@ def _json_entries(folder, found, sources, log, dest_lang=None):
 
 
 def folder_languages(folder, relative):
-    """The names (without extension) of the language files of the same family as 'relativo' (e.g. english,
+    """The names (without extension) of the language files of the same family as 'relative' (e.g. english,
     french...): they are the values the game saves as the chosen language."""
     family = adapter_gamemaker.family(relative)
     names = {os.path.splitext(os.path.basename(r))[0] for r in adapter_gamemaker.language_json_files(folder)
@@ -815,7 +815,7 @@ def _read_profile(path):
 
 
 def _language_name(code):
-    """'Francese (fr)' for a code of the text tables ('fr', 'zh-cn', 'pt-br'); the code itself if unknown."""
+    """'French (fr)' for a code of the text tables ('fr', 'zh-cn', 'pt-br'); the code itself if unknown."""
     known_code = next((c for c in language.NAMES if c.lower() == (code or "").lower()), None)
     return language.label(known_code or language.best(language.NAMES, code) or code) if code else ""
 
@@ -884,7 +884,7 @@ def _prepare_unity_tables(folder, existing, origin, dest_lang, log):
     - "official": the game already has the target language;
     - "crc": the catalog checks the bundles' fingerprint and it cannot be removed for the bundle to translate;
     - "binary": the catalog is catalog.bin (it is unknown whether it checks the fingerprint);
-    - ("language", lingue): there are tables, but not in the source language;
+    - ("language", languages): there are tables, but not in the source language;
     - None: the game does not use Unity Localization.
     If the catalog (catalog.json) checks the fingerprint of a bundle to translate, the game profile entry also has
     "catalog": Project sets that bundle's CRC to 0 there before rewriting it (with backup, see
@@ -1010,7 +1010,7 @@ def _merge(old, new, log):
 
 def prepare(folder, origin="auto", dest_lang=None, backend="google", log=print, force=False, regenerate=False,
             translate_anyway=False, consent=False):
-    """Detects the engine, finds the texts and creates/updates the game profile. Returns (percorso_profilo, esito)."""
+    """Detects the engine, finds the texts and creates/updates the game profile. Returns (profile_path, outcome)."""
     path, outcome = _prepare(folder, origin, dest_lang, backend, log, force, regenerate, translate_anyway,
                                consent)
     if path:
@@ -1051,7 +1051,7 @@ def _names_in_profile(path, log):
 
 
 def _profile_identity(path):
-    """The game's identity (see identita) in the game profile: used to recognize it if you move or copy it elsewhere."""
+    """The game's identity (see identity) in the game profile: used to recognize it if you move or copy it elsewhere."""
     try:
         profile = _read_profile(path)
         new_value = identity(profile["game_folder"])
@@ -1094,8 +1094,8 @@ def _prepare(folder, origin, dest_lang, backend, log, force, regenerate, transla
                              "the official language, press 'Restore originals' and then 'Analyze and translate' again.")
             for line in lines:
                 log("  " + line)
-            outcome = dict(outcome, official_language=official, lingua_ufficiale_righe=lines,
-                         traduzione_installata=installed_ok, engine_supported=bool(is_supported or web),
+            outcome = dict(outcome, official_language=official, official_language_lines=lines,
+                         translation_installed=installed_ok, engine_supported=bool(is_supported or web),
                          language_set=done, needs_consent=done is None)
             return None, _mark(outcome, "OFFICIAL", lines[0] if lines else "", actions=["choose_language"],
                                 extra={"official_language": True, "lines": lines,
@@ -1215,7 +1215,7 @@ def _prepare_web_live(folder, existing, origin, dest_lang, backend, log):
 
 
 def live_translation(folder):
-    """(profilo, attiva) if the folder's game has translation while playing (Unity, live web), otherwise (profilo or
+    """(profile, active) if the folder's game has translation while playing (Unity, live web), otherwise (profile or
     None, None)."""
     path = find_profile(folder)
     if not path:
@@ -1405,7 +1405,7 @@ def _reason_no_text(outcome, folder):
 
 def _write_outcome(outcome, project, texts, written, engine, live=None, reason="", actions=()):
     """Outcome of the engines that write the translations from the translation memory into the game (Unity, Unreal,
-    XNA): OK, PARTIAL or TRANSLATOR_BLOCKED, with the translated texts and those left untranslated. azioni: extra
+    XNA): OK, PARTIAL or TRANSLATOR_BLOCKED, with the translated texts and those left untranslated. actions: extra
     ones (e.g. for Unity's new sentences without a translator)."""
     if outcome is None:
         return
@@ -1424,12 +1424,12 @@ def _write_outcome(outcome, project, texts, written, engine, live=None, reason="
 
 
 def _apply_outcome(outcome, project, engine):
-    """Outcome after Progetto.traduci or applica (games with text files: web, GameMaker, Unity Localization...)."""
+    """Outcome after Project.translate or apply (games with text files: web, GameMaker, Unity Localization...)."""
     if outcome is None:
         return
     r = project.last_apply or {"ok": 0, "missing": 0, "examples": [], "discarded": 0, "writes": 0,
                                     "is_open": False}
-    # scritto: the game has at least one translation (a file rewritten without translations does not count)
+    # written: the game has at least one translation (a file rewritten without translations does not count)
     fields = dict(engine=engine, written=r["writes"] > 0 and r["ok"] > 0, translated_items=r["ok"],
                  remaining=r["missing"], remaining_examples=r["examples"], extra=_extra_attempts(project))
     if outcome.get("added_language"):
@@ -1630,7 +1630,7 @@ def retranslate(folder, texts=None, backend="local", log=print, test=False, outc
     """"Fix translations": re-translates the chosen texts now (texts=None: all the machine translations and the texts
     left untranslated; fixes made by hand stay), see corrections.retranslate, and then rewrites them into the game like
     "Reapply" (with the game closed: with the game open the new translations stay saved and the outcome says to press
-    "Reapply"). modello: the local translator model to use (e.g. '12b'). True if everything is fine; the outcome in
+    "Reapply"). model: the local translator model to use (e.g. '12b'). True if everything is fine; the outcome in
     outcome["outcome"], with extra["retranslation"] = {retranslated, remaining_count, texts, interrupted}."""
     from . import corrections
     path = find_profile(folder)
@@ -1661,7 +1661,7 @@ def retranslate(folder, texts=None, backend="local", log=print, test=False, outc
 
 
 class RestartError(RuntimeError):
-    """"Start over" did not start (codice: a code from esito.CODICI, for the window)."""
+    """"Start over" did not start (code: a code from outcome.CODES, for the window)."""
 
     def __init__(self, message, code=None):
         super().__init__(message)
@@ -1671,8 +1671,8 @@ class RestartError(RuntimeError):
 def start_over(folder, log=print, test=False, backend=None):
     """"Start over" (Fix translations): puts back the game's original files (like "Restore originals": the text scan
     must see the originals, not the translated files) and sets aside all the saved translations, the ones fixed by
-    hand too, in memory/copies/<gioco>-<data>/ (nothing is lost), so that the next "Analyze and translate" (with
-    rigenera) translates everything again. The saved translations are the game's translation memory with the machine
+    hand too, in memory/copies/<game>-<date>/ (nothing is lost), so that the next "Analyze and translate" (with
+    regenerate) translates everything again. The saved translations are the game's translation memory with the machine
     translations, the texts with problems and the fixes to write; for Unity also the XUnity cache saved by "Restore".
     From the shared translation memory, the short texts machine-translated for this game are removed (and kept in the
     copy): otherwise they would come back the same. If the originals cannot be put back (game open, locked files) it
@@ -1759,9 +1759,9 @@ def _remove_from_shared(profile, memory, copy_dir, log):
 def unity_full(profile_path, log=print, network=True, anticheat=False, backend="google", outcome=None):
     """Installs/updates XUnity and pre-translates the game's texts into its cache.
 
-    rete=True: extracts the texts from the game's files and translates those not yet in memory with the chosen
+    network=True: extracts the texts from the game's files and translates those not yet in memory with the chosen
     translator (which also becomes the game profile's one, read by the translator started by the game).
-    rete=False: puts back into the cache only the translations already in memory (no connection).
+    network=False: puts back into the cache only the translations already in memory (no connection).
     PatchSmith translates the new sentences while the game is played (see profile["live"] and xunity_service).
     The outcome (see outcome.py) goes into outcome["outcome"]: live says who translates the new sentences (see
     _live).
@@ -1776,7 +1776,7 @@ def unity_full(profile_path, log=print, network=True, anticheat=False, backend="
     if network and not test and profile.get("backend") != backend:
         profile["backend"] = backend
         scan.save_json(profile_path, profile)
-    # new sentences while playing: always to PatchSmith's translator (if the plugin compiles), even with rete=False
+    # new sentences while playing: always to PatchSmith's translator (if the plugin compiles), even with network=False
     # ("Reapply" after "Restore originals"); in the test it is left as it is (the test translation memory is another)
     choice = profile.get("live") if profile.get("live") in LIVE_CHOICES else "service"
     local = None if test else (profile_path if choice == "service" else
@@ -1924,7 +1924,7 @@ def write_unity_fixes(profile, log=print):
 
 
 def _cache_lines_to_redo(folder, a, src_lang, project, log):
-    """{original: traduzione nella cache} of the XUnity cache lines to fix (read-only):
+    """{original: translation in the cache} of the XUnity cache lines to fix (read-only):
     - those that adapter_unity.check_xunity_cache reports (identical to the original with several words, in
       another language, different line breaks or placeholders, a translated game name);
     - the provisional answers of the live translator (journal: 'relaxed', 'rejected', 'deferred'), which XUnity
@@ -2082,7 +2082,7 @@ def check_writable(folder):
 
 
 def _in_program_files(folder):
-    """True if the folder is inside C:\\Programmi (Program Files), which Windows protects."""
+    """True if the folder is inside Program Files (C:\\Programmi on Italian Windows), which Windows protects."""
     for env_var in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
         root = os.environ.get(env_var)
         if root and _inside(folder, root):
@@ -2141,8 +2141,8 @@ def _language_problems(src_lang, a):
 
 
 def preflight_checks(folder, backend=None, operation="translate", src_lang=None, a=None):
-    """Quick checks before a long operation (operazione: traduci, riapplica, ripristina), so as not to discover a
-    problem after minutes or hours of work. Returns [Preflight(codice, messaggio, azione, dati)] in the order in
+    """Quick checks before a long operation (operation: translate, reapply, restore), so as not to discover a
+    problem after minutes or hours of work. Returns [Preflight(code, message, action, data)] in the order in
     which to show them (empty: it can start):
     - GAME_OPEN (action 'retry'): a program from the game folder is open;
     - LANGUAGE (translate only; None, or 'continue' for a code not in the list): From/To languages unknown or the
@@ -2152,11 +2152,11 @@ def preflight_checks(folder, backend=None, operation="translate", src_lang=None,
       data;
     - TRANSLATOR_PAUSED (translate only; 'use_local' or 'install_local'): the chosen online translator is paused
       after a block (Limiter.pause);
-    - LOCAL_MISSING (traduci only; 'install_local', or continue: the official language does not need translating,
+    - LOCAL_MISSING (translate only; 'install_local', or continue: the official language does not need translating,
       and without a translator Analyze and translate stops before modifying the game): the local translator is
       chosen, but it is not installed;
-    - SAME_GAME (traduci only, folder without a game profile; 'reuse'): the same game is already translated in
-      another folder (copied, moved, reinstalled); dati: what same_games says.
+    - SAME_GAME (translate only, folder without a game profile; 'reuse'): the same game is already translated in
+      another folder (copied, moved, reinstalled); data: what same_games says.
     Reads only, except for a test file written and removed right away in the game folder. With the test translator
     ('fake') no translator checks."""
     folder = os.path.abspath(folder)

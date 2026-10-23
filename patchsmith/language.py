@@ -10,7 +10,7 @@ import sys
 
 AUTO = "auto"
 
-# Google Translate codes with their Italian name.
+# Google Translate codes with their English name.
 NAMES = {
     "en": "English", "it": "Italian", "ja": "Japanese", "zh-CN": "Simplified Chinese",
     "zh-TW": "Traditional Chinese", "ko": "Korean", "fr": "French", "de": "German", "es": "Spanish",
@@ -58,7 +58,7 @@ def same_language(a, b):
 
 
 def best(candidates, dest_lang):
-    """The code among 'candidati' that best matches 'destinazione': the same code, then the language without a
+    """The code among 'candidates' that best matches 'dest_lang': the same code, then the language without a
     region ('it', 'zh-Hans'), then another variant of the same language (never the other Chinese script).
     None if none matches."""
     dest = (dest_lang or "").strip().replace("_", "-").lower()
@@ -78,7 +78,7 @@ def endonym(code):
 
 
 def label(code):
-    """'Italiano (it)'; 'Detect automatically' for auto; the code itself if unknown."""
+    """'Italian (it)'; 'Detect automatically' for auto; the code itself if unknown."""
     if code == AUTO:
         return AUTO_LABEL
     return "%s (%s)" % (NAMES[code], code) if code in NAMES else code
@@ -168,8 +168,8 @@ ALSO_IN = {"it": {"a", "o", "i", "no", "se", "su", "tu", "ne", "te", "mi", "ce",
 
 
 def obvious_language(text, wait):
-    """The language (a _WORDS code) whose frequent words the text clearly has instead of those of the 'attesa'
-    language: at least 2, and more than those of 'attesa'. None if no other language shows (also for short texts
+    """The language (a _WORDS code) whose frequent words the text clearly has instead of those of the expected
+    language 'wait': at least 2, and more than those of 'wait'. None if no other language shows (also for short texts
     without frequent words: doubt is not enough). A word that also belongs to the expected language ("la", "in", "se")
     counts only for it."""
     words = re.findall(r"[^\W\d_]+", text.lower())
@@ -193,7 +193,7 @@ def _writing_system(c):
 
 
 def detect(texts, maximum=200_000):
-    """(codice, descrizione) of the prevailing language in the texts. ('en', ...) if it cannot be told."""
+    """(code, description) of the prevailing language in the texts. ('en', ...) if it cannot be told."""
     sample = "\n".join(texts)[:maximum]
     counts = {}
     for c in sample:

@@ -162,7 +162,7 @@ Se PatchSmith viene aggiornato mentre la sua finestra è aperta, alla prossima o
 - per Unity: `BepInEx/LogOutput.log`, la configurazione di XUnity e di BepInEx, lo stato dell'avvio del traduttore (`BepInEx/patchsmith-servizio-stato.txt`), la fine del registro e del diario delle frasi del traduttore dal vivo, `Player.log`, `Player-prev.log` e il `Player.log` dell'ultimo crash.
 - per Unreal: il registro del gioco (`%LOCALAPPDATA%\<progetto>\Saved\Logs\<progetto>.log`), da cui il controllo dopo aver giocato capisce se il pak della traduzione è stato caricato e quale lingua è scelta.
 
-Niente file del gioco e niente salvataggi. Se la chiave o l'email fossero finite in un registro (anche dentro un indirizzo web), nel rapporto diventano `<tolto>`; la cartella del tuo utente di Windows diventa `%USERPROFILE%`. Se sul Desktop non si può scrivere (per esempio con l'"Accesso controllato alle cartelle" di Windows), il rapporto va nella cartella `logs/` e la finestra dice dove.
+Niente file del gioco e niente salvataggi. Se la chiave o l'email fossero finite in un registro (anche dentro un indirizzo web), nel rapporto diventano `<removed>`; la cartella del tuo utente di Windows diventa `%USERPROFILE%`. Se sul Desktop non si può scrivere (per esempio con l'"Accesso controllato alle cartelle" di Windows), il rapporto va nella cartella `logs/` e la finestra dice dove.
 
 ## Da riga di comando
 

@@ -41,7 +41,7 @@ TITLES = {"OK": "Translation installed", "PARTIAL": "Translation partially insta
           "TRANSLATOR_MISSING": "Translator not ready", "ALREADY_ORIGINAL": "Game already original",
           "PERMISSIONS": "Locked files", "WRONG_FOLDER": "Wrong folder",
           "ERROR": "Operation failed"}
-WINDOWS = []  # (titolo, testo, pulsanti) of the choice dialogs shown by the interface
+WINDOWS = []  # (title, text, buttons) of the choice dialogs shown by the interface
 CHECKS = []
 
 
@@ -347,9 +347,9 @@ def _trial(folder, reports):
     names = zipfile.ZipFile(created[0]).namelist() if created else []
     check("Crea rapporto: finestra 'Rapporto creato' e zip con registri (anche dell'errore nella finestra), "
               "profilo e impostazioni", WINDOWS[-1][0] == "Report generated" and len(created) == 1
-              and any(n.startswith("registri/") and n.endswith("-lantern-keeper.log") for n in names)
+              and any(n.startswith("logs/") and n.endswith("-lantern-keeper.log") for n in names)
               and any(n.endswith("-interfaccia.log") for n in names)
-              and "settings.json" in names and any(n.startswith("profilo/") for n in names))
+              and "settings.json" in names and any(n.startswith("profile/") for n in names))
 
     # Desktop that cannot be written to (e.g. controlled folder access): the report goes to the logs
     blocked = os.path.join(reports, "non-una-cartella")
@@ -625,7 +625,7 @@ def _trial_preflight(app, root, folder):
             after_pause = app._chosen
             app._translate()  # now the local translator is chosen, and it is not installed
             absent = WINDOWS[-1]
-            # the yes to the official language (consenso) translates nothing: no questions about the translator
+            # the yes to the official language (consent) translates nothing: no questions about the translator
             windows = len(WINDOWS)
             app._translate(consent=True)
             consent = (list(started), [f[0] for f in WINDOWS[windows:]])

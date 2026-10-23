@@ -49,7 +49,7 @@ def fingerprints(folder):
 
 
 def unity_il2cpp_game(folder, tables=False, crc=0):
-    """Fake Unity IL2CPP game; with tabelle=True also the English Unity Localization bundle and the Addressables
+    """Fake Unity IL2CPP game; with tables=True also the English Unity Localization bundle and the Addressables
     catalog (crc: the value of m_Crc in the bundle options)."""
     test_unity.create_game(folder)
     os.rename(os.path.join(folder, "Gioco_Data", "Managed"), os.path.join(folder, "Gioco_Data", "nonusata"))
@@ -426,26 +426,26 @@ def test_report(base, mono):
     with zipfile.ZipFile(zip_) as z:
         names = set(z.namelist())
         content = {n: z.read(n).decode("utf-8") for n in names}
-    expected_list = {"riepilogo.txt", "settings.json", "services.json", "rilevamento.txt",
-              "registri/" + os.path.basename(log_file), "profilo/%s.json" % name, "gioco/BepInEx/LogOutput.log",
-              "gioco/" + adapter_unity.CONFIG_XUNITY, "gioco/" + adapter_unity.CONFIG_BEPINEX,
-              "gioco/patchsmith-unity.json", "traduttore-locale/servizio-xunity.log", "unity/Player.log",
+    expected_list = {"summary.txt", "settings.json", "services.json", "detection.txt",
+              "logs/" + os.path.basename(log_file), "profile/%s.json" % name, "game/BepInEx/LogOutput.log",
+              "game/" + adapter_unity.CONFIG_XUNITY, "game/" + adapter_unity.CONFIG_BEPINEX,
+              "game/patchsmith-unity.json", "local-translator/servizio-xunity.log", "unity/Player.log",
               "unity/Player-prev.log", "unity/crash-Crash_nuovo-Player.log",
-              "traduzioni/" + os.path.basename(text_problems)}
+              "translations/" + os.path.basename(text_problems)}
     check("rapporto: registro, profilo, impostazioni, stato, rilevamento, BepInEx/XUnity, Unity, crash, "
               "manifesto, testi rimasti con il motivo (problemi.json)", expected_list <= names)
     whole = "\n".join(content.values())
     check("rapporto: nessuna chiave DeepL ne' email (nemmeno dentro un registro, anche in maiuscolo)",
-              key not in whole and email not in whole.lower() and "<tolto>" in content["registri/" +
+              key not in whole and email not in whole.lower() and "<removed>" in content["logs/" +
                                                                                        os.path.basename(log_file)])
     prefs = json.loads(content["settings.json"])
     check("rapporto: impostazioni senza chiave_deepl ed email, il resto c'e'",
               "deepl_key" not in prefs and "email_mymemory" not in prefs and prefs.get("backend") == "deepl")
     check("rapporto: versione e ultimo esito nel riepilogo, crash piu' recente, fine del registro lungo",
-              __version__ in content["riepilogo.txt"] and "PARTIAL" in content["riepilogo.txt"]
+              __version__ in content["summary.txt"] and "PARTIAL" in content["summary.txt"]
               and content["unity/crash-Crash_nuovo-Player.log"] == "crash nuovo"
-              and "traduzione interrotta" in content["traduttore-locale/servizio-xunity.log"]
-              and len(content["traduttore-locale/servizio-xunity.log"]) < report.MAX_BYTES + 200)
+              and "traduzione interrotta" in content["local-translator/servizio-xunity.log"]
+              and len(content["local-translator/servizio-xunity.log"]) < report.MAX_BYTES + 200)
     check("rapporto: la cartella dell'utente diventa %USERPROFILE% (anche dentro un JSON)",
               report.clean("log: %s\\AppData" % user, []) == "log: %USERPROFILE%\\AppData"
               and report.clean(json.dumps({"c": user}), []) == '{"c": "%USERPROFILE%"}'
@@ -454,7 +454,7 @@ def test_report(base, mono):
     cleaned = report.clean("GET https://api.mymemory.translated.net/get?q=Start&de=%s&x=%s" % (
         email.replace("@", "%40"), email.replace("@", "%40").upper()), [email, key])
     check("rapporto: l'email sparisce anche scritta come in un indirizzo web (%40)",
-              "segreto" not in cleaned.lower() and cleaned.count("<tolto>") == 2)
+              "segreto" not in cleaned.lower() and cleaned.count("<removed>") == 2)
 
 
 def test_live(mono):

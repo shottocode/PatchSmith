@@ -35,7 +35,7 @@ from .text import DETAIL, readable, slug
 SETTINGS = None  # None = settings.json among the user's data (project.data_folder); the tests change it
 SETTINGS_VERSION = 2
 # Translator used by the interface. The "fake" test translator is only available from the command line
-# (--backend finto) and for the automatic tests (App.forced_backend).
+# (--backend fake) and for the automatic tests (App.forced_backend).
 DEFAULT_BACKEND = "local"  # fallback: the real default is backend.default()
 TRANSLATORS = {"local": "Local translator (on your PC)", "google": "Free Google (unofficial)",
               "deepl": "DeepL (with your free key)", "mymemory": "MyMemory (free)"}
@@ -150,9 +150,9 @@ class App:
         self.tail = queue.Queue()
         self._log_lines = []  # the window's log lines as written (to change language)
         self.work = None
-        self._log_file = None  # log file of the running operation (logs/AAAAMMGG-HHMMSS-<gioco>.log)
+        self._log_file = None  # log file of the running operation (logs/YYYYMMDD-HHMMSS-<game>.log)
         self._lock = threading.Lock()
-        self._operation = None  # traduci / riapplica / ripristina / installa / rapporto
+        self._operation = None  # translate / reapply / restore / install / report / check / retranslate
         self._retry = None  # for "Try again": repeats the last operation on the game
         self._translate_choices = {"force": False, "translate_anyway": False}  # of the last Analyze and translate
         self._in_error = False
@@ -198,7 +198,7 @@ class App:
         self.folder_entry.grid(row=0, column=1, sticky="ew", padx=6)
         # as wide as the column (that is, as "Create report"): the right edges are all aligned; as tall as the
         # folder field
-        self.btn_browse = ttk.Button(frame, text="Browse…", style="Campo.TButton", command=self._browse)
+        self.btn_browse = ttk.Button(frame, text="Browse…", style="Field.TButton", command=self._browse)
         self.btn_browse.grid(row=0, column=2, sticky="nsew")
         # flag: interface language (the languages are the files in patchsmith/ui_language/)
         self._flags = {c: ui.flag(c, root) for c in ui.languages()}
@@ -275,13 +275,13 @@ class App:
         # tests the DeepL key or the MyMemory email right away, without waiting for "Analyze and translate"
         self.btn_verify = ttk.Button(services, text="Check", command=self._verify_credential)
         self._warned_google = False
-        self.translator_status = ttk.Label(services, text="", style="Stato.TLabel")
+        self.translator_status = ttk.Label(services, text="", style="Status.TLabel")
         self.btn_reactivate = ttk.Button(services, text="Reactivate", command=self._reactivate)
         # the model: the saved one, otherwise the best one already downloaded; with neither, the one suited to the
         # graphics card is proposed (ollama.recommended_model, looked up in the background: _suggest_model)
         self._model_chosen = prefs.get("local_model") in LOCAL_MODELS
         model = prefs.get("local_model") if self._model_chosen else ollama.default_model()
-        self._model_recommendation = None  # (chiave, motivo) from the graphics card
+        self._model_recommendation = None  # (key, reason) from the graphics card
         self._local_probe = None  # the last test of the local translator (backend.probe_local)
         self._then = None  # to redo after installing the local translator (e.g. "Analyze and translate")
         self.local_model = tk.StringVar(value=LOCAL_MODELS[model])
@@ -328,7 +328,7 @@ class App:
         scrollbar.pack(side="right", fill="y")
 
         self.state = ui.TextVar(value="")
-        self.status_label = ttk.Label(self.bottom, textvariable=self.state, style="Stato.TLabel")
+        self.status_label = ttk.Label(self.bottom, textvariable=self.state, style="Status.TLabel")
         self.status_label.pack(side="left")
         # while the game is open with its translator on (see _watch_live)
         self.btn_stop_live = ttk.Button(self.bottom, text="Stop the game translator",
@@ -440,7 +440,7 @@ class App:
         self._update_service_status()
 
     def _suggest_model(self, recommendation, sync=False):
-        """The model suited to the graphics card (ollama.recommended_model: (chiave, motivo)), if the user has not
+        """The model suited to the graphics card (ollama.recommended_model: (key, reason)), if the user has not
         chosen one and none is downloaded: the 12B with at least 8 GB of video memory, otherwise the 4B."""
         from . import ollama
         self._model_recommendation = recommendation
@@ -458,7 +458,7 @@ class App:
     def _install_local(self, then=None):
         """Guided installation of the local translator: proposes the model suited to the graphics card, lists what it
         downloads and starts only after the yes. At the end a test sentence (_install_and_test) tells whether it works
-        and how fast it is; then (if it succeeds) runs 'poi', for example the "Analyze and translate" that was waiting
+        and how fast it is; then (if it succeeds) runs 'then', for example the "Analyze and translate" that was waiting
         for the translator."""
         from . import ollama
         if self._busy():
@@ -502,7 +502,7 @@ class App:
 
     def _update_service_status(self, repeat=False):
         """Next to the translator: whether it is paused after a block (until when) or disabled (Reactivate button);
-        for the local translator whether it is ready or to install. With ripeti=True it refreshes every minute."""
+        for the local translator whether it is ready or to install. With repeat=True it refreshes every minute."""
         from .limiter import Limiter
         self.translator_status.pack_forget()
         self.btn_reactivate.pack_forget()
@@ -727,8 +727,8 @@ class App:
         return readable(original)
 
     def _open_log(self, folder, description, name=None):
-        """New log on disk for the operation: logs/AAAAMMGG-HHMMSS-<nome>.log, with the name of the game
-        profile (or of its folder); without a folder 'interface' (window errors outside an operation) or the given
+        """New log on disk for the operation: logs/YYYYMMDD-HHMMSS-<name>.log, with the name of the game
+        profile (or of its folder); without a folder 'interfaccia' (window errors outside an operation) or the given
         name. The oldest beyond MAX_LOGS are deleted. Without a log the work goes on anyway: there must never be
         an error here (the buttons are already disabled)."""
         self._close_log()
@@ -837,8 +837,8 @@ class App:
 
     def _start(self, description, func, stoppable=False, needs_folder=True, operation=None, keep_log=True,
                log_name=None):
-        """Runs func(cartella) in a thread. operazione: traduci/riapplica/ripristina/installa/rapporto/controlla
-        (chooses the final dialog); registra=False: without a log on disk (e.g. creating the report);
+        """Runs func(folder) in a thread. operation: translate/reapply/restore/install/report/check/retranslate
+        (chooses the final dialog); keep_log=False: without a log on disk (e.g. creating the report);
         log_name: the end of the log's name (default: the game)."""
         folder = self.folder.get().strip().strip('"')
         if self._busy():  # one work at a time: reset() would cancel a "Stop" still in progress
@@ -980,7 +980,7 @@ class App:
             return False
 
     def _show_window(self, e, operation):
-        """The end-of-operation dialog for the outcome (text and buttons from esito.finestra) and the chosen action."""
+        """The end-of-operation dialog for the outcome (text and buttons from outcome.window) and the chosen action."""
         data = outcomes.window(e, operation or "translate", local_ready=self._local_ready(),
                               current=self._backend())
         if e.code == "PARTIAL" and e.written and operation != "restore":  # translated, with a few texts left
@@ -1188,7 +1188,7 @@ class App:
             self._check([e.extra["profile"]], at_open=False, retranslate=True)
 
     def _choices(self, e):
-        """forza and translate_anyway of the last Analyze and translate (from the outcome, or remembered: an outcome
+        """force and translate_anyway of the last Analyze and translate (from the outcome, or remembered: an outcome
         born from an error does not have them); from_scratch if the outcome is from a "Start over" that did not start
         (translator not ready: with the new one it starts over, it does not just translate)."""
         choices = dict(self._translate_choices)
@@ -1207,9 +1207,9 @@ class App:
     def _preflight(self, operation, repeat, backend=None):
         """Before a long operation, the quick checks of automatic.preflight_checks (game open, languages,
         protected folder, space, translator paused or to install, same game already translated elsewhere), with a
-        dialog for each problem found. Returns the choices to start ({'reuse': profilo or None}), or None if it does
-        not start: cancelled, or another way chosen ("Try again" and "Use the local translator" redo 'ripeti', so
-        the checks run again; "Install" installs the local translator and then redoes 'ripeti')."""
+        dialog for each problem found. Returns the choices to start ({'reuse': profile or None}), or None if it does
+        not start: cancelled, or another way chosen ("Try again" and "Use the local translator" redo 'repeat', so
+        the checks run again; "Install" installs the local translator and then redoes 'repeat')."""
         folder = self.folder.get().strip().strip('"')
         if self._busy():
             return None
@@ -1258,9 +1258,9 @@ class App:
 
     def _translate(self, force=False, translate_anyway=False, consent=False, from_scratch=False, regenerate=False):
         """Analyze and translate. from_scratch ("Start over" in Fix translations): first the game's saved translations
-        are set aside in a copy (automatic.start_over) and the game profile is rebuilt (rigenera). Once those are
+        are set aside in a copy (automatic.start_over) and the game profile is rebuilt (regenerate). Once those are
         set aside, "Try again" (e.g. the game opened halfway through the work) continues the new translation with
-        rigenera: it does not set aside again the one just made."""
+        regenerate: it does not set aside again the one just made."""
         from .backend import BackendError
         src_lang, a, backend = self._language_code(self.src_lang.get()), self._target_lang(), self._backend()
         repeat = lambda: self._translate(force=force, translate_anyway=translate_anyway, consent=consent,  # noqa: E731
@@ -1272,7 +1272,7 @@ class App:
         reuse = choices.get("reuse")
 
         def _work(folder):
-            """The outcome of Analyze and translate (esito.Esito), with the choices made so they can be repeated."""
+            """The outcome of Analyze and translate (outcome.Outcome), with the choices made so they can be repeated."""
             if from_scratch:  # (with a translator that is missing or paused it stops before touching anything)
                 try:
                     automatic.start_over(folder, self._log, test=backend == "fake", backend=backend)
@@ -1396,9 +1396,9 @@ class App:
             self._update_check_line(last=True)
 
     def _check(self, profiles=None, at_open=None, retranslate=None):
-        """After-play check: the game of the chosen folder (profili=None) or the given games. at_open
+        """After-play check: the game of the chosen folder (profiles=None) or the given games. at_open
         (default: with the given games) = the check started on its own on opening: no dialogs at the end, the
-        result goes to the line under the folder. ritraduci (default: not on opening): re-translate now the lines
+        result goes to the line under the folder. retranslate (default: not on opening): re-translate now the lines
         translated while playing that stayed provisional; not on opening (loading the local translator or
         waiting for Google's pauses would freeze the window): they stay to do, with the "Re-translate" button."""
         translator = self._backend()
@@ -1437,7 +1437,7 @@ class App:
                     operation="check", log_name="controllo" if profiles is not None else None)
 
     def _update_check_line(self, last=False):
-        """The line under the folder: 'Dopo l'ultima partita a X: 2 problemi corretti, 1 da fare' and 'Details'."""
+        """The line under the folder: 'After the last session of X: 2 problems fixed, 1 to do' and 'Details'."""
         with_problems = [e for e in self.check_outcomes if e.extra.get("checks")]
         self.btn_details.pack_forget()
         self.btn_retranslate.pack_forget()
@@ -1478,7 +1478,7 @@ class App:
             self.check_row.pack_forget()
 
     def _to_retranslate(self):
-        """([profili], how many lines) with lines translated while playing that need re-translating (left by the check
+        """([profiles], how many lines) with lines translated while playing that need re-translating (left by the check
         on opening: problems with the 'retranslate' action still to do)."""
         profiles, sentences = [], 0
         for e in self.check_outcomes:
@@ -1527,7 +1527,7 @@ class App:
 
     def _fix(self, filter_=None):
         """"Fix translations…": the window with the translations of the chosen folder's game and their problems;
-        filtro: the list to show at once (see corrections.FILTERS). Returns the window (or None)."""
+        filter_: the list to show at once (see corrections.FILTERS). Returns the window (or None)."""
         from . import corrections, gui_corrections
         if self._busy():
             return None

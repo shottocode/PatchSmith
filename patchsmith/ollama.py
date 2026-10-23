@@ -243,7 +243,7 @@ def default_model():
 
 
 def state():
-    """'ready', 'manca il modello' or 'non installato' (for the interface)."""
+    """'ready', 'the model is missing' or 'not installed' (for the interface)."""
     if not installed():
         return "not installed"
     present = [k for k in MODELS if model_present(k)]
@@ -329,7 +329,7 @@ _LOG_LIMIT = 5 * 1024 * 1024
 
 
 class Server:
-    """PatchSmith's Ollama server: started with avvia(), closed with chiudi() (or with 'with')."""
+    """PatchSmith's Ollama server: started with launch(), closed with close() (or with 'with')."""
 
     def __init__(self, log=print, executable=None, startup_wait=180.0, command=None, parallel=1):
         self.log = log
@@ -454,7 +454,7 @@ class Server:
 
 
 def _log_tail(from_pos=0, lines=15):
-    """The last lines of the log written from 'dalla' onwards (at most the last 64 KB)."""
+    """The last lines of the log written from 'from_pos' onwards (at most the last 64 KB)."""
     try:
         with open(os.path.join(folder(), "server.log"), "rb") as f:
             f.seek(0, os.SEEK_END)
@@ -559,7 +559,7 @@ def _install_program(log):
 
 
 def _download_zip(partial, log):
-    """Downloads the zip into 'parziale', resuming from where it was (Range request) if a part is already there."""
+    """Downloads the zip into 'partial', resuming from where it was (Range request) if a part is already there."""
     already = os.path.getsize(partial) if os.path.exists(partial) else 0
     if already >= ZIP_SIZE:
         return

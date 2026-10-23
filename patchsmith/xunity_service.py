@@ -15,9 +15,9 @@ language ("relaxed"), otherwise the original ("rejected"); a line that an online
 later ("deferred") also gets the original. Error (500) only if no translator answers, 503 while the game is closing
 (no translation with the translator that is shutting down).
 
-Every requested line ends up in the journal memory/<gioco>.requests.jsonl (see journal_path): a JSON line with ts,
-testo, da, a, esito (JOURNAL_OUTCOMES), backend, motivo and risposta. Lines with an outcome other than "ok" are not in
-the translation memory: they can be re-translated with the game closed and fixed in XUnity's cache.
+Every requested line ends up in the journal memory/<game>.richieste.jsonl (see journal_path): a JSON line with ts,
+text, from, to, outcome (JOURNAL_OUTCOMES), backend, reason and response. Lines with an outcome other than "ok" are
+not in the translation memory: they can be re-translated with the game closed and fixed in XUnity's cache.
 
 PatchSmith's plugin starts it when the game starts (BepInEx/plugins/Patchsmith) and it closes by itself when the
 game closes, freeing the graphics card."""
@@ -31,6 +31,7 @@ import re
 import socket
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import zlib
@@ -49,7 +50,7 @@ GAME_CHECK = 3.0  # seconds between one check of the game's process and the next
 MAX_WAIT = 60.0  # seconds: XUnity waits at most 150 s for an answer, the online translators sometimes longer
 MAX_STARTUP = 140.0  # seconds of waiting for translators that are starting, then the line is postponed
 MAX_CLOSING = 180.0  # seconds: on closing, a translation in progress (even with the online waits) finishes first
-MAX_JOURNAL = 2_000_000  # bytes: then the journal becomes <nome>.requests.jsonl.1 and a new one is started
+MAX_JOURNAL = 2_000_000  # bytes: then the journal becomes <name>.richieste.jsonl.1 and a new one is started
 # outcomes in the journal: translated (and saved in the translation memory); fallback answer (not in the translation
 # memory); original because rejected by all translators; original because the online translators ask to wait too
 # long; no translator reachable (500); game closing (503)
@@ -87,9 +88,15 @@ def stop(profile_name):
     if not is_on(profile_name):
         return False
     try:
-        with urllib.request.urlopen("http://127.0.0.1:%d/ferma" % port_for(profile_name), timeout=5) as r:
-            r.read()
-        return True
+        for path in ("/stop", "/ferma"):  # (/ferma: a translator started by an earlier version)
+            try:
+                with urllib.request.urlopen("http://127.0.0.1:%d%s" % (port_for(profile_name), path), timeout=5) as r:
+                    r.read()
+                return True
+            except urllib.error.HTTPError as ex:
+                if ex.code != 404:
+                    raise
+        return False
     except (OSError, ValueError):
         return False
 
@@ -100,7 +107,7 @@ def journal_path(profile_name):
 
 
 def read_journal(profile_name):
-    """The journal's lines (the old one's too, .1), oldest first: [{ts, text, outcome, risposta...}]. Unreadable lines
+    """The journal's lines (the old one's too, .1), oldest first: [{ts, text, outcome, response...}]. Unreadable lines
     (e.g. half written by a game closed abruptly) are skipped."""
     lines = []
     for path in (journal_path(profile_name) + ".1", journal_path(profile_name)):
@@ -191,7 +198,7 @@ def create_translator(name, log=print):
 
 
 def other_language(original, translated, origin, dest_lang):
-    """True if 'tradotto' is not a translation in the target language: empty, equal to the original, refused by the
+    """True if 'translated' is not a translation in the target language: empty, equal to the original, refused by the
     model, with another script or letters of another language, or with the frequent words of another language."""
     if set(translation_problems(original, translated, dest_lang)) & _UNTRANSLATED:
         return True
@@ -202,7 +209,7 @@ def other_language(original, translated, origin, dest_lang):
 
 class _NoClose:
     """The translator stays on between one line and the next: Project would close it at the end of each translation
-    (chiudi) and would make time estimates (stima), which are not needed for one line at a time. The service checks
+    (close) and would make time estimates (estimate), which are not needed for one line at a time. The service checks
     the pause before trying it."""
 
     def __init__(self, backend):
@@ -268,12 +275,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(url.query, keep_blank_values=True)
         if url.path == "/patchsmith":
             return self._reply(200, "patchsmith " + service.name)
-        if url.path == "/ferma":  # "Stop the game translator" in PatchSmith's window
+        if url.path in ("/stop", "/ferma"):  # "Stop the game translator" in PatchSmith's window (/ferma: before)
             service.log("Stopped from the PatchSmith window (phrases translated: %d)" % service.translated_count)
             service.closing.set()
             threading.Thread(target=service.httpd.shutdown, daemon=True).start()
             return self._reply(200, "ok")
-        if url.path == "/adotta":  # the game was reopened: from now on the new process is followed
+        if url.path in ("/adopt", "/adotta"):  # the game was reopened: from now on the new process is followed
             try:
                 service.pid = int(q["pid"][0])
             except (KeyError, ValueError):
@@ -316,14 +323,14 @@ class Service:
     def __init__(self, profile_path, port=None, pid=None, log=print, backend=None, test=False):
         self.project = Project(profile_path, log, test=test)
         # one line at a time during play: no second rounds (the other model would load the game's graphics card)
-        # and no problems.json; the journal records the rejected lines and they are re-translated with the game closed
+        # and no problemi.json; the journal records the rejected lines and they are re-translated with the game closed
         self.project.recovery = False
         self.name = self.project.profile["name"]
         self.port = port or port_for(self.name)
         self.pid = pid
         self.log = log
         self._backend = backend
-        self.chain = []  # [(nome, traduttore)] ready, in the order they are tried
+        self.chain = []  # [(name, translator)] ready, in the order they are tried
         self._lock = threading.Lock()
         self._journal_lock = threading.Lock()
         self._ready = threading.Event()
@@ -467,15 +474,14 @@ class Service:
         return 503, "closing"
 
     def adapt(self, response, a):
-        """The answer for XUnity without the characters the game's fonts cannot draw (profilo
-        ["missing_chars"], found by the after-play check): è -> e'. The translation memory and the journal keep
-        the real translation."""
+        """The answer for XUnity without the characters the game's fonts cannot draw (profile["missing_chars"],
+        found by the after-play check): è -> e'. The translation memory and the journal keep the real translation."""
         from .characters import adapt_without
         excluded = self.project.profile.get("missing_chars")
         return (adapt_without(response, set(excluded), a) or response) if excluded else response
 
     def _translate(self, text, src_lang, a):
-        """Tries the translators in a row; if they all reject the line, the fallback answer (see _rilassata)."""
+        """Tries the translators in a row; if they all reject the line, the fallback answer (see _relaxed)."""
         memory, p = self.project.memory, self.project
         answered, deferred, errors = [], [], []
         for _, translator in self.chain:
@@ -558,7 +564,7 @@ class Service:
     # --- journal -----------------------------------------------------------------------------------
 
     def record(self, text, src_lang, a, outcome, backend=None, reason="", response=None):
-        """A line in the journal of the requested lines (see percorso_diario)."""
+        """A line in the journal of the requested lines (see journal_path)."""
         line = {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "text": text, "from": src_lang, "to": a,
                 "outcome": outcome, "backend": backend, "reason": reason}
         if response is not None:
@@ -600,7 +606,7 @@ class Service:
                 if r.read().decode("utf-8", "replace") != "patchsmith " + self.name:
                     return False
             if self.pid:
-                with urllib.request.urlopen(base + "/adotta?pid=%d" % self.pid, timeout=5) as r:
+                with urllib.request.urlopen(base + "/adopt?pid=%d" % self.pid, timeout=5) as r:
                     r.read()
             return True
         except (OSError, ValueError):

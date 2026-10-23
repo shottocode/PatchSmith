@@ -25,7 +25,7 @@ import struct
 from . import unityfs
 
 _TABLE = re.compile(r"^localization-string-tables-.*\(([A-Za-z]{2,3}(?:-[A-Za-z]+)?)\)_.*\.bundle$", re.I)
-# fallback name: "localization-string-tables-<lingua>_assets_..." or "localization_<lingua>_assets_..."
+# fallback name: "localization-string-tables-<language>_assets_..." or "localization_<language>_assets_..."
 _LANGUAGE_NAME = re.compile(r"^locali[sz]ation[-_](?:string[-_]tables?[-_])?(.+?)_assets_.*\.bundle$", re.I)
 _CODE = re.compile(r"^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$", re.I)
 _ASSET_TABLES = re.compile(r"asset[-_]?tables?", re.I)  # asset tables (images, sounds): no texts
@@ -44,7 +44,7 @@ _LANGUAGE_NAMES = {
     "vietnamese": "vi", "indonesian": "id", "arabic": "ar", "hebrew": "he", "bulgarian": "bg", "slovak": "sk",
 }
 MAX_CONTENT_BUNDLE = 64 * 1024 * 1024  # larger bundles are not opened to recognize their language
-_CACHE = {}  # (percorso, dimensione, data) -> language code (or None): a bundle is read only once
+_CACHE = {}  # (path, size, date) -> language code (or None): a bundle is read only once
 
 
 def _skipped_folders(name):
@@ -52,7 +52,7 @@ def _skipped_folders(name):
 
 
 def _localization_bundle(folder):
-    """[percorso] of the bundles with 'locali' in the name (Unity Localization), except the asset tables."""
+    """[path] of the bundles with 'locali' in the name (Unity Localization), except the asset tables."""
     found = []
     for root, dirs, files in os.walk(folder):
         dirs[:] = [d for d in dirs if not _skipped_folders(d)]
@@ -83,8 +83,8 @@ def _table_texts(s, o):
 
 
 def _content_language(path_or_data):
-    """(leggibile, codice): the language code (m_LocaleId) of the bundle's text tables, or None if it has no tables
-    with texts (asset tables, the Locales, tables without the field trees); leggibile=False if the bundle cannot be
+    """(readable, code): the language code (m_LocaleId) of the bundle's text tables, or None if it has no tables
+    with texts (asset tables, the Locales, tables without the field trees); readable=False if the bundle cannot be
     opened (too large, damaged, not UnityFS)."""
     try:
         if isinstance(path_or_data, (bytes, bytearray)):
@@ -115,7 +115,7 @@ def _content_language(path_or_data):
 
 
 def bundle_language(path_or_data):
-    """The language code (m_LocaleId) of the bundle's text tables, or None (see _lingua_contenuto)."""
+    """The language code (m_LocaleId) of the bundle's text tables, or None (see _content_language)."""
     return _content_language(path_or_data)[1]
 
 
@@ -151,7 +151,7 @@ def _language(path):
 
 
 def table_bundles(folder):
-    """{codice lingua: [percorsi relativi]} of all the bundles with text tables (Unity Localization), including
+    """{language code: [relative paths]} of all the bundles with text tables (Unity Localization), including
     several bundles for the same language (tables packed separately)."""
     matches = {}
     for path in _localization_bundle(folder):
@@ -163,7 +163,7 @@ def table_bundles(folder):
 
 
 def tables_by_content(folder):
-    """{codice lingua: percorso relativo} of the bundles with text tables: the code from the name ("(en)"),
+    """{language code: relative path} of the bundles with text tables: the code from the name ("(en)"),
     otherwise from the contents (m_LocaleId), otherwise from the language name (e.g. "english", "italiano", "en")."""
     return {c: p[0] for c, p in table_bundles(folder).items()}
 
@@ -188,9 +188,9 @@ _CRC = re.compile(r'("m_Crc"\s*:\s*)(\d+)')
 
 
 def _opts(catalog_bytes, names):
-    """(dati extra, [(inizio, fine, codifica)]): where, in the catalog's extra data (m_ExtraDataString), the options
-    (AssetBundleRequestOptions, JSON text) of the bundles with these file names are. The catalog's entries
-    (m_EntryDataString, 7 integers each) say which id (the bundle's path) uses which extra data."""
+    """(extra data, [(name, start, end, encoding)]): where, in the catalog's extra data (m_ExtraDataString), the
+    options (AssetBundleRequestOptions, JSON text) of the bundles with these file names are. The catalog's
+    entries (m_EntryDataString, 7 integers each) say which id (the bundle's path) uses which extra data."""
     data = json.loads(catalog_bytes.decode("utf-8-sig"))
     m = _EXTRA.search(catalog_bytes)
     extra = base64.b64decode(data["m_ExtraDataString"])
@@ -239,7 +239,7 @@ def _record_bin(catalog_bytes, bundle_name):
     In catalog.bin the options of each bundle (AssetBundleRequestOptions) are a record of 5 32-bit numbers: position
     of the Hash128 fingerprint (16 bytes), position of the bundle's name (a string with its length in the 4 bytes
     before it), CRC, size, position of the common data. The fingerprint is the one written in the name of the
-    bundle's entry ("<nome>_<32 cifre esadecimali>.bundle"): from there the record is found. Each fingerprint must
+    bundle's entry ("<name>_<32 hex digits>.bundle"): from there the record is found. Each fingerprint must
     lead to a single record."""
     root = re.escape(os.path.splitext(bundle_name)[0].encode("utf-8"))
     fingerprints = set(re.findall(rb"(?<![^\x00-\x20/\\])" + root + rb"_([0-9a-f]{32})\.bundle", catalog_bytes))
@@ -267,7 +267,7 @@ def _record_bin(catalog_bytes, bundle_name):
 
 
 def bundle_crc(bundle_path, read_from=None):
-    """(stato, catalogo): how the Addressables catalog checks this bundle (read only).
+    """(state, catalog): how the Addressables catalog checks this bundle (read only).
     'absent': no catalog; 'binary': catalog.bin in which the bundle cannot be found with certainty; 'checked':
     its CRC is not 0 (it must be removed from the catalog to rewrite the bundle); 'unlocked': CRC 0; 'unknown': the
     catalog cannot be read or does not name the bundle. read_from: another file to read the catalog from (e.g. its
@@ -365,7 +365,7 @@ def checked_crc(bundle_path):
 # --- text tables --------------------------------------------------------------------------------------------------
 
 class TablesFile:
-    """A bundle's text tables: texts() to translate and serialize(traduzioni) to rewrite it. The asset tables
+    """A bundle's text tables: texts() to translate and serialize(translations) to rewrite it. The asset tables
     (entries that are references, not texts) stay as they are."""
 
     def __init__(self, path_or_data):
@@ -403,11 +403,11 @@ class TablesFile:
                 self._units += units
 
     def texts(self):
-        """[(posizione, testo)] of the tables' texts."""
+        """[(position, text)] of the tables' texts."""
         return list(self._units)
 
     def serialize(self, translations):
-        """The bundle with the translated texts ({posizione: text}), not compressed."""
+        """The bundle with the translated texts ({position: text}), not compressed."""
         by_file = {}
         for (name, path_id, start, end), text in translations.items():
             by_file.setdefault(name, {}).setdefault(path_id, {})[(start, end)] = text

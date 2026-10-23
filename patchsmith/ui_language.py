@@ -11,7 +11,7 @@ retranslate() puts the ones already shown back in the new language without reope
 
 To add a language: the command line command "interface --create fr" (translates all the texts with the local
 translator; those already in the file stay) and then review the file patchsmith/ui_language/fr.json by hand. The flag
-is described with stripes ({"vertical": [colori]} or {"horizontal": [colori]}) or with a 24x16 PNG image next to
+is described with stripes ({"vertical": [colors]} or {"horizontal": [colors]}) or with a 24x16 PNG image next to
 the file ({"file": "fr.png"}).
 """
 import ast
@@ -25,7 +25,7 @@ from . import legacy
 FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_language")
 SOURCE = "en"
 ENGLISH = {"name": "English", "flag": {"kind": "gb"}}
-# placeholders of the program's texts: %s, %d, %5.1f, %r, %(nome)s, %%
+# placeholders of the program's texts: %s, %d, %5.1f, %r, %(name)s, %%
 _MARKER = re.compile(r"%(?:\([^)]*\))?[-+ #0]*(?:\d+)?(?:\.\d+)?[sdrifxXceEgG%]")
 # what each placeholder matches in a line already written
 _VALUE = {"d": r"-?\d[\d.,']*", "i": r"-?\d[\d.,']*", "f": r"-?[\d.,]+", "x": r"[0-9a-fA-F]+", "%": r"%"}
@@ -103,7 +103,7 @@ def current():
 # --- translation -----------------------------------------------------------------------------------------------------
 
 def _template_regex(key):
-    """(regex, segni) of an entry with placeholders, or None if it has none."""
+    """(regex, markers) of an entry with placeholders, or None if it has none."""
     markers = _MARKER.findall(key)
     if not markers:
         return None
@@ -166,7 +166,7 @@ def _translate_core(text, depth=0):
         return t
     models = _models()
     # among the templates that start like the text, the one with more fixed text wins (the most precise), not the one
-    # with the longest start: "%s: interfaccia, %d testi tradotti..." beats "index.html: %s"
+    # with the longest start: "%s: interface, %d texts translated..." beats "index.html: %s"
     best = None
     for start in [text[:n] for n in range(min(6, len(text)), -1, -1)]:
         for verbatim, regex, markers, translation in models.get(start, ()):
@@ -190,13 +190,13 @@ def _translate_core(text, depth=0):
         return text
     _verbatim, m, markers, translation = best
     values = list(m.groups())
-    if depth < 2:  # the pieces of text inside (e.g. " (387 da altri giochi)"): translated too
+    if depth < 2:  # the pieces of text inside (e.g. " (387 from other games)"): translated too
         values = [_translate_piece(v, depth + 1) if s[-1] in "sr" else v for s, v in zip(markers, values)]
     return _fill(translation, markers, values)
 
 
 def _by_sentences(text):
-    """The text split into sentences ("... evitano. Una frase con..."), translated in groups: from the start, the
+    """The text split into sentences ("... avoided. A sentence with..."), translated in groups: from the start, the
     longest group of consecutive sentences that is in the file (an entry can have several sentences); the sentences
     that are not there stay as they were."""
     parts = re.split(r"(?<=[.!?])( +)(?=[A-ZÀ-Ý\"«(\d])", text)
@@ -244,18 +244,19 @@ _VARIABLES = weakref.WeakSet()  # the TextVar objects, to translate again when t
 
 
 def _remember(widget, cnf):
-    """The original (English) texts given to the widget, to translate them again if the language changes (ritraduci)."""
+    """The original (English) texts given to the widget, to translate them again if the language changes
+    (retranslate)."""
     if not isinstance(cnf, dict):
         return
     for k in _TEXT_OPTIONS + ("values",):
         v = cnf.get(k)
         if isinstance(v, str) or k == "values" and isinstance(v, (list, tuple)):
-            widget.__dict__.setdefault("_patchsmith_testi", {})[k] = v
+            widget.__dict__.setdefault("_patchsmith_texts", {})[k] = v
 
 
 def hook_tk():
     """The texts given to Tkinter (buttons, labels, menus, window titles, values of drop-down menus) go through
-    translate() and stay remembered in the widget (ritraduci). Only once; with English nothing changes."""
+    translate() and stay remembered in the widget (retranslate). Only once; with English nothing changes."""
     import tkinter
     if getattr(tkinter.Misc, "_patchsmith_language", False):
         return
@@ -305,7 +306,7 @@ def retranslate(root):
     import tkinter
 
     def visit(w):
-        for option_name, original in list(getattr(w, "_patchsmith_testi", {}).items()):
+        for option_name, original in list(getattr(w, "_patchsmith_texts", {}).items()):
             try:
                 w.configure(**{option_name: original})
             except tkinter.TclError:  # not an option of the widget (e.g. a menu entry): leave it alone
@@ -326,7 +327,7 @@ def retranslate(root):
 
 def TextVar(*args, **kw):
     """A StringVar for the texts shown (status lines): what is written goes through translate() (and stays remembered,
-    for ritraduci)."""
+    for retranslate)."""
     import tkinter
 
     class _TextVar(tkinter.StringVar):
@@ -382,7 +383,7 @@ def flag(code, master=None):
     return img
 
 
-# --- creating a language (command "interface --create <codice>") -----------------------------------------------------
+# --- creating a language (command "interface --create <code>") -------------------------------------------------------
 
 def _looks_like_text(s):
     """A text for the program's user (not an internal name, a path, a regex...)."""
@@ -398,8 +399,8 @@ def _looks_like_text(s):
                  r"|^#|==|^if .*:$|^for \w+ in .+:$|^[a-z_][\w.]* = |\b[a-z_]\w*\.[a-z_]\w*\("
                  r"|(?<![\w%])_[a-z]\w*", core):
         return False  # code (e.g. the script for Godot) or regular expressions
-    if re.match(r"[A-Z][a-z]+=\S", core):
-        return False  # a line of a configuration file (Program=...)
+    if re.match(r"[A-Z][a-z]+=\S", core) or re.fullmatch(r"[a-z][\w-]*:", core):
+        return False  # a line of a configuration file (Program=...), the prefix of a signal (removed:)
     if re.search(r"\w\|\w", core):
         return False  # alternatives of a regular expression (a|b)
     words = core.split()
@@ -437,7 +438,7 @@ def program_texts(folder=None):
 
 
 def create_language(code, name, translator, log=print, flag_info=None, maximum=None):
-    """Creates or completes patchsmith/ui_language/<codice>.json by translating with 'translator' (e.g. backend.Local)
+    """Creates or completes patchsmith/ui_language/<code>.json by translating with 'translator' (e.g. backend.Local)
     the program's texts that are missing; those already in the file (also fixed by hand) stay. Returns how many it
     added."""
     from .backend import BackendError

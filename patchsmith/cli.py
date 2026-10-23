@@ -40,7 +40,7 @@ def _translate_help(parser):
 
 def _profile(value_):
     """Accepts a game profile path or just the name (looked up in profiles/). A path that no longer exists (e.g.
-    profili\\<gioco>.json, the former name of the folder, written in the translator's command inside an already
+    profili\\<game>.json, the former name of the folder, written in the translator's command inside an already
     translated game) counts for its name."""
     if os.path.isfile(value_):
         return value_
@@ -259,7 +259,7 @@ def cmd_services(a):
 def cmd_xunity_service(a):
     """Translator of new lines for XUnity (started by the PatchSmith plugin when the game starts, without a
     window): writes to components/ollama/servizio-xunity.log; the requested lines go into the journal
-    memory/<gioco>.requests.jsonl."""
+    memory/<game>.richieste.jsonl."""
     import datetime
     from . import ollama, xunity_service
     log_file = os.path.join(ollama.folder(), "servizio-xunity.log")
@@ -311,7 +311,7 @@ def cmd_local(a):
 
 
 def cmd_interface(a):
-    """Interface languages: list, or --create <codice> to translate the program's texts with the local translator
+    """Interface languages: list, or --create <code> to translate the program's texts with the local translator
     (those already in the file stay: fixes made by hand are not lost)."""
     if not a.create:
         for code, info in ui.languages().items():

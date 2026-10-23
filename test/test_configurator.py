@@ -135,8 +135,8 @@ def main(base, real_game=None):
     path, outcome = automatic.prepare(outer, "auto", "it", "fake", silent)
     check("senza consenso: proposta, nessun file toccato",
               path is None and outcome.get("needs_consent") and fingerprints(game) == originals
-              and any("1 byte" in x and game in x for x in outcome["lingua_ufficiale_righe"])
-              and not any("I can't set it myself" in x for x in outcome["lingua_ufficiale_righe"]))
+              and any("1 byte" in x and game in x for x in outcome["official_language_lines"])
+              and not any("I can't set it myself" in x for x in outcome["official_language_lines"]))
     fake = dict(r, steam_known={"appid": "1", "name": "x", "executable": "x.exe"})
     check("messaggio: se la scheda spiega il rifiuto, niente 'Non posso impostarla io' contraddittorio",
               not any("I can't" in x for x in official_language.message(fake, "it", ["motivo e rimedio"], False)))
@@ -193,14 +193,14 @@ def main(base, real_game=None):
               configurator.has_consent(game) and configurator.lever(game, "language")["state"] == "applied"
               and os.path.isdir(str(configurator.note(game, "saves_copied"))))
     check("messaggio: attivata, senza 'Non posso impostarla io' e senza 'traduzione installata'",
-              any("I activated" in x for x in outcome["lingua_ufficiale_righe"])
-              and not any("I can't" in x for x in outcome["lingua_ufficiale_righe"])
-              and not outcome.get("traduzione_installata"))
+              any("I activated" in x for x in outcome["official_language_lines"])
+              and not any("I can't" in x for x in outcome["official_language_lines"])
+              and not outcome.get("translation_installed"))
     after = fingerprints(game)
     path, outcome = automatic.prepare(game, "auto", "it", "fake", silent)
     check("seconda analisi: gia' attivo, niente riscritto",
               outcome.get("language_set") is True and fingerprints(game) == after
-              and any("already active" in x for x in outcome["lingua_ufficiale_righe"]))
+              and any("already active" in x for x in outcome["official_language_lines"]))
 
     # --- game update: an executable goes back to original but different; with the saved consent it is reapplied
     new = fake_pe(signature=b"versione 2")
@@ -334,7 +334,7 @@ def main(base, real_game=None):
     path, outcome = automatic.prepare(two_copies, "auto", "it", "fake", silent, consent=True)
     check("due copie del gioco nella cartella: nessuna modifica, chiede di sceglierne una",
               outcome.get("language_set") is False
-              and any("2 copies" in x for x in outcome["lingua_ufficiale_righe"])
+              and any("2 copies" in x for x in outcome["official_language_lines"])
               and all(fingerprints(os.path.join(two_copies, d)) == before[d] for d in before))
 
     import test_official_language as plu
@@ -357,7 +357,7 @@ def main(base, real_game=None):
     path, outcome = automatic.prepare(shared, "auto", "it", "fake", silent, consent=True)
     steam.steam_folder = lambda: None
     check("installato da Steam (scelta la cartella sopra): menu Lingua di Steam, eseguibili non toccati",
-              any("Properties > General > Language" in x for x in outcome.get("lingua_ufficiale_righe", []))
+              any("Properties > General > Language" in x for x in outcome.get("official_language_lines", []))
               and fingerprints(os.path.join(shared, "KH Steam")) == before)
 
     # --- an executable of an unknown version: none is modified

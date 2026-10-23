@@ -5,7 +5,7 @@ because the same string can also act as an identifier. So this adapter does NOT 
 code:
   1. it statically extracts the readable strings from the .js/.html files of the web folder (one-word buttons
      too, PLAY, OK, quit, when they are certainly visible: HTML text, el.textContent = "...", fillText...);
-  2. after the translation it generates patchsmith-translation.js, with the dictionary {English: Italian};
+  2. after the translation it generates patchsmith-traduzione.js, with the dictionary {English: Italian};
   3. it adds to index.html a single <script> tag that, while the game runs, replaces the DISPLAYED
      texts (text nodes, title/placeholder/aria-label/alt, text drawn on canvas) that exactly
      match a dictionary entry.
@@ -38,7 +38,7 @@ _CONDITION_WORDS = {"if", "while", "for", "with"}
 # --- reading the strings from the JavaScript ----------------------------------------------
 
 def _string_end(code, i):
-    """codice[i] is ' or ". Index right after the closing quote (or the end of the line)."""
+    """code[i] is ' or ". Index right after the closing quote (or the end of the line)."""
     q, j, n = code[i], i + 1, len(code)
     while j < n and code[j] != q and code[j] != "\n":
         j += 2 if code[j] == "\\" else 1
@@ -46,7 +46,7 @@ def _string_end(code, i):
 
 
 def _read_template(code, i):
-    """codice[i] is `. Returns (index after the closing backtick, fixed text pieces)."""
+    """code[i] is `. Returns (index after the closing backtick, fixed text pieces)."""
     n, j, pieces, piece = len(code), i + 1, [], []
     while j < n:
         d = code[j]
@@ -85,7 +85,7 @@ def _read_template(code, i):
 
 
 def _regex_end(code, i):
-    """codice[i] is / at the start of a regex. Index after the flags, or None if it does not look like a regex."""
+    """code[i] is / at the start of a regex. Index after the flags, or None if it does not look like a regex."""
     j, n, class_ = i + 1, len(code), False
     limit = min(n, i + MAX_REGEX)
     while j < limit:
@@ -119,7 +119,7 @@ _UI_KEYS = {"text", "label", "title", "caption", "tooltip", "placeholder", "mess
 
 
 def _ui_context(history, brackets):
-    """True if the string that follows the tokens 'storia' (the last three: (tipo, valore)) is an interface text."""
+    """True if the string that follows the tokens 'history' (the last three: (type, value)) is an interface text."""
     recent = [None] * (3 - len(history)) + list(history)
     if recent[2] == ("punct", "=") and recent[0] == ("punct", ".") and recent[1] and recent[1][0] == "word" \
             and recent[1][1] in _UI_PROPERTIES:
@@ -137,7 +137,7 @@ def js_literals(code, context=False):
     so quotes inside a regex or a comment do not confuse the extraction.
     A "/" is a regex only where an expression can start (after operators, '(', ',', words
     like return/typeof, the ')' of if/while/for), otherwise it is a division.
-    contesto=True: pairs (string, interface), with interface True if the string is certainly a shown text
+    context=True: pairs (string, interface), with interface True if the string is certainly a shown text
     (see _ui_context).
     """
     i, n = 0, len(code)
@@ -145,7 +145,7 @@ def js_literals(code, context=False):
     last = ""  # last significant character
     word_before = None  # last word read, if it is the last token
     brackets = []  # for each open '(': "condition" (if/while/for/with), "ui" (see _UI_FUNCTIONS) or None
-    history = collections.deque(maxlen=3)  # the last three tokens: (tipo, valore)
+    history = collections.deque(maxlen=3)  # the last three tokens: (type, value)
     while i < n:
         c = code[i]
         if c.isspace():

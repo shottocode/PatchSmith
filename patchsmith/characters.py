@@ -14,7 +14,7 @@ ASCII = frozenset(chr(c) for c in range(32, 127))  # the characters of the defau
 
 # Italian: first the acute accent (similar), then the apostrophe (as typed on a typewriter)
 _ACUTE_IT = {"\u00ec": "\u00ed", "\u00f2": "\u00f3", "\u00f9": "\u00fa",
-             "\u00cc": "\u00cd", "\u00d2": "\u00d3", "\u00d9": "\u00da"}  # i o u gravi -> acuti
+             "\u00cc": "\u00cd", "\u00d2": "\u00d3", "\u00d9": "\u00da"}  # grave i o u -> acute
 _APOSTROPHE_IT = {"à": "a'", "è": "e'", "é": "e'", "ì": "i'", "í": "i'", "ò": "o'", "ó": "o'", "ù": "u'", "ú": "u'",
                  "À": "A'", "È": "E'", "É": "E'", "Ì": "I'", "Ò": "O'", "Ù": "U'"}
 PUNCTUATION = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u00ab": '"', "\u00bb": '"',
@@ -36,8 +36,8 @@ def typical_letters(target_lang):
 
 class Filter:
     """The characters that can be written, without copying large sets (CJK fonts have tens of thousands of them): for
-    adapt_chars 'c in ammessi' is enough. Those of 'base' (None: all), plus those of the original text ('aggiunti':
-    the game already shows them), except the 'esclusi' (the ones the game said it cannot draw, see checks.py: they
+    adapt_chars 'c in allowed' is enough. Those of 'base' (None: all), plus those of the original text ('added':
+    the game already shows them), except the 'excluded' (the ones the game said it cannot draw, see checks.py: they
     apply even if the original has them)."""
 
     def __init__(self, base=None, excluded=(), added=()):
@@ -50,7 +50,7 @@ class Filter:
 
 
 def adapt_without(text, excluded, target_lang):
-    """The text without the 'esclusi' characters (the ones the game said it cannot draw), replaced only with ASCII
+    """The text without the 'excluded' characters (the ones the game said it cannot draw), replaced only with ASCII
     characters (è -> e', ò -> o': for the other accented characters it is not known whether the font has them), the
     text itself if it has none, None if one cannot be replaced (e.g. an emoji)."""
     if not excluded or not isinstance(text, str) or not any(c in excluded for c in text):
@@ -75,7 +75,7 @@ def undrawable(text, allowed, target_lang):
 
 
 def adapt_chars(text, allowed, target_lang):
-    """Text that uses only drawable characters (ammessi=None: no limit). None if impossible."""
+    """Text that uses only drawable characters (allowed=None: no limit). None if impossible."""
     if allowed is None:
         return text
     italian = target_lang.split("-")[0] == "it"

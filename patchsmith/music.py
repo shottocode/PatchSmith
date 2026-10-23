@@ -1,4 +1,4 @@
-"""PatchSmith's 8-bit style background music ("Miniera"), written here like a score and played by the program.
+"""PatchSmith's 8-bit style background music ("Mine"), written here like a score and played by the program.
 
 Four channels like a NES console: melody, arpeggio (square wave, soft), bass (triangle wave) and drums (noise and a
 falling triangle hit). Notes are written in eighth-note steps: "E5:2" is an E of the fifth octave two eighths long,
@@ -39,7 +39,7 @@ def _read(line):
 
 
 def _channel(length, notes, step, play):
-    """Samples (float) of a channel: 'suona(campioni, inizio, quanti, frequenza)' writes each note."""
+    """Samples (float) of a channel: 'play(samples, start, count, frequency)' writes each note."""
     samples = [0.0] * length
     position = 0.0
     for note, steps in notes:
@@ -75,7 +75,7 @@ def _triangle(volume):
 
 
 def _drums(length, rhythm, step, measures, volume):
-    """Drums: ritmo is a bar of 8 steps ('k' kick, 's' snare, 'h' hi-hat, '.' nothing)."""
+    """Drums: rhythm is a bar of 8 steps ('k' kick, 's' snare, 'h' hi-hat, '.' nothing)."""
     samples = [0.0] * length
     rng = random.Random(7)
     for measure in range(measures):
@@ -132,7 +132,7 @@ def _wav(samples, bit=8):
 
 def _track(tempo, chords, melody, low, rhythm, sixteenths=False, melody_duty=0.25, melody_shape="square",
            echo=None, arpeggio_octave=4, arpeggio_volume=0.16, drums_volume=0.5):
-    """The track as WAV: eco = (delay steps, volume) on the melody, which "wraps around" the track (at the end of the
+    """The track as WAV: echo = (delay steps, volume) on the melody, which "wraps around" the track (at the end of the
     loop the echo continues at the start: no gap when it starts again)."""
     step = 60.0 / tempo / 2  # an eighth
     measures = len(chords)
@@ -153,7 +153,7 @@ def _track(tempo, chords, melody, low, rhythm, sixteenths=False, melody_duty=0.2
 
 
 def mine():
-    """D, "Miniera": E minor, 76 beats per minute, the slowest and barest; triangle melody with a long echo."""
+    """D, "Mine": E minor, 76 beats per minute, the slowest and barest; triangle melody with a long echo."""
     chords = ["Em", "C", "Am", "B"] * 2 + ["Am", "Em", "C", "B", "Am", "Em", "B", "B"]
     melody = """B4:4 G4:2 E4:2   E4:4 G4:2 C5:2   A4:6 E4:2   F#4:4 D#4:4
                  E4:2 G4:2 B4:2 E5:2   D5:3 C5:1 G4:4   A4:2 C5:2 B4:2 A4:2   B4:6 r:2
@@ -208,7 +208,7 @@ def prepare(track="mine"):
 
 
 def launch(track="mine"):
-    """Starts the track in a loop without blocking the window (in a thread: if it is not ready yet, see prepara, it
+    """Starts the track in a loop without blocking the window (in a thread: if it is not ready yet, see prepare, it
     starts as soon as it is). Without waveOut (not Windows) or without an audio output nothing plays."""
     _state["wanted"] = True
     threading.Thread(target=_prepare_and_play, args=(track,), daemon=True).start()

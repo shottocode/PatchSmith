@@ -65,7 +65,7 @@ def http_error(code, body=b"", url="https://translate.googleapis.com/x", header=
 
 
 class Opener:
-    """Fake urlopen: each call uses the function 'risposta(req)' and counts the requests."""
+    """Fake urlopen: each call uses the function 'response(req)' and counts the requests."""
 
     def __init__(self, response, clock=None):
         self.response = response
@@ -361,7 +361,7 @@ def main(base):
     p.log = lines.append
     p.translate_texts(texts, backend.GoogleFree(log=silent, opener=opener, limiter=lim), "en", "it")
     check("progetto: gruppi da una richiesta ciascuno (circa 3.600 caratteri), stima mostrata prima",
-              # ("  testi " lines: detail, only on disk)
+              # ("  texts " lines: detail, only on disk)
               len(opener.requests) == len([r for r in lines if r.lstrip("").startswith("  texts ")])
               and all(len(urllib.parse.parse_qs(r.data.decode())["q"][0]) <= 4000 for r in opener.requests)
               and any("Expected requests" in r and "estimated time" in r for r in lines))

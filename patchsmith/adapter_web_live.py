@@ -3,10 +3,10 @@ in clear text: the texts are translated while the game runs, in its page, as XUn
 
 PatchSmith neither opens nor changes the encrypted file: it appends to preload.js (with a verified backup, which
 "Restore originals" puts back) the injector_live.js script, which
-- translates the page's texts with patchsmith-dictionary.json (the translations already made, from the game's
+- translates the page's texts with patchsmith-dizionario.json (the translations already made, from the game's
   translation memory);
 - asks PatchSmith's translator for new sentences (xunity_service: the same service as for Unity games, on
-  127.0.0.1, started by preload.js with the command in patchsmith-alive.json and closed with the game), which saves
+  127.0.0.1, started by preload.js with the command in patchsmith-vivo.json and closed with the game), which saves
   them to the translation memory.
 
 It needs a preload.js that runs in the page with Node: in Electron's main.js contextIsolation:false and
@@ -75,7 +75,7 @@ def _command(profile_path, profile_name):
 
 def install(folder, profile_path, profile_name, src_lang, a, translations, log=print, active=True):
     """Adds (or updates) the script in preload.js and writes the dictionary and the translator's command.
-    attivo=False: no translator while playing (only the dictionary's translations). Returns the number of
+    active=False: no translator while playing (only the dictionary's translations). Returns the number of
     translations."""
     from . import project
     preload = suitable(folder)

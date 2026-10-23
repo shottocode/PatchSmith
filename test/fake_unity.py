@@ -171,8 +171,8 @@ def _kind(class_, tree, trees):
 
 
 def serialized_file(objects, trees=True, unity_version="2022.3.62f2"):
-    """Serialized file (version 22) with the objects [(classe, albero, byte)]: one type for each (classe, albero);
-    alberi=False like the files of <gioco>_Data (without the type trees)."""
+    """Serialized file (version 22) with the objects [(class, tree, bytes)]: one type for each (class, tree);
+    trees=False like the files of <game>_Data (without the type trees)."""
     kinds, indices = [], {}
     for class_, tree, _ in objects:
         key = (class_, id(tree))
@@ -198,7 +198,7 @@ def serialized_file(objects, trees=True, unity_version="2022.3.62f2"):
 
 
 def font_file(font_tmp=(), font_ttf=(), trees=True):
-    """Serialized file with the TextMeshPro fonts [(nome, caratteri, modo)] and the .ttf fonts [(nome, caratteri)]."""
+    """Serialized file with the TextMeshPro fonts [(name, chars, mode)] and the .ttf fonts [(name, chars)]."""
     objects = [(114, _TMP_FONT_TREE, tmp_font_data(*f)) for f in font_tmp]
     objects += [(128, _FONT_TREE, font_data(name, ttf(chars))) for name, chars in font_ttf]
     return serialized_file(objects, trees)
@@ -224,7 +224,7 @@ def _lzma(b):
 
 
 def bundle(nodes, compression=None, block=1 << 17, unity_version="2022.3.62f2"):
-    """UnityFS AssetBundle (version 7) with the internal files [(nome, byte)]; compression None, 'lz4' or 'lzma'."""
+    """UnityFS AssetBundle (version 7) with the internal files [(name, bytes)]; compression None, 'lz4' or 'lzma'."""
     data = b"".join(b for _, b in nodes)
     blocks, body = [], b""
     for i in range(0, max(len(data), 1), block):

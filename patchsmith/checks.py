@@ -3,8 +3,8 @@ on their own. It starts on its own when PatchSmith opens (for games with new sig
 button (the lines to redo) and from the command line ("check" command).
 
 Signals read (read only):
-- Unity: the Crash_* folders in %TEMP%\\<azienda>\\<prodotto>\\Crashes, Player.log and Player-prev.log in
-  %USERPROFILE%\\AppData\\LocalLow\\<azienda>\\<prodotto> (company and product from <gioco>_Data/app.info),
+- Unity: the Crash_* folders in %TEMP%\\<company>\\<product>\\Crashes, Player.log and Player-prev.log in
+  %USERPROFILE%\\AppData\\LocalLow\\<company>\\<product> (company and product from <game>_Data/app.info),
   BepInEx/LogOutput.log, the configuration of BepInEx, of XUnity and of PatchSmith's translator, the state written by
   the plugin, the journal of the lines translated while playing (xunity_service) and the log of the live translator.
   The LocalLow and %TEMP% folders are the same for all copies of a game: a log counts only if it belongs to THIS
@@ -18,7 +18,7 @@ this check).
 
 Rules for automatic fixes (Problem.safe):
 - only with the game closed (system.game_open): with the game open they are postponed to the next check;
-- only once per signal: every attempt is kept in profiles/<nome>.checks.json (not <nome>.state.json, which
+- only once per signal: every attempt is kept in profiles/<name>.controllo.json (not <name>.stato.json, which
   project.py deletes as a file of versions 0.1-0.2); if the problem comes back, it stays "to do";
 - reversible: they change only PatchSmith's files (BepInEx and XUnity configuration, plugin, translation cache,
   translation memory) or put back the saved translations (like "Reapply"); "Restore originals" removes everything
@@ -48,7 +48,7 @@ from .backend import BackendError, create_backend
 from .outcome import Outcome
 from .project import INFO_SUFFIXES, _has_tag, _hash_file, read_info, memory_path
 
-STATE_SUFFIX = ".controllo.json"  # profiles/<nome>.checks.json (automatic.list_profiles skips it)
+STATE_SUFFIX = ".controllo.json"  # profiles/<name>.controllo.json (automatic.list_profiles skips it)
 SEVERITIES = ("error", "warning", "info")
 # state of a problem after the check: fixed on its own, fix failed, fix already tried for the same signal (the
 # problem came back), postponed (game open), to do (the user is needed), to fix (read only: it would be fixed on its
@@ -86,13 +86,13 @@ class CheckError(Exception):
 
 @dataclass
 class Problem:
-    """codice: the type (e.g. STARTUP_CRASH, LIVE, RESTORED_BY_GAME). gravita: errore/avviso/info. messaggio:
-    a sentence for the player. rimedio: the fix (function without arguments; returns a sentence, (riuscito, frase) or
-    (riuscito, frase, action to offer if it is still to do)), or None. sicuro: the fix starts on its own (with the
-    game closed, once per signal). segnale: what found it (a crash folder, a log with its date...): the same fix for
-    the same signal is not repeated. azione: the interface button if it is still to do (outcome.ACTIONS). chiave: fixes
+    """code: the type (e.g. STARTUP_CRASH, LIVE, RESTORED_BY_GAME). severity: error/warning/info. message:
+    a sentence for the player. remedy: the fix (function without arguments; returns a sentence, (success, sentence) or
+    (success, sentence, action to offer if it is still to do)), or None. safe: the fix starts on its own (with the
+    game closed, once per signal). signal: what found it (a crash folder, a log with its date...): the same fix for
+    the same signal is not repeated. action: the interface button if it is still to do (outcome.ACTIONS). key: fixes
     with the same key are made only once (e.g. 'reconfigure' fixes configuration, version and live translator
-    together). stato and dettaglio: how it went (STATES)."""
+    together). state and detail: how it went (STATES)."""
     code: str
     severity: str
     message: str
@@ -113,15 +113,15 @@ class Problem:
         return output
 
 
-# --- check state (profiles/<nome>.checks.json) -----------------------------------------------------------
+# --- check state (profiles/<name>.controllo.json) --------------------------------------------------------
 
 def state_path(profile_path):
     return os.path.splitext(os.path.abspath(profile_path))[0] + STATE_SUFFIX
 
 
 def read_state(profile_path):
-    """{ultimo_controllo, visti: {signal: value}, rimedi: {key: [{signal, when, ts, success, detail}]},
-    journal_until, entrypoint_forzato, ultimo: {when, fixed_count, to_do, problems}}; empty if missing."""
+    """{last_check, seen: {signal: value}, remedies: {key: [{signal, when, ts, success, detail}]},
+    journal_until, forced_entrypoint, last: {when, fixed_count, to_do, problems}}; empty if missing."""
     try:
         with open(state_path(profile_path), encoding="utf-8") as f:
             data = legacy.load(f)
@@ -155,7 +155,7 @@ def _mtime(path):
 
 
 def _read(path, maximum=MAX_BYTES):
-    """A log (text), or "" if it cannot be read. If it is larger than 'massimo', the start (MAX_HEAD: that is where
+    """A log (text), or "" if it cannot be read. If it is larger than 'maximum', the start (MAX_HEAD: that is where
     "Mono path[0]" and "Chainloader startup complete" are) and the end (the last errors and the crash) are read: a
     long play session with many warnings must not look like a crash at startup, nor like a log of another copy of the
     game."""
@@ -215,7 +215,7 @@ class _Context:
         self.log = log
         self.apply = apply
         self.translator = translator
-        self.retranslate = retranslate  # re-translate the journal's provisional lines now (see controlla)
+        self.retranslate = retranslate  # re-translate the journal's provisional lines now (see check)
         self.events = events  # Windows crashes already read (None: they are read if needed)
         self._is_open = None
         self.reference = 0.0
@@ -265,7 +265,7 @@ def unity_logs(folder):
 
 def of_this_copy(text, folder):
     """True if the Unity log belongs to this copy of the game, False if to another one, None if unknown. It looks at
-    'Mono path[0]' (<gioco>/<exe>_Data/Managed), 'Discovering subsystems at path' (<gioco>/<exe>_Data/
+    'Mono path[0]' (<game>/<exe>_Data/Managed), 'Discovering subsystems at path' (<game>/<exe>_Data/
     UnitySubsystems: also in IL2CPP games) or, in crash logs, 'Symbol-SearchPath'."""
     m = re.search(r"^Mono path\[0\] = '([^']*)'", text, re.M)
     if m:
@@ -641,7 +641,7 @@ def _verify_unity(c):
             "MISSING_FILES", "error", "%d translation files are missing from the game (e.g. %s): maybe the antivirus "
                                        "removed them. I'm putting them back." % (len(missing), missing[0]),
             remedy=lambda: _reconfigure(c), safe=True,
-            signal="mancanti:%d:%s" % (len(missing), missing[0]), key="reconfigure", action="reapply"))
+            signal="missing:%d:%s" % (len(missing), missing[0]), key="reconfigure", action="reapply"))
 
     # 4) PatchSmith's translator cannot start with the game (changed paths, state written by the plugin)
     faults = []
@@ -666,7 +666,7 @@ def _verify_unity(c):
             "SERVICE", "warning", "The PatchSmith translator for new phrases cannot start with the game (%s): I'm "
                                   "going to prepare it again." % "; ".join(faults),
             remedy=lambda: _reconfigure(c), safe=True,
-            signal="servizio:" + "|".join(faults), key="reconfigure", action="create_report"))
+            signal="service:" + "|".join(faults), key="reconfigure", action="create_report"))
 
     # 5) who translates new lines, configuration and the version of PatchSmith that wrote it
     problems += _verify_config(c, manifest)
@@ -717,7 +717,7 @@ def _verify_config(c, manifest):
                 where, "I'm passing them to the PatchSmith translator." if choice == "service" else
                 "I'm turning off the translator, as you requested." if choice == "none" else
                 "I'm handing them back to Google, as the game profile requires."),
-            remedy=lambda: _reconfigure(c), safe=True, signal="dal_vivo:%s" % kind, key="reconfigure",
+            remedy=lambda: _reconfigure(c), safe=True, signal="live:%s" % kind, key="reconfigure",
             action="create_report"))
         mismatches = [d for d in mismatches
                       if d[0] not in ("Service", "Custom") and d[1] != "MaxCharactersPerTranslation"]
@@ -755,7 +755,7 @@ def _verify_config(c, manifest):
             "VERSION", "info", "The translation was installed with a different version of PatchSmith%s: updating the "
                                 "configuration in the game to the current one."
                                 % (" (%s)" % version if version else ""),
-            remedy=lambda: _reconfigure(c), safe=True, signal="versione:%s" % (version or "-"),
+            remedy=lambda: _reconfigure(c), safe=True, signal="version:%s" % (version or "-"),
             key="reconfigure", action="reapply"))
     return problems
 
@@ -810,12 +810,12 @@ def _verify_journal(c):
                                                              '"%s"): press "Re-translate" to translate them now (the '
                                                              'next "Analyze and translate" also retries them).' % (
                                  len(provisional), " ".join(next(iter(provisional)).split())[:60]),
-                             action="retranslate", signal="diario:%s" % up_to, extra={"sentences": len(provisional)})]
+                             action="retranslate", signal="journal:%s" % up_to, extra={"sentences": len(provisional)})]
         if lost:
             problems.append(Problem("SENTENCES_TO_REDO", "info", "While you were playing, %d translated phrases hadn't "
                                                                "been saved: I've saved them now." % len(lost),
                                      remedy=lambda: _redo_sentences(c, {}, lost), safe=True,
-                                     signal="diario-perse:%s" % up_to, key="LOST_SENTENCES"))
+                                     signal="journal-lost:%s" % up_to, key="LOST_SENTENCES"))
         return problems
     parts = []
     if provisional:
@@ -825,12 +825,12 @@ def _verify_journal(c):
         parts.append("%d translated phrases had not been saved: saving them" % len(lost))
     return [Problem("SENTENCES_TO_REDO", "info", "While you were playing, %s." % "; ".join(parts),
                      remedy=lambda: _redo_sentences(c, provisional, lost), safe=True,
-                     signal="diario:%s" % up_to, action="translate", extra={"journal_until": up_to})]
+                     signal="journal:%s" % up_to, action="translate", extra={"journal_until": up_to})]
 
 
 def _verify_fixes(c):
     """Unity: the fixes made in "Fix translations" while the game was open wait in
-    memory/<gioco>.<lingua>.to_write.json (the XUnity cache lines are changed only with the game closed) until
+    memory/<game>.<language>.da_scrivere.json (the XUnity cache lines are changed only with the game closed) until
     "Reapply" writes them: if nobody pressed it, the check writes them (with the game closed, once)."""
     from . import corrections
     try:
@@ -859,7 +859,7 @@ def _verify_fixes(c):
         'One of your corrections made in "Fix translations" while the game was open was not in the game yet: writing '
         "it now." if n == 1 else '%d of your corrections made in "Fix translations" while the game was open were not '
                                  "in the game yet: writing them now." % n,
-        remedy=write, safe=True, signal="correzioni:%s" % fingerprint, key="corrections", action="reapply")]
+        remedy=write, safe=True, signal="corrections:%s" % fingerprint, key="corrections", action="reapply")]
 
 
 def _redo_sentences(c, provisional, lost):
@@ -949,7 +949,7 @@ def _verify_service_log(c):
         return []
     return [Problem("SERVICE_LOG", "warning", "During the last session, the translator for new phrases had a "
                                                    'problem (%s: "%s").' % (_when(found[-1][0]), found[-1][1][:120]),
-                     signal="registro:%d" % int(found[-1][0]), action="create_report")]
+                     signal="service-log:%d" % int(found[-1][0]), action="create_report")]
 
 
 def _remove_unity(c):
@@ -990,7 +990,7 @@ def _verify_web_live(c):
                                                         "perhaps due to an update or a Steam file verification. I'm "
                                                         "re-enabling the live translation.",
                      remedy=lambda: _reapply(c), safe=True,
-                     signal="ripristinato:%s" % (_mtime(preload) if preload else ""), key="reapply",
+                     signal="restored:%s" % (_mtime(preload) if preload else ""), key="reapply",
                      action="reapply")]
 
 
@@ -1034,7 +1034,7 @@ def _verify_file(c):
                                                 "update or a Steam file verification. I am restoring the saved "
                                                 "translations." % ", ".join(names[:3]),
             remedy=lambda: _reapply(c, force_language=bool(removed)), safe=True,
-            signal="ripristinato:" + "|".join(sorted("%s=%s" % x for x in put_back) + sorted(removed)),
+            signal="restored:" + "|".join(sorted("%s=%s" % x for x in put_back) + sorted(removed)),
             key="reapply", action="reapply"))
     new_catalogs = [r for r in changed_files if r in catalogs]
     if new_catalogs and len(new_catalogs) == len(changed_files):
@@ -1046,7 +1046,7 @@ def _verify_file(c):
                                                 "that prevents loading translated texts. I'm removing it again and "
                                                 "putting back the saved translations." % ", ".join(new_catalogs),
             remedy=lambda: _reapply(c), safe=True,
-            signal="catalogo:" + "|".join(sorted("%s=%s" % (r, fingerprints[r]) for r in new_catalogs)),
+            signal="catalog:" + "|".join(sorted("%s=%s" % (r, fingerprints[r]) for r in new_catalogs)),
             key="reapply", action="reapply"))
         changed_files = []
     if changed_files:
@@ -1054,7 +1054,7 @@ def _verify_file(c):
             "UPDATED", "warning", "After the translation the game changed %d text files (e.g. %s): maybe an update. "
                                     'Press "Analyze and translate" to translate the new texts too (the ones already '
                                     "translated stay)." % (len(changed_files), changed_files[0]),
-            signal="cambiati:" + "|".join(sorted(changed_files)), action="translate"))
+            signal="changed:" + "|".join(sorted(changed_files)), action="translate"))
     if c.engine == "gamemaker" and not removed:
         problems += _verify_added_language(c)
     return problems
@@ -1087,7 +1087,7 @@ def _verify_added_language(c):
     return [Problem("LANGUAGE_ADDED", "info", "In the game, the language '%s' has been selected: the translation is "
                                                "in language '%s'. If you wish, you can select it in the game under "
                                                "Options > Language." % (spot[3], written_lang),
-                     signal="lingua:%s:%s" % (spot[3], int(_mtime(path) or 0)))]
+                     signal="language:%s:%s" % (spot[3], int(_mtime(path) or 0)))]
 
 
 def _put_back_added_language(c, force=False):
@@ -1108,7 +1108,7 @@ def _verify_unreal(c):
             "TRANSLATION_REMOVED", "warning", "The file with the translation (%s) is no longer in the game: "
                                           "perhaps due to an update. I'll re-add it with the saved translations."
                                           % os.path.basename(dropped[0]),
-            remedy=lambda: _reapply(c), safe=True, signal="tolti:" + "|".join(sorted(dropped)), key="reapply",
+            remedy=lambda: _reapply(c), safe=True, signal="removed:" + "|".join(sorted(dropped)), key="reapply",
             action="reapply"))
     for log_file in _unreal_logs(c.folder, manifest):
         t = _mtime(log_file)
@@ -1129,7 +1129,7 @@ def _verify_unreal(c):
                 "UNREAL_LANGUAGE", "info", "The last time you played, the game used the '%s' language: the translation "
                                          "takes the place of the original one (%s). Choose %s in the game options." % (
                     other_ones[0], language.label(origin), language.label(origin)),
-                signal="lingua:%s:%d" % (other_ones[0], int(t))))
+                signal="language:%s:%d" % (other_ones[0], int(t))))
     try:
         current_count = {n: _sha1(pak.read_file(n)) for pak, n, _, _ in adapter_unreal.find_locres(c.folder)}
     except Exception:  # noqa: BLE001 - unreadable archives: "Analyze and translate" reports it
@@ -1137,7 +1137,7 @@ def _verify_unreal(c):
     if current_count and manifest.get("sources") and current_count != manifest.get("sources"):
         problems.append(Problem(
             "UPDATED", "warning", 'The game has been updated: press "Analyze and translate" to translate the new '
-                                    "texts too (the ones already translated are kept).", signal="sorgenti:" + _sha1(
+                                    "texts too (the ones already translated are kept).", signal="sources:" + _sha1(
                 json.dumps(sorted(current_count.items())).encode("utf-8")), action="translate"))
     return problems
 
@@ -1171,7 +1171,7 @@ def _verify_xna(c):
             "TRANSLATION_REMOVED", "warning", "The files with the translations (%s) are no longer in the game: "
                                           "perhaps due to an update. I'll re-add them with the saved translations."
                                           % ", ".join(dropped[:2]),
-            remedy=lambda: _reapply(c), safe=True, signal="tolti:" + "|".join(sorted(dropped)), key="reapply",
+            remedy=lambda: _reapply(c), safe=True, signal="removed:" + "|".join(sorted(dropped)), key="reapply",
             action="reapply"))
     changed_files = []
     for name, fingerprint in (manifest.get("sources") or {}).items():
@@ -1185,7 +1185,7 @@ def _verify_xna(c):
         problems.append(Problem(
             "UPDATED", "warning", 'The game has been updated (%s): press "Analyze and translate" to translate the '
                                     "new texts too." % ", ".join(changed_files[:2]),
-            signal="sorgenti:" + "|".join(sorted(changed_files)), action="translate"))
+            signal="sources:" + "|".join(sorted(changed_files)), action="translate"))
     return problems
 
 
@@ -1193,7 +1193,7 @@ def _verify_xna(c):
 
 def crash_events(since):
     """Program crashes from the Windows Application log after the time 'since' (at most EVENT_DAYS days ago), read
-    only: [{id, istante, codice (1000 o 1026), app, percorso, testo}]. 1000: a program crash (with the executable's
+    only: [{id, instant, code (1000 or 1026), app, path, text}]. 1000: a program crash (with the executable's
     path); 1026: unhandled .NET error (only the executable's name, in the text). Empty if it cannot be read."""
     if not sys.platform.startswith("win"):
         return []
@@ -1225,8 +1225,8 @@ def read_events(data):
     for ev in root.iter(ns + "Event"):
         try:
             code = int(ev.findtext("%sSystem/%sEventID" % (ns, ns)) or 0)
-            tempo = ev.find("%sSystem/%sTimeCreated" % (ns, ns)).get("SystemTime")
-            instant = datetime.datetime.strptime(tempo[:19], "%Y-%m-%dT%H:%M:%S").replace(
+            created = ev.find("%sSystem/%sTimeCreated" % (ns, ns)).get("SystemTime")
+            instant = datetime.datetime.strptime(created[:19], "%Y-%m-%dT%H:%M:%S").replace(
                 tzinfo=datetime.timezone.utc).timestamp()
         except (AttributeError, TypeError, ValueError):
             continue
@@ -1279,7 +1279,7 @@ def _verify_crash_events(c, events):
                                        'press "Restore originals" to go back to the original files (the translations '
                                        "stay saved) and create a report." % repeats,
                      remedy=lambda: _remove_file(c), safe=False,
-                     signal="eventi:" + ",".join(sorted(str(e["id"]) for e in crash)), action="restore")]
+                     signal="events:" + ",".join(sorted(str(e["id"]) for e in crash)), action="restore")]
 
 
 def _remove_file(c):
@@ -1393,7 +1393,7 @@ def signals(profile_path, profile=None):
             p = os.path.join(c.folder, *entry["path"].split("/"))
             date(entry["path"], p)
             for name in info.get("created", []):
-                date("creato:" + name, os.path.join(os.path.dirname(p), name))
+                date("created:" + name, os.path.join(os.path.dirname(p), name))
         if c.engine == "unity-localization":  # the Unity log: the letters the fonts lack (MISSING_FONT_CHARS)
             try:
                 for p in unity_logs(c.folder).get("player", []):
@@ -1405,7 +1405,7 @@ def signals(profile_path, profile=None):
                 options = os.path.join(os.environ["LOCALAPPDATA"], os.path.splitext(exe)[0])
                 for p in glob.glob(os.path.join(glob.escape(options), "*"))[:20]:
                     if os.path.isfile(p):
-                        date("opzioni:" + os.path.basename(p), p)
+                        date("options:" + os.path.basename(p), p)
     return output
 
 
@@ -1448,11 +1448,11 @@ def to_check(events=None):
 
 def check(profile_path, apply=True, log=print, translator=None, events=None, retranslate=True):
     """Checks a game after playing. apply=True: the safe fixes start (with the game closed, once per signal) and
-    the result is saved in profiles/<nome>.checks.json; False: read only, writes nothing.
+    the result is saved in profiles/<name>.controllo.json; False: read only, writes nothing.
     translator: to re-translate the lines left provisional while playing (default: the game profile's one).
-    ritraduci=False (the check when the interface opens): those lines are not re-translated now, they stay to do
+    retranslate=False (the check when the interface opens): those lines are not re-translated now, they stay to do
     (SENTENCES_TO_RETRANSLATE, action 'retranslate'); the quick checks and their fixes are made anyway.
-    eventi: the Windows crashes already read (for the tests; default: crash_events). Returns [Problem]."""
+    events: the Windows crashes already read (for the tests; default: crash_events). Returns [Problem]."""
     log = log or (lambda _m: None)
     profile = _read_profile(profile_path)
     state = read_state(profile_path)
@@ -1496,7 +1496,7 @@ def check(profile_path, apply=True, log=print, translator=None, events=None, ret
     if apply:
         state["seen"] = signals(profile_path, profile)
         if c.engine != "unity":  # the Windows crashes already seen (they are not files: they are not in 'seen')
-            seen = {i for p in problems if p.signal.startswith("eventi:") for i in p.signal[7:].split(",")}
+            seen = {i for p in problems if p.signal.startswith("events:") for i in p.signal[len("events:"):].split(",")}
             state["events"] = sorted(set(state.get("events") or []) | seen)[-200:]
             state["events_since"] = time.time()
         # the journal lines already seen (redone, or tried once) are not picked up again: "Analyze and translate"
@@ -1567,7 +1567,7 @@ def _record(state, key, signal, success, detail):
 
 
 def _run_remedies(c, problems):
-    """The safe fixes, with the game closed, once per signal (applica=True); the others stay to do."""
+    """The safe fixes, with the game closed, once per signal (apply=True); the others stay to do."""
     candidates = [p for p in problems if p.remedy is not None and p.safe]
     if c.apply and candidates and c.is_open():
         c.log("  The game is open: I'll make the fixes at the next check, with the game closed.")
@@ -1693,7 +1693,7 @@ def last(profile_path):
 
 
 def saved_outcome(profile_path):
-    """The outcome of the last saved check (like come_esito), or None if there is none."""
+    """The outcome of the last saved check (like as_outcome), or None if there is none."""
     data = last(profile_path)
     if not data:
         return None

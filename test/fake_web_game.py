@@ -1,7 +1,7 @@
 """Fake web game (an index.html page and a JSON file of English texts) for the tests of the interface, the command
 line and safety: it is created in a test folder, no real game.
 
-Usage from the tests: fake_web_game.create(cartella) -> relative path of the JSON file of the texts.
+Usage from the tests: fake_web_game.create(folder) -> relative path of the JSON file of the texts.
 """
 import json
 import os

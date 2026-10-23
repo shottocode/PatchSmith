@@ -322,7 +322,7 @@ def test_decimals():
 # --- web games: key names -----------------------------------------------------------------------------
 
 def _js_function(source, name):
-    """The text of 'function nome(...) {...}' (braces counted: in the injector's functions there are none inside
+    """The text of 'function name(...) {...}' (braces counted: in the injector's functions there are none inside
     strings)."""
     start = source.index("function %s(" % name)
     level, i = 0, source.index("{", start)

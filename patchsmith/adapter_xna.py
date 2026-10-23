@@ -282,7 +282,7 @@ def compiler(runtime):
 
 
 def build_satellite(runtime, assembly_name, version, culture, resources, work_folder):
-    """Creates <cultura>/<nome>.resources.dll with the resources {nome_risorsa: byte} and verifies it. Returns the
+    """Creates <culture>/<name>.resources.dll with the resources {resource_name: bytes} and verifies it. Returns the
     bytes."""
     cs = os.path.join(work_folder, "satellite.cs")
     with open(cs, "w", encoding="utf-8") as f:
@@ -333,7 +333,7 @@ def _checks(folder):
 
 
 def texts_to_translate(folder, log=print):
-    """(insiemi, unique texts to translate). Only strings with letters."""
+    """(resource_sets, unique texts to translate). Only strings with letters."""
     resource_sets = analyze(folder)["resource_sets"]
     if not resource_sets:
         raise XnaError("I haven't found any usable localized text resources (.resources with satellites) in the game.")

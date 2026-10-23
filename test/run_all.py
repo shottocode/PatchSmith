@@ -1,18 +1,18 @@
 """Runs all the tests (test/test_*.py), each with python -I, with PatchSmith's data in a temporary folder.
 
-Usage: python -I test/run_all.py [--lavoro FOLDER] [--sicurezza COPIA FILE_JSON] [--tieni] [prova ...]
-- each test gets an empty folder of its own (prove/<nome>), holding its own PatchSmith data (game profiles,
+Usage: python -I test/run_all.py [--work FOLDER] [--safety COPY JSON_FILE] [--keep] [test ...]
+- each test gets an empty folder of its own (prove/<name>), holding its own PatchSmith data (game profiles,
   translation memory, settings, logs...: the PATCHSMITH_DATA folder) and its own %LOCALAPPDATA%, %APPDATA%, %TEMP%
   and user folder: the games' real options, crashes and saves are not touched, and a test does not see what
   another one left behind;
-- each test's output goes to registri/<nome>.txt; a test that runs longer than MAX_SECONDS is stopped, together
+- each test's output goes to registri/<name>.txt; a test that runs longer than MAX_SECONDS is stopped, together
   with the processes it started;
 - test_gui runs on a fake web game created here (PatchSmith's window opens for a few seconds), with some
   pre-existing settings that the test must put back as they were;
-- test_safety needs a COPY of a game (--sicurezza <copia> <file.json relativo>): first
-  `smith.py auto <copia> --backend finto` is run; without the copy the test is skipped;
+- test_safety needs a COPY of a game (--safety <copy> <relative file.json>): first
+  `smith.py auto <copy> --backend fake` is run; without the copy the test is skipped;
 - at the end it checks that PatchSmith's real data (game profiles, translation memory, settings...) has not changed;
-- the work folder is deleted if everything goes well (with --tieni, or if you chose it yourself with --lavoro, it
+- the work folder is deleted if everything goes well (with --keep, or if you chose it yourself with --work, it
   stays).
 With some names (e.g. test_unity test_xna) it runs only those. Exit code: 0 if all the tests run pass and the real
 data has not changed. The runner's functions are checked by test/test_run_all.py.
@@ -94,7 +94,7 @@ def _stop(process):
 
 def run_command(command, test_env, cwd, log_file, maximum=None):
     """Runs a command with its output written to the log: a file, not a pipe, so a process started by the test and
-    left running does not block the reading. (codice, uscita, secondi); codice None = stopped because it ran too
+    left running does not block the reading. (code, output, seconds); code None = stopped because it ran too
     long."""
     maximum = maximum or MAX_SECONDS
     start = time.time()
@@ -146,7 +146,7 @@ def main(argv=None):
           % work, flush=True)
     before = snapshot()
 
-    outcomes = {}  # nome -> (stato, secondi, uscita); stato: "OK", "ERROR", "SALTATA"
+    outcomes = {}  # name -> (state, seconds, output); state: "OK", "ERROR", "SALTATA"
     for name in items:
         log_file = os.path.join(logs, name + ".txt")
         folder = os.path.join(work, "prove", name)

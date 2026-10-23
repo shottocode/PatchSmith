@@ -173,6 +173,14 @@ CODES = {
 OPAQUE = {"file", "texts", "sources", "prior", "dictionary", "translations", "references"}
 # "da"/"a" (source and target language) are renamed only together: alone, "da" is the Danish language code
 PAIR = {"da": "from", "a": "to"}
+# the signals of the after-play check (in the fixes already tried and among the signals seen): old -> new, whole
+# signals and prefixes
+SIGNALS = {"in_corso": "in_progress", "manifesto": "manifest"}
+SIGNAL_PREFIXES = {"mancanti:": "missing:", "servizio:": "service:", "dal_vivo:": "live:", "versione:": "version:",
+                   "diario:": "journal:", "diario-perse:": "journal-lost:", "correzioni:": "corrections:",
+                   "registro:": "service-log:", "ripristinato:": "restored:", "catalogo:": "catalog:",
+                   "cambiati:": "changed:", "lingua:": "language:", "tolti:": "removed:", "sorgenti:": "sources:",
+                   "eventi:": "events:", "creato:": "created:", "opzioni:": "options:"}
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*$")
 
@@ -205,7 +213,20 @@ def upgrade_entries(data):
     return {k: upgrade(v) for k, v in data.items()}
 
 
+def _signal(s):
+    if s in SIGNALS:
+        return SIGNALS[s]
+    if ":" not in s:
+        return s
+    prefix = s.split(":", 1)[0] + ":"
+    return SIGNAL_PREFIXES[prefix] + s[len(prefix):] if prefix in SIGNAL_PREFIXES else s
+
+
 def _code(key, value):
+    if key == "signal" and isinstance(value, str):
+        return _signal(value)
+    if key == "seen" and isinstance(value, dict):  # signal -> value (old names of the whole signals too)
+        value = {_signal(k) if isinstance(k, str) else k: v for k, v in value.items()}
     codes = CODES.get(key)
     if not codes:
         return value

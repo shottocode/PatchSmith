@@ -65,7 +65,7 @@ def apply(root, choice="auto"):
                     selectforeground=c["text"], insertcolor=c["text"], arrowcolor=c["text"])
     style.configure("TFrame", background=c["background"])
     style.configure("TLabel", background=c["background"], foreground=c["text"])
-    style.configure("Stato.TLabel", background=c["background"], foreground=c["muted"])
+    style.configure("Status.TLabel", background=c["background"], foreground=c["muted"])
     style.configure("TButton", background=c["button"], foreground=c["text"], padding=(10, 4),
                     bordercolor=c["border"], focusthickness=1)
     style.map("TButton",
@@ -95,7 +95,7 @@ def apply(root, choice="auto"):
     style.map("Treeview.Heading", background=[("active", c["button_hover"])])
 
     # button next to a field ("Browse…"): no margin above and below, as tall as the field
-    style.configure("Campo.TButton", padding=(10, 0))
+    style.configure("Field.TButton", padding=(10, 0))
     # the small language flag: as big as the flag (the clam theme gives buttons at least 11 characters)
     style.configure("Bandiera.TButton", padding=(3, 2), width=0)
     # button with a menu (the small language flag) and the menus (they are not ttk widgets)
@@ -126,12 +126,12 @@ def apply(root, choice="auto"):
 
 ICONS = {"info": ("i", "accent"), "warning": ("!", "#d39b2a"), "error": ("✕", "#d9534f"),
          "question": ("?", "accent")}
-ON_SHOW = None  # function(tipo) called when a dialog appears (the main window: the sounds)
+ON_SHOW = None  # function(kind) called when a dialog appears (the main window: the sounds)
 
 
 def window(parent, c, title_text, text, kind="info", buttons=(("OK", True),), cancel=None):
-    """Modal dialog. pulsanti: [(etichetta, valore)], the first is the default one (Enter).
-    Esc or the window's X return `annulla`."""
+    """Modal dialog. buttons: [(label, value)], the first is the default one (Enter).
+    Esc or the window's X return `cancel`."""
     top = tk.Toplevel(parent)
     top.withdraw()
     top.title(title_text)
@@ -204,7 +204,7 @@ def ask(parent, c, title_text, text):
 
 
 def choose(parent, c, title_text, text, buttons, kind="info"):
-    """Dialog with several buttons [(etichetta, valore)] (e.g. "OK", "Show remaining", "Create report"): returns
+    """Dialog with several buttons [(label, value)] (e.g. "OK", "Show remaining", "Create report"): returns
     the value of the button pressed. The first is the default (Enter); Esc or the X return None."""
     return window(parent, c, title_text, text, kind, buttons, cancel=None)
 

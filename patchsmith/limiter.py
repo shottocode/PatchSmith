@@ -30,8 +30,8 @@ RULES = {
     "deepl": {"pause": 0.5, "variation": 0.0, "windows": ()},
     "mymemory": {"pause": 1.0, "variation": 0.5, "windows": ((MINUTE, 50, None),)},
 }
-# waits after a block: "a freddo" (cold) = the very first request was rejected (not a limit exceeded, access is
-# refused: no point retrying soon); "dopo traffico" (after traffic) = after successful requests (a rate limit)
+# waits after a block: "cold" = the very first request was rejected (not a limit exceeded, access is refused: no
+# point retrying soon); "after_traffic" = after successful requests (a rate limit)
 WAITS = {"cold": (DAY, 3 * DAY, 7 * DAY), "after_traffic": (HOUR, 6 * HOUR, DAY, 3 * DAY)}
 MAX_FUTURE = 8 * DAY  # a farther "until" (wrong clock, damaged file) is reduced
 FORGET_AFTER = 7 * DAY  # a week without blocks: start again from the first level
@@ -51,7 +51,7 @@ def state_path():
 
 
 def when(instant):
-    """'alle 18:30 di domani', 'alle 18:30 del 22/10' (for the messages)."""
+    """'at 18:30 tomorrow', 'at 18:30 on 22/10' (for the messages)."""
     moment = datetime.datetime.fromtimestamp(instant)
     today = datetime.date.today()
     if moment.date() == today:
@@ -208,7 +208,7 @@ class Limiter:
         return None
 
     def short_status(self):
-        """'in pausa fino alle 05:58 di domani', 'disabled' or '' (for the interface)."""
+        """'paused, resumes at 05:58 tomorrow', 'disabled after repeated rejections' or '' (for the interface)."""
         try:
             s, now = self._corrected_state()
             block = s.get("block")

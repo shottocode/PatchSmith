@@ -147,8 +147,8 @@ def _needs_backup(path, data):
 def apply_bytes(folder, lever_name, plans, log=print, value_=None, description=None):
     """Applies byte changes to several files, all or nothing.
 
-    piani: [{'path': assoluto, 'changes': [(offset, byte_prima, byte_dopo)]}]. A change already made (the
-    'dopo' bytes are already there) is skipped; bytes different from both 'before' and 'dopo' stop everything.
+    plans: [{'path': absolute, 'changes': [(offset, before, after)]}]. A change already made (the
+    'after' bytes are already there) is skipped; bytes different from both 'before' and 'after' stop everything.
     Returns how many files were written. If something goes wrong (an interruption too) it puts every file back as it
     was BEFORE this operation and raises ConfiguratorError."""
     prepared = []

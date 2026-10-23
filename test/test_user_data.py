@@ -6,7 +6,7 @@ Covers:
   logs, and saves go there; downloaded components, plugin, rules and smith.py stay next to the program;
 - without the variable everything stays as before (next to the program), also for whoever changes
   PROJECT_FOLDER;
-- command line: `smith auto`, `stato` and `ripristina` on a fake web game with the data in the test folder;
+- command line: `smith auto`, `status` and `restore` on a fake web game with the data in the test folder;
 - the translator command for XUnity written into the game always uses smith.py and the program's folder;
 - the interface settings are saved even if the data folder does not exist yet.
 The child processes only compute paths, except the command line, which runs only if the variable is honored.
@@ -179,7 +179,7 @@ def test_xunity_service(base):
 
 
 def test_gui_settings(base):
-    """_salva_impostazioni with a data folder that does not exist yet (first time with PATCHSMITH_DATA)."""
+    """_save_settings with a data folder that does not exist yet (first time with PATCHSMITH_DATA)."""
     saved = project.DATA_ROOT
     project.DATA_ROOT = os.path.join(base, "dati-gui", "nuova")
     try:

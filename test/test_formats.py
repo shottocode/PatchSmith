@@ -30,7 +30,7 @@ from patchsmith import (adapter_csv, adapter_gamemaker, adapter_unreal, adapter_
                         auto as automatic, backend, interruption,
                         official_language, project, scan, steam)
 from patchsmith.characters import ASCII  # noqa: E402
-import test_gamemaker  # noqa: E402  (date.win builder)
+import test_gamemaker  # noqa: E402  (data.win builder)
 import test_unreal as fake_unreal  # noqa: E402  (pak and .locres builder)
 
 OUTCOMES = []
@@ -110,8 +110,8 @@ def prepare_data(base):
 # --- 1. Lenient JSON --------------------------------------------------------------------------------
 
 def _door(values, language_name):
-    """A language file in the style of Another Door (CRLF, tabs, comments, trailing commas, sections). 'valori':
-    {(sezione, chiave): testo}; the literals written as json.dumps, except an identifier written by hand with an
+    """A language file in the style of Another Door (CRLF, tabs, comments, trailing commas, sections). 'values':
+    {(section, key): text}; the literals written as json.dumps, except an identifier written by hand with an
     unusual escape (it must stay identical) and some numbers written in a particular way (1.50, 1e5)."""
     def s(section, key):
         return json.dumps(values[(section, key)], ensure_ascii=False)

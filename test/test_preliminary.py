@@ -1,7 +1,7 @@
 """Tests of the checks before starting and of the safe default choices (point 5).
 
 Usage: python -I test/test_preliminary.py <empty_temp_folder>
-PatchSmith's data go to <cartella>/dati, the "installed" local translator to <cartella>/ollama (empty: not
+PatchSmith's data go to <folder>/data_folder, the "installed" local translator to <folder>/ollama (empty: not
 installed); Steam, open processes, free space and graphics card are simulated. No real game, no network,
 no program started. Covers:
 - automatic.preflight_checks: game open, From/To languages, folder that cannot be written to (also in the
@@ -69,7 +69,7 @@ def unity_game(folder, exe_name, company, product):
 
 
 class FakeServer:
-    """In place of ollama.Server for backend.prova_locale: answers and share of the model on the graphics card."""
+    """In place of ollama.Server for backend.probe_local: answers and share of the model on the graphics card."""
 
     def __init__(self, response="Inizia la partita", vram=100, error=None):
         self.response, self.vram, self.error = response, vram, error

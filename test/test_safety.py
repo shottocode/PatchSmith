@@ -1,8 +1,8 @@
 """Safety test of the game's files (backups, updates, restore) on a COPY of a game.
 
 Usage: python -I test/test_safety.py <game_copy_folder> <relative_json_file>
-or (recommended) python -I test/run_all.py --sicurezza <cartella_copia_del_gioco> <file_json_relativo>
-Prerequisite: `smith auto <copia> --backend finto` has already been run on the copy with the same data folder
+or (recommended) python -I test/run_all.py --safety <game_copy_folder> <relative_json_file>
+Prerequisite: `smith auto <copy> --backend fake` has already been run on the copy with the same data folder
 (run_all.py does it by itself); if the game profile is not there, the test does it itself.
 Game profile and translation memory go in the PATCHSMITH_DATA folder; without it, in "dati-prova-sicurezza" next to
 the copy: never among PatchSmith's real data. Do not use on a real game.

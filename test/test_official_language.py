@@ -158,7 +158,7 @@ def main(base):
     check("Unreal: niente traduzione automatica, lingua impostata", path is None and outcome.get("official_language")
               and b"Language=it-IT" in open(gus, "rb").read() and official_language.is_set(ue))
     check("Unreal: messaggio con quello che e' stato fatto",
-              any("I have set" in x for x in outcome.get("lingua_ufficiale_righe", [])))
+              any("I have set" in x for x in outcome.get("official_language_lines", [])))
     automatic.restore(ue, silent)
     check("Unreal: ripristino identico e registro tolto", open(gus, "rb").read() == original_gus
               and not official_language.is_set(ue))

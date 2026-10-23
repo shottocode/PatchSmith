@@ -114,7 +114,7 @@ def _pak_names(path):
 
 
 def game_languages(folder):
-    """({languages}, progetto) of the game's texts (not the engine's or plugins'), or (None, progetto) if unknown."""
+    """({languages}, project) of the game's texts (not the engine's or plugins'), or (None, project) if unknown."""
     languages, project, read_items = set(), None, 0
     for path in adapter_unreal._paks(folder):
         names = _pak_names(path)
@@ -210,7 +210,7 @@ def _write(path, text, encoding, bom):
 
 
 def _lines(text):
-    """[[contenuto, a capo]]: each line with its line ending ('\\r\\n', '\\n', '\\r' or '' for the last one)."""
+    """[[content, line ending]]: each line with its line ending ('\\r\\n', '\\n', '\\r' or '' for the last one)."""
     lines, pos = [], 0
     for m in re.finditer(r"\r\n|\r|\n", text):
         lines.append([text[pos:m.start()], m.group()])
@@ -311,7 +311,7 @@ def set_culture(path, tag):
 
 
 def _from_old_log(changes):
-    """0.8.0 log ([(chiave, vecchio)], ('[sezione]', testo)) in the current format."""
+    """0.8.0 log ([(key, old)], ('[sezione]', text)) in the current format."""
     new_lines = []
     for key, old in changes:
         if key == "[sezione]":

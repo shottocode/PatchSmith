@@ -7,7 +7,7 @@ or with no answer, it uses a default value: 1 (English). The game has no other l
 launch parameters, registry or configuration files). The texts of all these languages are already installed in the
 packages (Image/<dt|en>/*.hed + *.pkg).
 
-Lever "language": in every executable the default value is changed (1 byte: `mov ebx,1` -> `mov ebx,<codice>`).
+Lever "language": in every executable the default value is changed (1 byte: `mov ebx,1` -> `mov ebx,<code>`).
 The answer "english" (or no answer) thus leads to the chosen language; French, German, Spanish and Italian chosen
 by the platform are still respected. The game works as with the language chosen by Steam: same texts, menus, fonts
 and images with writing; the voices stay the original ones.
@@ -30,12 +30,12 @@ EXECUTABLES = ("KINGDOM HEARTS FINAL MIX.exe", "KINGDOM HEARTS Re_Chain of Memor
               "KINGDOM HEARTS II FINAL MIX.exe", "KINGDOM HEARTS Birth by Sleep FINAL MIX.exe",
               "KINGDOM HEARTS HD 1.5+2.5 Launcher.exe", "KINGDOM HEARTS Theater.exe")
 CODES = {"en": 1, "de": 3, "fr": 4, "es": 5, "it": 6}  # the game's internal codes
-_MSG_FOLDER = {"en": "us", "it": "it", "fr": "fr", "de": "gr", "es": "sp"}  # msg/<cartella>/ in KH2
+_MSG_FOLDER = {"en": "us", "it": "it", "fr": "fr", "de": "gr", "es": "sp"}  # msg/<folder>/ in KH2
 _VALUES = set(CODES.values())
 PATTERN = re.compile(rb"\xBB([\x00-\xFF])\x00\x00\x00\x48\x83\x3D[\x00-\xFF]{4}\x00\x75\x31\x8B\xCB\xE8")
 TABLE = b"english\x00french\x00\x00italian\x00german\x00\x00spanish\x00"
 COMPARE_DISTANCE = 0x300
-SAVES = None  # None = the user's Documenti/My Games/<NAME> (can be set for the tests)
+SAVES = None  # None = the user's Documents/My Games/<NAME> (can be set for the tests)
 MAX_SAVES = 512 * 1024 * 1024
 
 
@@ -97,7 +97,7 @@ def identify(folder):
 
 
 def present_languages(root):
-    """{codes} of the installed text languages (from a sample entry of KH2: msg/<lingua>/sys.bar); None."""
+    """{codes} of the installed text languages (from a sample entry of KH2: msg/<language>/sys.bar); None."""
     indices = glob.glob(os.path.join(glob.escape(root), "Image", "*", "kh2_first.hed"))
     if not indices:
         return None
@@ -170,7 +170,7 @@ def language_byte(data):
 
 
 def analyze(root):
-    """[(name, path, offset, value)] of the executables present. Raises ErroreScheda (with the file name)."""
+    """[(name, path, offset, value)] of the executables present. Raises SheetError (with the file name)."""
     output = []
     for name in EXECUTABLES:
         path = os.path.join(root, name)
@@ -222,8 +222,8 @@ def _copy_saves(root, log):
 # --- language lever -------------------------------------------------------------------------------
 
 def set_language(root, dest_lang, consent=False, log=print):
-    """Activates the language 'destinazione'. (True, righe) done or already active; (None, righe) the user's consent
-    is needed (proposal); (False, righe) it cannot be done (with the reason)."""
+    """Activates the language 'dest_lang'. (True, lines) done or already active; (None, lines) the user's consent
+    is needed (proposal); (False, lines) it cannot be done (with the reason)."""
     name = language.label(dest_lang)
     in_platform = ("choose %s in the platform from which you are launching the game (Steam: Properties > General > "
                    "Language)"

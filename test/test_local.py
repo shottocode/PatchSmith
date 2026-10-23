@@ -28,7 +28,7 @@ def silent(_):
 
 
 class FakeServer:
-    """Instead of ollama.Server: answers /api/chat with the function 'traduci(testo, opzioni)'."""
+    """Instead of ollama.Server: answers /api/chat with the function 'translate(text, options)'."""
 
     def __init__(self, translate, error=None):
         self.translate = translate
@@ -559,7 +559,7 @@ def write_json(path, data):
 
 
 class ServerWithPrompt(FakeServer):
-    """Like ServerFinto, but remembers the prompt and the model of each request (the answer can depend on them)."""
+    """Like FakeServer, but remembers the prompt and the model of each request (the answer can depend on them)."""
 
     def __init__(self, translate):
         FakeServer.__init__(self, lambda t, o: translate(t, o, self.prompt, self.model))
@@ -574,7 +574,7 @@ class ServerWithPrompt(FakeServer):
 
 def test_recovery(base):
     """Texts rejected by the checks: new rounds right away (separate sentences, new seeds, the other model),
-    problems.json and different seeds at each run (before, the same question was repeated with 42, 7, 11 and the
+    problemi.json and different seeds at each run (before, the same question was repeated with 42, 7, 11 and the
     answer was the same)."""
     from patchsmith import auto as automatic, outcome
 
@@ -591,7 +591,7 @@ def test_recovery(base):
               failed == 0 and p.memory.get("Open the door to the castle") == "IT Open the door to the castle"
               and seen[:3] == [42, 7, 11] and len(seen) == 4 and seen[3] not in (42, 7, 11) and not p.problems())
 
-    # 9b. a text always rejected: problems.json, not in the translation memory; the second run uses all new seeds
+    # 9b. a text always rejected: problemi.json, not in the translation memory; the second run uses all new seeds
     text = "Close the window of the house"
     p = Project(profile_of(base, "sempre-scartato"), silent)
     b, server = local(lambda t, o: t)
@@ -776,7 +776,7 @@ def test_memory(base):
 
 
 def test_apply(base):
-    """Translations that cannot be written to the game: in problems.json; the machine translations are redone right away
+    """Translations that cannot be written to the game: in problemi.json; the machine translations are redone right away
     with the right instruction, those fixed by hand stay."""
     from patchsmith import auto as automatic
     game = os.path.join(base, "gioco-righe")
@@ -823,7 +823,7 @@ def test_apply(base):
 
 
 def lines_game(base, name, lines):
-    """A game with a line file ('0 testo') and its game profile; returns (folder, game profile, translation memory)."""
+    """A game with a line file ('0 text') and its game profile; returns (folder, game profile, translation memory)."""
     game = os.path.join(base, "gioco-" + name)
     os.makedirs(game)
     with open(os.path.join(game, "english.txt"), "w", encoding="utf-8", newline="") as f:
@@ -834,12 +834,12 @@ def lines_game(base, name, lines):
 
 def test_limited_redos(base):
     """Saved translations redone: a redone one that is still wrong counts as an attempt (before, it was redone at every
-    run, always with seeds 42, 7, 11, and writing the game removed it from problems.json), the new rounds do not stop
+    run, always with seeds 42, 7, 11, and writing the game removed it from problemi.json), the new rounds do not stop
     writing to the game, the shared translation memory does not take translations that fail the checks."""
     suspect = {"Open the chest of the house": "Abre el cofre de la casa y el mapa"}
 
     # 11a. the local translator gives it back unchanged (it passes its own checks, not the language one): new seeds at
-    # every run, recorded in problems.json, and after MAX_ATTEMPTS it is left alone
+    # every run, recorded in problemi.json, and after MAX_ATTEMPTS it is left alone
     path = profile_of(base, "rifatta-uguale")
     memory = project.memory_path({"name": "rifatta-uguale", "target_language": "it"})
     write_json(memory, suspect)
@@ -858,7 +858,7 @@ def test_limited_redos(base):
               and problem.get("where") == "memory" and problem.get("attempts", 0) >= project.MAX_ATTEMPTS
               and p.redone == 0)
 
-    # 11b. the same with a full 'Analyze and translate' (it writes to the game): the note in problems.json stays, the
+    # 11b. the same with a full 'Analyze and translate' (it writes to the game): the note in problemi.json stays, the
     # attempts grow and after MAX_ATTEMPTS nothing more is requested
     game, path, memory = lines_game(base, "rifatta-gioco", ["Open the chest of the house", "Quit"])
     write_json(memory, dict(suspect, Quit="Esci"))
@@ -907,7 +907,7 @@ def test_limited_redos(base):
               and after.get("Light the torch") == "Accendi la torcia")
 
     # 11f. a text that is only a game name, machine-translated: the name comes back, without requests, and then it is
-    # not rechecked at every run ('non tradotta' does not apply to a name left as it is on purpose)
+    # not rechecked at every run ('not translated' does not apply to a name left as it is on purpose)
     name = "Cult Of The Lamb"
     path = profile_of(base, "solo-nome", do_not_translate=[name])
     memory = project.memory_path({"name": "solo-nome", "target_language": "it"})

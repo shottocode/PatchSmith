@@ -40,7 +40,7 @@ class PackageError(Exception):
 
 
 def _copy_tree(source, dest_lang, skip=(), take=("*",)):
-    """Copies the folder without the names that match 'salta'; of the files, only those that match 'prendi'."""
+    """Copies the folder without the names that match 'skip'; of the files, only those that match 'take'."""
     for root, folders, file in os.walk(source):
         folders[:] = [c for c in folders if not any(fnmatch.fnmatch(c, s) for s in skip)]
         where = os.path.join(dest_lang, os.path.relpath(root, source))
@@ -101,9 +101,9 @@ def _try_runtime(folder):
 
 
 def prepare(output=None, python=None, log=print):
-    """Prepares <uscita>/PatchSmith and <uscita>/PatchSmith-<versione>-windows.zip. uscita: by default the folder
+    """Prepares <output>/PatchSmith and <output>/PatchSmith-<version>-windows.zip. output: by default the folder
     PatchSmith-rilascio next to the program's; python: the folder of an installed Python (by default the one
-    PatchSmith runs with). Returns (cartella, zip)."""
+    PatchSmith runs with). Returns (folder, zip)."""
     if not sys.platform.startswith("win"):
         raise PackageError("the package with the portable Python version is for Windows")
     python = os.path.abspath(python or sys.base_prefix)

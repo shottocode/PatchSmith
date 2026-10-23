@@ -1,9 +1,9 @@
 """Test of the added language (GameMaker, Forager style) without network and without the real game.
 
 Usage: python -I test/test_added_language.py <empty_temp_folder>
-Builds a fake game: a minimal date.win (GEN8 with the name, STRG with the 'local/*.json' mask and the map of a sprite
+Builds a fake game: a minimal data.win (GEN8 with the name, STRG with the 'local/*.json' mask and the map of a sprite
 font, SPRT with the font's sprite), a lowercase local/english.json with the 'EP' and 'H' icons, official
-translations, and the options saved by the game (%LOCALAPPDATA%\\<nome>\\config.txt, ds_map in hexadecimal).
+translations, and the options saved by the game (%LOCALAPPDATA%\\<name>\\config.txt, ds_map in hexadecimal).
 """
 import hashlib
 import json
@@ -35,10 +35,10 @@ def fingerprint(p):
     return hashlib.sha256(open(p, "rb").read()).hexdigest()
 
 
-# --- minimal date.win ------------------------------------------------------------------------------------------
+# --- minimal data.win ------------------------------------------------------------------------------------------
 
 def data_win(strings, sprite, code=True, name="FintoGame"):
-    """FORM with GEN8 (name), STRG (strings), SPRT (sprites: [(nome, fotogrammi)]) and, if 'code', an empty CODE
+    """FORM with GEN8 (name), STRG (strings), SPRT (sprites: [(name, frames)]) and, if 'code', an empty CODE
     (game for the virtual machine: the code's strings are in STRG)."""
     all_items = [name] + list(strings) + [n for n, _ in sprite]
     # the chunks are built with absolute positions: first compute where STRG will be
@@ -117,7 +117,7 @@ def main(base):
     os.environ["LOCALAPPDATA"] = os.path.join(base, "appdata")
     system.game_open = lambda c: False
 
-    # --- 1. reading date.win: sprites, name, strings, map of the sprite font, mask of the languages
+    # --- 1. reading data.win: sprites, name, strings, map of the sprite font, mask of the languages
     vm = data_win(["local/*.json", CHAR_MAP], [("sprFont", len(CHAR_MAP)), ("sprPlayer", 4)])
     game = os.path.join(base, "game")
     os.makedirs(os.path.join(game, "local"))

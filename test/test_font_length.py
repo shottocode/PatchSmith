@@ -5,9 +5,9 @@ Fake games, fonts and logs (test/fake_unity.py, test/data/signals): no real game
 (fake in-memory translators). Covers:
 - Unity fonts (font_unity): the cmap table of .ttf files; TextMeshPro fonts with the field tree (bundles) and without
   it (_Data files, recognized by their shape); dynamic fonts with their .ttf; the rule "at least one font can draw
-  it"; result kept in memory/<gioco>.unity/font.json until the game files change;
+  it"; result kept in memory/<game>.unity/font.json until the game files change;
 - Unity Localization: a table written with è -> e' if no font has è (the translation memory keeps è; the French table
-  is not touched); a character that cannot be adapted leaves the original and goes into problems.json; with a font
+  is not touched); a character that cannot be adapted leaves the original and goes into problemi.json; with a font
   that has è nothing changes;
 - XUnity: BepInEx.cfg with WriteUnityLog at installation (and the check puts it back); the missing characters read
   from the logs (real lines); the after-play check adapts the cache lines written by PatchSmith (not those changed by
@@ -16,7 +16,7 @@ Fake games, fonts and logs (test/fake_unity.py, test/data/signals): no real game
 - Unity Localization with the Player.log (IL2CPP game): characters noted and table rewritten with "Reapply";
 - Unreal: characters of the game's other Latin languages (full Latin-1 if they use them), no limit without clues;
 - labels too long: shorter requests to the local translator (context 'width', also in the real prompt), the
-  shortest valid one kept, the others in problems.json with the original text and in the "Too long" list of
+  shortest valid one kept, the others in problemi.json with the original text and in the "Too long" list of
   "Fix translations"; only once; not the fixes made by hand; with the other translators only noted; the space of the
   official translations; outcome and messages.
 """

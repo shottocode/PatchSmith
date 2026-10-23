@@ -73,7 +73,7 @@ def _string(text):
 
 
 def _replace(b, value_, new):
-    """The bytes with the string 'value' (type, start, end, text) replaced by 'nuovo'."""
+    """The bytes with the string 'value' (type, start, end, text) replaced by 'new'."""
     return b[:value_[1]] + _string(new) + b[value_[2]:]
 
 
@@ -115,7 +115,7 @@ def find(json_text, languages):
 
 
 def change(json_text, spot, new):
-    """The text of the file with the language at 'spot' (from trova) changed to 'nuovo'. Touches only that string:
+    """The text of the file with the language at 'spot' (from find) changed to 'new'. Touches only that string:
     the whole rest of the file stays identical (only the hexadecimal value is replaced, which is unique in the file)."""
     json_key, mapping_key, idx, _current = spot
     data = json.loads(json_text)
@@ -140,7 +140,7 @@ def change(json_text, spot, new):
 
 def settings_folders(root):
     """The folders in %LOCALAPPDATA% where the game may save its options (GameMaker uses the game's name; the
-    names written in date.win and those of the executables are tried)."""
+    names written in data.win and those of the executables are tried)."""
     base = os.environ.get("LOCALAPPDATA")
     if not base:
         return []
@@ -184,8 +184,8 @@ def search(root, languages):
 
 
 def set_(root, new_value, languages, saves, log=print, respect=None):
-    """Sets 'nuova' as the game's language in the saved options. Returns (record for the restore, None)
-    or (None, reason). 'salvataggi': folder where the file is copied before changing it. 'rispetta': if the
+    """Sets 'new_value' as the game's language in the saved options. Returns (record for the restore, None)
+    or (None, reason). 'saves': folder where the file is copied before changing it. 'respect': if the
     saved language differs from this one (PatchSmith's choice from last time), the player changed it and it is
     left alone."""
     path, spot = search(root, set(languages) | {new_value})

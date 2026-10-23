@@ -62,7 +62,7 @@ _DECODER = json.JSONDecoder()
 
 
 def string_positions(text):
-    """{percorso: (inizio, fine)} of the string literals that are values (not keys) in a JSON text already
+    """{path: (start, end)} of the string literals that are values (not keys) in a JSON text already
     without comments (see without_comments). With repeated keys the last one wins, as with json.loads."""
     output = {}
 
@@ -129,7 +129,7 @@ def _at_path(data, path):
 
 class JSONFile:
     """A JSON file read from disk, with the information to rewrite it in the same format. A file with comments or
-    trailing commas (tollerante=True) is rewritten replacing only the literals of the changed strings."""
+    trailing commas (lenient=True) is rewritten replacing only the literals of the changed strings."""
 
     def __init__(self, path):
         self.path = path
@@ -194,14 +194,14 @@ def _refuse_constant(name):
 
 
 def reread_strict(data_bytes, lenient=False):
-    """Reads back with the rules of JSON.parse (no NaN/Infinity). Raises ValueError if invalid. tollerante: the
+    """Reads back with the rules of JSON.parse (no NaN/Infinity). Raises ValueError if invalid. lenient: the
     original file had comments or trailing commas (JSONFile.lenient), which the game accepts: removed first."""
     text = data_bytes.decode("utf-8-sig")
     return json.loads(without_comments(text) if lenient else text, parse_constant=_refuse_constant)
 
 
 def leaves(data, path=(), pattern=""):
-    """Yields (percorso_tupla, schema, valore) for every string of the JSON."""
+    """Yields (path_tuple, schema, value) for every string of the JSON."""
     if isinstance(data, dict):
         for k, v in data.items():
             yield from leaves(v, path + (k,), (pattern + "." + k) if pattern else k)
@@ -236,7 +236,7 @@ def technical_key(pattern):
 
 
 def suggest_schemas(stat):
-    """Splits the schemas into (includi, escludi) with generic rules."""
+    """Splits the schemas into (include, exclude) with generic rules."""
     include, exclude = [], []
     for pattern, s in sorted(stat.items()):
         if s["readable"] == 0:
@@ -249,13 +249,13 @@ def suggest_schemas(stat):
 
 
 def extract(data, include, readable=is_readable_text):
-    """[(percorso_tupla, testo)] of the strings to translate ('leggibile' decides which values are text)."""
+    """[(path_tuple, text)] of the strings to translate ('readable' decides which values are text)."""
     include = set(include)
     return [(p, v) for p, pattern, v in leaves(data) if pattern in include and readable(v)]
 
 
 def apply(data, replacements):
-    """Copy of the data with the strings replaced. sostituzioni: {percorso_tupla: nuovo_testo}."""
+    """Copy of the data with the strings replaced. replacements: {path_tuple: new_text}."""
     new_items = copy.deepcopy(data)
     for path, text in replacements.items():
         tree_node = new_items

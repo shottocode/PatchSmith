@@ -2,7 +2,7 @@
 
 Usage: python -I test/test_checks.py <empty_temp_folder>
 TEMP, TMP, USERPROFILE and LOCALAPPDATA point to test folders (that is where Unity's logs, the crashes and the games'
-options are), PatchSmith's data in <cartella>/dati, the live translator's log in <cartella>/ollama:
+options are), PatchSmith's data in <folder>/data_folder, the live translator's log in <folder>/ollama:
 no real game, no real data, no network, no program started (except smith.py in read-only mode).
 Covers:
 - Unity: crash at startup inside Application:.cctor (right copy) fixed with BepInEx's entry point; crash of another
@@ -17,7 +17,7 @@ Covers:
   translate"; crash in the Windows event log (real events 1000 and 1026, reduced) -> "Restore originals" to confirm;
 - GameMaker with the added language not chosen in the game; Unreal (language and pak not loaded), XNA (satellites
   removed);
-- command line `smith.py controlla --solo-leggi`, outcome window, report, status file not deleted;
+- command line `smith.py check --solo-leggi`, outcome window, report, status file not deleted;
 - from the verification: logs over 2 MB (a long session is not a crash, the errors at the end count),
   interrupted installation (only "Restore originals"), game profile without folder, Unreal log with the project
   folder, Windows crashes already past, PatchSmith updated (Unity games to check again), live translator without
@@ -353,14 +353,14 @@ def test_unity(base):
     check("riga di comando: cartella senza traduzione -> codice 0", r.returncode == 0
               and "nothing to check" in r.stdout.decode("utf-8", "replace"))
 
-    # the status file is not a game profile and Project does not delete it (like the old .state.json)
+    # the status file is not a game profile and Project does not delete it (like the old .stato.json)
     project.Project(path, silent)
     check("<nome>.controllo.json: non e' un profilo e resta dopo Progetto",
               os.path.exists(checks.state_path(path))
               and all(not p.endswith(".controllo.json") for p, _ in automatic.list_profiles()))
     report.desktop_folder = lambda: os.path.join(base, "rapporti")
     report_zip = report.create(game, os.path.join(base, "rapporti"))
-    check("rapporto: c'e' il risultato del controllo", "profilo/%s.controllo.json" % name
+    check("rapporto: c'e' il risultato del controllo", "profile/%s.controllo.json" % name
               in zipfile.ZipFile(report_zip).namelist())
     return game
 
@@ -496,7 +496,7 @@ def test_file(base):
     crash = by_code(problems, "CRASH")
     check("crash di Windows: 'Ripristina originali' proposto, non fatto (un solo crash: l'altro e' di un'altra "
               "cartella)", crash and crash.state == "to_do" and crash.action == "restore"
-              and crash.signal == "eventi:999" and snapshot(game) == whole)
+              and crash.signal == "events:999" and snapshot(game) == whole)
     check("crash di Windows gia' visto: non piu' da controllare all'apertura",
               path not in checks.to_check(events=[event, other]))
 
@@ -591,7 +591,7 @@ def test_unreal_xna(base):
     with zipfile.ZipFile(report.create(game, os.path.join(base, "rapporti-unreal"))) as z:
         names = z.namelist()
     check("Unreal: il rapporto proposto ha il registro del gioco (DDS.log) da cui il controllo l'ha capito",
-              "unreal/DDS.log" in names and "gioco/patchsmith-unreal.json" in names)
+              "unreal/DDS.log" in names and "game/patchsmith-unreal.json" in names)
     os.remove(pak)
     problems = checks.check(path, apply=False, log=silent, events=[])
     check("Unreal: pak tolto dal gioco -> si rimette (Riapplica)", "TRANSLATION_REMOVED" in codes(problems)
@@ -803,7 +803,7 @@ def test_retranslate_and_startup(base):
 
 def test_pending_fixes(base):
     """Revision 0.16: the fixes from "Fix translations" saved with the Unity game open (XUnity cache lines pending in
-    .to_write.json) are written by the check, with the game closed, once; a line changed by hand after the fix
+    .da_scrivere.json) are written by the check, with the game closed, once; a line changed by hand after the fix
     stays. Installed with a previous version and configuration to put back: a single message (CONFIGURATION that
     states the version), not VERSION as well."""
     from patchsmith import corrections
@@ -872,7 +872,7 @@ def test_pending_fixes(base):
     with zipfile.ZipFile(zip_) as z:
         names = z.namelist()
     check("rapporto: le correzioni non ancora scritte nel gioco e le lettere dei font",
-              "traduzioni/%s.it.da_scrivere.json" % name in names and "traduzioni/%s.font.json" % name in names)
+              "translations/%s.it.da_scrivere.json" % name in names and "translations/%s.font.json" % name in names)
     os.remove(corrections.to_write_path(profile))
     os.remove(font)
 

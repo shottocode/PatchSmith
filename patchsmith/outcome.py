@@ -2,14 +2,14 @@
 a code, the counts, the reason in one sentence and the possible actions afterwards. From here also the text of the
 windows the interface shows at the end, one per code, with the buttons for the next step.
 
-The functions of automatico still return the same values as before (the command line and the tests use them): the
-outcome is in outcome["outcome"], in the engine detection dictionary (or in the one passed to riapplica/ripristina).
+The functions of automatic still return the same values as before (the command line and the tests use them): the
+outcome is in outcome["outcome"], in the engine detection dictionary (or in the one passed to reapply/restore).
 """
 from dataclasses import asdict, dataclass, field
 
 CODES = ("OK", "PARTIAL", "NOTHING_TO_DO", "OFFICIAL", "NOT_SUPPORTED", "ANTICHEAT", "GAME_OPEN",
           "TRANSLATOR_BLOCKED", "TRANSLATOR_MISSING", "ALREADY_ORIGINAL", "PERMISSIONS", "WRONG_FOLDER", "ERROR")
-# actions proposed after an outcome (each becomes a button, except scegli_lingua which is an instruction)
+# actions proposed after an outcome (each becomes a button, except choose_language which is an instruction)
 ACTIONS = ("close_game", "use_local", "install_local", "show_remaining", "create_report", "reapply",
           "choose_language", "translate_anyway", "experimental", "restore", "translate", "retranslate", "fix")
 MAX_EXAMPLES = 20  # texts left untranslated to show (the first ones)
@@ -82,7 +82,7 @@ class Outcome:
 
 def set_(outcome, code, reason="", **fields):
     """Records the outcome in outcome["outcome"] (the detection dictionary, or the one given by the interface) and
-    returns the dictionary. With esito None it does nothing."""
+    returns the dictionary. With outcome None it does nothing."""
     if outcome is not None:
         outcome["outcome"] = Outcome(code, reason, **fields)
     return outcome
@@ -225,10 +225,10 @@ def _counts(e):
 
 
 def window(e, operation="translate", local_ready=False, current=None):
-    """The end-of-operation window: {"title", "kind" (info/avviso/errore/domanda), "text",
+    """The end-of-operation window: {"title", "kind" (info/warning/error/question), "text",
     "buttons": [(label, action)], "state" (line under the log)}. The first button is "OK" (action None).
     local_ready: the local translator is installed (then 'use_local' chooses it, otherwise it installs it);
-    attuale: the chosen translator (if it is already the local one, 'use_local' is not needed)."""
+    current: the chosen translator (if it is already the local one, 'use_local' is not needed)."""
     op = OPERATION_NAMES.get(operation, operation)
     other = "use_local" in e.actions and not (current == "local" and local_ready)  # propose another translator
     lines = []
@@ -290,7 +290,7 @@ def to_fix(e, operation="translate"):
 
 
 def fixes_filter(e):
-    """The list to show in "Fix translations" when opened from this outcome (see correzioni.FILTRI)."""
+    """The list to show in "Fix translations" when opened from this outcome (see corrections.FILTERS)."""
     if e is not None and (e.extra.get("hand_fixes_discarded") or (
             e.extra.get("discarded") and e.remaining <= e.extra["discarded"] and not e.extra.get("retried"))):
         return "game"  # (only translations the game could not show were left out of the game)
