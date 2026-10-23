@@ -1,0 +1,100 @@
+Mono path[0] = 'C:/Giochi/One Million Coins/One Million Coins_Data/Managed'
+Mono config path = 'C:/Giochi/One Million Coins/MonoBleedingEdge/etc'
+CodeReloadManager initialized
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+Initialize engine version: 6000.6.0f1 (f7f8ed4d1e24)
+[EntityIdStore] init: VM path (explicit commit), pageSize=4096, blockCount=1048576, entitiesPerBlock=256, slots reserved=4294967296 bytes
+[Subsystems] Discovering subsystems at path C:/Giochi/One Million Coins/One Million Coins_Data/UnitySubsystems
+GfxDevice: creating device client; kGfxThreadingModeClientWorkerJobs
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+Begin MonoManager ReloadAssembly
+- Finished resetting the current domain, in  0.011 seconds
+[Physics::Module] Selected backend.
+[Physics::Module] Name: PhysX
+[Physics::Module] Id: 0xf2b8ea05
+[Physics::Module] SDK Version: 4.1.2
+[Physics::Module] Integration Version: 1.0.0
+[Physics::Module] Threading Mode: Multi-Threaded
+<RI> Initializing input.
+
+Using Windows.Gaming.Input
+[Message:   BepInEx] BepInEx 5.4.23.5 - One Million Coins (01/01/1980 00:00:00)
+[Info   :   BepInEx] Running under Unity v6000.6.0.16251117
+[Info   :   BepInEx] CLR runtime version: 4.0.30319.42000
+[Info   :   BepInEx] Supports SRE: True
+[Info   :   BepInEx] System platform: Bits64, Windows
+[Message:   BepInEx] Preloader started
+[Info   :   BepInEx] Loaded 1 patcher method from [BepInEx.Preloader 5.4.23.5]
+[Info   :   BepInEx] 1 patcher plugin loaded
+[Info   :   BepInEx] Patching [UnityEngine.CoreModule] with [BepInEx.Chainloader]
+[Message:   BepInEx] Preloader finished
+[Message:   BepInEx] Chainloader ready
+[Message:   BepInEx] Chainloader started
+[Info   :   BepInEx] 2 plugins to load
+[Info   :   BepInEx] Loading [XUnity Auto Translator 5.6.3.1]
+OnLevelWasLoaded was found on AutoTranslationPlugin
+This message has been deprecated and will be removed in a later version of Unity.
+Add a delegate to SceneManager.sceneLoaded instead to get notifications after scene loading has completed
+[Debug  :XUnity.AutoTranslator] Screen resolution determine to be: 3440x1440
+[Info   :XUnity.AutoTranslator] Version of TextMesh Pro: 1.4.0.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.UI.Text.set_text through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.UI.Text.OnEnable through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.UIElements.TextElement.set_text through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TextMeshProUGUI.OnEnable through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TextMeshPro.OnEnable through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TMP_Text.set_text through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TMP_Text.SetText through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TMP_Text.SetText through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TMP_Text.SetText through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TMP_Text.SetCharArray through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked TMPro.TMP_Text.SetCharArray through Harmony hooks.
+[Warning:  HarmonyX] AccessTools.Method: Could not find method for type TMPro.TMP_Text and name SetCharArray and parameters (int[], int, int)
+[Warning:XUnity.AutoTranslator] Could not hook 'TMP_Text_SetCharArray_Hook3'. Likely due differences between different versions of the engine or text framework.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.BeginGroup through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoLabel through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoButton through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoButtonGrid through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoToggle through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.Box through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoRepeatButton through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoModalWindow through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Hooked UnityEngine.GUI.DoWindow through Harmony hooks.
+[Debug  :XUnity.AutoTranslator] Not disabling certificate checks for endpoints because a .NET 4.x runtime is used.
+[Debug  :XUnity.AutoTranslator] Probing whether OnLevelWasLoaded or SceneManager is supported in this version of Unity. Any warnings related to OnLevelWasLoaded coming from Unity can safely be ignored.
+[Debug  :XUnity.AutoTranslator] SceneManager is supported in this version of Unity.
+[Debug  :XUnity.AutoTranslator] Loaded resize command text files.
+[Debug  :XUnity.AutoTranslator] --- Loading Global Translations ---
+[Debug  :XUnity.AutoTranslator] Loaded translation text files (took 0,02 seconds)
+[Debug  :XUnity.AutoTranslator] Created variation translations (took 0 seconds)
+[Debug  :XUnity.AutoTranslator] Created token translations (took 0 seconds)
+[Info   :XUnity.AutoTranslator] Loaded XUnity.AutoTranslator into Unity [6000.6.0f1] game.
+[Info   :   BepInEx] Loading [XUnity Resource Redirector 2.1.0]
+[Message:   BepInEx] Chainloader startup complete
+UnloadTime: 1.699900 ms
+Steam initialized for One Million Coins (5258340).
+[Debug  :XUnity.AutoTranslator] [UnityInput] Using NewInputSystem
+Shader 'Hidden/Universal Render Pipeline/GaussianDepthOfField' is not supported or has been stripped from the build (in 'DepthOfFieldGaussianPostProcessPass'). PostProcessing render passes will not execute.
+Shader 'Hidden/Universal Render Pipeline/GaussianDepthOfField' is not supported or has been stripped from the build (in 'DepthOfFieldGaussianPostProcessPass'). PostProcessing render passes will not execute.
+Shader 'Hidden/Universal Render Pipeline/BokehDepthOfField' is not supported or has been stripped from the build (in 'DepthOfFieldBokehPostProcessPass'). PostProcessing render passes will not execute.
+Shader 'Hidden/Universal Render Pipeline/PaniniProjection' is not supported or has been stripped from the build (in 'PaniniProjectionPostProcessPass'). PostProcessing render passes will not execute.
+[Info   :XUnity.AutoTranslator] Skipping plugin scan because no plugin-specific translations has been registered.
+[Error  :XUnity.AutoTranslator] Error occurred during translation.
+System.NullReferenceException: Object reference not set to an instance of an object
+  at GoogleTranslate.GoogleTranslateEndpointV2.OnExtractTranslation (XUnity.AutoTranslator.Plugin.Core.Endpoints.Http.IHttpTranslationExtractionContext context) [0x000bc] in <ad5e7e568af44c8f9461a7efbc8ed093>:0
+  at XUnity.AutoTranslator.Plugin.Core.Endpoints.Http.HttpEndpoint+<Translate>d__13.MoveNext () [0x0018a] in <7c039b30d0cc4410980d6f63a5bee8d4>:0
+  at XUnity.AutoTranslator.Plugin.Core.Endpoints.TranslationEndpointManager+<Translate>d__78.MoveNext () [0x000fd] in <7c039b30d0cc4410980d6f63a5bee8d4>:0
+[Error  :XUnity.AutoTranslator] Failed: 'MASTER'
+Unloading 6 Unused Serialized files (Serialized files now loaded: 0)
+UnloadTime: 5.136000 ms
+Unloading 123 unused Assets to reduce memory usage. Loaded Objects now: 22060.
+Total: 11.042100 ms (FindLiveObjects: 1.570800 ms CreateObjectMapping: 0.395200 ms MarkObjects: 8.703600 ms  DeleteObjects: 0.114500 ms)
+
+[Physics::Module] Cleanup current backend.
+[Physics::Module] Id: 0xf2b8ea05
+Input System module state changed to: ShutdownInProgress.
+Input Polling Thread exited.
+Input System module state changed to: Shutdown.
+CodeReloadManager destroyed

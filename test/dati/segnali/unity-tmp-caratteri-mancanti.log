@@ -1,0 +1,17 @@
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+Initialize engine version: 6000.0.62f1 (f99f05b3e950)
+[Subsystems] Discovering subsystems at path C:/Giochi/Cast n Chill/castnchill_Data/UnitySubsystems
+kGfxThreadingModeSplitJobs is not supported on Direct3D 11. Reverting to kGfxThreadingModeClientWorkerJobs instead.
+GfxDevice: creating device client; kGfxThreadingModeClientWorkerJobs
+
+The character with Unicode value \u00D9 was not found in the [slkscr] font asset or any potential fallbacks. It was replaced by Unicode character \u0020 in text object [BiggestCatchTitleText].
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+The character with Unicode value \u00D9 was not found in the [slkscr] font asset or any potential fallbacks. It was replaced by Unicode character \u0020 in text object [BiggestCatchTitleText].
+UnityEngine.DebugLogHandler:Internal_Log(LogType, LogOption, String, Object)
+
+The character with Unicode value \u2011 was not found in the [TextBody_Sdf] font asset or any potential fallbacks. It was replaced by Unicode character \u0020 in text object [Text_AffixDescription(Clone)].
+The character with Unicode value \U0001F41A was not found in the [The_Hand_Extrablack] font asset or any potential fallbacks. It was replaced by Unicode character \u25A1 in text object [TextUnitPrice].
+The character with Unicode value \u10E6 was not found in the [alagard SDF] font asset or any potential fallbacks. It was replaced by Unicode character \u25A1 in text object [Text (TMP)].

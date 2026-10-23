@@ -1,0 +1,25 @@
+# Nel repository va solo il codice di PatchSmith: tutto e' ignorato tranne quello elencato qui sotto con "!".
+# Cosi' non ci finiscono mai, nemmeno per sbaglio, i dati di chi lo usa (profili, memoria, registri, salvataggi,
+# configurazioni, impostazioni...), i componenti scaricati (Ollama e i modelli, BepInEx, XUnity), le cartelle di
+# lavoro e i file generati (PatchSmith.exe, i plugin compilati).
+/*
+!/.gitignore
+!/.gitattributes
+!/LICENSE
+!/README.md
+!/LEGGIMI.md
+!/PatchSmith.pyw
+!/smith.py
+!/patchsmith/
+!/docs/
+!/data/
+!/test/
+!/components/
+/components/*
+!/components/plugin/
+/components/plugin/*
+!/components/plugin/*.cs
+
+__pycache__/
+*.pyc
+*.tmp

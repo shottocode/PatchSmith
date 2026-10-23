@@ -1,0 +1,33 @@
+Log file open, 10/13/26 14:44:12
+LogPakFile: Display: Found Pak file ../../../DDS/Content/Paks/zz_Patchsmith_it_999_P.pak attempting to mount.
+LogPakFile: Display: Mounting pak file ../../../DDS/Content/Paks/zz_Patchsmith_it_999_P.pak.
+LogPakFile: Display: Found Pak file ../../../DDS/Content/Paks/DDS-WindowsNoEditor.pak attempting to mount.
+LogPakFile: Display: Mounting pak file ../../../DDS/Content/Paks/DDS-WindowsNoEditor.pak.
+LogICUInternationalization: ICU TimeZone Detection - Raw Offset: +1:00, Platform Override: ''
+LogInit: Build: ++UE4+Release-4.25-CL-1466
+LogInit: Engine Version: 4.25.3-1466+++UE4+Release-4.25
+LogInit: Base Directory: C:/Program Files (x86)/Steam/steamapps/common/Dungeon Defenders Awakened/DDS/Binaries/Win64/
+[2026.10.13-12.44.12:942][  0]LogInit: Overriding language with game user settings language configuration option (en).
+[2026.10.13-12.44.12:942][  0]LogInit: Overriding locale with game user settings locale configuration option (en).
+[2026.10.13-12.44.13:284][  0]LogInit: Overriding language with game user settings language configuration option (en).
+[2026.10.13-12.44.13:284][  0]LogInit: Overriding locale with game user settings locale configuration option (en).
+[2026.10.13-12.44.13:288][  0]LogTextLocalizationManager: Compacting localization data took   0.44ms
+[2026.10.13-12.44.13:705][  0]LogPackageLocalizationCache: Processed 19 localized package path(s) for 1 prioritized culture(s) in 0.000037 seconds
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: Couldn't find file for package /Game/DDS/Audio/SFX/Characters/Heroes/Squire/DDGR_Heavy_Sword_V2_B_short requested by async loading code. NameToLoad: /Game/DDS/Audio/SFX/Characters/Heroes/Squire/DDGR_Heavy_Sword_V2_B_short
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: This will hitch streaming because it ends up searching the disk instead of finding the file in the pak file.
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: Found 0 dependent packages...
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: Couldn't find file for package /Game/DDS/Audio/SFX/Characters/Heroes/Squire/DDGR_Heavy_Sword_V2_C_short requested by async loading code. NameToLoad: /Game/DDS/Audio/SFX/Characters/Heroes/Squire/DDGR_Heavy_Sword_V2_C_short
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: This will hitch streaming because it ends up searching the disk instead of finding the file in the pak file.
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: Found 0 dependent packages...
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: Couldn't find file for package /Game/DDS/Audio/SFX/Characters/Heroes/Squire/DDGR_Axe_A_short requested by async loading code. NameToLoad: /Game/DDS/Audio/SFX/Characters/Heroes/Squire/DDGR_Axe_A_short
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: This will hitch streaming because it ends up searching the disk instead of finding the file in the pak file.
+[2026.10.13-12.44.20:736][  0]LogStreaming: Error: Found 0 dependent packages...
+[2026.10.13-12.44.24:696][  0]LogInit: Display: Game Engine Initialized.
+[2026.10.13-12.44.24:727][  0]LogInit: Display: Starting Game.
+[2026.10.13-12.44.25:104][  0]LogPlayFabCpp: Error: You must log in before calling this function
+[2026.10.13-12.45.37:282][  1]LogMaterial: Error: Tried to access an uncooked shader map ID in a cooked application
+[2026.10.13-12.45.38:660][ 26]LogAudio: Error: Soundwave 'SoundWave /Game/DDS/Audio/SFX/UI/Menu_Swoosh1.Menu_Swoosh1' was not loaded when it should have been, forcing a sync load.
+[2026.10.13-12.45.39:594][ 54]LogAudio: Error: Soundwave 'SoundWave /Game/DDS/Audio/SFX/UI/MainMenuAppear.MainMenuAppear' was not loaded when it should have been, forcing a sync load.
+[2026.10.13-12.46.23:283][332]LogPlayFabCpp: Error: You must log in before calling this function
+[2026.10.13-12.46.44:682][417]LogInit: Display: PreExit Game.
+[2026.10.13-12.46.45:910][417]Log file closed, 10/13/26 14:46:45

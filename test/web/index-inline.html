@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+<script>
+/* Patchsmith - iniettore per giochi web (generato automaticamente, non modificare).
+ * Sostituisce i testi visualizzati che corrispondono esattamente a una voce del dizionario:
+ * nodi di testo, attributi title/placeholder/aria-label/alt, pulsanti, titolo della pagina e testo
+ * disegnato su canvas. Il codice del gioco non viene modificato.
+ * Per tornare all'originale: python -I smith.py ripristina <profilo>
+ */
+(function () {
+  "use strict";
+  var DIZIONARIO = {"Continue": "Continua", "Delete": "Elimina", "Enter a digit": "Inserisci una cifra", "Large": "Grande", "Music": "Musica", "Note": "Nota", "Notes": "Note", "Open menu": "Apri menu", "PLAY": "GIOCA", "Quit Game": "Esci dal gioco", "Room Cleared!": "Stanza completata!", "Save & Quit": "Salva ed esci", "Score": "Punteggio", "Search\u2026": "Cerca\u2026", "Start Game": "Inizia partita", "Sudoku Mansion": "Villa Sudoku", "Text size": "Dimensione testo", "The menu music is playing now. Drag the": "La musica del menu \u00e8 in riproduzione. Trascina il", "\u306f\u3044": "S\u00ec", "\u8a2d\u5b9a": "Impostazioni"};
+  var mappa = new Map();
+  Object.keys(DIZIONARIO).forEach(function (k) { mappa.set(k, DIZIONARIO[k]); });
+  if (!mappa.size) return;
+
+  var ATTRIBUTI = ["title", "placeholder", "aria-label", "alt"];
+  var IGNORA = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1, CODE: 1, PRE: 1 };
+  var scrittiTesto = new WeakMap(); // nodo di testo -> valore scritto da noi
+  var scrittiAttr = new WeakMap(); // elemento -> {attributo: valore scritto da noi}
+
+  function traduci(s) {
+    // nessuna lunghezza minima: in giapponese/cinese/coreano un menu puo' essere di 1-2 caratteri
+    if (typeof s !== "string" || !s || s.length > 2000) return null;
+    var t = mappa.get(s);
+    if (t === undefined) {
+      var nucleo = s.replace(/\s+/g, " ").trim();
+      if (!nucleo) return null;
+      t = mappa.get(nucleo);
+      if (t === undefined) return null;
+    }
+    var inizio = s.length - s.replace(/^\s+/, "").length;
+    var fine = s.replace(/\s+$/, "").length;
+    return s.slice(0, inizio) + t + s.slice(fine);
+  }
+
+  // Nomi di tasti (<kbd>, class="key"...): restano in originale, come sulla tastiera.
+  var CLASSI_TASTO = ["key", "kbd", "keycap", "hotkey", "keybind", "shortcut-key"];
+  function contestoTasto(el) {
+    for (var i = 0; el && el.nodeType === 1 && i < 3; i++, el = el.parentNode) {
+      if (el.nodeName === "KBD") return true;
+      for (var j = 0; el.classList && j < CLASSI_TASTO.length; j++) {
+        if (el.classList.contains(CLASSI_TASTO[j])) return true;
+      }
+    }
+    return false;
+  }
+
+  function nodoTesto(n) {
+    var p = n.parentNode;
+    if (!p || IGNORA[p.nodeName]) return;
+    var attuale = n.nodeValue;
+    if (scrittiTesto.get(n) === attuale) return;
+    var t = traduci(attuale);
+    if (t === null || t === attuale || p.isContentEditable || contestoTasto(p)) return;
+    // <option> senza value: il suo valore e' il testo, che il gioco puo' leggere come dato
+    if (p.nodeName === "OPTION" && !p.hasAttribute("value")) p.setAttribute("value", p.value);
+    scrittiTesto.set(n, t);
+    n.nodeValue = t;
+  }
+
+  function attributo(el, nome, v) {
+    var scritti = scrittiAttr.get(el);
+    if (scritti && scritti[nome] === v) return;
+    var t = traduci(v);
+    if (t === null || t === v) return;
+    if (!scritti) { scritti = {}; scrittiAttr.set(el, scritti); }
+    scritti[nome] = t;
+    el.setAttribute(nome, t);
+  }
+
+  function elemento(el) {
+    if (!el.getAttribute) return;
+    for (var i = 0; i < ATTRIBUTI.length; i++) {
+      var v = el.getAttribute(ATTRIBUTI[i]);
+      if (v) attributo(el, ATTRIBUTI[i], v);
+    }
+    // pulsanti <input>: solo se il valore non viene inviato come dato (nessun attributo name)
+    if (el.nodeName === "INPUT" && (el.type === "button" || el.type === "submit") && !el.name && el.value) {
+      var tv = traduci(el.value);
+      if (tv !== null && tv !== el.value) el.value = tv;
+    }
+  }
+
+  function visita(radice) {
+    if (!radice) return;
+    if (radice.nodeType === 3) { nodoTesto(radice); return; }
+    if (radice.nodeType !== 1 && radice.nodeType !== 9 && radice.nodeType !== 11) return;
+    if (radice.nodeType === 1) {
+      if (IGNORA[radice.nodeName]) return;
+      elemento(radice);
+    }
+    var w = document.createTreeWalker(radice, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    var n;
+    while ((n = w.nextNode())) {
+      if (n.nodeType === 3) nodoTesto(n); else elemento(n);
+    }
+  }
+
+  var osservatore = new MutationObserver(function (mutazioni) {
+    var aggiunti = new Set();
+    for (var i = 0; i < mutazioni.length; i++) {
+      var m = mutazioni[i];
+      if (m.type === "characterData") nodoTesto(m.target);
+      else if (m.type === "attributes") elemento(m.target);
+      else for (var j = 0; j < m.addedNodes.length; j++) aggiunti.add(m.addedNodes[j]);
+    }
+    // visita solo i nodi aggiunti il cui antenato non e' gia' stato aggiunto nello stesso giro
+    aggiunti.forEach(function (n) {
+      for (var a = n.parentNode; a; a = a.parentNode) if (aggiunti.has(a)) return;
+      if (n.isConnected !== false) visita(n);
+    });
+  });
+  osservatore.observe(document.documentElement || document, {
+    subtree: true, childList: true, characterData: true,
+    attributes: true, attributeFilter: ATTRIBUTI.concat(["value"])
+  });
+
+  // Testo disegnato su canvas (giochi HTML5: Phaser, RPG Maker MV/MZ, ...)
+  var C = window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype;
+  if (C) {
+    ["fillText", "strokeText", "measureText"].forEach(function (nome) {
+      var originale = C[nome];
+      if (typeof originale !== "function") return;
+      C[nome] = function (testo) {
+        var t = typeof testo === "string" ? traduci(testo) : null;
+        if (t === null) return originale.apply(this, arguments);
+        var argomenti = Array.prototype.slice.call(arguments);
+        argomenti[0] = t;
+        return originale.apply(this, argomenti);
+      };
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { visita(document.documentElement); });
+  } else {
+    visita(document.documentElement);
+  }
+})();
+
+</script>
+    <meta charset="utf-8">
+    <title>Sudoku Mansion</title>
+  </head>
+  <body>
+    <h1 id="t"> Continue </h1>
+    <p id="frag">The menu music is playing now. Drag the <strong>Music</strong> slider to set its volume live.</p>
+    <button id="b" title="Open menu" aria-label="Open menu">Quit Game</button>
+    <input id="i" placeholder="Search…">
+    <textarea id="ta">Continue</textarea>
+    <select id="sel"><option>Large</option><option value="s">Note</option></select>
+    <form id="f"><input id="sub" type="submit" name="act" value="Start Game"><input id="btn2" type="button" value="Start Game"></form>
+    <p id="notes">Notes</p><p id="note">Note</p><button id="amp">Save &amp; Quit</button>
+    <button id="del" class="danger-btn">Delete</button>
+    <button id="cjk1">設定</button><button id="cjk2"> はい </button><span id="corto">OK</span>
+    <button id="play">PLAY</button><button id="ok">OK</button>
+    <ul><li class="hotkeys-row"><span class="hotkeys-keys"><kbd id="kbd" class="key">Delete</kbd>
+      <button id="keybtn" type="button" class="key key--editable">Delete</button></span>
+      <span id="azione" class="hotkeys-actions">Enter a digit</span></li></ul>
+    <p id="dyn"></p><p id="untouched">Some other text</p>
+    <canvas id="c" width="300" height="40"></canvas>
+    <script>
+      setTimeout(function(){
+        document.getElementById('dyn').textContent = 'Room Cleared!';
+        document.getElementById('t').firstChild.nodeValue = ' Text size ';
+        var n = document.createElement('div'); n.id = 'nuovo';
+        n.innerHTML = '<span>Quit Game</span><span>Continue</span><span>Music</span>';
+        document.body.appendChild(n);
+        document.getElementById('b').setAttribute('title', 'Open menu');
+        var ctx = document.getElementById('c').getContext('2d');
+        window.__w1 = ctx.measureText('Score').width; window.__w0 = ctx.measureText('Punteggio').width;
+        ctx.fillText('Score', 10, 20);
+        window.__pronto = true;
+      }, 50);
+    </script>
+  </body>
+</html>

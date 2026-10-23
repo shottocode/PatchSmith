@@ -1,0 +1,6 @@
+<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='.NET Runtime'/><EventID Qualifiers='0'>1026</EventID><Version>0</Version><Level>2</Level><Task>0</Task><Opcode>0</Opcode><Keywords>0x80000000000000</Keywords><TimeCreated SystemTime='2026-10-16T03:29:57.8447031Z'/><EventRecordID>134124</EventRecordID><Correlation/><Execution ProcessID='5504' ThreadID='0'/><Channel>Application</Channel><Computer>PC</Computer><Security/></System><EventData><Data>Applicazione: EtwHostServiceUpdater.exe
+Versione framework: v4.0.30319
+Descrizione: il processo è stato terminato a causa di un'eccezione non gestita.
+Informazioni sull'eccezione: System.ArgumentException
+   in System.Windows.Media.CompositionTarget.SetRootVisual(System.Windows.Media.Visual)
+   in System.Windows.Media.CompositionTarget.set_RootVisual(System.Windows.Media.Visual)</Data></EventData></Event>

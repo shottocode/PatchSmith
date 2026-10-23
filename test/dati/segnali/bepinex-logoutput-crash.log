@@ -1,0 +1,14 @@
+[Message:   BepInEx] BepInEx 5.4.23.5 - One Million Coins (01/01/1980 00:00:00)
+[Info   :   BepInEx] Running under Unity v6000.6.0.16251117
+[Info   :   BepInEx] CLR runtime version: 4.0.30319.42000
+[Info   :   BepInEx] Supports SRE: True
+[Info   :   BepInEx] System platform: Bits64, Windows
+[Message:   BepInEx] Preloader started
+[Info   :   BepInEx] Loaded 1 patcher method from [BepInEx.Preloader 5.4.23.5]
+[Info   :   BepInEx] 1 patcher plugin loaded
+[Info   :   BepInEx] Patching [UnityEngine.CoreModule] with [BepInEx.Chainloader]
+[Message:   BepInEx] Preloader finished
+[Message:   BepInEx] Chainloader ready
+[Message:   BepInEx] Chainloader started
+[Info   :   BepInEx] 2 plugins to load
+[Info   :   BepInEx] Loading [XUnity Auto Translator 5.6.3.1]

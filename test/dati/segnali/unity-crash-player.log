@@ -1,0 +1,115 @@
+Mono path[0] = 'C:/Giochi/Copia vecchia/One Million Coins/One Million Coins_Data/Managed'
+Mono config path = 'C:/Giochi/Copia vecchia/One Million Coins/MonoBleedingEdge/etc'
+CodeReloadManager initialized
+Input System module state changed to: Initialized.
+[Physics::Module] Initialized fallback backend.
+[Physics::Module] Id: 0xdecafbad
+Initialize engine version: 6000.6.0f1 (f7f8ed4d1e24)
+[EntityIdStore] init: VM path (explicit commit), pageSize=4096, blockCount=1048576, entitiesPerBlock=256, slots reserved=4294967296 bytes
+[Subsystems] Discovering subsystems at path C:/Giochi/Copia vecchia/One Million Coins/One Million Coins_Data/UnitySubsystems
+GfxDevice: creating device client; kGfxThreadingModeClientWorkerJobs
+Direct3D:
+    Version:  Direct3D 11.0 [level 11.1]
+Begin MonoManager ReloadAssembly
+[Message:   BepInEx] BepInEx 5.4.23.5 - One Million Coins (01/01/1980 00:00:00)
+[Info   :   BepInEx] Running under Unity v6000.6.0.16251117
+[Info   :   BepInEx] CLR runtime version: 4.0.30319.42000
+[Info   :   BepInEx] Supports SRE: True
+[Info   :   BepInEx] System platform: Bits64, Windows
+[Message:   BepInEx] Preloader started
+[Info   :   BepInEx] Loaded 1 patcher method from [BepInEx.Preloader 5.4.23.5]
+[Info   :   BepInEx] 1 patcher plugin loaded
+[Info   :   BepInEx] Patching [UnityEngine.CoreModule] with [BepInEx.Chainloader]
+[Message:   BepInEx] Preloader finished
+[Message:   BepInEx] Chainloader ready
+[Message:   BepInEx] Chainloader started
+[Info   :   BepInEx] 2 plugins to load
+[Info   :   BepInEx] Loading [XUnity Auto Translator 5.6.3.1]
+OnLevelWasLoaded was found on AutoTranslationPlugin
+This message has been deprecated and will be removed in a later version of Unity.
+Add a delegate to SceneManager.sceneLoaded instead to get notifications after scene loading has completed
+Crash!!!
+SymInit: Symbol-SearchPath: '.;C:\Giochi\Copia vecchia\One Million Coins;C:/Giochi/Copia vecchia/One Million Coins/One Million Coins_Data/Plugins\x86_64;C:/Giochi/Copia vecchia/One Million Coins/One Million Coins_Data/Plugins;C:\Giochi\Copia vecchia\One Million Coins;C:\WINDOWS;C:\WINDOWS\system32;', symOptions: 534, UserName: 'giocatore'
+OS-Version: 10.0.0
+C:\Giochi\Copia vecchia\One Million Coins\One Million Coins.exe:One Million Coins.exe (00007FF7D2D50000), size: 679936 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 6000.6.0.63725
+C:\Giochi\Copia vecchia\One Million Coins\UnityPlayer.dll:UnityPlayer.dll (00007FF838060000), size: 39817216 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 6000.6.0.63725
+C:\Giochi\Copia vecchia\One Million Coins\WINHTTP.dll:WINHTTP.dll (0000000180000000), size: 45056 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 4.5.0.0
+C:\Giochi\Copia vecchia\One Million Coins\DSTORAGE.dll:DSTORAGE.dll (00007FF8B2840000), size: 217088 (result: 0), SymType: '-deferred-', PDB: '', fileVersion: 1.3.2506.2501
+C:\Giochi\Copia vecchia\One Million Coins\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll:mono-2.0-bdwgc.dll (00007FF869340000), size: 10760192 (result: 0), SymType: '-deferred-', PDB: ''
+
+========== OUTPUTTING STACK TRACE ==================
+
+0x00007FF83970F407 (UnityPlayer) UnityMain
+0x00007FF8393D226D (UnityPlayer) UnityMain
+0x00007FF8393CC63C (UnityPlayer) UnityMain
+0x00007FF8393556F7 (UnityPlayer) UnityMain
+0x00007FF83956B736 (UnityPlayer) UnityMain
+0x00007FF83956C6E8 (UnityPlayer) UnityMain
+0x00007FF839448253 (UnityPlayer) UnityMain
+SymInit: Symbol-SearchPath: '.;C:\Giochi\Copia vecchia\One Million Coins;C:/Giochi/Copia vecchia/One Million Coins/One Million Coins_Data/Plugins\x86_64;C:/Giochi/Copia vecchia/One Million Coins/One Million Coins_Data/Plugins;C:\Giochi\Copia vecchia\One Million Coins;C:\WINDOWS;C:\WINDOWS\system32;', symOptions: 534, UserName: 'giocatore'
+OS-Version: 10.0.0
+C:\Giochi\Copia vecchia\One Million Coins\One Million Coins.exe:One Million Coins.exe (00007FF7D2D50000), size: 679936 (result: 0), SymType: '-exported-', PDB: 'C:\Giochi\Copia vecchia\One Million Coins\One Million Coins.exe', fileVersion: 6000.6.0.63725
+C:\Giochi\Copia vecchia\One Million Coins\UnityPlayer.dll:UnityPlayer.dll (00007FF838060000), size: 39817216 (result: 0), SymType: '-exported-', PDB: 'C:\Giochi\Copia vecchia\One Million Coins\UnityPlayer.dll', fileVersion: 6000.6.0.63725
+C:\Giochi\Copia vecchia\One Million Coins\WINHTTP.dll:WINHTTP.dll (0000000180000000), size: 45056 (result: 0), SymType: '-exported-', PDB: 'C:\Giochi\Copia vecchia\One Million Coins\WINHTTP.dll', fileVersion: 4.5.0.0
+C:\Giochi\Copia vecchia\One Million Coins\DSTORAGE.dll:DSTORAGE.dll (00007FF8B2840000), size: 217088 (result: 0), SymType: '-exported-', PDB: 'C:\Giochi\Copia vecchia\One Million Coins\DSTORAGE.dll', fileVersion: 1.3.2506.2501
+C:\Giochi\Copia vecchia\One Million Coins\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll:mono-2.0-bdwgc.dll (00007FF869340000), size: 10760192 (result: 0), SymType: '-exported-', PDB: 'C:\Giochi\Copia vecchia\One Million Coins\MonoBleedingEdge\EmbedRuntime\mono-2.0-bdwgc.dll'
+  ERROR: SymGetSymFromAddr64, GetLastError: 'Tentativo di accedere ad un indirizzo non valido.' (Address: 00007FF8390B030E)
+0x00007FF8390B030E (UnityPlayer) (function-name not available)
+0x0000016928D5098D (UnityEngine.CoreModule) (wrapper managed-to-native) UnityEngine.GameObject:Internal_AddComponentWithType_Injected (intptr,System.Type)
+0x0000016928D5076B (UnityEngine.CoreModule) UnityEngine.GameObject:Internal_AddComponentWithType (System.Type)
+0x0000016928D506C3 (UnityEngine.CoreModule) UnityEngine.GameObject:AddComponent (System.Type)
+0x0000016928D505FB (UnityEngine.CoreModule) UnityEngine.GameObject:AddComponent<T_REF> ()
+0x0000016928E4984B (XUnity.AutoTranslator.Plugin.Core) XUnity.AutoTranslator.Plugin.Core.PluginLoader:LoadWithConfig (XUnity.AutoTranslator.Plugin.Core.IPluginEnvironment)
+0x0000016928E4971B (XUnity.AutoTranslator.Plugin.BepInEx) XUnity.AutoTranslator.Plugin.BepInEx.AutoTranslatorPlugin:Awake ()
+0x0000016928E48D58 (mscorlib) (wrapper runtime-invoke) object:runtime_invoke_void__this__ (object,intptr,intptr,intptr)
+0x00007FF8695C78AE (mono-2.0-bdwgc) mono_jit_set_domain
+0x00007FF869509104 (mono-2.0-bdwgc) mono_object_get_virtual_method
+0x00007FF8695091F0 (mono-2.0-bdwgc) mono_runtime_invoke
+0x00007FF839357014 (UnityPlayer) UnityMain
+0x00007FF8393D1F26 (UnityPlayer) UnityMain
+0x00007FF8393D242A (UnityPlayer) UnityMain
+0x00007FF8393CC63C (UnityPlayer) UnityMain
+0x00007FF8393556F7 (UnityPlayer) UnityMain
+0x00007FF83956B736 (UnityPlayer) UnityMain
+0x00007FF83956C6E8 (UnityPlayer) UnityMain
+0x00007FF839448253 (UnityPlayer) UnityMain
+  ERROR: SymGetSymFromAddr64, GetLastError: 'Tentativo di accedere ad un indirizzo non valido.' (Address: 00007FF8390B030E)
+0x00007FF8390B030E (UnityPlayer) (function-name not available)
+0x0000016928D5098D (UnityEngine.CoreModule) (wrapper managed-to-native) UnityEngine.GameObject:Internal_AddComponentWithType_Injected (intptr,System.Type)
+0x0000016928D5076B (UnityEngine.CoreModule) UnityEngine.GameObject:Internal_AddComponentWithType (System.Type)
+0x0000016928D506C3 (UnityEngine.CoreModule) UnityEngine.GameObject:AddComponent (System.Type)
+0x0000016928D5F61B (BepInEx) BepInEx.Bootstrap.Chainloader:Start ()
+0x0000016928D317BB (UnityEngine.CoreModule) UnityEngine.Application:.cctor ()
+0x00000168BFF86FD5 (mscorlib) (wrapper runtime-invoke) object:runtime_invoke_void (object,intptr,intptr,intptr)
+0x00007FF8695C78AE (mono-2.0-bdwgc) mono_jit_set_domain
+0x00007FF869509104 (mono-2.0-bdwgc) mono_object_get_virtual_method
+0x00007FF8695040B5 (mono-2.0-bdwgc) mono_runtime_class_init
+0x00007FF86961D3BC (mono-2.0-bdwgc) mono_set_break_policy
+0x00007FF8695BC9F0 (mono-2.0-bdwgc) mono_unity_type_is_unmanaged
+0x00007FF8695BE2E7 (mono-2.0-bdwgc) mono_unity_type_is_unmanaged
+0x00007FF8695C515E (mono-2.0-bdwgc) mono_jit_set_domain
+0x00007FF8695C714F (mono-2.0-bdwgc) mono_jit_set_domain
+0x00007FF869509104 (mono-2.0-bdwgc) mono_object_get_virtual_method
+0x00007FF8695091F0 (mono-2.0-bdwgc) mono_runtime_invoke
+  ERROR: SymGetSymFromAddr64, GetLastError: 'Tentativo di accedere ad un indirizzo non valido.' (Address: 00007FF839019B22)
+0x00007FF839019B22 (UnityPlayer) (function-name not available)
+0x00007FF8393C1113 (UnityPlayer) UnityMain
+0x00007FF8393BF186 (UnityPlayer) UnityMain
+0x00007FF83933B2E1 (UnityPlayer) UnityMain
+0x00007FF83934DC66 (UnityPlayer) UnityMain
+0x00007FF83934E573 (UnityPlayer) UnityMain
+0x00007FF83934E8C9 (UnityPlayer) UnityMain
+0x00007FF8397E7D1A (UnityPlayer) UnityMain
+0x00007FF83953EC20 (UnityPlayer) UnityMain
+  ERROR: SymGetSymFromAddr64, GetLastError: 'Tentativo di accedere ad un indirizzo non valido.' (Address: 00007FF839329A61)
+0x00007FF839329A61 (UnityPlayer) (function-name not available)
+0x00007FF83932A20B (UnityPlayer) UnityMain
+  ERROR: SymGetSymFromAddr64, GetLastError: 'Tentativo di accedere ad un indirizzo non valido.' (Address: 00007FF7D2D511F6)
+0x00007FF7D2D511F6 (One Million Coins) (function-name not available)
+0x00007FF8CD26DDA7 (KERNEL32) BaseThreadInitThunk
+0x00007FF8CEAFEE4C (ntdll) RtlUserThreadStart
+
+========== END OF STACKTRACE ===========
+
+A crash has been intercepted by the crash handler. For call stack and other details, see the latest crash report generated in:
+ * C:/Users/giocatore/AppData/Local/Temp/OyenUmiGames/One Million Coins/Crashes

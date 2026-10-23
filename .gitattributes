@@ -1,0 +1,3 @@
+# I file si salvano esattamente come sono (a capo di Windows o Unix compresi): alcune prove confrontano i byte di
+# file veri, che non devono cambiare passando dal repository.
+* -text

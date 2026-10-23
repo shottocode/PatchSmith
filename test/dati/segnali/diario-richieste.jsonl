@@ -1,0 +1,11 @@
+{"ts": "2026-10-18T04:29:41", "testo": "MASTER", "da": "en", "a": "it", "esito": "rifiutata", "backend": "locale", "motivo": "scartata dai controlli (traduttore locale)", "risposta": "MASTER"}
+{"ts": "2026-10-18T04:29:44", "testo": "Hold {{A}}s to leap", "da": "en", "a": "it", "esito": "rinviata", "backend": "google", "motivo": "Google: per restare nei margini prudenti la prossima richiesta potrebbe partire solo tra 312 secondi", "risposta": "Hold {{A}}s to leap"}
+{"ts": "2026-10-18T04:29:50", "testo": "Warm pool of light", "da": "en", "a": "it", "esito": "rilassata", "backend": "locale", "motivo": "scartata dai controlli (traduttore locale)", "risposta": "Warm piscina di luce"}
+{"ts": "2026-10-18T04:30:02", "testo": "Status lamp collar", "da": "en", "a": "it", "esito": "errore", "backend": null, "motivo": "traduttore locale: Il traduttore locale non risponde (ConnectionResetError): riprova."}
+{"ts": "2026-10-18T04:30:20", "testo": "Captured drive belt", "da": "en", "a": "it", "esito": "interrotta", "backend": null, "motivo": "il gioco si sta chiudendo"}
+{"ts": "2026-10-18T04:30:25", "testo": "Continuous glove", "da": "en", "a": "it", "esito": "ok", "backend": "locale", "motivo": "", "risposta": "Guanto a lunga durata"}
+{"ts": "2026-10-18T04:30:26", "testo": "Tea and maintenance bench", "da": "en", "a": "it", "esito": "ok", "backend": "memoria", "motivo": "", "risposta": "Tavolo per il tè e per la manutenzione"}
+{"ts": "2026-10-18T04:30:27", "testo": "Hold {{A}}s to leap", "da": "en", "a": "it", "esito": "rinviata", "backend": "google", "motivo": "Google: per restare nei margini prudenti la prossima richiesta potrebbe partire solo tra 250 secondi", "risposta": "Hold {{A}}s to leap"}
+{"ts": "2026-10-18T04:30:28", "testo": "Lift task light 5", "da": "en", "a": "it", "esito": "rifiutata", "backend": "locale", "motivo": "scartata dai controlli (traduttore locale)", "risposta": "Lift task light 5"}
+{"ts": "2026-10-18T04:30:29", "testo": "Lift task light 5", "da": "en", "a": "it", "esito": "ok", "backend": "locale", "motivo": "", "risposta": "Lampada da lavoro sollevabile 5"}
+{"ts": "2026-10-18T04:30
