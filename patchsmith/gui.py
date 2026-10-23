@@ -1,15 +1,15 @@
-"""Interfaccia grafica (Tkinter, inclusa in Python): scegli la cartella del gioco e premi Traduci.
+"""Graphical interface (Tkinter, included in Python): choose the game's folder and press Translate.
 
-Ogni operazione finisce con una finestra scelta dal suo esito (outcome.py: tradotto, in parte, non supportato, gioco
-aperto, traduttore fermo...) con i pulsanti per il passo successivo. Il registro di ogni operazione si salva anche su
-disco, in registri/ tra i dati dell'utente (gli ultimi MAX_REGISTRI), con i dettagli tecnici degli errori; "Crea
-rapporto" li mette in uno zip sul Desktop (report.py).
-All'apertura, i giochi con segnali nuovi dopo l'ultima partita (crash, traduttore fermo, file rimessi dal gioco...) si
-controllano da soli (checks.py): il risultato e' nella riga sotto la cartella, con "Dettagli" (e "Ritraduci" per
-le frasi tradotte mentre si giocava da rifare).
-"Correggi traduzioni…" apre la finestra con l'elenco delle traduzioni del gioco e i loro problemi (gui_corrections.py):
-le correzioni salvate li' si scrivono nel gioco da sole ("Riapplica"); da li' partono anche la ritraduzione dei testi
-scelti, "Ritraduci tutto con Qualità (12B)" e "Ricomincia da zero".
+Every operation ends with a dialog chosen by its outcome (outcome.py: translated, partly, not supported, game
+open, translator stopped...) with the buttons for the next step. The log of every operation is also saved to
+disk, in logs/ among the user's data (the last MAX_REGISTRI), with the technical details of the errors; "Create
+report" puts them in a zip on the Desktop (report.py).
+On opening, the games with new signals after the last session (crash, translator stopped, files put back by the
+game...) are checked on their own (checks.py): the result is in the line under the folder, with "Details" (and
+"Re-translate" for the lines translated while playing that need redoing).
+"Fix translations…" opens the window with the list of the game's translations and their problems
+(gui_corrections.py): the fixes saved there are written to the game on their own ("Reapply"); from there also start
+the re-translation of the chosen texts, "Re-translate everything with Quality (12B)" and "Start over".
 """
 import datetime
 import glob
@@ -32,11 +32,11 @@ from .outcome import Esito
 from .project import cartella_dati
 from .text import DETTAGLIO, leggibile, slug
 
-IMPOSTAZIONI = None  # None = settings.json tra i dati dell'utente (progetto.cartella_dati); le prove la cambiano
+IMPOSTAZIONI = None  # None = settings.json among the user's data (progetto.cartella_dati); the tests change it
 VERSIONE_IMPOSTAZIONI = 2
-# Traduttore usato dall'interfaccia. Il traduttore di prova "finto" resta solo da riga di comando
-# (--backend finto) e per i collaudi automatici (App.backend_forzato).
-BACKEND_PREDEFINITO = "locale"  # ripiego: il predefinito vero e' backend.predefinito()
+# Translator used by the interface. The "finto" test translator is only available from the command line
+# (--backend finto) and for the automatic tests (App.backend_forzato).
+BACKEND_PREDEFINITO = "locale"  # fallback: the real default is backend.predefinito()
 TRADUTTORI = {"locale": "Traduttore locale (sul tuo PC)", "google": "Google gratuito (non ufficiale)",
               "deepl": "DeepL (con la tua chiave gratuita)", "mymemory": "MyMemory (gratuito)"}
 AVVISO_GOOGLE = ("Google gratuito usa l'indirizzo del traduttore web di Google, che non è fatto per i programmi: Google "
@@ -47,14 +47,14 @@ AVVISO_GOOGLE = ("Google gratuito usa l'indirizzo del traduttore web di Google, 
                  "Per tradurre un gioco intero conviene il traduttore locale (sul tuo PC, nessun limite) oppure "
                  "DeepL con la tua chiave gratuita.")
 MODELLI_LOCALI = {"4b": "Veloce (4B)", "12b": "Qualità (12B, più lento)"}
-# i controlli prima di partire (automatico.controlli_preliminari): titolo e tipo della finestra
+# the preliminary checks (automatico.controlli_preliminari): title and type of the dialog
 FINESTRE_PRELIMINARI = {"GIOCO_APERTO": ("Il gioco è aperto", "avviso"), "LINGUA": ("Lingua da controllare", "avviso"),
                         "SOLA_LETTURA": ("Cartella del gioco protetta", "errore"),
                         "SPAZIO": ("Poco spazio libero", "avviso"), "TRADUTTORE_IN_PAUSA": ("Traduttore in pausa", "avviso"),
                         "LOCALE_ASSENTE": ("Traduttore locale da installare", "domanda"),
                         "STESSO_GIOCO": ("Stesso gioco già tradotto?", "domanda")}
-_FERMATO = object()  # risultato di un lavoro fermato con il tasto "Ferma"
-MAX_REGISTRI = 30  # registri delle operazioni tenuti su disco (i piu' vecchi si cancellano)
+_FERMATO = object()  # result of a work stopped with the "Stop" button
+MAX_REGISTRI = 30  # operation logs kept on disk (the oldest are deleted)
 
 
 def _impostazioni():
@@ -62,16 +62,16 @@ def _impostazioni():
 
 
 def _blocco_note():
-    """Il Blocco note di Windows, con il percorso intero (mai un notepad.exe della cartella corrente)."""
+    """Windows Notepad, with the full path (never a notepad.exe from the current folder)."""
     return os.path.join(os.environ.get("SystemRoot") or r"C:\Windows", "System32", "notepad.exe")
 
 
 def _apri(percorso):
-    """Apre il file con il programma predefinito; se Windows non ne ha uno per quel tipo di file (es. .json su un PC
-    nuovo), con il Blocco note. OSError se non riesce nessuno dei due."""
+    """Opens the file with the default program; if Windows has none for that file type (e.g. .json on a new PC),
+    with Notepad. OSError if neither works."""
     if sys.platform.startswith("win"):
         try:
-            os.startfile(percorso)  # noqa: S606 - apre il file con il programma predefinito
+            os.startfile(percorso)  # noqa: S606 - opens the file with the default program
         except OSError:
             subprocess.Popen([_blocco_note(), percorso])
     else:
@@ -79,7 +79,7 @@ def _apri(percorso):
 
 
 def mostra_file(percorso):
-    """Apre la cartella con il file selezionato (Esplora file)."""
+    """Opens the folder with the file selected (File Explorer)."""
     if sys.platform.startswith("win"):
         subprocess.Popen(["explorer", "/select,", os.path.normpath(percorso)])
     else:
@@ -91,8 +91,8 @@ def cartella_registri():
 
 
 def impronta_codice():
-    """(versione scritta in patchsmith/__init__.py, data piu' recente dei file del programma): se cambia mentre la
-    finestra e' aperta, PatchSmith e' stato aggiornato e la finestra usa ancora il codice di prima."""
+    """(version written in patchsmith/__init__.py, most recent date of the program's files): if it changes while the
+    window is open, PatchSmith was updated and the window still uses the old code."""
     cartella = os.path.dirname(os.path.abspath(__file__))
     try:
         with open(os.path.join(cartella, "__init__.py"), encoding="utf-8") as f:
@@ -114,11 +114,11 @@ def _quanti(n, uno, molti):
 
 
 def _nota_musicale(master, colore, accesa):
-    """Nota musicale 16x16 disegnata qui (come l'altoparlante): barrata se la musica e' spenta."""
+    """16x16 musical note drawn here (like the speaker): crossed out if the music is off."""
     img = tk.PhotoImage(master=master, width=16, height=16)
     punti = [(x, y) for x in range(2, 8) for y in range(10, 15) if ((x - 4.5) / 2.6) ** 2 + ((y - 12) / 1.9) ** 2 <= 1]
-    punti += [(x, y) for x in (7, 8) for y in range(2, 12)]  # l'asta
-    punti += [(9, 3), (10, 3), (10, 4), (11, 4), (11, 5), (12, 6), (12, 7), (12, 8), (11, 9)]  # la bandierina
+    punti += [(x, y) for x in (7, 8) for y in range(2, 12)]  # the stem
+    punti += [(9, 3), (10, 3), (10, 4), (11, 4), (11, 5), (12, 6), (12, 7), (12, 8), (11, 9)]  # the flag
     if not accesa:
         punti += [(i, 15 - i) for i in range(1, 15)] + [(i, 14 - i) for i in range(1, 14)]
     for x, y in set(punti):
@@ -127,12 +127,12 @@ def _nota_musicale(master, colore, accesa):
 
 
 def _altoparlante(master, colore, acceso):
-    """Altoparlante 16x16 disegnato qui (come le bandierine): con le onde se acceso, con la x se spento."""
+    """16x16 speaker drawn here (like the flags): with the waves if on, with the x if off."""
     img = tk.PhotoImage(master=master, width=16, height=16)
-    punti = [(x, y) for x in range(1, 4) for y in range(6, 10)]  # il corpo
-    punti += [(x, y) for x in range(4, 8) for y in range(6 - (x - 3), 10 + (x - 3))]  # il cono
+    punti = [(x, y) for x in range(1, 4) for y in range(6, 10)]  # the body
+    punti += [(x, y) for x in range(4, 8) for y in range(6 - (x - 3), 10 + (x - 3))]  # the cone
     if acceso:
-        for raggio in (3.0, 5.6):  # due onde
+        for raggio in (3.0, 5.6):  # two waves
             punti += [(x, y) for x in range(9, 16) for y in range(16)
                       if abs(((x - 7.5) ** 2 + (y - 7.5) ** 2) ** 0.5 - raggio) < 0.6 and abs(y - 7.5) < raggio * 0.8]
     else:
@@ -146,42 +146,42 @@ class App:
     def __init__(self, radice):
         self.radice = radice
         self.coda = queue.Queue()
-        self._righe_registro = []  # le righe del registro della finestra come scritte (per cambiare lingua)
+        self._righe_registro = []  # the window's log lines as written (to change language)
         self.lavoro = None
-        self._registro = None  # file del registro dell'operazione in corso (logs/AAAAMMGG-HHMMSS-<gioco>.log)
+        self._registro = None  # log file of the running operation (logs/AAAAMMGG-HHMMSS-<gioco>.log)
         self._lucchetto = threading.Lock()
         self._operazione = None  # traduci / riapplica / ripristina / installa / rapporto
-        self._ripeti = None  # per "Riprova": ripete l'ultima operazione sul gioco
-        self._scelte_traduci = {"forza": False, "traduci_comunque": False}  # dell'ultimo Analizza e traduci
+        self._ripeti = None  # for "Try again": repeats the last operation on the game
+        self._scelte_traduci = {"forza": False, "traduci_comunque": False}  # of the last Analyze and translate
         self._in_errore = False
         self.ultimo_esito = None
-        self.esiti_controllo = []  # esiti dell'ultimo controllo dopo aver giocato (uno per gioco), per "Dettagli"
-        self._controllo_automatico = False  # il controllo in corso e' quello partito da solo all'apertura
-        # il codice caricato: se i file del programma cambiano (aggiornamento) si avvisa di riaprire la finestra
+        self.esiti_controllo = []  # outcomes of the last after-play check (one per game), for "Details"
+        self._controllo_automatico = False  # the running check is the one started on its own on opening
+        # the loaded code: if the program's files change (update) the user is told to reopen the window
         self._codice = impronta_codice()
         self._avvisato_codice = False
-        # errori nei comandi della finestra (pythonw non ha una console): nel registro su disco e in una finestra
+        # errors in the window's commands (pythonw has no console): in the log on disk and in a dialog
         radice.report_callback_exception = self._errore_interfaccia
-        radice.title("PatchSmith")  # (la versione e' nei registri e nei rapporti)
-        try:  # martello e cartella (icon.py) su questa finestra e su quelle che si aprono dopo
+        radice.title("PatchSmith")  # (the version is in the logs and in the reports)
+        try:  # hammer and folder (icon.py) on this window and on those that open later
             icona.applica(radice)
-        except tk.TclError:  # immagini rovinate: resta l'icona di Tk
+        except tk.TclError:  # damaged images: Tk's icon stays
             pass
         radice.minsize(720, 480)
         imp = self._leggi_impostazioni()
-        # lingua dell'interfaccia (bandierina in alto a destra): i testi si traducono quando la finestra li mostra
+        # interface language (flag at the top right): the texts are translated when the window shows them
         self.lingua_interfaccia = interfaccia.imposta(imp.get("interfaccia") or interfaccia.predefinita())
         interfaccia.aggancia_tk()
         _traduci_costanti()
-        self.scelta_tema = imp.get("tema", "auto")  # auto (come Windows) / scuro / chiaro
-        self.suoni_accesi = bool(imp.get("suoni", False))  # spenti di default (pulsante con l'altoparlante)
-        self.musica_accesa = bool(imp.get("musica", False))  # spenta di default (pulsante con la nota)
-        self._suono_atteso = False  # vero alla fine di un'operazione, fino alla prima finestra (_suono_finestra)
-        self._suono_forzato = None  # il suono da usare per la prossima finestra al posto di quello del suo tipo
+        self.scelta_tema = imp.get("tema", "auto")  # auto (like Windows) / dark / light
+        self.suoni_accesi = bool(imp.get("suoni", False))  # off by default (button with the speaker)
+        self.musica_accesa = bool(imp.get("musica", False))  # off by default (button with the note)
+        self._suono_atteso = False  # true at the end of an operation, until the first dialog (_suono_finestra)
+        self._suono_forzato = None  # the sound to use for the next dialog instead of the one of its type
         tema.AL_MOSTRARE = self._suono_finestra
-        # il clic di ogni pulsante, anche nelle altre finestre (finestre di dialogo, "Correggi traduzioni")
+        # the click of every button, also in the other windows (dialogs, "Fix translations")
         radice.bind_class("TButton", "<ButtonPress-1>", self._clic_pulsante, add="+")
-        if imp.get("versione", 1) < 2:  # dalla 0.2.1 la lingua del gioco si rileva da sola
+        if imp.get("versione", 1) < 2:  # since 0.2.1 the game's language is detected on its own
             imp["da"] = lingua.AUTO
         self.colori = tema.applica(radice, self.scelta_tema)
 
@@ -191,17 +191,17 @@ class App:
 
         ttk.Label(cornice, text="Cartella del gioco:").grid(row=0, column=0, sticky="w")
         self.cartella = tk.StringVar(value=imp.get("cartella", ""))
-        # solo da "Sfoglia…": niente percorsi scritti a mano (sbagliati o a meta'); il testo si puo' copiare
+        # only from "Browse…": no paths typed by hand (wrong or half-typed); the text can be copied
         self.voce_cartella = ttk.Entry(cornice, textvariable=self.cartella, state="readonly")
         self.voce_cartella.grid(row=0, column=1, sticky="ew", padx=6)
-        # largo quanto la colonna (cioe' quanto "Crea rapporto"): i bordi a destra sono tutti allineati; alto quanto
-        # il campo della cartella
+        # as wide as the column (that is, as "Create report"): the right edges are all aligned; as tall as the
+        # folder field
         self.btn_sfoglia = ttk.Button(cornice, text="Sfoglia…", style="Campo.TButton", command=self._sfoglia)
         self.btn_sfoglia.grid(row=0, column=2, sticky="nsew")
-        # bandierina: lingua dell'interfaccia (le lingue sono i file in patchsmith/ui_language/)
+        # flag: interface language (the languages are the files in patchsmith/ui_language/)
         self._bandiere = {c: interfaccia.bandiera(c, radice) for c in interfaccia.lingue()}
-        # (una tendina disegnata qui: i menu di Windows hanno il bordo chiaro anche nel tema scuro)
-        angolo = ttk.Frame(cornice)  # sotto "Sfoglia…": musica, suoni, tema chiaro/scuro e lingua
+        # (a drop-down drawn here: Windows menus have a light border even in the dark theme)
+        angolo = ttk.Frame(cornice)  # under "Browse…": music, sounds, light/dark theme and language
         angolo.grid(row=2, column=2, sticky="e", pady=(8, 0))
         self.btn_musica = ttk.Button(angolo, style="Bandiera.TButton", command=self._cambia_musica)
         self.btn_musica.pack(side="left", padx=(0, 4))
@@ -217,26 +217,26 @@ class App:
         self._simbolo_musica()
         self._tendina_lingue = None
 
-        # riga in fondo, sotto il registro: a sinistra i pulsanti del controllo dopo aver giocato ("Dettagli ultima
-        # partita", "Ritraduci N frasi"), che si vedono solo quando c'e' qualcosa da fare (il risultato e' gia' nel
-        # registro), poi la riga di stato; "Crea rapporto" a destra. stato_controllo resta il riassunto del controllo
-        # (per le prove e il registro).
+        # bottom row, under the log: on the left the buttons of the after-play check ("Last session details",
+        # "Re-translate N lines"), visible only when there is something to do (the result is already in the
+        # log), then the status line; "Create report" on the right. stato_controllo stays the summary of the check
+        # (for the tests and the log).
         self.fondo = ttk.Frame(cornice)
         self.fondo.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         riga_controllo = self.riga_controllo = ttk.Frame(self.fondo)
         self.stato_controllo = tk.StringVar(value="")
         self.btn_dettagli = ttk.Button(riga_controllo, text="Dettagli ultima partita",
                                        command=self._dettagli_controllo)
-        # frasi tradotte mentre giocavi da rifare: il controllo all'apertura non le ritraduce da solo (caricare il
-        # traduttore locale o aspettare le pause di Google bloccherebbe la finestra), lo fa questo pulsante
+        # lines translated while playing that need redoing: the check on opening does not re-translate them on its
+        # own (loading the local translator or waiting for Google's pauses would block the window), this button does
         self.btn_ritraduci = ttk.Button(riga_controllo, text="Ritraduci", command=self._ritraduci)
 
         opzioni = ttk.Frame(cornice)
         opzioni.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
         ttk.Label(opzioni, text="Da:").pack(side="left")
-        # lingue solo dall'elenco; una lingua salvata che non c'e' (vecchie impostazioni) torna alla predefinita
+        # languages only from the list; a saved language that is not there (old settings) goes back to the default
         elenco_da, elenco_a = lingua.etichette(con_auto=True), lingua.etichette()
-        # (nei menu i nomi delle lingue sono nella lingua dell'interfaccia: da li' si torna al codice con _codice)
+        # (in the menus the language names are in the interface language: from there _codice goes back to the code)
         self._etichette = {interfaccia.traduci(e): e for e in elenco_da}
         da = lingua.etichetta(imp.get("da") or lingua.AUTO)
         self.da = tk.StringVar(value=interfaccia.traduci(da if da in elenco_da else lingua.etichetta(lingua.AUTO)))
@@ -248,7 +248,7 @@ class App:
                                                         lingua.etichetta(lingua.lingua_di_windows())))
         ttk.Combobox(opzioni, textvariable=self.a, values=elenco_a, state="readonly",
                      width=20).pack(side="left", padx=(4, 12))
-        # backend_forzato serve ai collaudi automatici ("finto")
+        # backend_forzato is for the automatic tests ("finto")
         self.backend_forzato = None
 
         servizi = ttk.Frame(cornice)
@@ -269,18 +269,18 @@ class App:
         self.etichetta_credenziale = ttk.Label(servizi, text="")
         self.credenziale = tk.StringVar()
         self.voce_credenziale = ttk.Entry(servizi, textvariable=self.credenziale, width=30)
-        # prova subito la chiave DeepL o l'email di MyMemory, senza aspettare "Analizza e traduci"
+        # tests the DeepL key or the MyMemory email right away, without waiting for "Analyze and translate"
         self.btn_verifica = ttk.Button(servizi, text="Verifica", command=self._verifica_credenziale)
         self._avvisato_google = False
         self.stato_traduttore = ttk.Label(servizi, text="", style="Stato.TLabel")
         self.btn_riattiva = ttk.Button(servizi, text="Riattiva", command=self._riattiva)
-        # il modello: quello salvato, se no il migliore gia' scaricato; senza nessuno dei due si propone quello adatto
-        # alla scheda video (ollama.modello_consigliato, cercato in background: _proponi_modello)
+        # the model: the saved one, otherwise the best one already downloaded; with neither, the one suited to the
+        # graphics card is proposed (ollama.modello_consigliato, looked up in the background: _proponi_modello)
         self._modello_scelto = imp.get("modello_locale") in MODELLI_LOCALI
         modello = imp.get("modello_locale") if self._modello_scelto else ollama.modello_predefinito()
-        self._consiglio_modello = None  # (chiave, motivo) dalla scheda video
-        self._prova_locale = None  # l'ultima prova del traduttore locale (backend.prova_locale)
-        self._poi = None  # da rifare dopo l'installazione del traduttore locale (es. "Analizza e traduci")
+        self._consiglio_modello = None  # (chiave, motivo) from the graphics card
+        self._prova_locale = None  # the last test of the local translator (backend.prova_locale)
+        self._poi = None  # to redo after installing the local translator (e.g. "Analyze and translate")
         self.modello_locale = tk.StringVar(value=MODELLI_LOCALI[modello])
         self.scelta_modello = ttk.Combobox(servizi, textvariable=self.modello_locale,
                                            values=list(MODELLI_LOCALI.values()), state="readonly", width=22)
@@ -300,16 +300,16 @@ class App:
         self.btn_correggi.pack(side="left", padx=6)
         self.btn_ripristina = ttk.Button(pulsanti, text="Ripristina originali", command=self._ripristina)
         self.btn_ripristina.pack(side="right")
-        # attivo solo mentre un'operazione e' in corso: si ferma al primo punto sicuro (traduzioni salvate)
+        # enabled only while an operation is running: it stops at the first safe point (translations saved)
         self.btn_ferma = ttk.Button(pulsanti, text="Ferma", command=self._ferma)
         self.btn_ferma.pack(side="right", padx=6)
         self.btn_ferma.state(["disabled"])
-        # disattivati mentre un lavoro e' in corso: mai due lavori insieme (ne' cambi di traduttore a meta')
+        # disabled while a work is running: never two works at once (nor translator changes halfway)
         self.pulsanti = [self.btn_traduci, self.btn_correggi, self.btn_ripristina,
                          self.btn_installa, self.btn_riattiva, self.scelta_traduttore, self.scelta_modello,
                          self.btn_ritraduci]
 
-        # barra di avanzamento: visibile solo mentre un'operazione e' in corso
+        # progress bar: visible only while an operation is running
         self.barra = ttk.Progressbar(cornice, mode="indeterminate")
         self.barra.grid(row=5, column=0, columnspan=3, sticky="ew")
         self.barra.grid_remove()
@@ -327,12 +327,12 @@ class App:
         self.stato = interfaccia.TestoVar(value="")
         self.etichetta_stato = ttk.Label(self.fondo, textvariable=self.stato, style="Stato.TLabel")
         self.etichetta_stato.pack(side="left")
-        # mentre il gioco e' aperto con il suo traduttore acceso (vedi _sorveglia_dal_vivo)
+        # while the game is open with its translator on (see _sorveglia_dal_vivo)
         self.btn_ferma_vivo = ttk.Button(self.fondo, text="Ferma il traduttore del gioco",
                                          command=self._ferma_dal_vivo)
-        self._vivo_acceso = None  # nome del gioco con il traduttore acceso, l'ultima volta che si e' guardato
-        self._diario_letto = {}  # gioco -> fin dove il suo diario e' gia' stato riassunto nel registro
-        # registri, impostazioni (senza chiave ne' email) e file utili in uno zip sul Desktop, da inviare a chi aiuta
+        self._vivo_acceso = None  # name of the game with the translator on, the last time it was checked
+        self._diario_letto = {}  # game -> how far its journal has already been summarized in the log
+        # logs, settings (without key or email) and useful files in a zip on the Desktop, to send to whoever helps
         self.btn_rapporto = ttk.Button(cornice, text="Crea rapporto", command=self._crea_rapporto)
         self.btn_rapporto.grid(row=7, column=2, sticky="e", pady=(6, 0))
         self.pulsanti.append(self.btn_rapporto)
@@ -341,21 +341,21 @@ class App:
         self.radice.after(3000, self._sorveglia_dal_vivo)
         self.radice.protocol("WM_DELETE_WINDOW", self._chiudi)
         self.radice.after(500, self._controllo_iniziale)
-        if self.musica_accesa:  # accesa l'ultima volta: riparte
+        if self.musica_accesa:  # on last time: it starts again
             musica.avvia()
 
     def _chiudi(self):
-        """Non chiudere a meta' di un'installazione o di una scrittura nei file del gioco."""
+        """Do not close halfway through an installation or a write to the game's files."""
         if self.lavoro is not None and self.lavoro.is_alive():
             if not tema.chiedi(self.radice, self.colori, "Operazione in corso",
                                "PatchSmith sta ancora lavorando sui file del gioco.\n"
                                "Se chiudi adesso l'operazione resta a metà. Chiudere comunque?"):
                 return
-        self._salva_impostazioni()  # traduttore, chiave/email, cartella e lingue scelti: li ritrovi alla riapertura
+        self._salva_impostazioni()  # chosen translator, key/email, folder and languages: found again on reopening
         musica.ferma()
         self.radice.destroy()
 
-    # --- impostazioni -------------------------------------------------------------------------
+    # --- settings ------------------------------------------------------------------------------
 
     def _leggi_impostazioni(self):
         try:
@@ -365,9 +365,9 @@ class App:
             return {}
 
     def _cambia_traduttore(self, primo=False, scelto_ora=False):
-        """Mostra il campo giusto (chiave DeepL, email per MyMemory) e lo stato del traduttore scelto. scelto_ora: scelto
-        adesso dal menu (per Google, una volta per sessione, la finestra che spiega i blocchi)."""
-        if not primo:  # conserva quello scritto nel campo del traduttore di prima
+        """Shows the right field (DeepL key, email for MyMemory) and the status of the chosen translator. scelto_ora:
+        chosen just now from the menu (for Google, once per session, the dialog that explains the blocks)."""
+        if not primo:  # keeps what was written in the previous translator's field
             if self._scelto == "deepl":
                 self.chiave_deepl = self.credenziale.get().strip()
             elif self._scelto == "mymemory":
@@ -398,7 +398,7 @@ class App:
             tema.avvisa(self.radice, self.colori, "Google gratuito: può bloccarsi", AVVISO_GOOGLE)
 
     def _verifica_credenziale(self):
-        """Pulsante "Verifica": la chiave DeepL o l'email di MyMemory, in background (una richiesta piccola)."""
+        """"Check" button: the DeepL key or the MyMemory email, in the background (one small request)."""
         nome = self._scelto
         valore = "".join(self.credenziale.get().split()) if nome == "deepl" else self.credenziale.get().strip()
         if nome == "deepl":
@@ -432,12 +432,12 @@ class App:
         return next((k for k, v in MODELLI_LOCALI.items() if v == self.modello_locale.get()), "4b")
 
     def _scegli_modello(self):
-        self._modello_scelto = True  # scelto dall'utente: la scheda video non lo cambia piu'
+        self._modello_scelto = True  # chosen by the user: the graphics card no longer changes it
         self._aggiorna_stato_servizio()
 
     def _proponi_modello(self, consiglio, sincrono=False):
-        """Il modello adatto alla scheda video (ollama.modello_consigliato: (chiave, motivo)), se l'utente non ne ha
-        scelto uno e non ce n'e' nessuno scaricato: il 12B con almeno 8 GB di memoria video, se no il 4B."""
+        """The model suited to the graphics card (ollama.modello_consigliato: (chiave, motivo)), if the user has not
+        chosen one and none is downloaded: the 12B with at least 8 GB of video memory, otherwise the 4B."""
         from . import ollama
         self._consiglio_modello = consiglio
         if self._modello_scelto or (self._occupato() and not sincrono) or \
@@ -452,9 +452,10 @@ class App:
         return self.lavoro is not None and self.lavoro.is_alive()
 
     def _installa_locale(self, poi=None):
-        """Installazione guidata del traduttore locale: propone il modello adatto alla scheda video, elenca cosa
-        scarica e parte solo dopo il si'. Alla fine una frase di prova (_installa_e_prova) dice se funziona e quanto
-        e' veloce; poi (se riesce) fa 'poi', per esempio l'"Analizza e traduci" che aspettava il traduttore."""
+        """Guided installation of the local translator: proposes the model suited to the graphics card, lists what it
+        downloads and starts only after the yes. At the end a test sentence (_installa_e_prova) tells whether it works
+        and how fast it is; then (if it succeeds) runs 'poi', for example the "Analyze and translate" that was waiting
+        for the translator."""
         from . import ollama
         if self._occupato():
             return
@@ -473,7 +474,7 @@ class App:
                         "\"Installa…\"." % (self._consiglio_modello[1], MODELLI_LOCALI[scelti[0]])
         try:
             lento = ollama.avviso_prestazioni()
-        except Exception:  # noqa: BLE001 - solo un avviso: non deve impedire l'installazione
+        except Exception:  # noqa: BLE001 - only a warning: it must not prevent the installation
             lento = ""
         testo = ("Per il traduttore locale servono questi download, salvati in %s:\n\n- %s\n\nNessun limite e "
                  "nessun blocco: dopo l'installazione traduce anche senza internet.%s%s\n\nProcedo?"
@@ -485,8 +486,8 @@ class App:
                         fermabile=True, serve_cartella=False, operazione="installa")
 
     def _installa_e_prova(self, scelti, a="it"):
-        """(nel lavoro in background) Installa e poi traduce una frase di prova, misurando i tempi: il risultato
-        (backend.prova_locale) va nella riga di stato in basso."""
+        """(in the background work) Installs and then translates a test sentence, measuring the times: the result
+        (backend.prova_locale) goes to the status line at the bottom."""
         from . import backend, ollama
         ollama.installa(scelti, self._log)
         self._log("Prova del traduttore locale: traduco \"Start game\" (la prima volta il modello si carica nella "
@@ -496,8 +497,8 @@ class App:
         return risultato
 
     def _aggiorna_stato_servizio(self, ripeti=False):
-        """Accanto al traduttore: se e' in pausa dopo un blocco (fino a quando) o disattivato (pulsante Riattiva);
-        per il traduttore locale se e' pronto o da installare. Con ripeti=True si riaggiorna ogni minuto."""
+        """Next to the translator: whether it is paused after a block (until when) or disabled (Reactivate button);
+        for the local translator whether it is ready or to install. With ripeti=True it refreshes every minute."""
         from .limiter import Limitatore
         self.stato_traduttore.pack_forget()
         self.btn_riattiva.pack_forget()
@@ -505,8 +506,8 @@ class App:
         if self._scelto == "locale":
             from . import ollama
             pronto = ollama.installato() and ollama.modello_presente(self._chiave_modello())
-            lento = pronto and (self._prova_locale or {}).get("scheda") == 0  # la prova: solo il processore
-            # installato: niente scritta (solo l'avviso se usa il processore); se no "da installare" con "Installa…"
+            lento = pronto and (self._prova_locale or {}).get("scheda") == 0  # the test: processor only
+            # installed: no text (only the warning if it uses the processor); otherwise "to install" with "Install…"
             testo = ("lento: senza scheda video" if lento else "") if pronto else "da installare"
             self.stato_traduttore.configure(text=testo)
             if testo:
@@ -535,7 +536,7 @@ class App:
             self._aggiorna_stato_servizio()
 
     def _salva_impostazioni(self):
-        if self._scelto == "deepl":  # niente spazi o a capo incollati per sbaglio dentro la chiave
+        if self._scelto == "deepl":  # no spaces or newlines pasted by mistake inside the key
             self.chiave_deepl = "".join(self.credenziale.get().split())
         elif self._scelto == "mymemory":
             self.email_mymemory = self.credenziale.get().strip()
@@ -555,31 +556,31 @@ class App:
             pass
 
     def _codice_lingua(self, etichetta):
-        """Il codice della lingua da un'etichetta del menu "Da" o "A" (anche tradotta nella lingua dell'interfaccia)."""
+        """The language code from a label of the "From" or "To" menu (also translated into the interface language)."""
         return lingua.codice(self._etichette.get(etichetta, etichetta))
 
     def _simbolo_tema(self):
-        """Sul pulsante del tema il simbolo del tema di adesso: luna = scuro, sole = chiaro."""
+        """On the theme button the symbol of the current theme: moon = dark, sun = light."""
         self.btn_tema.configure(text="☾" if self.colori.get("nome") == "scuro" else "☀")
 
     def _cambia_tema(self):
-        """Pulsante sole/luna: passa dal tema scuro a quello chiaro e viceversa, subito, e lo ricorda."""
+        """Sun/moon button: switches from the dark theme to the light one and vice versa, at once, and remembers it."""
         self.scelta_tema = "chiaro" if self.colori.get("nome") == "scuro" else "scuro"
         self.colori = tema.applica(self.radice, self.scelta_tema)
         tema.colora_testo(self.testo, self.colori)
         self._simbolo_tema()
-        self._simbolo_suoni()  # (l'altoparlante e la nota sono disegnati con il colore del testo)
+        self._simbolo_suoni()  # (the speaker and the note are drawn with the text color)
         self._simbolo_musica()
         self._chiudi_tendina()
         self._salva_impostazioni()
 
     def _simbolo_suoni(self):
-        """Sul pulsante dei suoni l'altoparlante con le onde (accesi) o con la x (spenti), del colore del testo."""
+        """On the sounds button the speaker with the waves (on) or with the x (off), in the text color."""
         self._img_suoni = _altoparlante(self.radice, self.colori["testo"], self.suoni_accesi)
         self.btn_suoni.configure(image=self._img_suoni)
 
     def _cambia_suoni(self):
-        """Pulsante con l'altoparlante: accende o spegne i suoni (accendendoli si sente il clic) e lo ricorda."""
+        """Button with the speaker: turns the sounds on or off (turning them on plays the click) and remembers it."""
         self.suoni_accesi = not self.suoni_accesi
         self._simbolo_suoni()
         self._chiudi_tendina()
@@ -588,12 +589,12 @@ class App:
             suoni.suona("clic")
 
     def _simbolo_musica(self):
-        """Sul pulsante della musica la nota (accesa) o la nota barrata (spenta), del colore del testo."""
+        """On the music button the note (on) or the crossed-out note (off), in the text color."""
         self._img_musica = _nota_musicale(self.radice, self.colori["testo"], self.musica_accesa)
         self.btn_musica.configure(image=self._img_musica)
 
     def _cambia_musica(self):
-        """Pulsante con la nota: accende o spegne la musica di sottofondo (music.py) e lo ricorda."""
+        """Button with the note: turns the background music (music.py) on or off and remembers it."""
         self.musica_accesa = not self.musica_accesa
         self._simbolo_musica()
         self._chiudi_tendina()
@@ -604,7 +605,7 @@ class App:
             musica.ferma()
 
     def _clic_pulsante(self, evento):
-        """Con i suoni accesi, il clic quando si preme un pulsante (non uno disattivato)."""
+        """With the sounds on, the click when a button is pressed (not a disabled one)."""
         try:
             attivo = not evento.widget.instate(["disabled"])
         except (AttributeError, tk.TclError):
@@ -613,10 +614,10 @@ class App:
             suoni.suona("clic")
 
     def _suono_finestra(self, tipo):
-        """Con i suoni accesi suona ogni finestra, in qualunque momento: "errore" per gli errori, "domanda" per
-        domande, avvisi e informazioni (anche l'avviso di Google quando lo scegli). La prima finestra alla fine di
-        un'operazione, se e' un'informazione, suona invece "fatto"; anche una traduzione scritta nel gioco solo in parte
-        (un avviso, ma il gioco e' tradotto: _mostra_finestra)."""
+        """With the sounds on every dialog plays a sound, at any moment: "errore" for errors, "domanda" for
+        questions, warnings and information (also the Google warning when you choose it). The first dialog at the end
+        of an operation, if it is information, plays "fatto" instead; so does a translation written to the game only
+        in part (a warning, but the game is translated: _mostra_finestra)."""
         forzato, self._suono_forzato = self._suono_forzato, None
         fine, self._suono_atteso = self._suono_atteso, False
         if not self.suoni_accesi:
@@ -629,7 +630,7 @@ class App:
             suoni.suona("domanda")
 
     def _menu_lingue(self):
-        """La tendina delle lingue sotto la bandierina, con i colori del tema (bordo compreso)."""
+        """The language drop-down under the flag, with the theme's colors (border included)."""
         if self._tendina_lingue is not None:
             self._chiudi_tendina()
             return
@@ -651,7 +652,7 @@ class App:
             self._voci_lingue.append((codice, voce))
         t.update_idletasks()
         b = self.btn_lingua
-        x = b.winfo_rootx() + b.winfo_width() - t.winfo_reqwidth()  # allineata a destra con il pulsante
+        x = b.winfo_rootx() + b.winfo_width() - t.winfo_reqwidth()  # right-aligned with the button
         t.geometry("+%d+%d" % (x, b.winfo_rooty() + b.winfo_height() + 2))
         t.bind("<Escape>", lambda _e: self._chiudi_tendina())
         t.bind("<FocusOut>", lambda _e: self.radice.after(150, self._chiudi_tendina))
@@ -666,15 +667,15 @@ class App:
             self._tendina_lingue = None
 
     def _cambia_interfaccia(self, codice):
-        """La bandierina: la finestra passa subito alla lingua scelta (registro compreso), che resta nelle impostazioni.
-        Senza riaprire PatchSmith: i testi originali sono ricordati nei widget (interfaccia.ritraduci)."""
+        """The flag: the window switches at once to the chosen language (log included), which stays in the settings.
+        Without reopening PatchSmith: the original texts are remembered in the widgets (interfaccia.ritraduci)."""
         if codice == self.lingua_interfaccia:
             return
         if self._occupato():
             tema.avvisa(self.radice, self.colori, "Operazione in corso", "Aspetta che l'operazione finisca, poi "
                         "cambia la lingua.")
             return
-        # le scelte dei menu a tendina come codici, prima che cambino le loro etichette
+        # the choices of the drop-down menus as codes, before their labels change
         da, a, modello = self._codice_lingua(self.da.get()), self._codice_lingua(self.a.get()), self._chiave_modello()
         self.lingua_interfaccia = interfaccia.imposta(codice)
         _traduci_costanti()
@@ -682,7 +683,7 @@ class App:
         self._etichette = {interfaccia.traduci(e): e for e in lingua.etichette(con_auto=True)}
         self.da.set(interfaccia.traduci(lingua.etichetta(da)))
         self.a.set(interfaccia.traduci(lingua.etichetta(a)))
-        # (i nomi dei traduttori e dei modelli sono arrivati ai menu gia' tradotti: si rimettono da qui)
+        # (the names of the translators and models reached the menus already translated: they are set again here)
         self.scelta_traduttore.configure(values=list(TRADUTTORI.values()))
         self.traduttore.set(TRADUTTORI[self._scelto])
         self.scelta_modello.configure(values=list(MODELLI_LOCALI.values()))
@@ -702,32 +703,32 @@ class App:
     def _backend(self):
         return self.backend_forzato or self._scelto
 
-    # --- registro e lavori in background ----------------------------------------------------
+    # --- log and background work ------------------------------------------------------------
 
     def _log(self, messaggio):
         originale = str(messaggio)
         riga = leggibile(originale)
-        if DETTAGLIO in riga:  # dettaglio tecnico: solo nel registro su disco (e in "Crea rapporto")
+        if DETTAGLIO in riga:  # technical detail: only in the log on disk (and in "Create report")
             self._scrivi_registro(riga.replace(DETTAGLIO, ""))
             return
-        self.coda.put(("log", originale))  # nella finestra nella lingua dell'interfaccia (_riga_mostrata)
-        self._scrivi_registro(riga)  # su disco come in origine
+        self.coda.put(("log", originale))  # in the window in the interface language (_riga_mostrata)
+        self._scrivi_registro(riga)  # on disk as originally written
 
     def _riga_mostrata(self, originale):
-        """Una riga del registro come si vede nella finestra: tradotta, o in italiano con gli accenti."""
+        """A log line as seen in the window: translated, or in Italian with the accents."""
         if self.lingua_interfaccia != interfaccia.SORGENTE:
             return interfaccia.traduci(originale)
         return leggibile(originale)
 
     def _apri_registro(self, cartella, descrizione, nome=None):
-        """Nuovo registro su disco per l'operazione: registri/AAAAMMGG-HHMMSS-<nome>.log, con nome quello del
-        profilo del gioco (o della sua cartella); senza cartella 'interfaccia' (errori della finestra fuori da
-        un'operazione) o il nome dato. I piu' vecchi oltre MAX_REGISTRI si cancellano. Senza registro si lavora lo
-        stesso: qui non deve mai esserci un errore (i pulsanti sono gia' disattivati)."""
+        """New log on disk for the operation: logs/AAAAMMGG-HHMMSS-<nome>.log, with the name of the game
+        profile (or of its folder); without a folder 'interfaccia' (window errors outside an operation) or the given
+        name. The oldest beyond MAX_REGISTRI are deleted. Without a log the work goes on anyway: there must never be
+        an error here (the buttons are already disabled)."""
         self._chiudi_registro()
         if not nome:
             nome = slug(os.path.basename(os.path.normpath(cartella))) if cartella else "interfaccia"
-            try:  # un profilo rovinato lo segnala poi l'operazione, con la sua finestra
+            try:  # a damaged game profile is reported later by the operation, with its dialog
                 profilo = automatico.trova_profilo(cartella) if cartella and os.path.isdir(cartella) else None
                 if profilo:
                     nome = os.path.splitext(os.path.basename(profilo))[0]
@@ -738,7 +739,7 @@ class App:
             intestazione = "PatchSmith %s - %s - %s\nCartella: %s\nTraduttore: %s, lingue: %s -> %s\n" % (
                 __version__, descrizione, adesso.strftime("%Y-%m-%d %H:%M:%S"), cartella or "-", self._backend(),
                 self._codice_lingua(self.da.get()), self._lingua_a())
-        except Exception:  # noqa: BLE001 - l'intestazione non deve impedire il registro
+        except Exception:  # noqa: BLE001 - the header must not prevent the log
             intestazione = "PatchSmith %s - %s - %s\n" % (__version__, descrizione, adesso)
         try:
             os.makedirs(cartella_registri(), exist_ok=True)
@@ -776,7 +777,7 @@ class App:
             self._registro = None
 
     def percorso_registro(self):
-        """Il registro su disco dell'operazione in corso (o None)."""
+        """The log on disk of the running operation (or None)."""
         with self._lucchetto:
             return self._registro.name if self._registro is not None else None
 
@@ -800,13 +801,13 @@ class App:
                     self._fine_verifica(*valore)
         except queue.Empty:
             pass
-        finally:  # anche se una finestra di fine operazione non riesce, la finestra continua a leggere la coda
+        finally:  # even if an end-of-operation dialog fails, the window keeps reading the queue
             self.radice.after(100, self._svuota_coda)
 
     def _errore_interfaccia(self, tipo, valore, tb):
-        """Errore in un comando della finestra: il dettaglio tecnico va nel registro su disco, all'utente una
-        finestra con il tipo di errore e la proposta di creare un rapporto (mai "Riprova": ripeterebbe l'ultima
-        operazione sul gioco, che con questo errore non c'entra)."""
+        """Error in a window command: the technical detail goes to the log on disk, the user gets a dialog with the
+        type of error and the offer to create a report (never "Try again": it would repeat the last operation on the
+        game, which has nothing to do with this error)."""
         testo = "".join(traceback.format_exception(tipo, valore, tb))
         aperto = self._registro is not None
         if not aperto:
@@ -823,18 +824,18 @@ class App:
             self.ultimo_esito = e
             self.stato.set("Errore imprevisto: %s" % tipo.__name__)
             self._mostra_finestra(e, "interfaccia")
-        except Exception:  # noqa: S110 - un errore anche qui: e' gia' nel registro, non si insiste
+        except Exception:  # noqa: S110 - an error here too: it is already in the log, no further attempt
             pass
         finally:
             self._in_errore = False
 
     def _avvia(self, descrizione, funzione, fermabile=False, serve_cartella=True, operazione=None, registra=True,
                nome_registro=None):
-        """Esegue funzione(cartella) in un thread. operazione: traduci/riapplica/ripristina/installa/rapporto/controlla
-        (sceglie la finestra di fine); registra=False: senza registro su disco (es. la creazione del rapporto);
-        nome_registro: la fine del nome del registro (predefinita: il gioco)."""
+        """Runs funzione(cartella) in a thread. operazione: traduci/riapplica/ripristina/installa/rapporto/controlla
+        (chooses the final dialog); registra=False: without a log on disk (e.g. creating the report);
+        nome_registro: the end of the log's name (default: the game)."""
         cartella = self.cartella.get().strip().strip('"')
-        if self._occupato():  # un lavoro alla volta: azzera() annullerebbe un "Ferma" ancora in corso
+        if self._occupato():  # one work at a time: azzera() would cancel a "Stop" still in progress
             return
         if serve_cartella and (not cartella or not os.path.isdir(cartella)):
             tema.avvisa(self.radice, self.colori, "Cartella mancante", "Scegli una cartella del gioco valida.")
@@ -845,7 +846,7 @@ class App:
         for b in self.pulsanti:
             b.state(["disabled"])
         interruzione.azzera()
-        self.btn_ferma.state(["!disabled"] if fermabile else ["disabled"])  # solo dove si puo' fermare
+        self.btn_ferma.state(["!disabled"] if fermabile else ["disabled"])  # only where it can be stopped
         self.barra.grid()
         self.barra.start(12)
         self.stato.set(descrizione + "…")
@@ -860,8 +861,8 @@ class App:
                 self.coda.put(("fine", (descrizione, risultato, None)))
             except interruzione.Interrotto:
                 self.coda.put(("fine", (descrizione, _FERMATO, None)))
-            except Exception as e:  # l'errore va mostrato all'utente, non deve chiudere l'app
-                # il dettaglio tecnico (traceback) solo nel registro su disco: serve a chi aiuta, non a chi gioca
+            except Exception as e:  # the error must be shown to the user, it must not close the app
+                # the technical detail (traceback) only in the log on disk: it is for whoever helps, not for the player
                 self._scrivi_registro("ERRORE (%s: %s)\n%s" % (type(e).__name__, e, traceback.format_exc()))
                 self.coda.put(("fine", (descrizione, None, e)))
 
@@ -875,7 +876,7 @@ class App:
         self._log("Richiesta di fermarsi: mi fermo al primo punto sicuro.")
 
     def _fine(self, descrizione, risultato, errore):
-        # alla fine di un'operazione la prima finestra suona (se i suoni sono accesi; non il controllo all'apertura)
+        # at the end of an operation the first dialog plays a sound (if sounds are on; not the check on opening)
         self._suono_atteso = not (self._operazione == "controlla" and self._controllo_automatico)
         try:
             self._fine_operazione(descrizione, risultato, errore)
@@ -886,11 +887,11 @@ class App:
         self.barra.stop()
         self.barra.grid_remove()
         self.btn_ferma.state(["disabled"])
-        self._aggiorna_stato_servizio()  # un blocco appena ricevuto si vede subito accanto al traduttore
+        self._aggiorna_stato_servizio()  # a block just received shows at once next to the translator
         for b in self.pulsanti:
             b.state(["!disabled"])
         operazione = self._operazione
-        poi = None  # l'operazione che aspettava l'installazione del traduttore locale (solo se e' riuscita)
+        poi = None  # the operation that was waiting for the local translator's installation (only if it succeeded)
         if operazione == "installa":
             poi, self._poi = self._poi, None
         if risultato is _FERMATO:
@@ -904,7 +905,7 @@ class App:
             return
         if errore:
             e = esiti.da_eccezione(errore)
-            if getattr(errore, "da_zero", False):  # "Ricomincia da zero" non partito (vedi _traduci)
+            if getattr(errore, "da_zero", False):  # "Start over" did not start (see _traduci)
                 e.extra["da_zero"] = True
             self._log("ERRORE imprevisto (%s): %s" % (type(errore).__name__, errore) if e.extra.get("imprevisto")
                       else "ERRORE: %s" % errore)
@@ -914,7 +915,7 @@ class App:
             self._chiudi_registro()
             self.ultimo_esito = e
             self.stato.set("%s: %s" % (descrizione, esiti.STATO[e.codice]))
-            if operazione == "controlla" and self._controllo_automatico:  # all'apertura: niente finestre d'errore
+            if operazione == "controlla" and self._controllo_automatico:  # on opening: no error dialogs
                 self.stato_controllo.set("Controllo dopo l'ultima partita non riuscito (i dettagli sono nel registro): "
                                          "puoi creare un rapporto.")
                 return
@@ -927,18 +928,18 @@ class App:
             self.esiti_controllo = risultato
             self.ultimo_esito = risultato[-1] if risultato else None
             self._aggiorna_riga_controllo()
-            self.stato.set("")  # il risultato e' nel registro (e nei pulsanti in fondo, se c'e' qualcosa da fare)
+            self.stato.set("")  # the result is in the log (and in the bottom buttons, if there is something to do)
             if not self._controllo_automatico:
                 self._mostra_controllo()
             return
-        if operazione == "installa" and isinstance(risultato, dict):  # installato, con la frase di prova
+        if operazione == "installa" and isinstance(risultato, dict):  # installed, with the test sentence
             self._chiudi_registro()
             self._prova_locale = risultato
             self._aggiorna_stato_servizio()
             self.stato.set("Traduttore locale installato: %s" % risultato["messaggio"])
-            if poi and risultato.get("ok"):  # di nuovo l'operazione che aspettava il traduttore locale
+            if poi and risultato.get("ok"):  # again the operation that was waiting for the local translator
                 self.radice.after(100, poi)
-            elif not risultato.get("ok"):  # dopo scaricamenti di qualche GB non basta la riga in basso
+            elif not risultato.get("ok"):  # after downloads of a few GB the bottom line is not enough
                 testo = "Il traduttore locale è installato, ma %s" % risultato["messaggio"]
                 if poi:
                     testo += ("\n\nPer questo l'operazione che aspettava il traduttore non è partita: premi di nuovo "
@@ -973,20 +974,20 @@ class App:
             return False
 
     def _mostra_finestra(self, e, operazione):
-        """La finestra di fine operazione per l'esito (testo e pulsanti da esito.finestra) e l'azione scelta."""
+        """The end-of-operation dialog for the outcome (text and buttons from esito.finestra) and the chosen action."""
         dati = esiti.finestra(e, operazione or "traduci", locale_pronto=self._locale_pronto(),
                               attuale=self._backend())
-        if e.codice == "PARZIALE" and e.scritto and operazione != "ripristina":  # tradotto, con qualche testo rimasto
+        if e.codice == "PARZIALE" and e.scritto and operazione != "ripristina":  # translated, with a few texts left
             self._suono_forzato = "fatto"
         scelta = tema.scegli(self.radice, self.colori, dati["titolo"], dati["testo"], dati["pulsanti"], dati["tipo"])
         self._azione(scelta, e)
         return dati
 
     def _mostra_esito(self, descrizione, e):
-        """Fine di Analizza e traduci / Riapplica / Ripristina: una finestra per ogni esito, con il passo dopo."""
+        """End of Analyze and translate / Reapply / Restore: one dialog for each outcome, with the next step."""
         self.ultimo_esito = e
         x = e.extra
-        if e.codice == "UFFICIALE" and x.get("lingua_ufficiale"):  # la lingua ufficiale c'e' (official_language.py)
+        if e.codice == "UFFICIALE" and x.get("lingua_ufficiale"):  # official language present (official_language.py)
             righe = x.get("righe") or [e.motivo]
             if x.get("serve_consenso"):
                 self.stato.set("Il gioco ha gia' la lingua ufficiale: serve il tuo consenso per attivarla.")
@@ -1026,15 +1027,15 @@ class App:
             self._chiedi_dal_vivo(e)
         self._mostra_finestra(e, self._operazione)
 
-    # --- traduzione mentre si gioca -------------------------------------------------------------------------------
+    # --- live translation (while playing) -------------------------------------------------------------------------
 
     def _chiedi_dal_vivo(self, e):
-        """Alla fine di "Analizza e traduci": tenere acceso il traduttore mentre si gioca? La scelta resta nel profilo
-        del gioco (automatico.imposta_dal_vivo) e vale fino alla prossima "Analizza e traduci"."""
+        """At the end of "Analyze and translate": keep the translator on while playing? The choice stays in the game
+        profile (automatico.imposta_dal_vivo) and holds until the next "Analyze and translate"."""
         cartella = self.cartella.get().strip().strip('"')
         try:
             _profilo, attiva = automatico.traduzione_dal_vivo(cartella)
-        except Exception:  # noqa: BLE001 - solo una domanda in piu'
+        except Exception:  # noqa: BLE001 - only an extra question
             attiva = None
         if attiva is None:
             return
@@ -1046,12 +1047,12 @@ class App:
             "memoria) solo per il tempo in cui giochi. Mentre è acceso, qui sotto vedi ogni tanto cosa ha tradotto e "
             "puoi fermarlo con un pulsante.\n\nLo tengo acceso?",
             [("Sì, tienilo acceso", True), ("No, solo le traduzioni salvate", False)], "domanda")
-        if scelta is None:  # finestra chiusa: resta com'era
+        if scelta is None:  # dialog closed: it stays as it was
             return
         if scelta != attiva:
             try:
                 automatico.imposta_dal_vivo(cartella, scelta, self._log)
-            except Exception as ex:  # noqa: BLE001 - la traduzione e' gia' nel gioco: si dice e si va avanti
+            except Exception as ex:  # noqa: BLE001 - the translation is already in the game: say so and go on
                 self._log("! Non ho potuto %s la traduzione mentre giochi (%s): riprova con 'Analizza e traduci'."
                           % ("accendere" if scelta else "spegnere", ex))
                 return
@@ -1059,11 +1060,11 @@ class App:
             e.dal_vivo = "nessuno"
 
     def _sorveglia_dal_vivo(self):
-        """Ogni 5 secondi: se il gioco della cartella scelta e' aperto con il suo traduttore acceso, il pulsante per
-        fermarlo e, nel registro, le frasi nuove tradotte dall'ultima volta."""
+        """Every 5 seconds: if the game of the chosen folder is open with its translator on, the button to stop it
+        and, in the log, the new lines translated since the last time."""
         try:
             self._controlla_dal_vivo()
-        except Exception as e:  # noqa: BLE001 - solo un aiuto: non deve mai disturbare la finestra
+        except Exception as e:  # noqa: BLE001 - only a help: it must never disturb the window
             self._scrivi_registro("(sorveglianza del traduttore del gioco: %s: %s)" % (type(e).__name__, e))
         finally:
             self.radice.after(5000, self._sorveglia_dal_vivo)
@@ -1073,7 +1074,7 @@ class App:
         profilo, attiva = automatico.traduzione_dal_vivo(cartella) if cartella and os.path.isdir(cartella) else \
             (None, None)
         nome = profilo.get("nome") if profilo and attiva else None
-        if nome and nome not in self._diario_letto:  # la storia di prima non si ripete: solo le frasi da adesso
+        if nome and nome not in self._diario_letto:  # the earlier history is not repeated: only the lines from now on
             try:
                 self._diario_letto[nome] = os.path.getsize(servizio_xunity.percorso_diario(nome))
             except OSError:
@@ -1094,21 +1095,21 @@ class App:
         self._vivo_acceso = nome if acceso else None
 
     def _riassumi_diario(self, nome):
-        """Le frasi nuove del diario del traduttore dall'ultima lettura, in una riga del registro."""
+        """The new lines of the translator's journal since the last reading, in one log line."""
         percorso = servizio_xunity.percorso_diario(nome)
         try:
             dimensione = os.path.getsize(percorso)
         except OSError:
             return
         letto = self._diario_letto.get(nome, 0)
-        if dimensione < letto:  # diario ricominciato (troppo grande): da capo
+        if dimensione < letto:  # journal restarted (too big): from the beginning
             letto = 0
         if dimensione == letto:
             return
         with open(percorso, "rb") as f:
             f.seek(letto)
             dati = f.read(dimensione - letto)
-        fine = dati.rfind(b"\n") + 1  # solo righe intere: il resto alla prossima lettura
+        fine = dati.rfind(b"\n") + 1  # only whole lines: the rest at the next reading
         self._diario_letto[nome] = letto + fine
         nuove, rimaste = [], 0
         for riga in dati[:fine].decode("utf-8", "replace").splitlines():
@@ -1140,26 +1141,26 @@ class App:
         self._vivo_acceso = None
 
     def _azione(self, azione, e):
-        """Il pulsante scelto nella finestra di fine operazione."""
+        """The button chosen in the end-of-operation dialog."""
         if e is not None and e.extra.get("cartella") and azione in ("ripristina", "riapplica", "traduci",
                                                                      "traduci_comunque", "usa_locale",
                                                                      "crea_rapporto", "correggi"):
-            # dal controllo dopo aver giocato di un altro gioco (all'apertura): l'azione (anche il rapporto) e' per
-            # quel gioco
+            # from the after-play check of another game (on opening): the action (the report too) is for
+            # that game
             self.cartella.set(os.path.normpath(e.extra["cartella"]))
         if azione == "mostra_rimasti":
             scelta = tema.scegli(self.radice, self.colori, "Testi rimasti in originale", esiti.testo_rimasti(e),
                                  [("OK", None), ("Correggi traduzioni", "correggi"),
                                   ("Crea rapporto", "crea_rapporto")])
             self._azione(scelta, e)
-        elif azione == "correggi":  # la finestra con l'elenco giusto (rimasti in originale, non scritti nel gioco)
+        elif azione == "correggi":  # the window with the right list (left untranslated, not written to the game)
             self._correggi(esiti.filtro_correzioni(e))
         elif azione == "crea_rapporto":
             self._crea_rapporto(e)
         elif azione == "riapplica":
             self._riapplica()
         elif azione == "chiudi_gioco" and e is not None and "controllo" in e.extra and e.extra.get("profilo"):
-            self._controlla([e.extra["profilo"]], all_apertura=False)  # di nuovo il controllo di quel gioco
+            self._controlla([e.extra["profilo"]], all_apertura=False)  # the check of that game again
         elif azione == "chiudi_gioco" and self._ripeti:
             self._ripeti()
         elif azione in ("usa_locale", "installa_locale"):
@@ -1167,11 +1168,11 @@ class App:
             self._cambia_traduttore()
             if azione == "installa_locale" or not self._locale_pronto():
                 self._installa_locale()
-            else:  # di nuovo Analizza e traduci con le stesse scelte (es. "Traduci comunque"), anche dopo un errore
+            else:  # Analyze and translate again with the same choices (e.g. "Translate anyway"), also after an error
                 self._traduci(**self._scelte(e))
         elif azione == "traduci_comunque":
             self._traduci(forza=self._scelte(e)["forza"], traduci_comunque=True)
-        elif azione == "ripristina":  # chiede conferma prima di rimettere gli originali
+        elif azione == "ripristina":  # asks for confirmation before putting the originals back
             self._ripristina()
         elif azione == "traduci":
             self._traduci()
@@ -1179,16 +1180,16 @@ class App:
             self._controlla([e.extra["profilo"]], all_apertura=False, ritraduci=True)
 
     def _scelte(self, e):
-        """forza e traduci_comunque dell'ultimo Analizza e traduci (dall'esito, o ricordate: un esito nato da un
-        errore non le ha); da_zero se l'esito e' di un "Ricomincia da zero" che non e' partito (traduttore non
-        pronto: con quello nuovo si ricomincia da zero, non si traduce soltanto)."""
+        """forza and traduci_comunque of the last Analyze and translate (from the outcome, or remembered: an outcome
+        born from an error does not have them); da_zero if the outcome is from a "Start over" that did not start
+        (translator not ready: with the new one it starts over, it does not just translate)."""
         scelte = dict(self._scelte_traduci)
         scelte.update({k: e.extra[k] for k in scelte if k in e.extra})
         if e.extra.get("da_zero"):
             scelte["da_zero"] = True
         return scelte
 
-    # --- azioni -------------------------------------------------------------------------------
+    # --- actions -------------------------------------------------------------------------------
 
     def _sfoglia(self):
         scelta = filedialog.askdirectory(title="Cartella del gioco", initialdir=self.cartella.get() or None)
@@ -1196,20 +1197,20 @@ class App:
             self.cartella.set(os.path.normpath(scelta))
 
     def _preliminari(self, operazione, ripeti, backend=None):
-        """Prima di un'operazione lunga, i controlli veloci di automatico.controlli_preliminari (gioco aperto, lingue,
-        cartella protetta, spazio, traduttore in pausa o da installare, stesso gioco gia' tradotto altrove), con una
-        finestra per ogni problema trovato. Restituisce le scelte per partire ({'riusa': profilo o None}), oppure None
-        se non si parte: annullato, o un'altra strada scelta ("Riprova" e "Usa il traduttore locale" rifanno 'ripeti',
-        quindi di nuovo i controlli; "Installa" installa il traduttore locale e poi rifa' 'ripeti')."""
+        """Before a long operation, the quick checks of automatico.controlli_preliminari (game open, languages,
+        protected folder, space, translator paused or to install, same game already translated elsewhere), with a
+        dialog for each problem found. Returns the choices to start ({'riusa': profilo or None}), or None if it does
+        not start: cancelled, or another way chosen ("Try again" and "Use the local translator" redo 'ripeti', so
+        the checks run again; "Install" installs the local translator and then redoes 'ripeti')."""
         cartella = self.cartella.get().strip().strip('"')
         if self._occupato():
             return None
         if not cartella or not os.path.isdir(cartella):
-            return {"riusa": None}  # "Cartella mancante" lo dice _avvia
+            return {"riusa": None}  # "Missing folder" is said by _avvia
         try:
             trovati = automatico.controlli_preliminari(cartella, backend, operazione, self._codice_lingua(self.da.get()),
                                                        self._lingua_a())
-        except Exception as e:  # noqa: BLE001 - un controllo che non riesce non deve impedire di lavorare
+        except Exception as e:  # noqa: BLE001 - a check that fails must not prevent working
             self._log("  ! Controlli prima di partire non riusciti (%s: %s): parto lo stesso." % (type(e).__name__, e))
             return {"riusa": None}
         scelte = {"riusa": None}
@@ -1220,8 +1221,8 @@ class App:
                 "continua": [("Annulla", None), ("Continua comunque", "continua")],
                 "usa_locale": [("Usa il traduttore locale", "usa_locale"), ("Continua comunque", "continua"),
                                ("Annulla", None)],
-                # (continuare senza: la lingua ufficiale non serve tradurla, e senza traduttore Analizza e traduci si
-                # ferma prima di modificare il gioco)
+                # (continuing without: the official language needs no translating, and without a translator Analyze
+                # and translate stops before changing the game)
                 "installa_locale": [("Installa il traduttore locale" if p.codice != "LOCALE_ASSENTE" else "Installa ora",
                                      "installa_locale"), ("Continua comunque", "continua"), ("Annulla", None)],
                 "riusa": [("Sì, riusale", "riusa"), ("No, traduci da capo", "da_capo"), ("Annulla", None)],
@@ -1241,33 +1242,33 @@ class App:
                 return None
             if scelta == "riusa":
                 scelte["riusa"] = p.dati.get("profilo")
-            elif scelta not in ("continua", "da_capo"):  # Annulla, OK di un problema che ferma, finestra chiusa
+            elif scelta not in ("continua", "da_capo"):  # Cancel, OK of a problem that stops, dialog closed
                 self.stato.set("%s: non avviato." % titolo)
                 return None
         return scelte
 
     def _traduci(self, forza=False, traduci_comunque=False, consenso=False, da_zero=False, rigenera=False):
-        """Analizza e traduci. da_zero ("Ricomincia da zero" in Correggi traduzioni): prima le traduzioni salvate del
-        gioco vanno da parte in una copia (automatico.ricomincia_da_zero) e il profilo si rifa' (rigenera). Messe da
-        parte quelle, "Riprova" (es. il gioco aperto a meta' lavoro) continua la traduzione nuova con rigenera: non
-        mette da parte di nuovo quella appena fatta."""
+        """Analyze and translate. da_zero ("Start over" in Fix translations): first the game's saved translations are
+        set aside in a copy (automatico.ricomincia_da_zero) and the game profile is rebuilt (rigenera). Once those are
+        set aside, "Try again" (e.g. the game opened halfway through the work) continues the new translation with
+        rigenera: it does not set aside again the one just made."""
         from .backend import ErroreBackend
         da, a, backend = self._codice_lingua(self.da.get()), self._lingua_a(), self._backend()
         ripeti = lambda: self._traduci(forza=forza, traduci_comunque=traduci_comunque, consenso=consenso,  # noqa: E731
                                        da_zero=da_zero, rigenera=rigenera)
-        # (il si' alla lingua ufficiale del gioco non traduce nulla: niente controlli del traduttore)
+        # (the yes to the game's official language translates nothing: no translator checks)
         scelte = self._preliminari("traduci", ripeti, None if consenso else backend)
         if scelte is None:
             return
         riusa = scelte.get("riusa")
 
         def _lavoro(cartella):
-            """L'esito di Analizza e traduci (esito.Esito), con le scelte fatte per poterle ripetere."""
-            if da_zero:  # (con un traduttore che non c'e' o in pausa si ferma prima di toccare qualcosa)
+            """The outcome of Analyze and translate (esito.Esito), with the choices made so they can be repeated."""
+            if da_zero:  # (with a translator that is missing or paused it stops before touching anything)
                 try:
                     automatico.ricomincia_da_zero(cartella, self._log, prova=backend == "finto", backend=backend)
                 except ErroreBackend as errore:
-                    errore.da_zero = True  # niente toccato: "Usa il traduttore locale" ricomincia da zero (_scelte)
+                    errore.da_zero = True  # nothing touched: "Use the local translator" starts over (_scelte)
                     raise
                 self._ripeti = lambda: self._traduci(forza=forza, traduci_comunque=traduci_comunque,
                                                      consenso=consenso, rigenera=True)
@@ -1314,10 +1315,10 @@ class App:
         self._avvia("Ripristino", _lavoro, operazione="ripristina")
 
     def _crea_rapporto(self, e=None):
-        """Zip sul Desktop con registri, profilo, impostazioni senza chiave ne' email e file utili del gioco. Se sul
-        Desktop non si puo' scrivere (es. "Accesso controllato alle cartelle" di Windows), nella cartella dei
-        registri. e: l'esito della finestra da cui e' stato chiesto (predefinito: l'ultimo; dai "Dettagli" del
-        controllo dopo aver giocato e' quello del gioco scelto, non dell'ultimo controllato)."""
+        """Zip on the Desktop with logs, game profile, settings without key or email and useful files of the game. If
+        the Desktop cannot be written to (e.g. Windows "Controlled folder access"), in the logs folder. e: the outcome
+        of the dialog it was requested from (default: the last one; from the "Details" of the after-play check it is
+        the one of the chosen game, not of the last one checked)."""
         if self._occupato():
             return
         ultimo, scelto = e if e is not None else self.ultimo_esito, self._scelto
@@ -1333,15 +1334,15 @@ class App:
 
         self._avvia("Creazione del rapporto", _lavoro, serve_cartella=False, operazione="rapporto", registra=False)
 
-    # --- controllo dopo aver giocato -----------------------------------------------------------
+    # --- after-play check ----------------------------------------------------------------------
 
     def _controllo_iniziale(self):
-        """All'apertura: si cercano (in background, solo date di file) i giochi con segnali nuovi dopo l'ultima
-        partita; se ce ne sono, il controllo parte da solo (vedi _avvia_controllo_iniziale)."""
+        """On opening: the games with new signals after the last session are looked for (in the background, file
+        dates only); if there are any, the check starts on its own (see _avvia_controllo_iniziale)."""
         def cerca():
             try:
                 trovati = controllo.da_controllare()
-            except Exception as e:  # noqa: BLE001 - non deve mai impedire di usare PatchSmith
+            except Exception as e:  # noqa: BLE001 - it must never prevent using PatchSmith
                 self._log("  ! Controllo dopo l'ultima partita non riuscito (%s: %s)" % (type(e).__name__, e))
                 trovati = []
             self.coda.put(("controllo", trovati))
@@ -1351,16 +1352,16 @@ class App:
     def _avvia_controllo_iniziale(self, trovati, finestra_aperta=False):
         aperta = bool(trovati) and self.lavoro is None and bool(str(self.radice.tk.call("grab", "current")))
         if aperta or (trovati and self.lavoro is None and finestra_aperta):
-            # una finestra aperta (es. i controlli prima di "Analizza e traduci" o "Installare il traduttore
-            # locale?"): si aspetta che si chiuda, e ancora un attimo (la scelta fatta li', es. "Riprova", parte
-            # subito dopo), altrimenti l'operazione scelta non partirebbe (un lavoro alla volta)
+            # a dialog is open (e.g. the checks before "Analyze and translate" or "Install the local
+            # translator?"): wait for it to close, and a moment more (the choice made there, e.g. "Try again", starts
+            # right after), otherwise the chosen operation would not start (one work at a time)
             self.radice.after(300, lambda: self._avvia_controllo_iniziale(trovati, finestra_aperta=aperta))
             return
         if not trovati:
             self._mostra_ultimo_controllo()
             return
-        if self.lavoro is not None:  # nel frattempo hai gia' avviato un'operazione: il controllo parte dopo
-            if not self.stato_controllo.get().startswith("Ci sono novità"):  # (una riga sola nel registro)
+        if self.lavoro is not None:  # meanwhile you already started an operation: the check starts afterwards
+            if not self.stato_controllo.get().startswith("Ci sono novità"):  # (only one line in the log)
                 self._log("Ci sono novità dopo l'ultima partita (%s): le controllo appena finisce l'operazione in "
                           "corso." % _quanti(len(trovati), "gioco", "giochi"))
             self.stato_controllo.set("Ci sono novità dopo l'ultima partita (%s): le controllo appena finisce "
@@ -1373,23 +1374,23 @@ class App:
         self._controlla(trovati)
 
     def _mostra_ultimo_controllo(self):
-        """Senza novita': se all'ultimo controllo del gioco scelto era rimasto qualcosa da fare, lo ricorda."""
+        """Without news: if something was left to do at the last check of the chosen game, it reminds of it."""
         cartella = self.cartella.get().strip().strip('"')
         try:
             percorso = automatico.trova_profilo(cartella) if cartella and os.path.isdir(cartella) else None
             e = controllo.esito_salvato(percorso) if percorso else None
-        except Exception:  # noqa: BLE001 - solo un promemoria
+        except Exception:  # noqa: BLE001 - only a reminder
             e = None
         if e is not None and e.extra.get("da_fare"):
             self.esiti_controllo = [e]
             self._aggiorna_riga_controllo(ultimo=True)
 
     def _controlla(self, profili=None, all_apertura=None, ritraduci=None):
-        """Controllo dopo aver giocato: il gioco della cartella scelta (profili=None) o i giochi dati. all_apertura
-        (predefinito: con i giochi dati) = il controllo partito da solo all'apertura: senza finestre alla fine, il
-        risultato va nella riga sotto la cartella. ritraduci (predefinito: non all'apertura): ritradurre adesso le
-        frasi tradotte mentre si giocava rimaste provvisorie; all'apertura no (caricare il traduttore locale o
-        aspettare le pause di Google terrebbe la finestra ferma): restano da fare, con il pulsante "Ritraduci"."""
+        """After-play check: the game of the chosen folder (profili=None) or the given games. all_apertura
+        (default: with the given games) = the check started on its own on opening: no dialogs at the end, the
+        result goes to the line under the folder. ritraduci (default: not on opening): re-translate now the lines
+        translated while playing that stayed provisional; not on opening (loading the local translator or
+        waiting for Google's pauses would freeze the window): they stay to do, with the "Re-translate" button."""
         traduttore = self._backend()
         all_apertura = profili is not None if all_apertura is None else all_apertura
         ritraduci = not all_apertura if ritraduci is None else ritraduci
@@ -1412,7 +1413,7 @@ class App:
                                                    ritraduci=ritraduci)
                 except interruzione.Interrotto:
                     raise
-                except Exception as e:  # noqa: BLE001 - un gioco che non si controlla non ferma gli altri
+                except Exception as e:  # noqa: BLE001 - a game that cannot be checked does not stop the others
                     self._scrivi_registro("ERRORE (%s: %s)\n%s" % (type(e).__name__, e, traceback.format_exc()))
                     problemi = [controllo.problema_errore(e)]
                 risultati.append(controllo.come_esito(problemi, percorso))
@@ -1421,12 +1422,12 @@ class App:
         if self._occupato():
             return
         self._controllo_automatico = all_apertura
-        self._ripeti = lambda: self._controlla(profili, all_apertura=False)  # "Riprova": con la finestra alla fine
+        self._ripeti = lambda: self._controlla(profili, all_apertura=False)  # "Try again": with the dialog at the end
         self._avvia("Controllo dopo aver giocato", _lavoro, fermabile=True, serve_cartella=profili is None,
                     operazione="controlla", nome_registro="controllo" if profili is not None else None)
 
     def _aggiorna_riga_controllo(self, ultimo=False):
-        """La riga sotto la cartella: 'Dopo l'ultima partita a X: 2 problemi corretti, 1 da fare' e 'Dettagli'."""
+        """The line under the folder: 'Dopo l'ultima partita a X: 2 problemi corretti, 1 da fare' and 'Details'."""
         con_problemi = [e for e in self.esiti_controllo if e.extra.get("controllo")]
         self.btn_dettagli.pack_forget()
         self.btn_ritraduci.pack_forget()
@@ -1459,7 +1460,7 @@ class App:
         self._mostra_riga_controllo()
 
     def _mostra_riga_controllo(self):
-        """I pulsanti del controllo (in fondo, a sinistra) solo se ce n'e' uno da usare."""
+        """The check's buttons (at the bottom, on the left) only if there is one to use."""
         if self.btn_dettagli.winfo_manager() or self.btn_ritraduci.winfo_manager():
             if not self.riga_controllo.winfo_manager():
                 self.riga_controllo.pack(side="left", padx=(0, 10), before=self.etichetta_stato)
@@ -1467,8 +1468,8 @@ class App:
             self.riga_controllo.pack_forget()
 
     def _da_ritradurre(self):
-        """([profili], quante frasi) con frasi tradotte mentre si giocava da ritradurre (lasciate dal controllo
-        all'apertura: problemi con l'azione 'ritraduci' ancora da fare)."""
+        """([profili], how many lines) with lines translated while playing that need re-translating (left by the check
+        on opening: problems with the 'ritraduci' action still to do)."""
         profili, frasi = [], 0
         for e in self.esiti_controllo:
             voci = [p for p in e.extra.get("controllo") or [] if p.get("azione") == "ritraduci"
@@ -1479,8 +1480,8 @@ class App:
         return list(dict.fromkeys(profili)), frasi
 
     def _ritraduci(self):
-        """Il pulsante "Ritraduci N frasi": il controllo dei giochi con frasi da ritradurre, questa volta con la
-        ritraduzione (e le finestre alla fine)."""
+        """The "Re-translate N lines" button: the check of the games with lines to re-translate, this time with the
+        re-translation (and the dialogs at the end)."""
         profili, _ = self._da_ritradurre()
         if profili:
             self._controlla(profili, all_apertura=False, ritraduci=True)
@@ -1489,8 +1490,8 @@ class App:
         self._mostra_controllo(tutti=True)
 
     def _mostra_controllo(self, tutti=False):
-        """Una finestra per gioco con i problemi (corretti, da fare, da sapere) e i pulsanti per quelli da fare; alla
-        fine del controllo dal pulsante anche senza problemi. Un pulsante scelto chiude le altre finestre."""
+        """One dialog per game with the problems (fixed, to do, to know) and the buttons for those to do; at the
+        end of the check started from the button, even without problems. A chosen button closes the other dialogs."""
         esiti_da_mostrare = [e for e in self.esiti_controllo if e.extra.get("controllo")] if tutti else \
             list(self.esiti_controllo)
         for e in esiti_da_mostrare:
@@ -1502,7 +1503,7 @@ class App:
                 break
 
     def _controlla_codice(self):
-        """PatchSmith aggiornato mentre la finestra era aperta: si avvisa (una volta) di chiuderla e riaprirla."""
+        """PatchSmith updated while the window was open: the user is told (once) to close and reopen it."""
         if self._avvisato_codice:
             return
         attuale = impronta_codice()
@@ -1512,18 +1513,18 @@ class App:
                         "PatchSmith è stato aggiornato mentre questa finestra era aperta: chiudi PatchSmith e riaprilo, "
                         "altrimenti continui a usare la versione di prima.")
 
-    # --- correggi traduzioni (gui_corrections.py) ------------------------------------------------------------
+    # --- fix translations (gui_corrections.py) ---------------------------------------------------------------
 
     def _correggi(self, filtro=None):
-        """"Correggi traduzioni…": la finestra con le traduzioni del gioco della cartella scelta e i loro problemi;
-        filtro: l'elenco da mostrare subito (vedi correzioni.FILTRI). Restituisce la finestra (o None)."""
+        """"Fix translations…": the window with the translations of the chosen folder's game and their problems;
+        filtro: the list to show at once (see correzioni.FILTRI). Returns the window (or None)."""
         from . import corrections as correzioni, gui_corrections as gui_correzioni
         if self._occupato():
             return None
         cartella = self.cartella.get().strip().strip('"')
         try:
             percorso = automatico.trova_profilo(cartella) if cartella and os.path.isdir(cartella) else None
-        except Exception:  # noqa: BLE001 - un profilo rovinato: come senza traduzioni (lo dice Analizza e traduci)
+        except Exception:  # noqa: BLE001 - damaged game profile: as if untranslated (Analyze and translate says so)
             percorso = None
         if not percorso:
             tema.informa(self.radice, self.colori, "Nessuna traduzione", "Per questa cartella non ci sono ancora "
@@ -1535,8 +1536,8 @@ class App:
             motivo = ("Il file delle traduzioni di questo gioco è rovinato (forse è stato modificato a mano con un "
                       "errore) e non si legge." if isinstance(e, RuntimeError) and "JSON" in str(e) else
                       "Non riesco a leggere le traduzioni di questo gioco (%s)." % e)
-            # il dettaglio va nel registro dell'interfaccia (fuori da un'operazione non ce n'e' uno aperto) e
-            # nell'esito: "Crea rapporto" qui sotto deve parlare di questo, non dell'ultima operazione
+            # the detail goes to the interface log (outside an operation none is open) and to the
+            # outcome: "Create report" below must be about this, not about the last operation
             aperto = self._registro is not None
             if not aperto:
                 self._apri_registro("", "Correggi traduzioni", "interfaccia")
@@ -1556,11 +1557,11 @@ class App:
         return gui_correzioni.Finestra(self, elenco, filtro)
 
     def _apri_file_traduzioni(self):
-        """"Apri il file (avanzato)": il file delle traduzioni nel programma predefinito (o nel Blocco note)."""
+        """"Open the file (advanced)": the translations file in the default program (or in Notepad)."""
         cartella = self.cartella.get().strip().strip('"')
         try:
             percorso = automatico.file_memoria(cartella, self._lingua_a()) if cartella else None
-        except Exception:  # noqa: BLE001 - come senza file
+        except Exception:  # noqa: BLE001 - as without a file
             percorso = None
         if not percorso or not os.path.exists(percorso):
             tema.informa(self.radice, self.colori, "Nessuna traduzione", "Per questa cartella non ci sono ancora "
@@ -1579,18 +1580,19 @@ class App:
             mostra_file(percorso)
 
     def _dopo_correzioni(self, quante):
-        """Correzioni salvate nella finestra "Correggi traduzioni": si scrivono nel gioco da sole, con "Riapplica"
-        (prima i controlli: se il gioco e' aperto, "Riprova" quando l'hai chiuso)."""
+        """Fixes saved in the "Fix translations" window: they are written to the game on their own, with "Reapply"
+        (first the checks: if the game is open, "Try again" once you have closed it)."""
         self._log("Correggi traduzioni: %s salvate, le scrivo nel gioco." % _quanti(quante, "correzione",
                                                                                     "correzioni"))
         self.stato.set("Correzioni salvate: le scrivo nel gioco…")
         self._riapplica()
 
     def _ritraduci_correzioni(self, testi=None, modello=None):
-        """Da "Correggi traduzioni": ritraduce i testi scelti (testi=None: "Ritraduci tutto") con il traduttore scelto
-        o con il traduttore locale e il modello dato, poi li scrive nel gioco (automatico.ritraduci)."""
+        """From "Fix translations": re-translates the chosen texts (testi=None: "Re-translate everything") with the
+        chosen translator or with the local translator and the given model, then writes them to the game
+        (automatico.ritraduci)."""
         backend = self._backend()
-        if modello and backend != "finto":  # un modello scelto e' quello del traduttore locale
+        if modello and backend != "finto":  # a chosen model is the local translator's
             backend = "locale"
         prova = backend == "finto"
         if self._preliminari("riapplica", lambda: self._ritraduci_correzioni(testi, modello)) is None:
@@ -1601,12 +1603,12 @@ class App:
             fatto = automatico.ritraduci(cartella, testi, backend, self._log, prova=prova, esito=esito, modello=modello)
             return esito.get("esito") or Esito("OK" if fatto else "PARZIALE")
 
-        self._ripeti = self._riapplica  # (le traduzioni nuove sono gia' salvate: "Riprova" le scrive nel gioco)
+        self._ripeti = self._riapplica  # (the new translations are already saved: "Try again" writes them to the game)
         self._avvia("Ritraduzione", _lavoro, fermabile=True, operazione="ritraduci")
 
     def _installa_12b_e_ritraduci(self):
-        """"Ritraduci tutto con Qualità (12B)" senza il modello: si sceglie il modello Qualita' del traduttore locale,
-        si installa (con la solita domanda) e poi si ritraduce da solo."""
+        """"Re-translate everything with Quality (12B)" without the model: the local translator's Quality model is
+        chosen, installed (with the usual question) and then the re-translation starts on its own."""
         self.traduttore.set(TRADUTTORI["locale"])
         self._cambia_traduttore()
         self.modello_locale.set(MODELLI_LOCALI["12b"])
@@ -1618,24 +1620,24 @@ _TRADUTTORI_IT, _MODELLI_IT = dict(TRADUTTORI), dict(MODELLI_LOCALI)
 
 
 def _traduci_costanti():
-    """I nomi dei traduttori e dei modelli nella lingua dell'interfaccia (i menu a tendina li confrontano)."""
+    """The names of the translators and models in the interface language (the drop-down menus compare them)."""
     global TRADUTTORI, MODELLI_LOCALI
     TRADUTTORI = {k: interfaccia.traduci(v) for k, v in _TRADUTTORI_IT.items()}
     MODELLI_LOCALI = {k: interfaccia.traduci(v) for k, v in _MODELLI_IT.items()}
 
 
 def main():
-    progetto.migra_dati()  # i dati con i nomi italiani di prima (profili, memoria...) passano a quelli inglesi
+    progetto.migra_dati()  # the data with the former Italian names (profiles, memory...) move to the English ones
     if sys.platform.startswith("win"):
-        try:  # sulla barra delle applicazioni PatchSmith con la sua icona, non raggruppato sotto Python
+        try:  # on the taskbar PatchSmith with its own icon, not grouped under Python
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("PatchSmith.PatchSmith")
         except (AttributeError, OSError):
             pass
-        # PatchSmith.exe con l'icona accanto a PatchSmith.pyw (se manca o e' vecchio: compilarlo richiede un secondo)
+        # PatchSmith.exe with the icon next to PatchSmith.pyw (if missing or old: building it takes a second)
         threading.Thread(target=icona.eseguibile, daemon=True).start()
-    # la musica pronta in anticipo, anche se e' spenta: il pulsante con la nota la fa partire subito
+    # the music ready in advance, even if it is off: the button with the note starts it at once
     threading.Thread(target=musica.prepara, daemon=True).start()
     radice = tk.Tk()
-    App(radice)  # il tema (chiaro/scuro come Windows) viene applicato dall'App
+    App(radice)  # the theme (light/dark like Windows) is applied by App
     radice.mainloop()

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""PatchSmith: traduce i testi dei videogiochi direttamente nei file del gioco.
+"""PatchSmith: translates the texts of video games directly in the game's files.
 
-Uso:  python -I smith.py <comando> [opzioni]      (python -I smith.py -h per l'aiuto)
+Usage:  python -I smith.py <comando> [opzioni]      (python -I smith.py -h for help)
 """
 import os
 import sys
 
-# Con -I la cartella dello script non e' nel path: la aggiungiamo esplicitamente.
+# With -I the script's folder is not on the path: we add it explicitly.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from patchsmith.cli import main  # noqa: E402

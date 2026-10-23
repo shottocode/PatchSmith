@@ -1,31 +1,31 @@
-"""File di localizzazione "a righe con id" (es. Dokimon/GameMaker: Localization/english_ui.txt).
+"""Localization files "in lines with an id" (e.g. Dokimon/GameMaker: Localization/english_ui.txt).
 
-Due tipi di file, riconosciuti dal contenuto:
+Two kinds of file, recognized by their content:
 
-  a RIGHE (ui, scene...)                 a BLOCCHI (npc, char, trainer...)
-    // commento: non si tocca              12                <- riga con il solo id
-    0 Fight                                Hello there!      <- una riga per riquadro
-    5  do next?   (separatore: spazio,     Bye!
-                   tab o spazio ideografico) .               <- chiusura della sezione ('.', '. ', '\uff0e')
-                                           Second part...    <- altra sezione della stessa voce
-                                           .                    (es. allenatore: prima/dopo la lotta)
+  LINES (ui, scene...)                   BLOCKS (npc, char, trainer...)
+    // comment: left untouched             12                <- line with only the id
+    0 Fight                                Hello there!      <- one line per text box
+    5  do next?   (separator: space,       Bye!
+                   tab or ideographic space) .               <- end of the section ('.', '. ', '\uff0e')
+                                           Second part...    <- another section of the same entry
+                                           .                    (e.g. trainer: before/after the battle)
 
-Si traduce solo il testo: id, separatori, commenti, righe vuote, chiusure e a capo (CRLF)
-restano identici byte per byte. Le righe che il formato non prevede (errori dei file originali)
-non si toccano. Ogni traduzione viene controllata da sola (valida): una che cambierebbe il modo in
-cui il gioco legge il file resta in originale, senza bloccare le altre. Dopo la scrittura il file
-viene riletto e la struttura confrontata.
+Only the text is translated: ids, separators, comments, empty lines, section ends and line breaks (CRLF)
+stay identical byte for byte. Lines the format does not allow for (errors in the original files)
+are left untouched. Each translation is checked on its own (valida): one that would change the way
+the game reads the file stays in the original, without blocking the others. After writing, the file
+is read back and its structure compared.
 """
 import re
 
 _SEPARATORI = " \t\u3000"
 _ID_TESTO = re.compile(r"^(\d+(?:\.\d+)*)([ \t\u3000])(.*)$", re.S)
 _ID_DA_SOLO = re.compile(r"^\d+(?:\.\d+)*[ \t\u3000]*$")
-_CHIUSURE = {".", "\uff0e"}  # '.' e il punto a larghezza piena (anche con spazi attorno)
-# prefisso numerico che i giochi confrontano con l'id cercato (es. Dokimon: ogni riga e' un id candidato)
+_CHIUSURE = {".", "\uff0e"}  # '.' and the full-width period (also with spaces around it)
+# numeric prefix that games compare with the id they look for (e.g. Dokimon: every line is a candidate id)
 _PREFISSO_NUMERO = re.compile(r"^[\s\u3000\ufeff]*[-+]?(?:\d{0,30}\.)?\d{1,30}")
 BOM = "\ufeff"
-# caratteri di controllo e separatori di riga Unicode: un gioco potrebbe leggerli come a capo
+# control characters and Unicode line separators: a game could read them as line breaks
 _CONTROLLO = frozenset([chr(c) for c in range(32) if c not in (9, 10)] + ["\x7f", "\x85", "\u2028", "\u2029"])
 
 
@@ -34,7 +34,7 @@ class ErroreRighe(ValueError):
 
 
 def _dividi(testo):
-    """Righe con il loro a capo; si divide solo su \\n (non su altri separatori Unicode)."""
+    """Lines with their line breaks; splits only on \\n (not on other Unicode separators)."""
     parti = testo.split("\n")
     righe = [p + "\n" for p in parti[:-1]]
     if parti[-1]:
@@ -65,7 +65,7 @@ def _prefisso_numero(s):
 
 
 def modo(righe):
-    """'blocchi' se il file e' fatto di voci su piu' righe chiuse da '.', altrimenti 'righe'."""
+    """'blocchi' if the file is made of multi-line entries closed by '.', otherwise 'righe'."""
     corpi = [_separa_fine(r)[0] for r in righe]
     punti = sum(1 for c in corpi if _chiusura(c))
     voci_riga = sum(1 for c in corpi if _ID_TESTO.match(c) and _ID_TESTO.match(c).group(3).strip())
@@ -73,7 +73,7 @@ def modo(righe):
 
 
 def valida(pos, originale, tradotto):
-    """True se la traduzione puo' sostituire l'originale senza cambiare come il gioco legge il file."""
+    """True if the translation can replace the original without changing how the game reads the file."""
     if "\r" in tradotto or any(c in _CONTROLLO for c in tradotto):
         return False
     if pos[0] == "riga":
@@ -84,16 +84,16 @@ def valida(pos, originale, tradotto):
         return False
     for o, t in zip(righe_o, righe_t):
         if o.strip() and not t.strip():
-            return False  # una riga di testo non puo' diventare vuota (la prima aprirebbe un'altra voce)
+            return False  # a text line cannot become empty (the first one would open another entry)
         if _chiusura(t) or _ID_DA_SOLO.match(t) or t.startswith("//"):
             return False
         if _prefisso_numero(t) != _prefisso_numero(o):
-            return False  # una riga che comincia con un numero diverso potrebbe "rubare" un'altra voce
+            return False  # a line starting with a different number could "steal" another entry
     return True
 
 
 class FileRighe:
-    """File letto: righe (con i loro a capo), unita' di testo traducibili e struttura fissa."""
+    """File read: lines (with their line breaks), translatable text units and fixed structure."""
 
     def __init__(self, dati_byte):
         try:
@@ -109,7 +109,7 @@ class FileRighe:
                                                 else _analizza_righe)(self.righe)
 
     def testi(self):
-        """[(posizione, testo)]: posizione = ('riga', i) oppure ('blocco', i, j) per le righe i..j-1."""
+        """[(posizione, testo)]: posizione = ('riga', i) or ('blocco', i, j) for lines i..j-1."""
         return list(self.unita)
 
     def _scrivi(self, sostituzioni):
@@ -137,11 +137,11 @@ class FileRighe:
         return dati
 
     def serializza(self, sostituzioni):
-        """Byte del file con i testi sostituiti {posizione: nuovo testo}; struttura verificata."""
+        """Bytes of the file with the texts replaced {posizione: nuovo testo}; structure verified."""
         return self._scrivi(sostituzioni)
 
     def serializza_robusto(self, sostituzioni):
-        """(byte, posizioni scartate): le traduzioni che cambierebbero la struttura restano in originale."""
+        """(bytes, rejected positions): the translations that would change the structure stay in the original."""
         originali = dict(self.unita)
         buone = {p: t for p, t in sostituzioni.items() if valida(p, originali.get(p, ""), t)}
         scartate = [p for p in sostituzioni if p not in buone]
@@ -149,7 +149,7 @@ class FileRighe:
             return self._scrivi(buone), scartate
         except ErroreRighe:
             pass
-        # caso raro: controllo una traduzione alla volta
+        # rare case: check one translation at a time
         tenute = {}
         for p, t in buone.items():
             try:
@@ -186,11 +186,11 @@ def _analizza_blocchi(righe):
             forma.append(("fisso", righe[i]))
             i += 1
             continue
-        # sezione di testo: fino alla riga di chiusura
+        # text section: up to the closing line
         j = i
         while j < n and not _chiusura(_separa_fine(righe[j])[0]):
             j += 1
-        if j >= n:  # sezione senza chiusura: non la tocco
+        if j >= n:  # section without an end: left untouched
             for k in range(i, n):
                 forma.append(("fisso", righe[k]))
                 anomale.append(k + 1)
@@ -212,7 +212,7 @@ def leggi(percorso):
 
 
 def sembra_localizzazione(percorso, minimo=5):
-    """True se il file e' nel formato 'a righe con id' e ha almeno 'minimo' testi."""
+    """True if the file is in the 'lines with an id' format and has at least 'minimo' texts."""
     try:
         f = leggi(percorso)
     except (ErroreRighe, OSError):

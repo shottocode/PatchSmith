@@ -1,4 +1,4 @@
-"""Funzioni di sistema comuni: processi in esecuzione (per non toccare i file di un gioco aperto)."""
+"""Common system functions: running processes (so as not to touch the files of an open game)."""
 import ctypes
 import os
 import sys
@@ -9,7 +9,7 @@ class ErroreSistema(Exception):
 
 
 def processi_windows():
-    """Percorsi completi degli eseguibili in esecuzione (Windows, Unicode)."""
+    """Full paths of the running executables (Windows, Unicode)."""
     from ctypes import wintypes
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     psapi = ctypes.WinDLL("psapi", use_last_error=True)
@@ -34,8 +34,8 @@ def processi_windows():
 
 
 def gioco_aperto(cartella):
-    """True se un qualsiasi eseguibile che sta dentro la cartella del gioco e' in esecuzione.
-    Nel dubbio (controllo impossibile) solleva ErroreSistema: meglio fermarsi che rischiare."""
+    """True if any executable inside the game's folder is running.
+    When in doubt (check impossible) raises ErroreSistema: better to stop than to take the risk."""
     if not sys.platform.startswith("win"):
         return False
     try:

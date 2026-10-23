@@ -1,7 +1,7 @@
-"""Test del limitatore delle richieste e dei traduttori online (Google gratuito, DeepL, MyMemory).
+"""Test of the request limiter and of the online translators (free Google, DeepL, MyMemory).
 
-Uso: python -I test/test_limiter.py <cartella_temporanea_vuota>
-Nessuna rete: le risposte HTTP sono simulate e l'orologio e' finto (nessuna attesa vera).
+Usage: python -I test/test_limiter.py <empty_temp_folder>
+No network: the HTTP responses are simulated and the clock is fake (no real waiting).
 """
 import io
 import json
@@ -65,7 +65,7 @@ def errore_http(codice, corpo=b"", url="https://translate.googleapis.com/x", hea
 
 
 class Apri:
-    """urlopen finto: ogni chiamata usa la funzione 'risposta(req)' e conta le richieste."""
+    """Fake urlopen: each call uses the function 'risposta(req)' and counts the requests."""
 
     def __init__(self, risposta, orologio=None):
         self.risposta = risposta
@@ -75,7 +75,7 @@ class Apri:
     def __call__(self, req, timeout):
         self.richieste.append(req)
         if self.orologio:
-            self.orologio.t += 1.0  # tempo di risposta
+            self.orologio.t += 1.0  # response time
         esito = self.risposta(req)
         if isinstance(esito, Exception):
             raise esito
@@ -83,7 +83,7 @@ class Apri:
 
 
 def google_eco(req):
-    """Google finto che 'traduce' anteponendo [it] a ogni riga."""
+    """Fake Google that 'translates' by putting [it] in front of each line."""
     q = urllib.parse.parse_qs(req.data.decode("utf-8"))["q"][0]
     righe = q.split("\n")
     return Risposta(json.dumps([[["\n".join("[it] " + r for r in righe), q, None, None]]]).encode())
@@ -101,13 +101,13 @@ def main(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     os.makedirs(os.path.join(progetto.CARTELLA_PROGETTO, "memory"))
     attese_rete = []
     attesa_vera = interruzione.attendi
-    backend.interruzione.attendi = lambda s: attese_rete.append(s)  # attese per errori di rete: finte
+    backend.interruzione.attendi = lambda s: attese_rete.append(s)  # waits for network errors: fake
 
-    # --- 1. finestre e pause su 200 richieste
+    # --- 1. windows and pauses over 200 requests
     lim, orologio = limitatore_finto(base, nome="finestre.json")
     tempi = []
     for _ in range(200):
@@ -123,7 +123,7 @@ def main(base):
     controlla("limitatore: caratteri per minuto entro il margine",
               max(sum(3600 for x in tempi if t <= x < t + 60) for t in tempi) <= 32_000)
 
-    # --- 2. primo 429 "Sorry": una sola richiesta, nessuna attesa, pausa ricordata 24 ore
+    # --- 2. first 429 "Sorry": a single request, no waiting, pause remembered for 24 hours
     lim, orologio = limitatore_finto(base, nome="blocco.json")
     apri = Apri(lambda req: errore_http(429, b"<html><title>Sorry...</title>automated queries</html>"), orologio)
     g = backend.GoogleGratis(log=silenzio, apri=apri, limitatore=lim)
@@ -151,7 +151,7 @@ def main(base):
     controlla("dopo la pausa si riprova", backend.GoogleGratis(log=silenzio, apri=apri2, limitatore=lim2)
               .traduci_righe(["hello"], "en", "it") == ["[it] hello"])
 
-    # --- 3. livelli: a freddo 1 -> 3 -> 7 giorni -> disattivato; dopo traffico 1 ora
+    # --- 3. levels: cold 1 -> 3 -> 7 days -> disabled; after traffic 1 hour
     lim, orologio = limitatore_finto(base, nome="livelli.json")
     fini = []
     for _ in range(4):
@@ -172,7 +172,7 @@ def main(base):
     controlla("blocco dopo richieste riuscite: 'dopo traffico', pausa di un'ora",
               s["tipo"] == "dopo_traffico" and abs(s["fino"] - s["dal"] - 3600) < 1)
 
-    # --- 4. altri segnali: HTML al posto del JSON, /sorry/, consenso cookie, 400
+    # --- 4. other signals: HTML instead of JSON, /sorry/, cookie consent, 400
     for nome, risposta, atteso in (
             ("pagina HTML con 200", lambda r: Risposta(b"<html>Sorry</html>", "text/html"), backend.Bloccato),
             ("redirect a /sorry/", lambda r: Risposta(b"x", "text/html", "https://www.google.com/sorry/index"),
@@ -190,14 +190,14 @@ def main(base):
         controlla("segnale '%s' riconosciuto correttamente" % nome, preso is atteso
                   and (atteso is backend.Bloccato) == bool(lim.pausa()))
 
-    # --- 5. righe non allineate: divisione a meta', niente raffica
+    # --- 5. misaligned lines: split in half, no burst
     lim, orologio = limitatore_finto(base, nome="allinea.json")
 
     def sfasata(req):
         q = urllib.parse.parse_qs(req.data.decode("utf-8"))["q"][0]
         righe = q.split("\n")
         if len(righe) > 1:
-            righe = righe[:-1]  # Google unisce sempre due righe
+            righe = righe[:-1]  # Google always merges two lines
         return Risposta(json.dumps([[["\n".join(righe), q, None, None]]]).encode())
     apri = Apri(sfasata, orologio)
     esito = backend.GoogleGratis(log=silenzio, apri=apri, limitatore=lim).traduci_righe(
@@ -205,7 +205,7 @@ def main(base):
     controlla("righe non allineate: al massimo 15 richieste (non 151), le righe restano non tradotte",
               len(apri.richieste) <= 15 and all(t == "" for t in esito))
 
-    # --- 6. errori di rete: 2 nuovi tentativi (10 s, 30 s) e poi stop
+    # --- 6. network errors: 2 retries (10 s, 30 s) and then stop
     lim, orologio = limitatore_finto(base, nome="rete.json")
     apri = Apri(lambda r: urllib.error.URLError("rete assente"), orologio)
     del attese_rete[:]
@@ -217,7 +217,7 @@ def main(base):
     controlla("errori di rete: 3 tentativi (attese 10 e 30 s), poi stop", preso and len(apri.richieste) == 3
               and attese_rete == [10, 30] and lim.pausa() is None)
 
-    # --- 7. Ferma durante una pausa lunga del limitatore (attesa vera, interrotta)
+    # --- 7. Stop during a long pause of the limiter (real wait, interrupted)
     lim = limitatore.Limitatore("google", silenzio, os.path.join(base, "ferma.json"), dormi=attesa_vera)
     lim.prima_di(100)
     for _ in range(7):
@@ -234,14 +234,14 @@ def main(base):
     interruzione.azzera()
     controlla("Ferma durante una pausa del limitatore: si ferma subito", fermato and time.monotonic() - inizio < 3)
 
-    # --- 8. stima
+    # --- 8. estimate
     lim, _ = limitatore_finto(base, nome="stima.json")
     forager = lim.stima([3600] * 12)
     grande = lim.stima([3600] * 113)
     controlla("stima: Forager (~42.000 caratteri, 12 richieste) in pochi minuti; 406.000 caratteri oltre un'ora",
               60 <= forager <= 300 and grande >= 3600)
 
-    # --- 9. file di stato rovinato o con date assurde
+    # --- 9. state file damaged or with absurd dates
     rotto = os.path.join(base, "rotto.json")
     open(rotto, "w").write("{non json")
     lim, orologio = limitatore_finto(base, nome="rotto.json")
@@ -256,7 +256,7 @@ def main(base):
               lim.pausa() is not None and lim._mio(lim._leggi(), orologio.t)["blocco"]["fino"] <= orologio.t + 8 * 86400
               and dati is not None)
 
-    # --- 10. due limitatori sullo stesso file contano insieme (interfaccia + riga di comando)
+    # --- 10. two limiters on the same file count together (interface + command line)
     orologio = Orologio()
     a, _ = limitatore_finto(base, nome="condiviso.json", orologio=orologio)
     b, _ = limitatore_finto(base, nome="condiviso.json", orologio=orologio)
@@ -335,14 +335,14 @@ def main(base):
     controlla("MyMemory: caratteri del giorno finiti -> stop chiaro e pausa fino a domani",
               "domani" in messaggio and lim.pausa() is not None)
 
-    # --- 13. credenziali da settings.json
+    # --- 13. credentials from settings.json
     with open(os.path.join(progetto.CARTELLA_PROGETTO, "settings.json"), "w", encoding="utf-8") as f:
         json.dump({"chiave_deepl": "k:fx", "email_mymemory": "a@b.it"}, f)
     controlla("credenziali lette dalle impostazioni",
               backend.crea_backend("deepl", silenzio).chiave == "k:fx"
               and backend.crea_backend("mymemory", silenzio).email == "a@b.it")
 
-    # --- 14. progetto: servizio in pausa -> nessuna richiesta; gruppi per caratteri; ripieghi in una richiesta
+    # --- 14. project: service paused -> no request; groups by characters; fallbacks in one request
     profilo = os.path.join(base, "profilo.json")
     json.dump({"nome": "prova", "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
                "file": []}, open(profilo, "w"))
@@ -361,7 +361,8 @@ def main(base):
     p.log = righe.append
     p.traduci_testi(testi, backend.GoogleGratis(log=silenzio, apri=apri, limitatore=lim), "en", "it")
     controlla("progetto: gruppi da una richiesta ciascuno (circa 3.600 caratteri), stima mostrata prima",
-              len(apri.richieste) == len([r for r in righe if r.lstrip("").startswith("  testi ")])  # (dettaglio: solo su disco)
+              # ("  testi " lines: detail, only on disk)
+              len(apri.richieste) == len([r for r in righe if r.lstrip("").startswith("  testi ")])
               and all(len(urllib.parse.parse_qs(r.data.decode())["q"][0]) <= 4000 for r in apri.richieste)
               and any("Richieste previste" in r and "tempo stimato" in r for r in righe))
 
@@ -373,13 +374,13 @@ def main(base):
 
         def traduci_righe(self, righe, origine, destinazione):
             self.chiamate += 1
-            return [r.replace("[[0]]", "[0]") + " it" for r in righe]  # rovina i segnaposto
+            return [r.replace("[[0]]", "[0]") + " it" for r in righe]  # damages the placeholders
     rov = Rovina()
     p.traduci_testi(["Hello {name}, welcome %d" % i for i in range(20)], rov, "en", "it")
     controlla("segnaposto rovinati: i ripieghi di tutto il gruppo in una sola richiesta (non una per testo)",
               rov.chiamate <= 2)
 
-    # --- 15. casi trovati dalla revisione
+    # --- 15. cases found by the review
     riga = "Thanks! " + " ".join("tester%d" % i for i in range(120)) + ". Bye now."
     controlla("righe lunghe: divise senza cambiare l'ordine delle frasi",
               " ".join(backend._dividi_lunga(riga, 480)) == riga and " ".join(backend._dividi_lunga(riga, 100)) == riga)
@@ -387,7 +388,7 @@ def main(base):
     controlla("MyMemory: pezzi sempre entro 480 byte anche con giapponese + inglese",
               all(len(p.encode("utf-8")) <= 480 for p in backend._dividi_byte(misto)))
     lim, orologio = limitatore_finto(base, nome="orologio.json")
-    lim.bloccato(429, adesso=orologio.t + 365 * 86400)  # orologio avanti di un anno quando arriva il blocco
+    lim.bloccato(429, adesso=orologio.t + 365 * 86400)  # clock one year ahead when the block arrives
     lim.pausa()
     orologio.t += 9 * 86400
     controlla("blocco registrato con l'orologio avanti: dura al massimo 8 giorni, poi finisce davvero",
@@ -432,7 +433,7 @@ def main(base):
         messaggio = str(e)
     controlla("Google: risposta in un formato inatteso -> stop con messaggio", "formato inatteso" in messaggio)
 
-    # MyMemory: quota finita a meta' gruppo -> le righe gia' tradotte restano in memoria
+    # MyMemory: quota used up halfway through a group -> the lines already translated stay in the translation memory
     lim, orologio = limitatore_finto(base, "mymemory", nome="mm-quota.json")
     conteggio = [0]
 
@@ -477,7 +478,7 @@ def main(base):
         codice = "eccezione"
     controlla("riga di comando: DeepL senza chiave -> errore spiegato (uscita 1), niente traceback", codice == 1)
 
-    # --- pulsante "Verifica": chiave DeepL (consumo del mese, nessun testo) ed email di MyMemory
+    # --- "Check" button: DeepL key (monthly usage, no text) and MyMemory email
     chieste = []
 
     def uso(req):

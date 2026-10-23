@@ -1,7 +1,7 @@
-"""Test dell'adapter GameMaker con un gioco finto (file di localizzazione + data.win minimo con due font).
+"""Test of the GameMaker adapter with a fake game (localization files + minimal data.win with two fonts).
 
-Uso: python -I test/test_gamemaker.py <cartella_temporanea_vuota>
-Profili e memorie del test restano nella cartella temporanea (non in quella di PatchSmith).
+Usage: python -I test/test_gamemaker.py <empty_temp_folder>
+The test's game profiles and translation memories stay in the temporary folder (not in PatchSmith's).
 """
 import hashlib
 import os
@@ -34,12 +34,12 @@ FR_UI = "0 Attaquer\r\n1 Changer\r\n2 Capturer\r\n3 Fuir\r\n4 Qu'est ce que \r\n
 
 
 def data_win(fonts):
-    """FORM minimo con STRG (nomi) e FONT (glifi), nel formato letto da patchsmith.gamemaker."""
+    """Minimal FORM with STRG (names) and FONT (glyphs), in the format read by patchsmith.gamemaker."""
     strg_corpo, posizioni = bytearray(), []
     for nome, _ in fonts:
         posizioni.append(len(strg_corpo) + 4)
         strg_corpo += struct.pack("<I", len(nome)) + nome.encode() + b"\x00"
-    inizio_strg = 8 + 8  # FORM(8) + intestazione STRG(8)
+    inizio_strg = 8 + 8  # FORM(8) + STRG header(8)
     strg = b"STRG" + struct.pack("<I", len(strg_corpo)) + bytes(strg_corpo)
     inizio_font = 8 + len(strg) + 8
     corpo = bytearray(struct.pack("<I", len(fonts)) + b"\x00" * (4 * len(fonts)))
@@ -82,7 +82,7 @@ def main(base):
     open(os.path.join(gioco, "Gioco.exe"), "wb").write(b"MZ")
     prima = impronte(gioco)
 
-    # formato a righe e a blocchi
+    # line format and block format
     ui = adapter_righe.leggi(os.path.join(gioco, "Localization", "english_ui.txt"))
     npc = adapter_righe.leggi(os.path.join(gioco, "Localization", "english_npc.txt"))
     controlla("file a righe: modo, testi, commento e numeri esclusi", ui.modo == "righe" and
@@ -99,7 +99,7 @@ def main(base):
     except adapter_righe.ErroreRighe:
         controlla("blocco con un numero di righe diverso: rifiutato", True)
 
-    # regole del parser del gioco (Dokimon): separatori, chiusure, prefissi numerici, barre
+    # rules of the game's parser (Dokimon): separators, terminators, numeric prefixes, slashes
     varianti = adapter_righe.FileRighe("0\tFight\r\n1\u3000Switch\r\n2 Catch\r\n".encode("utf-8"))
     controlla("separatori tab e spazio ideografico riconosciuti e conservati",
               [t for _, t in varianti.unita] == ["Fight", "Switch", "Catch"]
@@ -128,7 +128,7 @@ def main(base):
               and adapter_gamemaker.lingua_del_percorso("data/pt1_dialog.txt") is None
               and adapter_gamemaker.lingua_del_percorso("text/ui_fr.txt") == "fr")
 
-    # ricerca dei file e font
+    # file search and fonts
     trovati = adapter_gamemaker.file_localizzazione(gioco)
     sorgenti, lingue, _ = adapter_gamemaker.scegli_sorgenti(trovati)
     controlla("file della lingua originale trovati, il francese no", sorgenti == [
@@ -142,7 +142,8 @@ def main(base):
               == ["fn_testo", "fn_altro", "fn_numeri"])
     controlla("italiano: à è restano se il font li ha; l'acuto solo per i o u",
               caratteri.adatta_caratteri("è già", set(caratteri.ASCII) | set("áéíóú"), "it") == "e' gia'")
-    # politica dei font: un font solo ASCII conta; uno coreano senza accenti no; uno di sole maiuscole vale per le minuscole
+    # font policy: an ASCII-only font counts; a Korean one without accents does not; an uppercase-only one also covers
+    # lowercase
     prove = os.path.join(base, "font")
     os.makedirs(prove)
     coreano = set(chr(c) for c in range(32, 127)) | {chr(0xAC00 + i) for i in range(300)}
@@ -157,13 +158,13 @@ def main(base):
     open(os.path.join(prove, "data.win"), "wb").write(b"FORM\x10\x00\x00\x00FONT")
     controlla("data.win troncato: solo ASCII, nessun errore", adapter_gamemaker.caratteri_font(prove) == set(caratteri.ASCII))
 
-    # flusso completo con il traduttore di prova; profili e memorie nella cartella del test
+    # full flow with the test translator; game profiles and translation memories in the test folder
     os.makedirs(os.path.join(base, "patchsmith", "profiles"))
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     automatico.CARTELLA_PROFILI = os.path.join(base, "patchsmith", "profiles")
-    automatico.adapter_gamemaker  # noqa: B018 (importato)
+    automatico.adapter_gamemaker  # noqa: B018 (imported)
     percorso, completato, _ = automatico.analizza_e_traduci(gioco, "auto", "it", "finto", silenzio)
     controlla("analizza e traduci: completato, profilo GameMaker", completato and percorso
               and '"motore": "gamemaker"' in open(percorso, encoding="utf-8").read())
@@ -181,7 +182,7 @@ def main(base):
               and impronte(gioco) == prima)
     progetto.gioco_aperto = lambda cartella: False
 
-    # file tradotto modificato a mano, poi riapplica e ripristina: l'originale inglese non si perde mai
+    # translated file edited by hand, then reapply and restore: the English original is never lost
     automatico.riapplica(gioco, silenzio, prova=True)
     ui_path = os.path.join(gioco, "Localization", "english_ui.txt")
     open(ui_path, "ab").write(b"99 Aggiunta a mano\r\n")
@@ -193,7 +194,7 @@ def main(base):
     automatico.ripristina(gioco, silenzio)
     controlla("modifica a mano + ripristino: l'originale inglese torna al suo posto, identico", impronte(gioco) == prima)
 
-    # file cambiato dopo la traduzione e mai riapplicato: il ripristino non cancella l'originale
+    # file changed after the translation and never reapplied: restoring does not delete the original
     automatico.riapplica(gioco, silenzio, prova=True)
     open(ui_path, "ab").write(b"98 Cambiato da altri\r\n")
     automatico.ripristina(gioco, silenzio)
@@ -204,7 +205,7 @@ def main(base):
     open(ui_path, "wb").write(UI.encode())
     controlla("... e rimesso a posto a mano la cartella torna identica", impronte(gioco) == prima)
 
-    # il gioco ha gia' l'italiano: niente traduzione
+    # the game already has Italian: no translation
     os.makedirs(os.path.join(gioco, "Localization", "italian"))
     open(os.path.join(gioco, "Localization", "italian", "ui.txt"), "wb").write(b"0 Combatti\r\n1 Cambia\r\n2 Cattura\r\n3 Fuggi\r\n4 Cosa deve fare \r\n5  ora?\r\n")
     percorso, completato, _ = automatico.analizza_e_traduci(gioco, "auto", "it", "finto", silenzio)

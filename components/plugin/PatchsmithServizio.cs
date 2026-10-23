@@ -1,12 +1,12 @@
-// Patchsmith - avvia il traduttore di Patchsmith quando parte il gioco (plugin per BepInEx 5).
-// XUnity.AutoTranslator manda le frasi nuove (es. quelle con numeri composte mentre si gioca) all'indirizzo
-// CustomTranslate su 127.0.0.1, dove risponde il servizio di Patchsmith (smith.py servizio-xunity), che le traduce con
-// il traduttore locale o con quelli online, con le pause di Patchsmith. Il comando da eseguire e' in
-// BepInEx/config/patchsmith-servizio.cfg, scritto da Patchsmith; il servizio riceve il numero del processo del gioco e
-// si chiude da solo quando il gioco si chiude. Se il Python indicato non c'e' piu' (spostato o aggiornato) prova il
-// Python di Windows (py -3). Com'e' andata lo scrive in BepInEx/patchsmith-servizio-stato.txt, che Patchsmith legge
-// dopo che si e' giocato.
-// Compilato da Patchsmith con csc (C# 5) usando le librerie del gioco.
+// Patchsmith - starts Patchsmith's translator when the game starts (plugin for BepInEx 5).
+// XUnity.AutoTranslator sends the new sentences (e.g. those with numbers, built while playing) to the CustomTranslate
+// address on 127.0.0.1, where Patchsmith's service answers (smith.py servizio-xunity) and translates them with the
+// local translator or the online ones, with Patchsmith's pauses. The command to run is in
+// BepInEx/config/patchsmith-servizio.cfg, written by Patchsmith; the service receives the game's process number and
+// closes by itself when the game closes. If the given Python is gone (moved or updated) it tries the Windows
+// Python launcher (py -3). How it went is written to BepInEx/patchsmith-servizio-stato.txt, which Patchsmith reads
+// after playing.
+// Compiled by Patchsmith with csc (C# 5) against the game's libraries.
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -72,7 +72,7 @@ public class PatchsmithServizio : BaseUnityPlugin
         }
     }
 
-    // Il launcher di Python per Windows (pyw.exe senza finestra, altrimenti py.exe), o null.
+    // The Python launcher for Windows (pyw.exe without a window, otherwise py.exe), or null.
     static string PythonDiWindows()
     {
         string windows = Environment.GetEnvironmentVariable("WINDIR");
@@ -93,7 +93,7 @@ public class PatchsmithServizio : BaseUnityPlugin
         return fine > inizio ? testo.Substring(inizio + 1, fine - inizio - 1) : null;
     }
 
-    // BepInEx/patchsmith-servizio-stato.txt: una riga per voce (Esito, Data, Processo, Programma, Dettaglio).
+    // BepInEx/patchsmith-servizio-stato.txt: one line per entry (Esito, Data, Processo, Programma, Dettaglio).
     void Stato(string esito, string programma, string dettaglio)
     {
         try

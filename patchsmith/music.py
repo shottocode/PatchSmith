@@ -1,10 +1,10 @@
-"""Musica di sottofondo di PatchSmith in stile 8 bit ("Miniera"), scritta qui come uno spartito e suonata dal programma.
+"""PatchSmith's 8-bit style background music ("Miniera"), written here like a score and played by the program.
 
-Quattro canali come una console NES: melodia, arpeggio (onda quadra, piano), basso (onda triangolare) e batteria (rumore
-e un colpo di triangolo che scende). Le note si scrivono a passi di un ottavo: "E5:2" e' un Mi della quinta ottava lungo
-due ottavi, "r:2" una pausa di due ottavi. Generata qui, senza file audio scaricati e senza diritti di altri; la
-finestra la accende con il pulsante con la nota (spento di default). Suona in loop senza stacchi da un'uscita audio a
-parte (waveOut), insieme ai suoni di sounds.py.
+Four channels like a NES console: melody, arpeggio (square wave, soft), bass (triangle wave) and drums (noise and a
+falling triangle hit). Notes are written in eighth-note steps: "E5:2" is an E of the fifth octave two eighths long,
+"r:2" a rest of two eighths. Generated here, with no downloaded audio files and no third-party rights; the window turns
+it on with the button with the note (off by default). It plays in a seamless loop from a separate audio output
+(waveOut), together with the sounds of sounds.py.
 """
 import ctypes
 import hashlib
@@ -17,20 +17,20 @@ import tempfile
 import threading
 import wave
 
-FREQUENZA = 22050  # (basta per l'8 bit e si genera in fretta)
-VOLUME = 0.2  # da sottofondo: piu' bassa dei suoni (suoni.VOLUME)
+FREQUENZA = 22050  # (enough for 8 bit and quick to generate)
+VOLUME = 0.2  # background level: lower than the sounds (suoni.VOLUME)
 NOTE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 
 
 def _hz(nota):
-    """'A4' -> 440 Hz; anche diesis e bemolle ('C#5', 'Bb3')."""
+    """'A4' -> 440 Hz; sharps and flats too ('C#5', 'Bb3')."""
     nome, ottava = nota[:-1], int(nota[-1])
     semitono = NOTE[nome[0]] + nome[1:].count("#") - nome[1:].count("b")
     return 440.0 * 2 ** ((semitono + 12 * (ottava + 1) - 69) / 12)
 
 
 def _leggi(riga):
-    """'E5:2 C5 r:2' -> [(nota o None, passi)]."""
+    """'E5:2 C5 r:2' -> [(note or None, steps)]."""
     note = []
     for pezzo in riga.split():
         nome, _, passi = pezzo.partition(":")
@@ -39,7 +39,7 @@ def _leggi(riga):
 
 
 def _canale(lunghezza, note, passo, suona):
-    """Campioni (float) di un canale: 'suona(campioni, inizio, quanti, frequenza)' scrive ogni nota."""
+    """Samples (float) of a channel: 'suona(campioni, inizio, quanti, frequenza)' writes each note."""
     campioni = [0.0] * lunghezza
     posizione = 0.0
     for nota, passi in note:
@@ -57,7 +57,7 @@ def _quadra(duty, volume, decadimento, sostegno, vibrato=False):
             t = i / FREQUENZA
             f = frequenza * (1 + 0.01 * math.sin(2 * math.pi * 5.5 * t)) if vibrato and t > 0.18 else frequenza
             fase += f / FREQUENZA
-            bordi = min(1.0, t / 0.003, (quanti - i) / FREQUENZA / 0.015)  # niente "click" all'inizio e alla fine
+            bordi = min(1.0, t / 0.003, (quanti - i) / FREQUENZA / 0.015)  # no "click" at the start and at the end
             inviluppo = (sostegno + (1 - sostegno) * math.exp(-t / decadimento)) * bordi
             campioni[inizio + i] += volume * inviluppo * (1.0 if fase % 1.0 < duty else -1.0)
     return suona
@@ -75,20 +75,20 @@ def _triangolo(volume):
 
 
 def _batteria(lunghezza, ritmo, passo, battute, volume):
-    """Batteria: ritmo e' una battuta di 8 passi ('k' cassa, 's' rullante, 'h' charleston, '.' niente)."""
+    """Drums: ritmo is a bar of 8 steps ('k' kick, 's' snare, 'h' hi-hat, '.' nothing)."""
     campioni = [0.0] * lunghezza
     caso = random.Random(7)
     for battuta in range(battute):
         for n, colpo in enumerate(ritmo):
             inizio = int((battuta * 8 + n) * passo * FREQUENZA)
-            if colpo == "k":  # cassa: un triangolo che scende in fretta
+            if colpo == "k":  # kick: a triangle that falls quickly
                 fase = 0.0
                 for i in range(min(int(0.11 * FREQUENZA), lunghezza - inizio)):
                     t = i / FREQUENZA
                     fase += (45 + 120 * math.exp(-t / 0.025)) / FREQUENZA
                     f = fase % 1.0
                     campioni[inizio + i] += volume * math.exp(-t / 0.05) * (4 * f - 1 if f < 0.5 else 3 - 4 * f)
-            elif colpo in "sh":  # rullante e charleston: rumore che cambia a scatti, come le console
+            elif colpo in "sh":  # snare and hi-hat: noise that changes in steps, like the consoles
                 durata, tau, forza, scatto = (0.13, 0.045, 0.55, 2) if colpo == "s" else (0.035, 0.010, 0.22, 1)
                 valore = 0.0
                 for i in range(min(int(durata * FREQUENZA), lunghezza - inizio)):
@@ -99,7 +99,7 @@ def _batteria(lunghezza, ritmo, passo, battute, volume):
 
 
 def _arpeggio(accordi, passo, ottava, sedicesimi):
-    """Le note dell'arpeggio: per ogni battuta un accordo ('Am', 'F', 'C', 'G', 'Em'...) suonato a note staccate."""
+    """The arpeggio notes: for each bar a chord ('Am', 'F', 'C', 'G', 'Em'...) played as separate notes."""
     triadi = {"": (0, 4, 7), "m": (0, 3, 7)}
     note = []
     for accordo in accordi:
@@ -132,9 +132,9 @@ def _wav(campioni, bit=8):
 
 def _brano(tempo, accordi, melodia, basso, ritmo, sedicesimi=False, duty_melodia=0.25, forma_melodia="quadra",
            eco=None, ottava_arpeggio=4, volume_arpeggio=0.16, volume_batteria=0.5):
-    """Il brano in WAV: eco = (passi di ritardo, volume) sulla melodia, che "fa il giro" del brano (alla fine del loop
-    l'eco continua all'inizio: nessuno stacco quando ricomincia)."""
-    passo = 60.0 / tempo / 2  # un ottavo
+    """The track as WAV: eco = (delay steps, volume) on the melody, which "wraps around" the track (at the end of the
+    loop the echo continues at the start: no gap when it starts again)."""
+    passo = 60.0 / tempo / 2  # an eighth
     battute = len(accordi)
     lunghezza = int(battute * 8 * passo * FREQUENZA)
     if forma_melodia == "triangolo":
@@ -153,7 +153,7 @@ def _brano(tempo, accordi, melodia, basso, ritmo, sedicesimi=False, duty_melodia
 
 
 def miniera():
-    """D, "Miniera": Mi minore, 76 battiti al minuto, la piu' lenta e spoglia; melodia a triangolo con eco lunga."""
+    """D, "Miniera": E minor, 76 beats per minute, the slowest and barest; triangle melody with a long echo."""
     accordi = ["Em", "C", "Am", "B"] * 2 + ["Am", "Em", "C", "B", "Am", "Em", "B", "B"]
     melodia = """B4:4 G4:2 E4:2   E4:4 G4:2 C5:2   A4:6 E4:2   F#4:4 D#4:4
                  E4:2 G4:2 B4:2 E5:2   D5:3 C5:1 G4:4   A4:2 C5:2 B4:2 A4:2   B4:6 r:2
@@ -166,24 +166,24 @@ def miniera():
 
 
 BRANI = {"miniera": miniera}
-_PRONTI = {}  # brano -> campioni PCM gia' generati
+_PRONTI = {}  # track -> PCM samples already generated
 _stato = {"voluta": False, "uscita": None, "buffer": None, "intestazione": None, "winmm": None}
 _lucchetto = threading.Lock()
 _lucchetto_prepara = threading.Lock()
 
 
 def _file_pronto(brano):
-    """Dove resta il brano gia' generato (cartella temporanea di Windows): il nome cambia con questo file, quindi una
-    musica cambiata non usa mai quello vecchio."""
+    """Where the already generated track is kept (Windows temporary folder): the name changes with this file, so
+    changed music never uses the old one."""
     with open(os.path.abspath(__file__), "rb") as f:
         impronta = hashlib.sha1(f.read()).hexdigest()[:12]
     return os.path.join(tempfile.gettempdir(), "PatchSmith", "musica-%s-%s.pcm" % (brano, impronta))
 
 
 def prepara(brano="miniera"):
-    """I campioni del brano pronti per suonare: gia' in memoria, dal file della volta prima o generati (un paio di
-    secondi; poi il file si scrive). La finestra la chiama all'apertura in un thread, anche con la musica spenta:
-    cosi' il pulsante con la nota la fa partire subito."""
+    """The track's samples ready to play: already in memory, from the file of the previous time or generated (a couple
+    of seconds; then the file is written). The window calls it when it opens, in a thread, even with the music off:
+    that way the button with the note starts it right away."""
     with _lucchetto_prepara:
         if brano in _PRONTI:
             return _PRONTI[brano]
@@ -196,7 +196,7 @@ def prepara(brano="miniera"):
         if not pcm:
             with wave.open(io.BytesIO(BRANI[brano]())) as w:
                 pcm = w.readframes(w.getnframes())
-            try:  # (un nome temporaneo e poi rinominato: mai un file a meta')
+            try:  # (a temporary name, renamed afterwards: never a half-written file)
                 os.makedirs(os.path.dirname(percorso), exist_ok=True)
                 with open(percorso + ".tmp", "wb") as f:
                     f.write(pcm)
@@ -208,8 +208,8 @@ def prepara(brano="miniera"):
 
 
 def avvia(brano="miniera"):
-    """Fa partire il brano in loop senza fermare la finestra (in un thread: se non e' ancora pronto, vedi prepara,
-    parte appena lo e'). Senza waveOut (non Windows) o senza un'uscita audio non suona nulla."""
+    """Starts the track in a loop without blocking the window (in a thread: if it is not ready yet, see prepara, it
+    starts as soon as it is). Without waveOut (not Windows) or without an audio output nothing plays."""
     _stato["voluta"] = True
     threading.Thread(target=_prepara_e_suona, args=(brano,), daemon=True).start()
 
@@ -223,7 +223,7 @@ def ferma():
 def _prepara_e_suona(brano):
     pcm = prepara(brano)
     with _lucchetto:
-        if _stato["voluta"] and _stato["uscita"] is None:  # (spenta mentre si preparava: niente)
+        if _stato["voluta"] and _stato["uscita"] is None:  # (turned off while it was being prepared: nothing)
             _apri(pcm)
 
 
@@ -240,9 +240,9 @@ class _Intestazione(ctypes.Structure):
 
 
 def _apri(pcm):
-    """Un'uscita waveOut (mono, 16 bit, FREQUENZA) che ripete 'pcm' all'infinito: il loop lo fa Windows
-    (WHDR_BEGINLOOP | WHDR_ENDLOOP), quindi senza stacchi; e' un'uscita a parte, cosi' i suoni di winsound (che ne
-    suona uno alla volta) si sentono insieme alla musica. True se suona."""
+    """A waveOut output (mono, 16 bit, FREQUENZA) that repeats 'pcm' forever: Windows does the loop
+    (WHDR_BEGINLOOP | WHDR_ENDLOOP), so with no gaps; it is a separate output, so the winsound sounds (which plays one
+    at a time) are heard together with the music. True if it plays."""
     try:
         winmm = ctypes.windll.winmm
     except (AttributeError, OSError):
@@ -263,7 +263,7 @@ def _apri(pcm):
     if winmm.waveOutPrepareHeader(uscita, ctypes.byref(intestazione), dimensione) != 0:
         winmm.waveOutClose(uscita)
         return False
-    intestazione.dwFlags |= 0x04 | 0x08  # WHDR_BEGINLOOP | WHDR_ENDLOOP: questo blocco si ripete
+    intestazione.dwFlags |= 0x04 | 0x08  # WHDR_BEGINLOOP | WHDR_ENDLOOP: this block repeats
     intestazione.dwLoops = 0xFFFFFFFF
     _stato.update(uscita=uscita, buffer=buffer, intestazione=intestazione, winmm=winmm)
     if winmm.waveOutWrite(uscita, ctypes.byref(intestazione), dimensione) != 0:
@@ -283,7 +283,7 @@ def _chiudi():
 
 
 def _suonati():
-    """Byte suonati dall'uscita aperta (contano anche i giri del loop), o None: per le prove."""
+    """Bytes played by the open output (loop repetitions count too), or None: for the tests."""
     if _stato["uscita"] is None:
         return None
 

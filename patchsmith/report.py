@@ -1,15 +1,15 @@
-"""Rapporto per chiedere aiuto ("Crea rapporto"): un file .zip sul Desktop con quello che serve a capire cosa e'
-successo con un gioco, senza dover frugare nelle cartelle.
+"""Report for asking for help ("Create report"): a .zip file on the Desktop with what is needed to understand what
+happened with a game, without having to dig through folders.
 
-Contiene: i registri delle ultime operazioni (cartella registri/ dei dati), il profilo del gioco, le impostazioni
-SENZA chiave DeepL ed email, lo stato dei traduttori, il riconoscimento del motore, i registri di BepInEx e la
-configurazione di XUnity, la fine del registro e del diario delle frasi del traduttore dal vivo, i registri di
-Unity (Player.log, Player-prev.log e l'ultimo crash) e di Unreal (<progetto>.log), i manifesti di PatchSmith nel
-gioco, l'elenco dei testi rimasti in originale con il motivo (problemi.json), le correzioni non ancora scritte nel gioco
-(Unity: da_scrivere.json), le lettere dei font letti (Unity Localization: font.json), il risultato del controllo dopo
-aver giocato (<gioco>.controllo.json) e la versione di PatchSmith.
-Non contiene file del gioco ne' salvataggi. Nei testi la chiave e l'email (anche se finite per caso in un registro)
-diventano "<tolto>" e la cartella dell'utente di Windows diventa %USERPROFILE%.
+It contains: the logs of the latest operations (logs/ folder of the data), the game profile, the settings
+WITHOUT the DeepL key and email, the state of the translators, the engine detection, the BepInEx logs and the
+XUnity configuration, the end of the log and of the sentence diary of the live translator, the logs of
+Unity (Player.log, Player-prev.log and the last crash) and of Unreal (<progetto>.log), PatchSmith's manifests in the
+game, the list of texts left untranslated with the reason (problemi.json), the fixes not yet written to the game
+(Unity: da_scrivere.json), the letters of the fonts read (Unity Localization: font.json), the result of the after-play
+check (<gioco>.controllo.json) and the PatchSmith version.
+It contains no game files and no saves. In the texts the key and the email (even if they ended up in a log by chance)
+become "<tolto>" and the Windows user folder becomes %USERPROFILE%.
 """
 import datetime
 import glob
@@ -24,23 +24,23 @@ import zipfile
 
 from . import __version__
 
-CHIAVI_SEGRETE = ("chiave", "email", "password", "token", "key")  # parti dei nomi delle impostazioni da togliere
-MAX_BYTE = 512 * 1024  # di ogni registro si tiene la fine
-MAX_REGISTRI = 5  # registri delle operazioni (i piu' recenti del gioco)
-# registri che non sono di un gioco: errori della finestra, installazione del traduttore locale, controllo all'apertura
+CHIAVI_SEGRETE = ("chiave", "email", "password", "token", "key")  # parts of the setting names to remove
+MAX_BYTE = 512 * 1024  # of each log the end is kept
+MAX_REGISTRI = 5  # operation logs (the game's most recent)
+# logs that do not belong to a game: window errors, installation of the local translator, check at startup
 REGISTRI_GENERALI = ("interfaccia", "traduttore-locale", "controllo")
 TOLTO = "<tolto>"
 
 
 def cartella_desktop():
-    """Il Desktop dell'utente, anche se Windows lo ha spostato (es. in OneDrive); se non si trova, la cartella dei
-    registri di PatchSmith."""
+    """The user's Desktop, even if Windows has moved it (e.g. into OneDrive); if it cannot be found, PatchSmith's
+    logs folder."""
     from .project import cartella_dati
     if sys.platform.startswith("win"):
         try:
             import ctypes
             buffer = ctypes.create_unicode_buffer(1024)
-            # CSIDL_DESKTOPDIRECTORY: la cartella vera del Desktop dell'utente
+            # CSIDL_DESKTOPDIRECTORY: the user's real Desktop folder
             if ctypes.windll.shell32.SHGetFolderPathW(None, 0x0010, None, 0, buffer) == 0 and \
                     os.path.isdir(buffer.value):
                 return buffer.value
@@ -55,12 +55,12 @@ def segreta(chiave):
 
 
 def impostazioni_pulite(dati):
-    """Le impostazioni senza chiavi, email e simili."""
+    """The settings without keys, emails and the like."""
     return {k: v for k, v in dati.items() if not segreta(k)} if isinstance(dati, dict) else {}
 
 
 def _segreti():
-    """I valori da non far uscire mai: chiave DeepL, email (dalle impostazioni e dalle variabili d'ambiente)."""
+    """The values that must never get out: DeepL key, email (from the settings and from the environment variables)."""
     from .project import cartella_dati
     valori = set()
     try:
@@ -75,16 +75,16 @@ def _segreti():
 
 
 def pulisci(testo, segreti):
-    """Testo senza i segreti e con la cartella dell'utente scritta come %USERPROFILE%."""
+    """Text without the secrets and with the user folder written as %USERPROFILE%."""
     for s in segreti:
-        # anche come compare in un indirizzo web (es. l'email di MyMemory: 'de=nome%40dominio.it')
+        # also as it appears in a web address (e.g. the MyMemory email: 'de=nome%40dominio.it')
         for forma in dict.fromkeys((s, urllib.parse.quote(s, safe=""), urllib.parse.quote_plus(s))):
             testo = re.sub(re.escape(forma), TOLTO, testo, flags=re.I)
     casa = os.path.expanduser("~").rstrip("\\/")
     if len(casa) > 3:
         for forma in {casa, casa.replace("\\", "/")}:
             testo = re.sub(re.escape(forma), "%USERPROFILE%", testo, flags=re.I)
-            testo = testo.replace(json.dumps(forma)[1:-1], "%USERPROFILE%")  # come appare dentro un JSON
+            testo = testo.replace(json.dumps(forma)[1:-1], "%USERPROFILE%")  # as it appears inside a JSON
     return testo
 
 
@@ -106,10 +106,10 @@ def _leggi(percorso, coda=True):
 
 
 def registri_del_gioco(nomi, massimo=MAX_REGISTRI, generali=REGISTRI_GENERALI):
-    """I registri delle operazioni piu' recenti di quel gioco, riconosciuti dal nome del profilo o della cartella
-    alla fine del nome del file (se non ce ne sono: i piu' recenti in assoluto), e in piu' l'ultimo di ognuno dei
-    registri generali (errori della finestra, installazione del traduttore locale, controllo all'apertura): cosi' i
-    registri generali non fanno uscire quelli del gioco, e viceversa."""
+    """The logs of that game's most recent operations, recognized by the name of the game profile or of the folder
+    at the end of the file name (if there are none: the most recent overall), plus the latest of each of the
+    general logs (window errors, installation of the local translator, check at startup): so the
+    general logs do not push out the game's, and vice versa."""
     from .project import cartella_dati
     nomi = [n for n in ([nomi] if isinstance(nomi, str) else nomi) if n and n not in generali]
     tutti = sorted(glob.glob(os.path.join(glob.escape(cartella_dati("logs")), "*.log")), key=_data, reverse=True)
@@ -132,14 +132,14 @@ def _data(percorso):
 
 
 def _unity(radice):
-    """[(nome nello zip, percorso)] dei registri di Unity: Player.log e Player-prev.log (in LocalLow) e il Player.log
-    dell'ultimo crash (in %TEMP%), trovati con azienda e prodotto scritti in <gioco>_Data/app.info."""
+    """[(name in the zip, path)] of the Unity logs: Player.log and Player-prev.log (in LocalLow) and the Player.log
+    of the last crash (in %TEMP%), found with the company and product written in <gioco>_Data/app.info."""
     from . import adapter_unity
     try:
         dati = adapter_unity.analizza(radice).get("dati")
         with open(os.path.join(dati, "app.info"), encoding="utf-8", errors="replace") as f:
             righe = [r.strip() for r in f.read().splitlines()]
-    except Exception:  # noqa: BLE001 - non e' Unity o non si legge: il rapporto si fa comunque, senza questi
+    except Exception:  # noqa: BLE001 - not Unity or unreadable: the report is made anyway, without these
         return []
     if len(righe) < 2 or not righe[0] or not righe[1]:
         return []
@@ -160,10 +160,10 @@ def _unity(radice):
 
 
 def crea(cartella, destinazione=None, esito=None, registri=None, extra=None):
-    """Crea lo zip e ne restituisce il percorso. cartella: la cartella del gioco (anche vuota: allora solo i dati
-    generali); destinazione: dove scriverlo (predefinita: il Desktop); esito: l'ultimo esito (esito.Esito);
-    registri: i registri delle operazioni da mettere (predefiniti: gli ultimi del gioco); extra: righe in piu' per
-    il riepilogo."""
+    """Creates the zip and returns its path. cartella: the game's folder (even empty: then only the general
+    data); destinazione: where to write it (default: the Desktop); esito: the last outcome (esito.Esito);
+    registri: the operation logs to include (default: the game's latest); extra: extra lines for
+    the summary."""
     from . import adapter_unity, auto as automatico, ollama, detection as rilevamento
     from .project import cartella_dati, trova_info
     from .text import slug
@@ -181,7 +181,7 @@ def crea(cartella, destinazione=None, esito=None, registri=None, extra=None):
     radice = os.path.abspath(radice) if radice and os.path.isdir(radice) else cartella
     nome = (os.path.splitext(os.path.basename(profilo_percorso))[0] if profilo_percorso else
             slug(os.path.basename(cartella)) if cartella else "")
-    testi = {}  # nome nello zip -> testo
+    testi = {}  # name in the zip -> text
     problemi = []
 
     def aggiungi(nome_zip, percorso, coda=True):
@@ -192,14 +192,14 @@ def crea(cartella, destinazione=None, esito=None, registri=None, extra=None):
         except OSError as e:
             problemi.append("%s: %s" % (nome_zip, e))
 
-    # i registri del gioco, degli errori della finestra fuori da un'operazione, dell'installazione del traduttore
-    # locale e del controllo dopo aver giocato fatto all'apertura
+    # the logs of the game, of the window errors outside an operation, of the installation of the local
+    # translator and of the after-play check done at startup
     nomi = [nome] + [slug(os.path.basename(d)) for d in (cartella, radice) if d]
     for p in registri if registri is not None else registri_del_gioco(nomi):
         aggiungi("registri/" + os.path.basename(p), p)
     if profilo_percorso:
         aggiungi("profilo/" + os.path.basename(profilo_percorso), profilo_percorso, coda=False)
-        # il controllo dopo aver giocato: segnali visti, correzioni gia' provate e il loro esito
+        # the after-play check: signals seen, fixes already tried and their outcome
         controllo = os.path.splitext(profilo_percorso)[0] + ".controllo.json"
         aggiungi("profilo/" + os.path.basename(controllo), controllo, coda=False)
     try:
@@ -210,18 +210,18 @@ def crea(cartella, destinazione=None, esito=None, registri=None, extra=None):
     aggiungi("services.json", cartella_dati("services.json"), coda=False)
     for n in ("servizio-xunity.log", "server.log"):
         aggiungi("traduttore-locale/" + n, os.path.join(ollama.cartella(), n))
-    if nome:  # le frasi chieste mentre si gioca (solo testi del gioco)
+    if nome:  # the sentences requested while playing (only game texts)
         from .xunity_service import percorso_diario
         aggiungi("traduttore-locale/" + os.path.basename(percorso_diario(nome)), percorso_diario(nome))
-    if profilo.get("nome") and profilo.get("lingua_destinazione"):  # i testi rimasti in originale, con il motivo
+    if profilo.get("nome") and profilo.get("lingua_destinazione"):  # the texts left untranslated, with the reason
         from .project import percorso_problemi
         problemi_testi = percorso_problemi(profilo)
         aggiungi("traduzioni/" + os.path.basename(problemi_testi), problemi_testi, coda=False)
-        # Unity: le correzioni di "Correggi traduzioni" non ancora scritte nella cache di XUnity
+        # Unity: the fixes from "Fix translations" not yet written to the XUnity cache
         from .corrections import percorso_da_scrivere
         aggiungi("traduzioni/" + os.path.basename(percorso_da_scrivere(profilo)), percorso_da_scrivere(profilo),
                  coda=False)
-    if profilo.get("nome"):  # Unity Localization: le lettere che i font del gioco sanno disegnare (font_unity.py)
+    if profilo.get("nome"):  # Unity Localization: the letters the game's fonts can draw (font_unity.py)
         aggiungi("traduzioni/%s.font.json" % profilo["nome"],
                  cartella_dati("memory", "%s.unity" % profilo["nome"], "font.json"), coda=False)
     modificati = []
@@ -230,7 +230,7 @@ def crea(cartella, destinazione=None, esito=None, registri=None, extra=None):
             righe = []
             rilevamento.stampa(rilevamento.rileva(radice), righe.append)
             testi["rilevamento.txt"] = "\n".join(righe)
-        except Exception as e:  # il rapporto si fa comunque: e' proprio quando qualcosa non va che serve
+        except Exception as e:  # the report is made anyway: it is exactly when something goes wrong that it is needed
             problemi.append("rilevamento: %s: %s" % (type(e).__name__, e))
         unity = adapter_unity.trova_radice(radice) or radice
         for rel in (adapter_unity.LOG_BEPINEX, adapter_unity.CONFIG_XUNITY, adapter_unity.CONFIG_BEPINEX,
@@ -241,14 +241,14 @@ def crea(cartella, destinazione=None, esito=None, registri=None, extra=None):
                 aggiungi("gioco/" + manifesto, os.path.join(d, manifesto), coda=False)
         for nome_zip, p in _unity(unity):
             aggiungi(nome_zip, p)
-        # Unreal: il registro del gioco, da cui il controllo dopo aver giocato capisce se il pak della traduzione e'
-        # stato caricato e quale lingua e' scelta (i suoi problemi propongono proprio il rapporto)
+        # Unreal: the game's log, from which the after-play check understands whether the translation pak was
+        # loaded and which language is chosen (its problems propose the report itself)
         try:
             from . import adapter_unreal, checks as controllo
             manifesto = adapter_unreal.leggi_manifesto(radice)
             for p in controllo._registri_unreal(radice, manifesto) if manifesto else []:
                 aggiungi("unreal/" + os.path.basename(p), p)
-        except Exception as e:  # noqa: BLE001 - il rapporto si fa comunque, senza questi
+        except Exception as e:  # noqa: BLE001 - the report is made anyway, without these
             problemi.append("registro di Unreal: %s: %s" % (type(e).__name__, e))
         try:
             modificati = [os.path.relpath(p, radice).replace(os.sep, "/") for p in trova_info(radice)]

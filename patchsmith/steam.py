@@ -1,10 +1,10 @@
-"""Lettura di Steam (sola lettura, libreria standard): librerie, giochi installati, lingue ufficiali.
+"""Reading of Steam (read-only, standard library): libraries, installed games, official languages.
 
-- libraryfolders.vdf e appmanifest_<appid>.acf sono file di testo "KeyValues" (VDF);
-- appcache/appinfo.vdf e' la cache binaria delle informazioni dei giochi: contiene anche le lingue
-  supportate (common/supported_languages), cosi' si sa offline se un gioco ha l'italiano ufficiale.
-La lingua che un gioco Steam usa e' quella scelta per quel gioco (Proprieta' > Generale > Lingua), salvata
-nell'appmanifest (UserConfig/language): il gioco la chiede a Steam all'avvio.
+- libraryfolders.vdf and appmanifest_<appid>.acf are "KeyValues" text files (VDF);
+- appcache/appinfo.vdf is the binary cache of the games' information: it also contains the supported
+  languages (common/supported_languages), so we know offline whether a game has official Italian.
+The language a Steam game uses is the one chosen for that game (Properties > General > Language), saved
+in the appmanifest (UserConfig/language): the game asks Steam for it at startup.
 """
 import bisect
 import os
@@ -12,7 +12,7 @@ import re
 import struct
 import sys
 
-# codici di PatchSmith -> nomi delle lingue nell'API di Steam
+# PatchSmith codes -> language names in the Steam API
 NOMI_STEAM = {
     "it": "italian", "en": "english", "fr": "french", "de": "german", "es": "spanish", "pt": "portuguese",
     "pt-BR": "brazilian", "ru": "russian", "pl": "polish", "ja": "japanese", "ko": "koreana", "zh-CN": "schinese",
@@ -27,7 +27,7 @@ class ErroreSteam(ValueError):
     pass
 
 
-# --- KeyValues di testo (VDF) --------------------------------------------------------------------
+# --- text KeyValues (VDF) ------------------------------------------------------------------------
 
 def _token(testo):
     i, n = 0, len(testo)
@@ -61,7 +61,7 @@ def _token(testo):
 
 
 def leggi_vdf(testo):
-    """KeyValues di testo -> dizionari annidati (le chiavi restano come sono scritte)."""
+    """Text KeyValues -> nested dictionaries (the keys stay as they are written)."""
     pila = [{}]
     chiave = None
     for t in _token(testo):
@@ -91,10 +91,10 @@ def _senza_maiuscole(d, chiave):
     return None
 
 
-# --- installazione e librerie -------------------------------------------------------------------
+# --- installation and libraries -----------------------------------------------------------------
 
 def cartella_steam():
-    """Cartella di Steam (dal registro, poi i percorsi soliti) oppure None."""
+    """Steam's folder (from the registry, then the usual paths) or None."""
     if sys.platform.startswith("win"):
         try:
             import winreg
@@ -116,7 +116,7 @@ def cartella_steam():
 
 
 def librerie(steam=None):
-    """Cartelle delle librerie di Steam (con 'steamapps')."""
+    """Folders of the Steam libraries (with 'steamapps')."""
     steam = steam or cartella_steam()
     if not steam:
         return []
@@ -141,7 +141,7 @@ def librerie(steam=None):
 
 
 def _chiavi_percorso(p):
-    """Le forme confrontabili di un percorso: com'e' scritto e risolto (junction, link, nomi corti 8.3)."""
+    """The comparable forms of a path: as written and resolved (junctions, links, 8.3 short names)."""
     forme = {os.path.normcase(os.path.abspath(p)).rstrip("\\/")}
     try:
         forme.add(os.path.normcase(os.path.realpath(p)).rstrip("\\/"))
@@ -151,7 +151,7 @@ def _chiavi_percorso(p):
 
 
 def gioco_installato(cartella_gioco, steam=None):
-    """Se la cartella e' un gioco installato da Steam: {'appid', 'nome', 'manifesto', 'lingua'}; altrimenti None."""
+    """If the folder is a game installed by Steam: {'appid', 'nome', 'manifesto', 'lingua'}; otherwise None."""
     gioco = _chiavi_percorso(cartella_gioco)
     for libreria in librerie(steam):
         app = os.path.join(libreria, "steamapps")
@@ -182,7 +182,7 @@ def gioco_installato(cartella_gioco, steam=None):
 
 
 def in_esecuzione():
-    """True se Steam e' aperto (steam.exe), None se non si puo' sapere."""
+    """True if Steam is open (steam.exe), None if it cannot be known."""
     try:
         from .system import processi_windows
         return any(os.path.basename(p).lower() == "steam.exe" for p in processi_windows())
@@ -190,14 +190,14 @@ def in_esecuzione():
         return None
 
 
-# --- appinfo.vdf (binario) ----------------------------------------------------------------------
+# --- appinfo.vdf (binary) -----------------------------------------------------------------------
 
 _V27, _V28, _V29 = 0x07564427, 0x07564428, 0x07564429
-_CACHE = {}  # una sola cache letta: {'identita': (percorso, mtime, dimensione), 'valore': (...)}
+_CACHE = {}  # only one cache read: {'identita': (path, mtime, size), 'valore': (...)}
 
 
 def _kv_binario(dati, pos, chiavi, profondita=0):
-    """KeyValues binari: tipo (0 sezione, 1 stringa, 2 int32, 3 float, 7 uint64, 8/11 fine)."""
+    """Binary KeyValues: type (0 section, 1 string, 2 int32, 3 float, 7 uint64, 8/11 end)."""
     if profondita > 64:
         raise ErroreSteam("KeyValues troppo annidati")
     uscita = {}
@@ -239,7 +239,7 @@ def _kv_binario(dati, pos, chiavi, profondita=0):
 
 
 def _indicizza(dati):
-    """(chiavi della tabella o None, {appid: (inizio dei KeyValues, fine del record)}) di appinfo.vdf."""
+    """(keys of the table or None, {appid: (start of the KeyValues, end of the record)}) of appinfo.vdf."""
     if len(dati) < 16:
         raise ErroreSteam("appinfo.vdf troppo corto")
     magia = struct.unpack_from("<I", dati, 0)[0]
@@ -257,7 +257,7 @@ def _indicizza(dati):
             fine = dati.index(b"\x00", q)
             chiavi.append(dati[q:fine].decode("utf-8", "replace"))
             q = fine + 1
-    # dopo appid e dimensione: info_state, last_updated, token, sha1, change_number, (dalla v28) sha1 binario
+    # after appid and size: info_state, last_updated, token, sha1, change_number, (from v28) binary sha1
     testa = 4 + 4 + 8 + 20 + 4 + (20 if magia >= _V28 else 0)
     record = {}
     while pos + 8 <= limite:
@@ -273,7 +273,7 @@ def _indicizza(dati):
 
 
 def _appinfo(steam=None):
-    """(byte, chiavi, record, gia' letti) della cache di Steam, riletta solo se il file cambia; None se manca."""
+    """(bytes, keys, records, already read) of the Steam cache, read again only if the file changes; None if missing."""
     steam = steam or cartella_steam()
     if not steam:
         return None
@@ -313,8 +313,8 @@ def _info_record(cache, app):
 
 
 def info_app(appid, steam=None):
-    """Informazioni di un gioco dalla cache di Steam (appinfo.vdf), oppure None. Solleva ErroreSteam se la
-    cache e' illeggibile."""
+    """Information about a game from the Steam cache (appinfo.vdf), or None. Raises ErroreSteam if the
+    cache is unreadable."""
     cache = _appinfo(steam)
     if cache is None:
         return None
@@ -327,9 +327,9 @@ def info_app(appid, steam=None):
     return _info_record(cache, app)
 
 
-# --- gioco fuori da Steam riconosciuto dagli eseguibili -----------------------------------------
+# --- game outside Steam recognized from its executables -----------------------------------------
 
-# eseguibili che non identificano un gioco: installatori di componenti, avvii generici, anti-cheat, crash reporter
+# executables that do not identify a game: component installers, generic launchers, anti-cheat, crash reporters
 _ESEGUIBILI_GENERICI = re.compile(
     r"^(vc_?redist.*|visualcppredist.*|dotnetfx.*|ndp\d.*|dxsetup|dxwebsetup|oalinst|physx.*|.*prereq.*|"
     r".*redist.*|.*setup.*|.*install.*|unins\d*|.*crashhandler.*|.*crashreport.*|.*crashpad.*|"
@@ -342,7 +342,7 @@ _NON_GIOCO = re.compile(r"\b(demo|prologue|playtest|trial|benchmark|dedicated se
 
 
 def _eseguibili_cartella(cartella):
-    """{percorso relativo minuscolo con '/'} degli eseguibili fino a due sottocartelle (senza installatori)."""
+    """{lowercase relative path with '/'} of the executables up to two subfolders deep (without installers)."""
     uscita = set()
     for radice, dirs, files in os.walk(cartella):
         rel = os.path.relpath(radice, cartella)
@@ -366,7 +366,7 @@ def _semplice(testo):
 
 
 def nomi_simili(a, b):
-    """True se due nomi di cartella/gioco si somigliano (uguali o uno dentro l'altro, solo lettere e cifre)."""
+    """True if two folder/game names look alike (equal or one inside the other, letters and digits only)."""
     a, b = _semplice(a), _semplice(b)
     if not a or not b:
         return False
@@ -376,10 +376,10 @@ def nomi_simili(a, b):
 
 
 def riconosci_da_eseguibili(cartella_gioco, steam=None):
-    """Gioco NON installato da Steam ma conosciuto da Steam: confronta gli eseguibili della cartella con i
-    percorsi di avvio dei giochi nella cache di Steam (config/launch/*/executable), maiuscole a parte.
-    Prudente: niente installatori o nomi generici, un eseguibile avviato da piu' giochi non conta, nessun
-    vincitore a pari merito. {'appid', 'nome', 'eseguibile', 'installdir', 'cartella_simile'} oppure None."""
+    """Game NOT installed by Steam but known to Steam: compares the folder's executables with the launch paths
+    of the games in the Steam cache (config/launch/*/executable), ignoring case.
+    Cautious: no installers or generic names, an executable launched by several games does not count, no
+    winner on a tie. {'appid', 'nome', 'eseguibile', 'installdir', 'cartella_simile'} or None."""
     eseguibili = _eseguibili_cartella(cartella_gioco)
     if not eseguibili:
         return None
@@ -406,11 +406,11 @@ def riconosci_da_eseguibili(cartella_gioco, steam=None):
             i = basso.find(cercato, i + 1)
     del basso
     nomi -= troppo_comuni
-    avviano = {}        # nome dell'eseguibile -> {appid dei giochi che lo avviano}
-    corrispondenze = {}  # appid -> {percorsi di avvio che esistono nella cartella}
+    avviano = {}        # executable name -> {appids of the games that launch it}
+    corrispondenze = {}  # appid -> {launch paths that exist in the folder}
     descrizioni = {}
     base = os.path.basename(os.path.normpath(os.path.abspath(cartella_gioco))).lower()
-    piu_giu = {e.split("/", 1)[1] for e in eseguibili if "/" in e}  # cartella scelta = quella sopra il gioco
+    piu_giu = {e.split("/", 1)[1] for e in eseguibili if "/" in e}  # chosen folder = the one above the game
     for app in candidati:
         try:
             info = _info_record(cache, app)
@@ -446,7 +446,7 @@ def riconosci_da_eseguibili(cartella_gioco, steam=None):
         return None
     classifica = sorted(validi.items(), key=lambda x: len(x[1]), reverse=True)
     if len(classifica) > 1 and len(classifica[0][1]) == len(classifica[1][1]):
-        return None  # pari merito: meglio non indovinare
+        return None  # tie: better not to guess
     app, percorsi = classifica[0]
     nome_app, installdir = descrizioni[app]
     return {"appid": str(app), "nome": nome_app or None, "eseguibile": sorted(percorsi)[0],
@@ -454,11 +454,11 @@ def riconosci_da_eseguibili(cartella_gioco, steam=None):
             "cartella_simile": nomi_simili(base, installdir) or nomi_simili(base, nome_app)}
 
 
-# --- lingue ---------------------------------------------------------------------------------------
+# --- languages ------------------------------------------------------------------------------------
 
 def selezionabili_da_info(info):
-    """Lingue che si possono scegliere in Steam (Proprieta' > Generali > Lingua): 'baselanguages' dei depot piu'
-    le lingue dei depot per lingua. Le altre lingue ufficiali si scelgono nel gioco."""
+    """Languages that can be chosen in Steam (Properties > General > Language): the depots' 'baselanguages' plus
+    the languages of the per-language depots. The other official languages are chosen in the game."""
     depots = info.get("depots") or {}
     if not isinstance(depots, dict):
         return set()
@@ -474,7 +474,7 @@ def selezionabili_da_info(info):
 
 
 def ufficiali_da_info(info):
-    """{'italian': {'supported': True, 'subtitles': ..., 'full_audio': ...}, ...} oppure None se non si sa."""
+    """{'italian': {'supported': True, 'subtitles': ..., 'full_audio': ...}, ...} or None if unknown."""
     comune = info.get("common") or {}
     if not isinstance(comune, dict):
         return None

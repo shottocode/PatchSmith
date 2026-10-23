@@ -1,5 +1,5 @@
-"""PatchSmith: rileva il motore del gioco, estrae i testi, li traduce e li reinserisce nel gioco."""
+"""PatchSmith: detects the game's engine, extracts the texts, translates them and puts them back into the game."""
 
-# Numerazione ripartita da 0.1.0 con il primo rilascio pubblico: le versioni di sviluppo prima arrivavano alla 0.19.0
-# (i commenti "fino alla 0.12", "revisione 0.16"... parlano di quelle).
+# Numbering restarted from 0.1.0 with the first public release: the development versions before it reached 0.19.0
+# (the comments "up to 0.12", "revision 0.16"... refer to those).
 __version__ = "0.1.0"

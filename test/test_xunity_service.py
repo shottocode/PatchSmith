@@ -1,16 +1,17 @@
-"""Test del traduttore delle frasi nuove per XUnity (servizio_xunity), della sua installazione nel gioco e della
-memoria condivisa tra piu' programmi (file_condiviso), senza scheda video e senza rete.
+"""Tests of the new-lines translator for XUnity (servizio_xunity), of its installation in the game and of the
+translation memory shared between several programs (file_condiviso), without graphics card and without network.
 
-Uso: python -I test/test_xunity_service.py <cartella_temporanea_vuota> [cartella_Data_di_un_gioco_Unity]
-- servizio con il traduttore finto su 127.0.0.1: risposte, segnaposto {{A}} di XUnity, memoria, diario delle frasi,
-  porta gia' in uso, chiusura alla fine del processo del gioco (503 mentre si chiude), temporanei vecchi tolti;
-- traduttori in fila: uno che non risponde si salta, uno in pausa non si chiama, nessuno raggiungibile = 500;
-- frasi scartate dai controlli: mai 500, risposta di ripiego ("rilassata") o l'originale ("rifiutata");
-- Google con i margini prudenti di PatchSmith: un'attesa lunga rimanda la frase, senza richieste;
-- quali traduttori userebbe il servizio (locale, online scelto, Google se non e' in pausa);
-- memoria, traduzioni automatiche e memoria comune salvate insieme da piu' programmi: nessuna voce persa;
-- configurazione di XUnity (CustomTranslate) e, se si indica la cartella _Data di un gioco Unity, compilazione del
-  plugin che avvia il servizio (le librerie del gioco si leggono soltanto).
+Usage: python -I test/test_xunity_service.py <empty_temp_folder> [cartella_Data_di_un_gioco_Unity]
+- service with the fake translator on 127.0.0.1: answers, XUnity {{A}} placeholders, translation memory, diary of
+  the lines, port already in use, closing at the end of the game process (503 while closing), old temp files removed;
+- translators in a queue: one that does not answer is skipped, one that is paused is not called, none reachable = 500;
+- lines rejected by the checks: never 500, fallback answer ("rilassata") or the original ("rifiutata");
+- Google with PatchSmith's cautious margins: a long wait postpones the line, without requests;
+- which translators the service would use (local, chosen online one, Google if it is not paused);
+- translation memory, machine translations and shared translation memory saved together by several programs: no
+  entry lost;
+- XUnity configuration (CustomTranslate) and, if the _Data folder of a Unity game is given, compilation of the
+  plugin that starts the service (the game's libraries are only read).
 """
 import io
 import json
@@ -29,7 +30,7 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(QUI))
 sys.path.insert(0, QUI)
 
-import test_local  # noqa: E402  (traduttore locale con un server simulato)
+import test_local  # noqa: E402  (local translator with a simulated server)
 from patchsmith import (adapter_unity, shared_file as file_condiviso, interruption as interruzione,
                         limiter as limitatore, ollama, project as progetto)  # noqa: E402
 from patchsmith import xunity_service as servizio_xunity  # noqa: E402
@@ -90,7 +91,7 @@ def diario(nome):
 
 
 class Avviato:
-    """Un servizio in ascolto in un thread (senza processo del gioco da seguire), fermato all'uscita."""
+    """A service listening in a thread (without a game process to follow), stopped on exit."""
 
     def __init__(self, tmp, nome, catena, prova=True):
         self.porta = porta_libera()
@@ -115,7 +116,7 @@ class Avviato:
 
 
 class Guasto:
-    """Traduttore che non risponde."""
+    """Translator that does not answer."""
     nome = "guasto"
 
     def __init__(self):
@@ -127,7 +128,7 @@ class Guasto:
 
 
 class Contato(Finto):
-    """Il traduttore di prova che conta le chiamate."""
+    """The test translator that counts the calls."""
 
     def __init__(self, prefisso="[it]", pausa=None):
         self.prefisso, self.chiamate, self._pausa = prefisso, 0, pausa
@@ -141,15 +142,15 @@ class Contato(Finto):
 
 
 class SenzaSegnaposto(Finto):
-    """Come Google quando perde i segnaposto: frase intera senza i codici, pezzi non tradotti."""
+    """Like Google when it loses the placeholders: whole sentence without the codes, pieces not translated."""
 
     def traduci_righe(self, righe, origine, destinazione):
         return ["Tieni premuto per saltare" if "[[" in r else "" for r in righe]
 
 
 class Ripete(Finto):
-    """Come il traduttore locale quando ripete l'originale: nessuna traduzione accettata, la proposta scartata e'
-    l'originale stesso."""
+    """Like the local translator when it repeats the original: no translation accepted, the rejected proposal is
+    the original itself."""
 
     def __init__(self):
         self.scarti = {}
@@ -163,7 +164,7 @@ class Ripete(Finto):
 def prova_servizio(tmp):
     percorso = profilo_di_prova(tmp, "prova-servizio-xunity")
     memoria = percorso_memoria({"nome": "prova-servizio-xunity", "lingua_destinazione": "it"}, prova=True)
-    # un salvataggio interrotto di tanto tempo fa (da togliere) e uno appena cominciato (da lasciare)
+    # a save interrupted long ago (to remove) and one just started (to leave)
     os.makedirs(os.path.dirname(memoria), exist_ok=True)
     vecchio, recente = memoria + ".tmp", memoria + ".123-4.tmp"
     for p in (vecchio, recente):
@@ -223,7 +224,7 @@ def prova_servizio(tmp):
 
 
 class Lento(Contato):
-    """Traduttore lento (come Google che aspetta i suoi margini prudenti)."""
+    """Slow translator (like Google waiting for its cautious margins)."""
 
     def traduci_righe(self, righe, origine, destinazione):
         time.sleep(4)
@@ -242,8 +243,8 @@ def porta_occupata(porta):
 
 
 def prova_chiusura_con_traduzione_in_corso(tmp):
-    """Il gioco si chiude mentre una frase si sta traducendo: la porta si libera subito (un gioco riaperto avvia il
-    suo traduttore, invece di affidarsi a uno che si sta chiudendo) e la frase in corso finisce e si salva."""
+    """The game closes while a line is being translated: the port is freed at once (a reopened game starts its own
+    translator, instead of relying on one that is closing) and the line in progress finishes and is saved."""
     gioco = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(60)"])
     porta, lento = porta_libera(), Lento()
     servizio_xunity.CONTROLLO_GIOCO = 0.3
@@ -260,7 +261,7 @@ def prova_chiusura_con_traduzione_in_corso(tmp):
         s._pronto.wait(10)
         richiesta = threading.Thread(target=lambda: risposta.append(traduci(porta, "Open the gate")))
         richiesta.start()
-        time.sleep(0.5)  # la frase e' in traduzione
+        time.sleep(0.5)  # the line is being translated
         gioco.kill()
         gioco.wait()
         inizio = time.monotonic()
@@ -281,7 +282,7 @@ def prova_chiusura_con_traduzione_in_corso(tmp):
 
 
 def prova_fila(tmp):
-    """Piu' traduttori in fila: si va avanti con il prossimo; 500 solo se nessuno risponde."""
+    """Several translators in a queue: we move on to the next one; 500 only if none answers."""
     guasto, buono = Guasto(), Contato()
     with Avviato(tmp, "fila", [("locale", guasto), ("google", buono)]) as a:
         codice, tradotto = traduci(a.porta, "Open the gate")
@@ -309,8 +310,8 @@ def prova_fila(tmp):
 
 
 def prova_scarti(tmp):
-    """Frasi che nessun traduttore sa tradurre bene: 200 con la risposta di ripiego o con l'originale, mai 500."""
-    def lunga(testo, _opzioni):  # traduzione lunghissima: scartata ("lunghezza anomala"), ma italiana e completa
+    """Lines no translator can translate well: 200 with the fallback answer or with the original, never 500."""
+    def lunga(testo, _opzioni):  # very long translation: rejected ("lunghezza anomala"), but Italian and complete
         return "Tieni premuto " + testo.replace("Hold RMB", "RMB") + " " + "per saltare in alto " * 8
 
     b, _ = test_local.locale(lunga)
@@ -328,7 +329,7 @@ def prova_scarti(tmp):
                   XUNITY not in a.servizio.progetto.memoria and righe and all(r["esito"] == "rilassata" for r in righe)
                   and righe[0]["risposta"] == risposte[0] and "scartata" in righe[0]["motivo"])
 
-    def a_pezzi(testo, _opzioni):  # la frase con i codici e' sbagliata, i pezzi tra i codici sono tradotti bene
+    def a_pezzi(testo, _opzioni):  # the sentence with codes is wrong, the pieces between codes are translated well
         if "[[" in testo:
             return testo + " " + "e poi ancora " * 12
         return {"Hold RMB": "Tieni premuto RMB", "to leap up to": "per saltare fino a", "m and slam": "m e schiantati"
@@ -341,7 +342,7 @@ def prova_scarti(tmp):
                   (codice, risposta) == (200, "Tieni premuto RMB {{A}}s per saltare fino a {{B}} m e schiantati")
                   and diario("a-pezzi")[-1]["esito"] == "rilassata")
 
-    def inglese(testo, _opzioni):  # risponde in inglese: nessuna traduzione
+    def inglese(testo, _opzioni):  # answers in English: no translation
         return testo
 
     b, _ = test_local.locale(inglese)
@@ -361,8 +362,8 @@ def prova_scarti(tmp):
                                                "it")
               and servizio_xunity.altra_lingua("Open the door to the castle", "Abre la puerta de los castillos y "
                                                "las torres", "en", "it"))
-    # parole italiane che negli elenchi stanno tra quelle di altre lingue ("se", "tu", "su", "no", "o", "a"): una
-    # risposta italiana non va scambiata per spagnola o portoghese; una rimasta in inglese si' (anche breve)
+    # Italian words that in the lists are among those of other languages ("se", "tu", "su", "no", "o", "a"): an
+    # Italian answer must not be mistaken for Spanish or Portuguese; one left in English must (even a short one)
     italiane = ["Se tu vuoi, premi {{A}} su la mappa", "Se non hai oro, tu perdi", "Mettilo su il tavolo se puoi",
                 "Vuoi salvare? Sì o no", "Sali su se osi", "Tocca a te? Se sì, tira", "No, non puoi andare lì"]
     scambiate = [t for t in italiane if servizio_xunity.altra_lingua("If you want, press {{A}}", t, "en", "it")]
@@ -380,11 +381,11 @@ def prova_scarti(tmp):
 
 
 def prova_google(tmp):
-    """Google nel servizio passa dal limitatore di PatchSmith: pause rispettate, attese lunghe = frase rimandata."""
+    """Google in the service goes through PatchSmith's rate limiter: pauses respected, long waits = line postponed."""
     stato = limitatore.percorso_stato()
     adesso = time.time()
     os.makedirs(os.path.dirname(stato), exist_ok=True)
-    with open(stato, "w", encoding="utf-8") as f:  # 30 richieste nell'ultimo minuto: la prossima tra ~10 minuti
+    with open(stato, "w", encoding="utf-8") as f:  # 30 requests in the last minute: the next one in ~10 minutes
         json.dump({"versione": 1, "google": {"richieste": [[adesso - 50 + i, 100] for i in range(30)]}}, f)
     g = servizio_xunity.crea_traduttore("google", silenzio)
     richieste = []
@@ -403,8 +404,8 @@ def prova_google(tmp):
                   traduci(a.porta, "Open the gate") == (200, "[mm] Open the gate") and not richieste)
     os.remove(stato)
 
-    # DeepL nel servizio: anche se chiede di aspettare due minuti (Retry-After) si riprova presto una volta sola e poi
-    # si passa al traduttore successivo (XUnity non aspetta tanto)
+    # DeepL in the service: even if it asks to wait two minutes (Retry-After) we retry soon only once and then
+    # move on to the next translator (XUnity does not wait that long)
     attese, vero_attendi = [], interruzione.attendi
     vecchia_chiave = os.environ.get("PATCHSMITH_DEEPL")
     os.environ["PATCHSMITH_DEEPL"] = "chiave-di-prova:fx"
@@ -437,14 +438,14 @@ def prova_google(tmp):
 
 
 def prova_previsti(tmp):
-    """Quali traduttori usa il servizio: locale (se installato), quello online scelto, Google se non in pausa."""
+    """Which translators the service uses: local (if installed), the chosen online one, Google if not paused."""
     vero = ollama.stato
     impostazioni = progetto.cartella_dati("settings.json")
-    os.environ.pop("PATCHSMITH_DEEPL", None)  # la chiave DeepL di chi lancia la prova non deve contare
+    os.environ.pop("PATCHSMITH_DEEPL", None)  # the DeepL key of whoever runs the test must not count
     try:
         ollama.stato = lambda: "pronto"
         primo = servizio_xunity.traduttori_previsti({"backend": "google"})
-        con_deepl = servizio_xunity.traduttori_previsti({"backend": "deepl"})  # senza chiave: no
+        con_deepl = servizio_xunity.traduttori_previsti({"backend": "deepl"})  # without a key: no
         with open(impostazioni, "w", encoding="utf-8") as f:
             json.dump({"backend": "mymemory"}, f)
         con_mymemory = servizio_xunity.traduttori_previsti({"backend": "locale"})
@@ -453,10 +454,10 @@ def prova_previsti(tmp):
         in_pausa = servizio_xunity.traduttori_previsti({"backend": "google"})
         ollama.stato = lambda: "non installato"
         niente = servizio_xunity.traduttori_previsti({"backend": "google"})
-        os.remove(limitatore.percorso_stato())  # Google di nuovo libero
+        os.remove(limitatore.percorso_stato())  # Google free again
         s = servizio_xunity.Servizio(profilo_di_prova(tmp, "fila-vera", "google"), porta_libera(), None, silenzio,
                                      prova=True)
-        s._prepara()  # senza avviare il server: la fila che userebbe il servizio avviato dal gioco
+        s._prepara()  # without starting the server: the queue the service started by the game would use
         controlla("servizio avviato dal gioco senza traduttore locale: Google di PatchSmith, con le attese brevi",
                   [n for n, _ in s.catena] == ["google"] and s._pronto.is_set()
                   and s.catena[0][1].limitatore.dormi is servizio_xunity._attesa_breve)
@@ -472,7 +473,7 @@ def prova_previsti(tmp):
     controlla("traduttore locale: ricorda la proposta scartata solo se richiesto (servizio)", b.scarti is None)
 
 
-# --- memoria condivisa tra piu' programmi ------------------------------------------------------------
+# --- translation memory shared between several programs ---------------------------------------------
 
 FIGLIO = r"""
 import sys, time
@@ -508,16 +509,16 @@ def prova_memoria_condivisa(tmp):
         su_disco = json.load(f)
     controlla("due programmi salvano insieme voci diverse: restano entrambe", su_disco == {"Start": "Inizia",
                                                                                          "Options": "Opzioni"})
-    del primo.memoria["Start"]  # tolta da uno (es. una traduzione da rifare)...
+    del primo.memoria["Start"]  # removed by one (e.g. a translation to redo)...
     primo._salva_memoria()
-    secondo.memoria["Back"] = "Indietro"  # ...mentre l'altro, che la aveva ancora, ne aggiunge un'altra
+    secondo.memoria["Back"] = "Indietro"  # ...while the other, which still had it, adds another one
     secondo._salva_memoria()
     with open(memoria, encoding="utf-8") as f:
         su_disco = json.load(f)
     controlla("una voce tolta da uno non torna con il salvataggio dell'altro; le sue voci nuove restano",
               su_disco == {"Options": "Opzioni", "Back": "Indietro"} and secondo.memoria == su_disco)
 
-    # piu' processi veri insieme, molte scritture ciascuno (come interfaccia e traduttore avviato dal gioco)
+    # several real processes together, many writes each (like the interface and the translator started by the game)
     figli, inizio, quante = [], time.time() + 1.5, 25
     for nome in ("a", "b", "c", "d"):
         figli.append(subprocess.Popen([sys.executable, "-I", "-c", FIGLIO, os.path.dirname(QUI),
@@ -539,7 +540,7 @@ def prova_memoria_condivisa(tmp):
         " (uscite %s, perse %s, rimasti %s)" % (uscite, persi[:5], rimasti)),
         uscite == [0] * 4 and set(su_disco) == attese and not rimasti)
 
-    # memoria comune e traduzioni automatiche: stesse regole
+    # shared translation memory and machine translations: same rules
     terzo = Progetto(profilo_di_prova(tmp, "condivisa-due"), silenzio)
     quarto = Progetto(profilo_di_prova(tmp, "condivisa-tre"), silenzio)
     comune_a = terzo._memoria_comune("en", "it")
@@ -553,7 +554,7 @@ def prova_memoria_condivisa(tmp):
     controlla("memoria comune: le voci nuove di due programmi restano entrambe",
               comune.get("Load") == "Carica" and comune.get("Save") == "Salva")
 
-    # file rovinato (corretto a mano con un errore): si conserva a parte, non si perde
+    # damaged file (edited by hand with an error): it is kept aside, not lost
     with open(memoria, "w", encoding="utf-8") as f:
         f.write('{"Options": "Opzioni",')
     secondo.memoria["Exit"] = "Esci"
@@ -566,12 +567,12 @@ def prova_memoria_condivisa(tmp):
     libero = not os.path.exists(memoria + ".lock")
     with file_condiviso.Lucchetto(memoria, attesa=1) as lucchetto:
         preso = lucchetto.preso
-        with file_condiviso.Lucchetto(memoria, attesa=0.3) as altro:  # un altro programma aspetta, poi va avanti
+        with file_condiviso.Lucchetto(memoria, attesa=0.3) as altro:  # another program waits, then goes on
             occupato = not altro.preso
     controlla("lucchetto: libero dopo l'uso (il file .lock non resta), esclusivo mentre lo si tiene",
               libero and preso and occupato and not os.path.exists(memoria + ".lock"))
-    # un .lock che un altro programma sta togliendo non si apre per un attimo (Windows: "in cancellazione"): prima si
-    # salvava senza lucchetto, e un salvataggio insieme a un altro perdeva voci
+    # a .lock that another program is removing cannot be opened for a moment (Windows: "delete pending"): before, we
+    # saved without a lock, and a save together with another one lost entries
     vero_open, rifiuti = file_condiviso.os.open, [0]
 
     def apri_dopo_un_attimo(percorso, *argomenti):
@@ -590,8 +591,8 @@ def prova_memoria_condivisa(tmp):
 
 
 def prova_gruppo(tmp):
-    """POST /traduci-gruppo (traduzione dal vivo dei giochi web): piu' frasi in una sola traduzione di gruppo, quelle in
-    memoria subito, i pezzi gia' in italiano lasciati stare."""
+    """POST /traduci-gruppo (live translation of web games): several lines in a single group translation, those in
+    the translation memory at once, the pieces already in Italian left alone."""
     contato = Contato()
     with Avviato(tmp, "gruppo", [("finto", contato)]) as av:
         av.servizio.progetto.memoria["Settings"] = "Impostazioni"
@@ -610,7 +611,7 @@ def prova_gruppo(tmp):
 
 
 def prova_ferma(tmp):
-    """Il pulsante "Ferma il traduttore del gioco": acceso() lo vede in ascolto, ferma() lo chiude."""
+    """The "Stop the game translator" button: acceso() sees it listening, ferma() closes it."""
     nome = "prova-ferma-traduttore"
     porta = servizio_xunity.porta_per(nome)
     if porta_occupata(porta):
@@ -683,7 +684,7 @@ def main():
     os.makedirs(tmp, exist_ok=True)
     if os.listdir(tmp):
         raise SystemExit("La cartella temporanea deve essere vuota: %s" % tmp)
-    progetto.RADICE_DATI = os.path.join(tmp, "dati")  # memoria e diario del servizio di prova: mai tra i dati veri
+    progetto.RADICE_DATI = os.path.join(tmp, "dati")  # the test service's memory and diary: never in the real data
     prova_servizio(tmp)
     prova_chiusura_con_traduzione_in_corso(tmp)
     prova_fila(tmp)

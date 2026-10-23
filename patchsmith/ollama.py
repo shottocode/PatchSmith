@@ -1,12 +1,12 @@
-"""Traduttore locale: Ollama (https://ollama.com, licenza MIT) con i modelli TranslateGemma (Gemma Terms of Use).
+"""Local translator: Ollama (https://ollama.com, MIT license) with the TranslateGemma models (Gemma Terms of Use).
 
-Tutto sta nella cartella di PatchSmith (components/ollama: programma e modelli), nessuna installazione nel sistema:
-- il server si avvia solo durante una traduzione, su una porta locale tutta sua (127.0.0.1, 11435-11444), e si
-  chiude alla fine; un "Job Object" di Windows lo chiude comunque se PatchSmith si interrompe di colpo;
-- all'ambiente del server si tolgono le variabili OLLAMA_* dell'utente e si mettono quelle di PatchSmith
-  (modelli su D:, nessuna funzione cloud);
-- le chiamate al server locale non passano mai da un proxy di sistema.
-Su C: Ollama scrive solo una piccola chiave in %USERPROFILE%\\.ollama.
+Everything is in PatchSmith's folder (components/ollama: program and models), nothing is installed in the system:
+- the server starts only during a translation, on a local port of its own (127.0.0.1, 11435-11444), and is
+  closed at the end; a Windows "Job Object" closes it anyway if PatchSmith stops abruptly;
+- the user's OLLAMA_* variables are removed from the server's environment and PatchSmith's are set
+  (models on D:, no cloud features);
+- calls to the local server never go through a system proxy.
+On C: Ollama writes only a small key in %USERPROFILE%\\.ollama.
 """
 import ctypes
 import hashlib
@@ -30,7 +30,7 @@ SHA256_ZIP = "7485a1172f8527db4342a63521b9342fc466185ff0855da378cc864ecf6354cf"
 MODELLI = {
     "4b": {"nome": "translategemma:4b-it-q4_K_M", "impronta": "c49d986b0764", "gb": 3.3,
            "etichetta": "Veloce (TranslateGemma 4B)", "secondi_per_testo": 0.25, "secondi_avvio": 30,
-           "parallele": 4},  # prova su RTX 3060 Ti: 4 righe insieme 0,10 s a riga contro 0,14
+           "parallele": 4},  # test on RTX 3060 Ti: 4 lines together 0.10 s per line against 0.14
     "12b": {"nome": "translategemma:12b-it-q4_K_M", "impronta": "c2f9a9ca1ec7", "gb": 8.1,
             "etichetta": "Qualità (TranslateGemma 12B)", "secondi_per_testo": 2.5, "secondi_avvio": 80},
 }
@@ -39,7 +39,7 @@ _SENZA_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 class ErroreLocale(Exception):
-    """Il traduttore locale non e' installato, non parte o non ha memoria a sufficienza."""
+    """The local translator is not installed, does not start or does not have enough memory."""
 
 
 def cartella():
@@ -60,19 +60,19 @@ def installato():
 
 
 def modello_presente(chiave):
-    """True se il modello e' gia' scaricato (si guarda il suo manifesto, senza avviare il server)."""
+    """True if the model is already downloaded (its manifest is checked, without starting the server)."""
     nome, tag = MODELLI[chiave]["nome"].split(":")
     return os.path.isfile(os.path.join(cartella_modelli(), "manifests", "registry.ollama.ai", "library", nome, tag))
 
 
-SOGLIA_12B = 7.5  # GB di memoria della scheda video da cui si consiglia il 12B (le schede da 8 GB ne dichiarano ~7,9)
-_MEMORIA_VIDEO = []  # la memoria video gia' cercata (una volta per avvio di PatchSmith)
+SOGLIA_12B = 7.5  # GB of video card memory from which the 12B is recommended (8 GB cards report ~7.9)
+_MEMORIA_VIDEO = []  # the video memory already looked up (once per PatchSmith start)
 
 
 def _programma_nvidia_smi():
-    """nvidia-smi.exe del driver NVIDIA (System32, la cartella NVSMI dei driver vecchi, poi il PATH), o None. Mai dalla
-    cartella corrente: un programma con quel nome messo li' (per esempio nella cartella di un gioco scaricato) non
-    deve partire. Fuori da Windows: quello nel PATH."""
+    """nvidia-smi.exe of the NVIDIA driver (System32, the NVSMI folder of old drivers, then the PATH), or None. Never
+    from the current folder: a program with that name put there (for example in the folder of a downloaded game)
+    must not start. Outside Windows: the one in the PATH."""
     if not sys.platform.startswith("win"):
         return shutil.which("nvidia-smi")
     candidati = [os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "nvidia-smi.exe"),
@@ -86,7 +86,7 @@ def _programma_nvidia_smi():
 
 
 def _nvidia_smi():
-    """GB della scheda NVIDIA piu' grande, da nvidia-smi (arriva con il driver NVIDIA), o None."""
+    """GB of the largest NVIDIA card, from nvidia-smi (it comes with the NVIDIA driver), or None."""
     programma = _programma_nvidia_smi()
     if not programma:
         return None
@@ -101,7 +101,7 @@ def _nvidia_smi():
 
 
 def _registro_video():
-    """GB della scheda video piu' grande secondo il suo driver (registro di Windows, sola lettura), o None."""
+    """GB of the largest video card according to its driver (Windows registry, read-only), or None."""
     if not sys.platform.startswith("win"):
         return None
     try:
@@ -131,11 +131,11 @@ def _registro_video():
 
 
 def _wmi_video():
-    """GB della scheda video piu' grande da WMI (PowerShell, sola lettura), o None. WMI arriva al massimo a 4 GB:
-    un valore da 4 GB vuol dire "almeno 4"."""
+    """GB of the largest video card from WMI (PowerShell, read-only), or None. WMI goes up to 4 GB at most:
+    a 4 GB value means "at least 4"."""
     if not sys.platform.startswith("win"):
         return None
-    # il percorso intero: con il solo nome Windows cercherebbe prima nella cartella corrente
+    # the full path: with the name alone Windows would look in the current folder first
     powershell = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "WindowsPowerShell", "v1.0",
                               "powershell.exe")
     if not os.path.isfile(powershell):
@@ -147,21 +147,21 @@ def _wmi_video():
     except (OSError, subprocess.SubprocessError):
         return None
     valori = [int(x) for x in r.stdout.decode("ascii", "replace").split() if x.isdigit()]
-    if not valori or max(valori) >= 0xF0000000:  # al limite dei 4 GB: la memoria vera non si sa
+    if not valori or max(valori) >= 0xF0000000:  # at the 4 GB limit: the real memory is not known
         return None
     return max(valori) / 1024 ** 3
 
 
 def memoria_video():
-    """GB di memoria della scheda video (la piu' grande), letti senza installare ne' scaricare nulla: nvidia-smi se
-    c'e' (driver NVIDIA), poi il registro di Windows (il valore scritto dal driver), poi WMI con PowerShell. None se
-    non si sa. Si cerca una volta sola."""
+    """GB of memory of the video card (the largest), read without installing or downloading anything: nvidia-smi if
+    available (NVIDIA driver), then the Windows registry (the value written by the driver), then WMI with PowerShell.
+    None if not known. It is looked up only once."""
     if not _MEMORIA_VIDEO:
         valore = None
         for cerca in (_nvidia_smi, _registro_video, _wmi_video):
             try:
                 valore = cerca()
-            except Exception:  # noqa: BLE001 - solo un consiglio: un errore qui non deve fermare nulla
+            except Exception:  # noqa: BLE001 - only a recommendation: an error here must not stop anything
                 valore = None
             if valore:
                 break
@@ -170,8 +170,8 @@ def memoria_video():
 
 
 def modello_consigliato(gb=None):
-    """(chiave del modello, motivo per chi gioca): il 12B (sbaglia meno, ma e' piu' lento) se la scheda video ha
-    almeno SOGLIA_12B GB di memoria, altrimenti il 4B (il 12B fuori dalla scheda video diventa molto lento)."""
+    """(model key, reason for the player): the 12B (makes fewer mistakes, but is slower) if the video card has
+    at least SOGLIA_12B GB of memory, otherwise the 4B (the 12B outside the video card becomes very slow)."""
     gb = memoria_video() if gb is None else gb
     if gb is None:
         return "4b", ("Non riesco a sapere quanta memoria ha la tua scheda video: ti propongo il modello Veloce (4B), "
@@ -183,12 +183,12 @@ def modello_consigliato(gb=None):
                   "vuole almeno 8 e senza diventerebbe molto lento." % _gb(gb))
 
 
-SOGLIA_SCHEDA = 3.5  # GB: sotto (grafica integrata o scheda vecchia) il modello gira quasi tutto sul processore
-RAM_MINIMA = 8  # GB di memoria del PC: sotto, anche il 4B (circa 4 GB) lascia poco al resto di Windows
+SOGLIA_SCHEDA = 3.5  # GB: below this (integrated graphics or old card) the model runs almost entirely on the CPU
+RAM_MINIMA = 8  # GB of PC memory: below this, even the 4B (about 4 GB) leaves little to the rest of Windows
 
 
 def memoria_pc():
-    """GB di memoria (RAM) del PC, o None se non si sa."""
+    """GB of memory (RAM) of the PC, or None if not known."""
     if not sys.platform.startswith("win"):
         return None
     import ctypes
@@ -210,9 +210,9 @@ def memoria_pc():
 
 
 def avviso_prestazioni(gb_video=None, gb_ram=None):
-    """Testo da mostrare PRIMA di scaricare se questo PC fara' andare piano il traduttore locale ('' se va bene o non
-    si sa): senza una scheda video adatta (grafica integrata, schede vecchie o con poca memoria) il modello gira sul
-    processore, molte volte piu' lento; con poca RAM anche il resto del PC rallenta."""
+    """Text to show BEFORE downloading if this PC will make the local translator slow ('' if it is fine or not
+    known): without a suitable video card (integrated graphics, old cards or cards with little memory) the model runs
+    on the CPU, many times slower; with little RAM the rest of the PC slows down too."""
     gb_video = memoria_video() if gb_video is None else gb_video
     gb_ram = memoria_pc() if gb_ram is None else gb_ram
     avvisi = []
@@ -234,21 +234,21 @@ def _gb(valore):
 
 
 def modello_predefinito():
-    """Il migliore gia' scaricato. Prove su Forager (RTX 3060 Ti 8 GB, ottobre 2026): il 12B sbaglia meno nomi e
-    meno grammatica ma e' circa 5 volte piu' lento (2,5 s a testo contro 0,5); si scarica solo se l'utente lo
-    sceglie, quindi se c'e' e' voluto."""
+    """The best one already downloaded. Tests on Forager (RTX 3060 Ti 8 GB, October 2026): the 12B gets fewer names
+    and less grammar wrong but is about 5 times slower (2.5 s per text against 0.5); it is downloaded only if the
+    user chooses it, so if it is there it is wanted."""
     return next((k for k in ("12b", "4b") if modello_presente(k)), "4b")
 
 
 def stato():
-    """'pronto', 'manca il modello' o 'non installato' (per l'interfaccia)."""
+    """'pronto', 'manca il modello' or 'non installato' (for the interface)."""
     if not installato():
         return "non installato"
     presenti = [k for k in MODELLI if modello_presente(k)]
     return "pronto" if presenti else "manca il modello"
 
 
-# --- Job Object: il server muore con PatchSmith ----------------------------------------------------
+# --- Job Object: the server dies with PatchSmith ---------------------------------------------------
 
 class _BASE(ctypes.Structure):
     _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
@@ -269,7 +269,7 @@ class _ESTESA(ctypes.Structure):
 
 
 def _lega_al_job(pid):
-    """Mette il processo in un Job Object che si chiude (con tutti i figli) quando PatchSmith termina."""
+    """Puts the process in a Job Object that is closed (with all its children) when PatchSmith exits."""
     if not sys.platform.startswith("win"):
         return None
     try:
@@ -294,7 +294,7 @@ def _lega_al_job(pid):
 # --- server ---------------------------------------------------------------------------------------
 
 def _porta_occupata(porta):
-    """True se qualcuno risponde gia' su questa porta (anche in ascolto su 0.0.0.0 o [::])."""
+    """True if something already answers on this port (also listening on 0.0.0.0 or [::])."""
     for famiglia, indirizzo in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
         try:
             with socket.socket(famiglia, socket.SOCK_STREAM) as c:
@@ -327,24 +327,24 @@ _LIMITE_LOG = 5 * 1024 * 1024
 
 
 class Server:
-    """Il server Ollama di PatchSmith: si avvia con avvia(), si chiude con chiudi() (o con 'with')."""
+    """PatchSmith's Ollama server: started with avvia(), closed with chiudi() (or with 'with')."""
 
     def __init__(self, log=print, eseguibile=None, attesa_avvio=180.0, comando=None, parallele=1):
         self.log = log
         self.eseguibile = eseguibile or programma()
-        self.comando = comando or [self.eseguibile]  # i test usano un Ollama simulato
+        self.comando = comando or [self.eseguibile]  # the tests use a simulated Ollama
         self.attesa_avvio = attesa_avvio
-        self.parallele = max(1, int(parallele))  # richieste elaborate insieme dalla scheda video
+        self.parallele = max(1, int(parallele))  # requests processed together by the video card
         self.processo = None
         self.porta = None
         self._job = None
         self._file_log = None
-        self._inizio_log = 0  # posizione nel registro all'avvio: gli errori mostrano solo le righe di questa volta
+        self._inizio_log = 0  # position in the log at startup: errors show only this run's lines
 
     def __enter__(self):
         try:
             self.avvia()
-        except BaseException:  # Ferma o errore durante l'avvio: il server appena lanciato non resta acceso
+        except BaseException:  # Stop or error during startup: the server just launched does not stay on
             self.chiudi()
             raise
         return self
@@ -371,7 +371,7 @@ class Server:
                    OLLAMA_KEEP_ALIVE="30m", OLLAMA_NUM_PARALLEL=str(self.parallele), OLLAMA_MAX_LOADED_MODELS="1",
                    OLLAMA_CONTEXT_LENGTH="2048", OLLAMA_NOPRUNE="1", TEMP=temporanea, TMP=temporanea)
         if not any(k.upper() == "HTTPS_PROXY" for k in env):
-            # proxy impostato solo in Windows (registro): Ollama, scritto in Go, legge solo le variabili
+            # proxy set only in Windows (registry): Ollama, written in Go, reads only the variables
             proxy = urllib.request.getproxies().get("https")
             if proxy:
                 env["HTTPS_PROXY"] = proxy
@@ -400,13 +400,13 @@ class Server:
                 except (OSError, ValueError, AttributeError):
                     time.sleep(0.25)
                     continue
-                # risponde il nostro server (non un altro programma sulla stessa porta)?
+                # is it our server answering (not another program on the same port)?
                 if versione == VERSIONE and self.processo.poll() is None:
                     return
                 time.sleep(0.25)
             raise ErroreLocale("Il traduttore locale non risponde dopo %d secondi:\n%s"
                                % (self.attesa_avvio, _coda_log(self._inizio_log)))
-        except BaseException:  # errore, Ferma o Ctrl+C durante l'avvio: niente server lasciato acceso
+        except BaseException:  # error, Stop or Ctrl+C during startup: no server left on
             self.chiudi()
             raise
 
@@ -418,7 +418,7 @@ class Server:
             return json.loads(r.read().decode("utf-8") or "{}")
 
     def flusso(self, percorso, dati, timeout=3600):
-        """Righe NDJSON di una risposta in streaming (es. /api/pull)."""
+        """NDJSON lines of a streaming response (e.g. /api/pull)."""
         req = urllib.request.Request("http://127.0.0.1:%d%s" % (self.porta, percorso),
                                      data=json.dumps(dati).encode("utf-8"), headers={"Content-Type": "application/json"})
         with _SENZA_PROXY.open(req, timeout=timeout) as r:
@@ -452,7 +452,7 @@ class Server:
 
 
 def _coda_log(dalla=0, righe=15):
-    """Le ultime righe del registro scritte da 'dalla' in poi (al massimo gli ultimi 64 KB)."""
+    """The last lines of the log written from 'dalla' onwards (at most the last 64 KB)."""
     try:
         with open(os.path.join(cartella(), "server.log"), "rb") as f:
             f.seek(0, os.SEEK_END)
@@ -463,7 +463,7 @@ def _coda_log(dalla=0, righe=15):
         return "(registro del server non disponibile)"
 
 
-# --- installazione (solo con il consenso dell'utente) ---------------------------------------------------
+# --- installation (only with the user's consent) --------------------------------------------------------
 
 def _sha256(percorso):
     h = hashlib.sha256()
@@ -474,7 +474,7 @@ def _sha256(percorso):
 
 
 def descrizione_download(scelti):
-    """Testo da mostrare PRIMA di scaricare (file, fonte, dimensione, licenza)."""
+    """Text to show BEFORE downloading (file, source, size, license)."""
     righe = []
     if not installato():
         righe.append("Ollama %s: ollama-windows-amd64.zip, %.2f GB, da github.com/ollama/ollama (release ufficiale, "
@@ -488,8 +488,8 @@ def descrizione_download(scelti):
 
 
 def installa(scelti, log=print):
-    """Scarica (se manca) e installa Ollama e i modelli scelti in componenti/ollama. Da chiamare solo dopo il
-    consenso dell'utente. Si puo' fermare: gli scaricamenti ripartono da dove erano."""
+    """Downloads (if missing) and installs Ollama and the chosen models in components/ollama. To be called only after
+    the user's consent. It can be stopped: downloads resume from where they were."""
     servono = (0 if installato() else DIMENSIONE_ZIP * 3.5) + sum(MODELLI[k]["gb"] * 1e9 for k in scelti
                                                                   if not modello_presente(k))
     os.makedirs(cartella(), exist_ok=True)
@@ -500,7 +500,7 @@ def installa(scelti, log=print):
         if not installato():
             _installa_programma(log)
         _scarica_modelli(scelti, log)
-    except (OSError, ValueError) as e:  # rete, disco, risposta inattesa: messaggio comprensibile, non un traceback
+    except (OSError, ValueError) as e:  # network, disk, unexpected response: an understandable message, not a traceback
         raise ErroreLocale("Installazione non riuscita (%s: %s). Controlla la connessione e riprova: gli "
                            "scaricamenti riprendono da dove erano." % (type(e).__name__, e)) from None
     return True
@@ -540,7 +540,7 @@ def _installa_programma(log):
                 break
             except ErroreLocale:
                 raise
-            except OSError as e:  # rete: il pezzo gia' scaricato resta, si riprende da li'
+            except OSError as e:  # network: the part already downloaded stays, it resumes from there
                 if tentativo == 2:
                     raise
                 log("    connessione interrotta (%s): riprovo tra %d secondi..." % (type(e).__name__, 10 * (tentativo + 1)))
@@ -556,7 +556,7 @@ def _installa_programma(log):
 
 
 def _scarica_zip(parziale, log):
-    """Scarica lo zip in 'parziale', riprendendo da dove era (richiesta Range) se c'e' gia' un pezzo."""
+    """Downloads the zip into 'parziale', resuming from where it was (Range request) if a part is already there."""
     gia = os.path.getsize(parziale) if os.path.exists(parziale) else 0
     if gia >= DIMENSIONE_ZIP:
         return
@@ -564,14 +564,14 @@ def _scarica_zip(parziale, log):
     if gia:
         intestazioni["Range"] = "bytes=%d-" % gia
     with urllib.request.urlopen(urllib.request.Request(URL_ZIP, headers=intestazioni), timeout=60) as r:
-        if gia and r.status != 206:  # il server non riprende: si ricomincia da zero
+        if gia and r.status != 206:  # the server does not resume: start again from zero
             gia = 0
         if gia:
             log("    riprendo da %.0f%%" % (100 * gia / DIMENSIONE_ZIP))
         letti, prossimo = gia, (gia // (DIMENSIONE_ZIP // 10) + 1) * (DIMENSIONE_ZIP // 10)
         with open(parziale, "ab" if gia else "wb") as f:
             for blocco in iter(lambda: r.read(1 << 20), b""):
-                interruzione.controlla()  # Ferma: il pezzo scaricato resta per la prossima volta
+                interruzione.controlla()  # Stop: the downloaded part stays for next time
                 f.write(blocco)
                 letti += len(blocco)
                 if letti > DIMENSIONE_ZIP + 1024:
@@ -584,7 +584,7 @@ def _scarica_zip(parziale, log):
 
 
 def _estrai(zip_, destinazione):
-    """Estrae lo zip in una cartella temporanea controllando ogni percorso, poi la rinomina: mai file fuori posto."""
+    """Extracts the zip into a temporary folder checking every path, then renames it: never files out of place."""
     temporanea = destinazione + ".tmp"
     shutil.rmtree(temporanea, ignore_errors=True)
     os.makedirs(temporanea)
@@ -604,7 +604,7 @@ def _estrai(zip_, destinazione):
         shutil.rmtree(temporanea, ignore_errors=True)
         raise ErroreLocale("Lo zip di Ollama non contiene il programma atteso: installazione annullata.")
     try:
-        if os.path.exists(destinazione):  # installazione rovinata (es. ollama.exe tolto dall'antivirus): si rifa'
+        if os.path.exists(destinazione):  # damaged installation (e.g. ollama.exe removed by the antivirus): redo it
             scarto = destinazione + ".vecchia"
             shutil.rmtree(scarto, ignore_errors=True)
             os.replace(destinazione, scarto)

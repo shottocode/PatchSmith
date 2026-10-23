@@ -1,8 +1,8 @@
-"""Lingue: nomi leggibili, lingua di Windows e riconoscimento automatico della lingua del gioco.
+"""Languages: readable names, the Windows language and automatic detection of the game's language.
 
-Il riconoscimento funziona senza rete:
-- prima guarda l'alfabeto (kana -> giapponese, hangul -> coreano, ideogrammi -> cinese, cirillico...);
-- per le lingue con alfabeto latino conta le parole piu' frequenti (articoli, preposizioni...).
+Detection works without the network:
+- first it looks at the script (kana -> Japanese, hangul -> Korean, ideograms -> Chinese, Cyrillic...);
+- for languages with the Latin alphabet it counts the most frequent words (articles, prepositions...).
 """
 import locale
 import re
@@ -10,7 +10,7 @@ import sys
 
 AUTO = "auto"
 
-# Codici di Google Translate con il nome in italiano.
+# Google Translate codes with their Italian name.
 NOMI = {
     "en": "Inglese", "it": "Italiano", "ja": "Giapponese", "zh-CN": "Cinese semplificato",
     "zh-TW": "Cinese tradizionale", "ko": "Coreano", "fr": "Francese", "de": "Tedesco", "es": "Spagnolo",
@@ -21,7 +21,7 @@ NOMI = {
 }
 ETICHETTA_AUTO = "Rileva automaticamente"
 
-# Nomi delle lingue scritti nella loro lingua: nei menu di scelta della lingua non vanno tradotti.
+# Language names written in their own language: in language selection menus they must not be translated.
 ENDONIMI = {
     "English", "Español", "Español (Latinoamérica)", "Español - Latinoamérica", "Français", "Deutsch", "Italiano",
     "Português", "Português - Brasil", "Português (Brasil)", "Português Brasileiro", "Русский", "Українська",
@@ -31,7 +31,7 @@ ENDONIMI = {
 }
 
 
-# Nome di ogni lingua nella lingua stessa (per la voce del menu lingue che ora mostra la traduzione).
+# Name of each language in the language itself (for the language menu entry that now shows the translation).
 ENDONIMO = {
     "en": "English", "it": "Italiano", "fr": "Français", "de": "Deutsch", "es": "Español", "pt": "Português",
     "ru": "Русский", "pl": "Polski", "ja": "日本語", "ko": "한국어", "zh-CN": "简体中文", "zh-TW": "繁體中文",
@@ -41,9 +41,9 @@ ENDONIMO = {
 
 
 def chiave_confronto(codice):
-    """Chiave per confrontare due lingue: la lingua base ('pt-BR' -> 'pt'), ma il cinese per scrittura
+    """Key to compare two languages: the base language ('pt-BR' -> 'pt'), but Chinese by script
     ('zh-TW', 'zh-HK', 'zh-Hant' -> 'zh-hant'; 'zh-CN', 'zh-SG', 'zh-Hans', 'zh' -> 'zh-hans'):
-    tradizionale e semplificato sono lingue scritte diverse e non si scambiano."""
+    traditional and simplified are different written languages and are not interchangeable."""
     c = (codice or "").strip().replace("_", "-").lower()
     base = c.split("-")[0]
     if base in ("zh", "chinese", "schinese", "tchinese"):
@@ -58,9 +58,9 @@ def stessa_lingua(a, b):
 
 
 def migliore(candidati, destinazione):
-    """Il codice tra 'candidati' che corrisponde meglio a 'destinazione': lo stesso codice, poi la lingua senza
-    regione ('it', 'zh-Hans'), poi un'altra variante della stessa lingua (mai l'altra scrittura del cinese).
-    None se nessuno corrisponde."""
+    """The code among 'candidati' that best matches 'destinazione': the same code, then the language without a
+    region ('it', 'zh-Hans'), then another variant of the same language (never the other Chinese script).
+    None if none matches."""
     dest = (destinazione or "").strip().replace("_", "-").lower()
     chiave = chiave_confronto(dest)
     voti = []
@@ -78,7 +78,7 @@ def endonimo(codice):
 
 
 def etichetta(codice):
-    """'Italiano (it)'; 'Rileva automaticamente' per auto; il codice stesso se sconosciuto."""
+    """'Italiano (it)'; 'Detect automatically' for auto; the code itself if unknown."""
     if codice == AUTO:
         return ETICHETTA_AUTO
     return "%s (%s)" % (NOMI[codice], codice) if codice in NOMI else codice
@@ -91,7 +91,7 @@ def etichette(con_auto=False):
 
 
 def codice(testo):
-    """Da etichetta ('Italiano (it)'), nome ('italiano') o codice ('it') al codice."""
+    """From a label ('Italiano (it)'), name ('italiano') or code ('it') to the code."""
     t = (testo or "").strip()
     if not t or t.lower() in (ETICHETTA_AUTO.lower(), AUTO):
         return AUTO
@@ -105,7 +105,7 @@ def codice(testo):
 
 
 def lingua_di_windows(predefinita="it"):
-    """Codice della lingua dell'interfaccia di Windows (o del sistema), es. 'it'."""
+    """Code of the Windows interface language (or of the system), e.g. 'it'."""
     nome = None
     if sys.platform.startswith("win"):
         try:
@@ -124,9 +124,9 @@ def lingua_di_windows(predefinita="it"):
     return primario if primario in NOMI else predefinita
 
 
-# --- riconoscimento -----------------------------------------------------------------------------
+# --- detection ----------------------------------------------------------------------------------
 
-_SCRITTURE = [  # (lingua, intervalli di caratteri)
+_SCRITTURE = [  # (language, character ranges)
     ("ko", [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)]),
     ("kana", [(0x3040, 0x30FF), (0x31F0, 0x31FF)]),
     ("han", [(0x4E00, 0x9FFF), (0x3400, 0x4DBF)]),
@@ -155,16 +155,16 @@ _PAROLE = {
     "sv": "och att det som en är på för med inte har till av den om",
 }
 _PAROLE = {k: set(v.split()) for k, v in _PAROLE.items()}
-# parole frequenti di una lingua che negli elenchi di _PAROLE stanno solo tra quelle di altre lingue: in un testo
-# italiano "se", "tu", "su", "no" non vogliono dire che e' spagnolo
+# frequent words of a language that in the _PAROLE lists appear only among those of other languages: in an Italian
+# text "se", "tu", "su", "no" do not mean that it is Spanish
 ANCHE_DI = {"it": {"a", "o", "i", "no", "se", "su", "tu", "ne", "te", "mi", "ce", "sua", "do", "po", "ve", "qui"}}
 
 
 def lingua_evidente(testo, attesa):
-    """La lingua (codice di _PAROLE) di cui il testo ha chiaramente le parole frequenti al posto di quelle della lingua
-    'attesa': almeno 2, e piu' di quelle di 'attesa'. None se non si vede un'altra lingua (anche per i testi corti
-    senza parole frequenti: il dubbio non basta). Una parola che e' anche della lingua attesa ("la", "in", "se")
-    conta solo per lei."""
+    """The language (a _PAROLE code) whose frequent words the text clearly has instead of those of the 'attesa'
+    language: at least 2, and more than those of 'attesa'. None if no other language shows (also for short texts
+    without frequent words: doubt is not enough). A word that also belongs to the expected language ("la", "in", "se")
+    counts only for it."""
     parole = re.findall(r"[^\W\d_]+", testo.lower())
     arrivo = attesa.split("-")[0]
     proprie = _PAROLE.get(arrivo, set()) | ANCHE_DI.get(arrivo, set())
@@ -186,7 +186,7 @@ def _scrittura(c):
 
 
 def rileva(testi, massimo=200_000):
-    """(codice, descrizione) della lingua prevalente nei testi. ('en', ...) se non si capisce."""
+    """(codice, descrizione) of the prevailing language in the texts. ('en', ...) if it cannot be told."""
     campione = "\n".join(testi)[:massimo]
     conteggi = {}
     for c in campione:

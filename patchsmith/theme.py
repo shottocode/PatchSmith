@@ -1,7 +1,7 @@
-"""Tema chiaro/scuro dell'interfaccia grafica.
+"""Light/dark theme of the graphical interface.
 
-"auto" segue l'impostazione di Windows (Impostazioni > Personalizzazione > Colori > modalita' app);
-se non si riesce a leggerla si usa il tema scuro.
+"auto" follows the Windows setting (Settings > Personalization > Colors > app mode);
+if it cannot be read, the dark theme is used.
 """
 import sys
 import tkinter as tk
@@ -22,7 +22,7 @@ PALETTE = {
 
 
 def tema_di_sistema():
-    """'scuro' o 'chiaro' secondo Windows; 'scuro' se l'impostazione non e' leggibile."""
+    """'scuro' or 'chiaro' according to Windows; 'scuro' if the setting cannot be read."""
     if sys.platform.startswith("win"):
         try:
             import winreg
@@ -35,7 +35,7 @@ def tema_di_sistema():
 
 
 def _barra_titolo(radice, scuro):
-    """Barra del titolo scura su Windows 10/11 (attributo DWM 'immersive dark mode')."""
+    """Dark title bar on Windows 10/11 (DWM attribute 'immersive dark mode')."""
     if not sys.platform.startswith("win"):
         return
     try:
@@ -43,7 +43,7 @@ def _barra_titolo(radice, scuro):
         radice.update_idletasks()
         finestra = ctypes.windll.user32.GetParent(radice.winfo_id())
         valore = ctypes.c_int(1 if scuro else 0)
-        for attributo in (20, 19):  # 20: Windows 10 2004+ / 11; 19: build precedenti
+        for attributo in (20, 19):  # 20: Windows 10 2004+ / 11; 19: earlier builds
             esito = ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 finestra, attributo, ctypes.byref(valore), ctypes.sizeof(valore))
             if esito == 0:
@@ -53,11 +53,11 @@ def _barra_titolo(radice, scuro):
 
 
 def applica(radice, scelta="auto"):
-    """Applica il tema a tutta l'applicazione. Restituisce la palette usata."""
+    """Applies the theme to the whole application. Returns the palette used."""
     nome = tema_di_sistema() if scelta not in PALETTE else scelta
     c = PALETTE[nome]
     stile = ttk.Style(radice)
-    stile.theme_use("clam")  # l'unico tema ttk interamente ricolorabile
+    stile.theme_use("clam")  # the only ttk theme that can be fully recolored
 
     stile.configure(".", background=c["sfondo"], foreground=c["testo"], fieldbackground=c["campo"],
                     bordercolor=c["bordo"], lightcolor=c["bordo"], darkcolor=c["bordo"],
@@ -86,7 +86,7 @@ def applica(radice, scelta="auto"):
     stile.configure("Vertical.TScrollbar", background=c["pulsante"], troughcolor=c["sfondo"],
                     bordercolor=c["sfondo"], arrowcolor=c["testo"])
     stile.map("Vertical.TScrollbar", background=[("active", c["pulsante_sopra"])])
-    # elenchi (la finestra "Correggi traduzioni")
+    # lists (the "Fix translations" window)
     stile.configure("Treeview", background=c["campo"], fieldbackground=c["campo"], foreground=c["testo"],
                     bordercolor=c["bordo"], lightcolor=c["bordo"], darkcolor=c["bordo"])
     stile.map("Treeview", background=[("selected", c["selezione"])], foreground=[("selected", c["testo"])])
@@ -94,11 +94,11 @@ def applica(radice, scelta="auto"):
                     lightcolor=c["bordo"], darkcolor=c["bordo"], relief="flat")
     stile.map("Treeview.Heading", background=[("active", c["pulsante_sopra"])])
 
-    # pulsante accanto a un campo ("Sfoglia…"): senza margine sopra e sotto, alto quanto il campo
+    # button next to a field ("Browse…"): no margin above and below, as tall as the field
     stile.configure("Campo.TButton", padding=(10, 0))
-    # la bandierina della lingua: grande quanto la bandiera (il tema clam da' ai pulsanti almeno 11 caratteri)
+    # the small language flag: as big as the flag (the clam theme gives buttons at least 11 characters)
     stile.configure("Bandiera.TButton", padding=(3, 2), width=0)
-    # pulsante con menu (la bandierina della lingua) e i menu (non sono widget ttk)
+    # button with a menu (the small language flag) and the menus (they are not ttk widgets)
     stile.configure("TMenubutton", background=c["pulsante"], foreground=c["testo"], bordercolor=c["bordo"],
                     arrowcolor=c["testo"], padding=(6, 3))
     stile.map("TMenubutton", background=[("pressed", c["premuto"]), ("active", c["pulsante_sopra"])],
@@ -110,7 +110,7 @@ def applica(radice, scelta="auto"):
     radice.option_add("*Menu.relief", "flat")
     radice.option_add("*Menu.borderWidth", 1)
 
-    # elenco a discesa delle combobox (non e' un widget ttk)
+    # drop-down list of the comboboxes (it is not a ttk widget)
     radice.option_add("*TCombobox*Listbox.background", c["campo"])
     radice.option_add("*TCombobox*Listbox.foreground", c["testo"])
     radice.option_add("*TCombobox*Listbox.selectBackground", c["selezione"])
@@ -120,18 +120,18 @@ def applica(radice, scelta="auto"):
     return dict(c, nome=nome)
 
 
-# --- finestre di messaggio con i colori del tema -----------------------------------------------
-# I messagebox di Tkinter usano la MessageBox di Windows, che resta sempre chiara: queste le
-# sostituiscono con finestre disegnate da noi.
+# --- message dialogs with the theme's colors ---------------------------------------------------
+# Tkinter's messageboxes use the Windows MessageBox, which always stays light: these replace
+# them with dialogs we draw ourselves.
 
 ICONE = {"info": ("i", "accento"), "avviso": ("!", "#d39b2a"), "errore": ("✕", "#d9534f"),
          "domanda": ("?", "accento")}
-AL_MOSTRARE = None  # funzione(tipo) chiamata quando compare una finestra (la finestra principale: i suoni)
+AL_MOSTRARE = None  # function(tipo) called when a dialog appears (the main window: the sounds)
 
 
 def finestra(genitore, c, titolo, testo, tipo="info", pulsanti=(("OK", True),), annulla=None):
-    """Finestra modale. pulsanti: [(etichetta, valore)], il primo e' quello predefinito (Invio).
-    Esc o la X della finestra restituiscono `annulla`."""
+    """Modal dialog. pulsanti: [(etichetta, valore)], the first is the default one (Enter).
+    Esc or the window's X return `annulla`."""
     top = tk.Toplevel(genitore)
     top.withdraw()
     top.title(titolo)
@@ -160,7 +160,7 @@ def finestra(genitore, c, titolo, testo, tipo="info", pulsanti=(("OK", True),), 
 
     bottoni = []
     for etichetta, valore in reversed(list(pulsanti)):
-        # larghezza minima di 10 caratteri: le etichette piu' lunghe ("Usa il traduttore locale") non si tagliano
+        # minimum width of 10 characters: longer labels ("Use the local translator") are not cut
         b = ttk.Button(piede, text=etichetta, width=-10, command=lambda v=valore: chiudi(v))
         b.pack(side="right", padx=(0, 12), pady=12)
         bottoni.append(b)
@@ -178,10 +178,10 @@ def finestra(genitore, c, titolo, testo, tipo="info", pulsanti=(("OK", True),), 
     if AL_MOSTRARE is not None:
         try:
             AL_MOSTRARE(tipo)
-        except Exception:  # noqa: BLE001 - un suono non deve mai impedire la finestra
+        except Exception:  # noqa: BLE001 - a sound must never prevent the dialog
             pass
     top.grab_set()
-    bottoni[-1].focus_set()  # il primo pulsante (predefinito)
+    bottoni[-1].focus_set()  # the first button (default)
     genitore.wait_window(top)
     return risultato["valore"]
 
@@ -199,18 +199,18 @@ def errore(genitore, c, titolo, testo):
 
 
 def chiedi(genitore, c, titolo, testo):
-    """True se l'utente sceglie Si'."""
+    """True if the user chooses Yes."""
     return bool(finestra(genitore, c, titolo, testo, "domanda", (("Sì", True), ("No", False)), annulla=False))
 
 
 def scegli(genitore, c, titolo, testo, pulsanti, tipo="info"):
-    """Finestra con piu' pulsanti [(etichetta, valore)] (es. "OK", "Mostra i rimasti", "Crea rapporto"): restituisce
-    il valore del pulsante premuto. Il primo e' il predefinito (Invio); Esc o la X restituiscono None."""
+    """Dialog with several buttons [(etichetta, valore)] (e.g. "OK", "Show remaining", "Create report"): returns
+    the value of the button pressed. The first is the default (Enter); Esc or the X return None."""
     return finestra(genitore, c, titolo, testo, tipo, pulsanti, annulla=None)
 
 
 def colora_testo(widget, c):
-    """Colori per i widget Tk classici (es. tk.Text del registro)."""
+    """Colors for the classic Tk widgets (e.g. the log's tk.Text)."""
     if isinstance(widget, tk.Text):
         widget.configure(background=c["campo"], foreground=c["testo"], insertbackground=c["testo"],
                          selectbackground=c["selezione"], selectforeground=c["testo"],

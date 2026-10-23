@@ -1,18 +1,19 @@
-"""Test dell'adapter Unity Localization (tabelle dei testi dentro gli AssetBundle).
+"""Tests of the Unity Localization adapter (text tables inside the AssetBundles).
 
-Uso: python -I test/test_unity_loc.py <cartella_temporanea_vuota> [<bundle con le tabelle dei testi>]
-Sempre, con bundle e giochi finti (test/fake_unity.py, nessun file di giochi veri):
-- lettura dei bundle (senza compressione, LZ4, LZMA, anche a pezzi) e delle tabelle dei testi; le tabelle degli asset
-  (riferimenti, non testi) non si traducono;
-- la lingua di un bundle dal nome ("english(en)"), dal contenuto ("english", "localization_en", "chinese(simplified)")
-  o dal nome della lingua se il bundle non si legge; la lingua ufficiale trovata cosi' (lingua_ufficiale);
-- gioco IL2CPP con il catalogo che controlla l'impronta (CRC): si toglie solo quella del bundle tradotto, con backup;
-  "Ripristina originali" rimette catalogo e bundle identici; il controllo dopo aver giocato vede il catalogo rimesso
-  dal gioco;
-- catalogo binario (catalog.bin), CRC che non si trova, anti-cheat, tabelle senza la lingua di partenza, italiano
-  gia' nel gioco: nessun file modificato e un motivo chiaro.
-Con un bundle vero (es. quello inglese di un gioco, che viene solo letto e copiato): riscrittura identica, testi
-cambiati e riletti, flusso completo con il traduttore di prova su una copia minima del gioco e ripristino identico.
+Usage: python -I test/test_unity_loc.py <empty_temp_folder> [<bundle with the string tables>]
+Always, with fake bundles and games (test/fake_unity.py, no files from real games):
+- reading of the bundles (uncompressed, LZ4, LZMA, also in pieces) and of the text tables; the asset tables
+  (references, not texts) are not translated;
+- a bundle's language from its name ("english(en)"), from its contents ("english", "localization_en",
+  "chinese(simplified)") or from the language name if the bundle cannot be read; the official language found this
+  way (lingua_ufficiale);
+- IL2CPP game with a catalog that checks the fingerprint (CRC): only the translated bundle's one is removed, with
+  backup; "Restore originals" puts back catalog and bundle identical; the after-play check sees the catalog put back
+  by the game;
+- binary catalog (catalog.bin), CRC that cannot be found, anti-cheat, tables without the source language, Italian
+  already in the game: no file changed and a clear reason.
+With a real bundle (e.g. a game's English one, which is only read and copied): identical rewrite, texts changed and
+read back, full flow with the test translator on a minimal copy of the game and identical restore.
 """
 import hashlib
 import json
@@ -79,7 +80,7 @@ def prova_formato(base):
         with open(percorso, "wb") as f:
             f.write(byte)
         vecchio = unityfs._PEZZO_LZMA
-        unityfs._PEZZO_LZMA = 500  # anche l'LZMA a pezzi (nei giochi: blocchi da piu' di 16 MB)
+        unityfs._PEZZO_LZMA = 500  # also LZMA in pieces (in games: blocks of more than 16 MB)
         try:
             with unityfs.Indice(percorso) as indice:
                 pezzi = {n: b"".join(p for _, p in indice.pezzi(s, s + d)) for n, s, d, _ in indice.nodi}
@@ -91,7 +92,7 @@ def prova_formato(base):
               "tabella degli asset (riferimenti) non e' tra i testi", tutti)
     rotto = os.path.join(base, "rotto.bundle")
     with open(rotto, "wb") as f:
-        f.write(finto.bundle([("CAB-1", interno)], compressione="lz4", blocco=700)[:-50])  # troncato
+        f.write(finto.bundle([("CAB-1", interno)], compressione="lz4", blocco=700)[:-50])  # truncated
     try:
         with unityfs.Indice(rotto) as indice:
             for _ in indice.pezzi():
@@ -100,8 +101,8 @@ def prova_formato(base):
     except ValueError as e:
         errore = e
     controlla("bundle troncato: errore di formato (ValueError), non un crash", isinstance(errore, ValueError))
-    # senza compressione e in un solo blocco (come i bundle grandi di SWORN o LumenTale): letto a pezzi, solo la parte
-    # che serve
+    # uncompressed and in a single block (like the large bundles of SWORN or LumenTale): read in pieces, only the part
+    # that is needed
     grande = os.path.join(base, "un-blocco.bundle")
     with open(grande, "wb") as f:
         f.write(finto.bundle([("CAB-1", interno), ("CAB-1.resS", risorse)], blocco=1 << 30))
@@ -117,9 +118,9 @@ def prova_formato(base):
     controlla("bundle senza compressione in un solo blocco: letto a pezzi piccoli, solo la parte chiesta",
               blocchi == 1 and len(pezzi) == 4 and all(len(p) <= 500 for _, p in pezzi)
               and pezzi[0][0] == s + 10 and b"".join(p for _, p in pezzi) == risorse[10:1700])
-    # LZMA a pezzi con il flusso che finisce prima della dimensione scritta nell'indice: niente EOFError
+    # LZMA in pieces with a stream that ends before the size written in the index: no EOFError
     corto = bytearray(finto.bundle([("CAB-1", interno)], compressione="lzma", blocco=1 << 20))
-    q = corto.index(b"\x00" * 16 + b"\x00\x00\x00\x01") + 20  # prima voce dei blocchi: dimensione decompressa
+    q = corto.index(b"\x00" * 16 + b"\x00\x00\x00\x01") + 20  # first block entry: decompressed size
     corto[q:q + 4] = (int.from_bytes(corto[q:q + 4], "big") + 300).to_bytes(4, "big")
     percorso = os.path.join(base, "lzma-corto.bundle")
     with open(percorso, "wb") as f:
@@ -129,7 +130,7 @@ def prova_formato(base):
         with unityfs.Indice(percorso) as indice:
             letto = b"".join(p for _, p in indice.pezzi())
         errore = None
-    except Exception as e:  # noqa: BLE001 - qualunque errore che non sia di formato e' il difetto cercato
+    except Exception as e:  # noqa: BLE001 - any error that is not a format error is the defect being looked for
         letto, errore = b"", e
     finally:
         unityfs._PEZZO_LZMA = vecchio
@@ -143,7 +144,7 @@ def prova_formato(base):
 
 
 def prova_lingue(base):
-    # nomi come LumenTale: la lingua per esteso, senza codice; i Locales e i dati condivisi non sono lingue
+    # names like LumenTale: the language in full, without a code; the Locales and the shared data are not languages
     a = os.path.join(base, "nomi-lumentale")
     os.makedirs(a)
     for nome, byte in {
@@ -161,7 +162,7 @@ def prova_lingue(base):
                   "en": "localization-string-tables-english_assets_all.bundle",
                   "it": "localization-string-tables-italiano_assets_all.bundle",
                   "fr": "localization-string-tables-français_assets_all.bundle"})
-    # nomi come Lego Party e Rogue Blight; un bundle illeggibile vale per il nome della lingua
+    # names like Lego Party and Rogue Blight; for an unreadable bundle the language name counts
     b = os.path.join(base, "nomi-vari")
     os.makedirs(b)
     for nome, byte in {
@@ -177,7 +178,7 @@ def prova_lingue(base):
               "illeggibile dal nome della lingua; tabelle degli asset escluse",
               sorted(adapter_unity_loc.tabelle_per_contenuto(b)) == ["de", "en", "pl", "zh-cn"]
               and adapter_unity_loc.tabelle(b)["en"] == "localization_en_assets_all.bundle")
-    # lingua ufficiale: il catalogo non elenca i Locales, le tabelle dicono che c'e' l'italiano
+    # official language: the catalog does not list the Locales, the tables say Italian is there
     gioco = os.path.join(base, "ufficiale-dal-contenuto")
     finto.gioco_il2cpp(gioco, {"localization-string-tables-english_assets_all.bundle": tabella("UI_en", "en", EN),
                                "localization-string-tables-italiano_assets_all.bundle": tabella("UI_it", "it", IT)},
@@ -188,7 +189,7 @@ def prova_lingue(base):
 
 
 def _flusso(base, nome, bundle_aa, catalogo, extra=None, origine="en"):
-    """Analizza e traduci (traduttore di prova) su un gioco IL2CPP finto: (gioco, profilo, esito, impronte prima)."""
+    """Analyze and translate (test translator) on a fake IL2CPP game: (gioco, profilo, esito, impronte prima)."""
     gioco = os.path.join(base, nome)
     cartella_bundle = finto.gioco_il2cpp(gioco, bundle_aa, catalogo, extra)
     prima = {n: impronta(os.path.join(cartella_bundle, n)) for n in bundle_aa}
@@ -229,13 +230,13 @@ def prova_crc(base):
     controlla("CRC: Riapplica rifa' lo stesso (catalogo e bundle come prima)",
               automatico.riapplica(gioco, silenzio, prova=True, esito=esito_riapplica)
               and leggi(percorso_catalogo) == dopo and finto.crc_nel_catalogo(dopo)[en] == 0)
-    # una nuova "Analizza e traduci": nel gioco il catalogo ha gia' il CRC 0 (scritto da PatchSmith), ma la voce del
-    # profilo deve continuare a nominarlo (vale l'originale nel backup)
+    # a new "Analyze and translate": in the game the catalog already has CRC 0 (written by PatchSmith), but the game
+    # profile's entry must keep naming it (the original in the backup counts)
     profilo2, _completo, esito2 = automatico.analizza_e_traduci(gioco, "en", "it", backend="finto", log=silenzio)
     controlla("CRC: una nuova 'Analizza e traduci' tiene il catalogo nel profilo (conta l'originale, non il CRC gia' 0)",
               profilo2 == profilo and esito2["esito"].codice == "OK"
               and json.load(open(profilo, encoding="utf-8"))["file"] == voci and leggi(percorso_catalogo) == dopo)
-    # il gioco rimette i suoi file (verifica dei file di Steam): il controllo dopo aver giocato lo vede
+    # the game puts back its files (Steam's file verification): the after-play check sees it
     shutil.copyfile(percorso_catalogo + progetto.SUFFISSO_BACKUP, percorso_catalogo)
     shutil.copyfile(os.path.join(cartella_bundle, en + progetto.SUFFISSO_BACKUP), os.path.join(cartella_bundle, en))
     c = controllo._Contesto(profilo, json.load(open(profilo, encoding="utf-8")), {}, silenzio, False, None)
@@ -249,7 +250,7 @@ def prova_crc(base):
     controlla("CRC: Ripristina originali rimette catalogo e bundle identici, nessun file di PatchSmith",
               automatico.ripristina(gioco, silenzio) and _invariati(cartella_bundle, prima))
 
-    # due bundle per la lingua di partenza (tabelle impacchettate separatamente), entrambi con il CRC
+    # two bundles for the source language (tables packed separately), both with the CRC
     en2 = "localization-string-tables-english(en)_assets_dialogues.bundle"
     catalogo = finto.catalogo([(en, 11), (en2, 22), (fr, 33)])
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
@@ -262,8 +263,8 @@ def prova_crc(base):
     controlla("CRC con due bundle: Ripristina rimette tutto identico",
               automatico.ripristina(gioco, silenzio) and _invariati(cartella_bundle, prima))
 
-    # un aggiornamento del gioco cambia solo il catalogo (non la tabella inglese): il catalogo nuovo ha di nuovo il CRC
-    # e il gioco non caricherebbe la tabella tradotta. Il controllo dopo aver giocato lo sistema da solo (Riapplica).
+    # a game update changes only the catalog (not the English table): the new catalog has the CRC again and the game
+    # would not load the translated table. The after-play check fixes it by itself (Reapply).
     catalogo = finto.catalogo([(en, 3530401984), (fr, 167159835)])
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "crc-aggiornato", {en: tabella("UI_en", "en", EN), fr: tabella("UI_fr", "fr", FR)},
@@ -292,7 +293,7 @@ def prova_crc(base):
               and not [n for d in (cartella_bundle, os.path.dirname(cartella_bundle)) for n in os.listdir(d)
                        if "patchsmith" in n])
 
-    # catalogo senza CRC (come SWORN): il catalogo non si tocca
+    # catalog without CRC (like SWORN): the catalog is not touched
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "crc-zero", {en: tabella("UI_en", "en", EN)}, ("catalog.json", finto.catalogo([(en, 0)])))
     controlla("CRC 0 (come SWORN): bundle tradotto, catalogo intatto e senza backup",
@@ -305,14 +306,14 @@ def prova_crc(base):
 
 def prova_rifiuti(base):
     en = "localization-string-tables-english(en)_assets_all.bundle"
-    # catalogo binario (Addressables 2, Unity 6): non si sa se controlla l'impronta
+    # binary catalog (Addressables 2, Unity 6): it is not known whether it checks the fingerprint
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "catalogo-bin", {en: tabella("UI_en", "en", EN)}, ("catalog.bin", b"\x01\x02catalogo binario"))
     e = esito["esito"]
     controlla("catalog.bin: non supportato con il motivo del catalogo binario, nessun file modificato",
               profilo is None and e.codice == "NON_SUPPORTATO" and "catalog.bin" in e.motivo
               and "BepInEx" not in e.motivo and _invariati(cartella_bundle, prima))
-    # il catalogo controlla l'impronta di altri bundle e non nomina questo: non si sa togliere
+    # the catalog checks the fingerprint of other bundles and does not name this one: it cannot be removed
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "crc-sconosciuto", {en: tabella("UI_en", "en", EN)},
         ("catalog.json", finto.catalogo([("altro.bundle", 777)])))
@@ -320,14 +321,14 @@ def prova_rifiuti(base):
     controlla("CRC che non si trova nel catalogo: non supportato (impronta), nessun file modificato",
               profilo is None and e.codice == "NON_SUPPORTATO" and "CRC" in e.motivo
               and _invariati(cartella_bundle, prima))
-    # anti-cheat: prima di guardare le tabelle, anche nei giochi IL2CPP
+    # anti-cheat: before looking at the tables, also in IL2CPP games
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "anticheat", {en: tabella("UI_en", "en", EN)}, ("catalog.json", finto.catalogo([(en, 0)])),
         extra={"EasyAntiCheat/EasyAntiCheat_EOS_Setup.exe": b"finto"})
     controlla("anti-cheat (IL2CPP con tabelle): rilevato, ANTICHEAT, nessun bundle scritto",
               any(r["sezione"] == "AntiCheat" for r in rilevamento.rileva(gioco)["risultati"])
               and profilo is None and esito["esito"].codice == "ANTICHEAT" and _invariati(cartella_bundle, prima))
-    # tabelle, ma non nella lingua di partenza: il motivo lo dice (non "serve BepInEx 6")
+    # tables, but not in the source language: the reason says so (not "serve BepInEx 6")
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "senza-inglese", {"localization-string-tables-french(fr)_assets_all.bundle": tabella("UI_fr", "fr", FR)},
         ("catalog.json", finto.catalogo([])))
@@ -337,7 +338,7 @@ def prova_rifiuti(base):
               profilo is None and e.codice == "NON_SUPPORTATO" and "tabelle dei testi" in e.motivo
               and "lingua di partenza" in e.motivo and "Francese (fr)" in e.motivo and '"Da:"' in e.motivo
               and "IL2CPP" not in e.motivo and "BepInEx" not in e.motivo and _invariati(cartella_bundle, prima))
-    # scelta la lingua che il gioco ha come lingua di partenza: la sua tabella si traduce
+    # with the language the game has as source language chosen: its table is translated
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "partenza-francese", {"localization-string-tables-french(fr)_assets_all.bundle": tabella("UI_fr", "fr", FR)},
         ("catalog.json", finto.catalogo([])), origine="fr")
@@ -345,14 +346,14 @@ def prova_rifiuti(base):
               esito["esito"].codice == "OK" and [t for _, t in adapter_unity_loc.FileTabelle(os.path.join(
                   cartella_bundle, "localization-string-tables-french(fr)_assets_all.bundle")).testi()]
               == ["[it] " + t for t in FR])
-    # italiano gia' nel gioco, con nomi alla Lego Party: lingua ufficiale
+    # Italian already in the game, with Lego Party-style names: official language
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "italiano-dentro", {"localization_en_assets_all.bundle": tabella("ui_en", "en", EN),
                                   "localization_it_assets_all.bundle": tabella("ui_it", "it", IT)},
         ("catalog.json", finto.catalogo([])))
     controlla("italiano gia' nel gioco (nomi 'localization_it'): UFFICIALE, nessun file modificato",
               profilo is None and esito["esito"].codice == "UFFICIALE" and _invariati(cartella_bundle, prima))
-    # nomi senza codice: la tabella inglese si trova dal contenuto e si traduce (prima: "non supportato")
+    # names without a code: the English table is found from the contents and translated (before: "non supportato")
     gioco, cartella_bundle, profilo, esito, prima = _flusso(
         base, "nomi-senza-codice", {"localization-string-tables-english_assets_all.bundle":
                                     tabella("UI_en", "en", EN, compressione="lz4")},
@@ -376,7 +377,7 @@ def prova_bundle_vero(base, bundle):
     riletti = adapter_unity_loc.FileTabelle(f.serializza(nuovi)).testi()
     controlla("testi cambiati (lunghezze diverse, accenti): riletti uguali e nello stesso ordine",
               [t for _, t in riletti] == ["IT %d àèìòù" % k for k in range(len(testi))])
-    # flusso completo su una copia minima del gioco: solo il bundle e il catalogo, sotto *_Data
+    # full flow on a minimal copy of the game: only the bundle and the catalog, under *_Data
     gioco = os.path.join(base, "Gioco")
     cartella_bundle = os.path.join(gioco, "Gioco_Data", "StreamingAssets", "aa", "StandaloneWindows64")
     os.makedirs(cartella_bundle)
@@ -400,9 +401,9 @@ def prova_bundle_vero(base, bundle):
 
 
 def _catalogo_bin(voci, doppio=None):
-    """catalog.bin finto come quello di Addressables 2 (Big Dig): per ogni bundle il nome della voce con l'impronta,
-    l'impronta Hash128 (16 byte), il nome del bundle (stringa con la lunghezza davanti) e il record di 5 numeri
-    (impronta, nome, CRC, dimensione, dati comuni). doppio: nome di un bundle con un secondo record (ambiguo)."""
+    """Fake catalog.bin like the Addressables 2 one (Big Dig): for each bundle the entry name with the fingerprint,
+    the Hash128 fingerprint (16 bytes), the bundle's name (a string with its length in front) and the record of 5
+    numbers (fingerprint, name, CRC, size, common data). doppio: name of a bundle with a second record (ambiguous)."""
     import struct
     dati = bytearray(b"\x42\x89\xe3\x0d\x02\x00\x00\x00" + b"\x00" * 24)
 
@@ -420,12 +421,12 @@ def _catalogo_bin(voci, doppio=None):
         b = stringa(esa.encode())
         for _ in range(2 if nome == doppio else 1):
             dati.extend(struct.pack("<5I", h, b, crc, 1234 + i, 0x20))
-        dati.extend(b"\x00\x01")  # i record non sono allineati a 4 byte
+        dati.extend(b"\x00\x01")  # the records are not aligned to 4 bytes
     return bytes(dati)
 
 
 def prova_catalogo_bin(base):
-    """Catalogo binario (catalog.bin, Addressables 2): il CRC del bundle tradotto si azzera, nient'altro."""
+    """Binary catalog (catalog.bin, Addressables 2): the translated bundle's CRC is zeroed, nothing else."""
     import struct
     inglese = "localization-string-tables-english(en)_assets_all.bundle"
     francese = "localization-string-tables-french(fr)_assets_all.bundle"
@@ -462,7 +463,7 @@ def main(base, bundle=None):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    # dati dell'utente (profili, memoria) nella cartella di prova
+    # user data (game profiles, translation memory) in the test folder
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
     progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO
     for d in ("memory", "profiles"):

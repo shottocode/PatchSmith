@@ -1,6 +1,6 @@
-"""Test dell'adapter Unreal con un gioco finto (pak v9 costruito qui, in modo indipendente dall'adapter).
+"""Test of the Unreal adapter with a fake game (pak v9 built here, independently of the adapter).
 
-Uso: python -I test/test_unreal.py <cartella_temporanea_vuota>
+Usage: python -I test/test_unreal.py <empty_temp_folder>
 """
 import hashlib
 import json
@@ -25,7 +25,7 @@ def silenzio(_):
     pass
 
 
-def fs(s):  # FString, scritto qui in modo indipendente
+def fs(s):  # FString, written here independently
     if not s:
         return struct.pack("<i", 0)
     try:
@@ -37,7 +37,7 @@ def fs(s):  # FString, scritto qui in modo indipendente
 
 
 def locres_v2(voci):
-    """voci: [(namespace, chiave, testo)] -> .locres versione 2 con stringhe deduplicate."""
+    """voci: [(namespace, chiave, testo)] -> .locres version 2 with deduplicated strings."""
     stringhe, indice = [], {}
     per_ns = {}
     for ns, k, t in voci:
@@ -62,7 +62,7 @@ def locmeta(cultura):
 
 
 def pak_v9(file):
-    """Pak v9 non compresso, costruito indipendentemente dall'adapter."""
+    """Uncompressed pak v9, built independently of the adapter."""
     corpo, voci = b"", []
     for nome, dati in file:
         h = hashlib.sha1(dati).digest()
@@ -133,16 +133,16 @@ def main(base):
               and adapter_unreal._adatta("L’arma", {"’"}) == "L’arma"
               and adapter_unreal._adatta("a\x00b", set()) is None and adapter_unreal._adatta("a￿b", set()) is None)
 
-    # cambio lingua: il pak vecchio viene sostituito
+    # language change: the old pak is replaced
     adapter_unreal.installa(gioco, "es", "prova", {"Start Game": "Iniciar"}, silenzio)
     controlla("cambio lingua: pak it tolto, pak es scritto", os.path.exists(os.path.join(paks, adapter_unreal.nome_pak("es")))
               and not os.path.exists(nuovo_pak))
 
-    # disinstallazione: tutto come prima
+    # uninstall: everything as before
     adapter_unreal.disinstalla(gioco, silenzio)
     controlla("disinstalla: cartelle identiche a prima", sorted(os.listdir(paks)) + sorted(os.listdir(gioco)) == prima)
 
-    # pak con lo stesso nome non creato da noi: non si sovrascrive
+    # pak with the same name not created by us: not overwritten
     open(nuovo_pak, "wb").write(b"di qualcun altro")
     try:
         adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
@@ -151,7 +151,7 @@ def main(base):
         controlla("pak altrui: non sovrascritto", open(nuovo_pak, "rb").read() == b"di qualcun altro")
     os.remove(nuovo_pak)
 
-    # pak modificato da altri dopo l'installazione: lasciato
+    # pak changed by others after the install: left in place
     adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
     from patchsmith import __version__
     controlla("manifesto con la versione di PatchSmith (per il controllo dopo aver giocato)",
@@ -161,7 +161,7 @@ def main(base):
     controlla("pak modificato da altri: lasciato", os.path.exists(nuovo_pak))
     os.remove(nuovo_pak)
 
-    # manifesto alterato: nulla cancellato
+    # tampered manifest: nothing deleted
     falso = {"patchsmith": True, "file": {"Proj/Content/Paks/Proj-WindowsNoEditor.pak": "0" * 64}}
     open(os.path.join(gioco, adapter_unreal.MANIFESTO), "w").write(json.dumps(falso))
     try:
@@ -171,7 +171,7 @@ def main(base):
         controlla("manifesto alterato: pak originale intatto", os.path.exists(os.path.join(paks, "Proj-WindowsNoEditor.pak")))
     os.remove(os.path.join(gioco, adapter_unreal.MANIFESTO))
 
-    # installazione interrotta dopo il manifesto e prima di mettere il pak al suo posto: si ripristina tutto
+    # install interrupted after the manifest and before putting the pak in place: everything is restored
     adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
     vero_replace = os.replace
 
@@ -190,7 +190,7 @@ def main(base):
     adapter_unreal.disinstalla(gioco, silenzio)
     controlla("installazione interrotta: il ripristino toglie tutto", sorted(os.listdir(paks)) + sorted(os.listdir(gioco)) == prima)
 
-    # pak firmati (.sig): rifiutato
+    # signed paks (.sig): refused
     sig = os.path.join(paks, "Proj-WindowsNoEditor.sig")
     open(sig, "wb").write(b"firma")
     try:
@@ -200,7 +200,7 @@ def main(base):
         controlla("pak firmati: rifiutato", not os.path.exists(nuovo_pak))
     os.remove(sig)
 
-    # aggiornamento del gioco: lo stato lo segnala
+    # game update: the status reports it
     adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
     open(os.path.join(paks, "Proj-WindowsNoEditor.pak"), "wb").write(pak_v9([
         ("Proj/Content/Localization/Game/Game.locmeta", locmeta("en")),

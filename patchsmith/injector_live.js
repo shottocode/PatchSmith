@@ -1,11 +1,12 @@
 
-;(function () { // Patchsmith - traduzione dal vivo (aggiunto da Patchsmith: "Ripristina originali" lo toglie)
-  /* Per i giochi Electron con i file illeggibili (cifrati): traduce i testi della pagina mentre il gioco gira,
-   * senza aprire ne' cambiare i file del gioco. Le traduzioni gia' fatte sono in patchsmith-dizionario.json; le
-   * frasi nuove le chiede a gruppi al traduttore di Patchsmith (servizio su 127.0.0.1, avviato qui e chiuso con il
-   * gioco), che le traduce insieme e le salva nella sua memoria. Una frase in attesa resta nascosta al massimo
-   * ATTESA_MS (poi si vede l'originale finche' la traduzione non arriva). I numeri si tolgono prima
-   * ("1.28 minutes" -> "{{A}} minutes") e si rimettono. Le lettere accentate che i font non hanno diventano e', a'. */
+;(function () { // Patchsmith - traduzione dal vivo (live translation; "Restore originals" removes it)
+  /* For Electron games with unreadable (encrypted) files: translates the page's texts while the game runs,
+   * without opening or changing the game's files. The translations already made are in
+   * patchsmith-dizionario.json; new sentences are sent in groups to Patchsmith's translator (a service on
+   * 127.0.0.1, started here and closed with the game), which translates them together and saves them in its
+   * memory. A pending sentence stays hidden for at most ATTESA_MS (then the original shows until the translation
+   * arrives). Numbers are taken out first ("1.28 minutes" -> "{{A}} minutes") and put back. Accented letters
+   * the fonts lack become e', a'. */
   "use strict";
   var CFG = /*__CONFIG__*/{};
   var fs, path, http, cp;
@@ -16,12 +17,12 @@
   try {
     var d = JSON.parse(fs.readFileSync(path.join(__dirname, CFG.dizionario), "utf8"));
     Object.keys(d).forEach(function (k) { mappa.set(k, d[k]); });
-  } catch (e) { /* nessun dizionario: tutto dal traduttore */ }
-  // le traduzioni (e le frasi gia' in italiano): mai da richiedere come se fossero originali
+  } catch (e) { /* no dictionary: everything from the translator */ }
+  // the translations (sentences already in the target language): never requested as if they were originals
   var tradotte = new Set();
   mappa.forEach(function (v) { tradotte.add(v); });
 
-  // --- il traduttore di Patchsmith -------------------------------------------------------------------------------
+  // --- Patchsmith's translator -----------------------------------------------------------------------------------
   try {
     var c = CFG.comando;
     if (c && c.programma && fs.existsSync(c.programma)) {
@@ -30,7 +31,7 @@
       figlio.on("error", function () {});
       figlio.unref();
     }
-  } catch (e) { /* senza traduttore restano le traduzioni del dizionario */ }
+  } catch (e) { /* without the translator the dictionary's translations remain */ }
 
   var chieste = new Map(), coda = [], occupato = false, errori = 0, inProgrammaInvio = false;
   function chiedi(testo) {
@@ -39,7 +40,7 @@
     coda.push(testo);
     programmaInvio();
   }
-  function programmaInvio() {  // le frasi nuove di una schermata arrivano a raffica: si mandano insieme
+  function programmaInvio() {  // the new sentences of a screen arrive in bursts: they are sent together
     if (inProgrammaInvio) return;
     inProgrammaInvio = true;
     setTimeout(function () { inProgrammaInvio = false; invia(); }, PAUSA_GRUPPO_MS);
@@ -52,7 +53,7 @@
       if (fatto) return;
       fatto = true;
       occupato = false;
-      if (!ok) {  // traduttore non ancora pronto (si sta avviando) o fermo: si riprova piu' tardi
+      if (!ok) {  // translator not ready yet (still starting) or stopped: retry later
         errori++;
         coda = gruppo.concat(coda);
         setTimeout(invia, Math.min(30000, 1000 * errori));
@@ -63,7 +64,7 @@
       Object.keys(t).forEach(function (k) {
         if (t[k] && t[k] !== k) { mappa.set(k, t[k]); tradotte.add(t[k]); nuove = true; }
       });
-      (risposta.riprova || []).forEach(function (k) {  // lasciate in originale: di nuovo piu' tardi, poche volte
+      (risposta.riprova || []).forEach(function (k) {  // left untranslated: again later, a few times
         var n = (chieste.get(k) || 0) + 1;
         chieste.set(k, n);
         if (n < TENTATIVI) setTimeout(function () { coda.push(k); programmaInvio(); }, 5000 * n);
@@ -90,13 +91,13 @@
     req.end(corpo);
   }
 
-  // --- testi ---------------------------------------------------------------------------------------------------
+  // --- texts ---------------------------------------------------------------------------------------------------
   var NUMERO = /[+\-]?\d+(?:[.,]\d+)*/g;
   function daTradurre(s) {
-    if (s.length <= 2 || !/\p{L}/u.test(s)) return false;  // tasti ("Q", "B"), simboli
-    return !(/\d/.test(s) && !/\p{L}{3,}/u.test(s));        // solo numeri e unita' ("$5k", "x 2", "v1.0")
+    if (s.length <= 2 || !/\p{L}/u.test(s)) return false;  // keys ("Q", "B"), symbols
+    return !(/\d/.test(s) && !/\p{L}{3,}/u.test(s));        // only numbers and units ("$5k", "x 2", "v1.0")
   }
-  // (traduzione, o null; atteso=true se la traduzione e' stata chiesta e sta arrivando)
+  // (translation, or null; atteso=true if the translation was requested and is on its way)
   var atteso = false;
   function traduciNucleo(nucleo) {
     atteso = false;
@@ -134,7 +135,7 @@
     return s.slice(0, inizio) + t + s.slice(s.replace(/\s+$/, "").length);
   }
 
-  // --- lettere che i font del gioco non hanno -----------------------------------------------------------------------
+  // --- letters the game's fonts lack --------------------------------------------------------------------------------
   var ACCENTATE = "àèéìòùÀÈÉÌÒÙ", RIPIEGO = { "à": "a'", "è": "e'", "é": "e'", "ì": "i'", "ò": "o'", "ù": "u'",
     "À": "A'", "È": "E'", "É": "E'", "Ì": "I'", "Ò": "O'", "Ù": "U'" };
   var fontMancanti = new Map(), misura = null;
@@ -144,12 +145,12 @@
     var famiglia = (stile.fontFamily || "").split(",")[0].trim();
     if (!famiglia || /^(serif|sans-serif|monospace|cursive|fantasy|system-ui)$/i.test(famiglia)) return "";
     if (fontMancanti.has(famiglia)) return fontMancanti.get(famiglia);
-    if (!document.fonts || !document.fonts.check("32px " + famiglia)) return "";  // non ancora caricato: dopo
+    if (!document.fonts || !document.fonts.check("32px " + famiglia)) return "";  // not loaded yet: later
     misura = misura || document.createElement("canvas").getContext("2d");
     var assenti = "";
     for (var i = 0; i < ACCENTATE.length; i++) {
       var ch = ACCENTATE[i], larghezze = [];
-      ["serif", "monospace"].forEach(function (riserva) {  // con la lettera nel font le due misure sono uguali
+      ["serif", "monospace"].forEach(function (riserva) {  // with the letter in the font the two widths are equal
         misura.font = "32px " + famiglia + ", " + riserva;
         larghezze.push(misura.measureText(ch).width);
       });
@@ -165,8 +166,8 @@
     return t.replace(/[àèéìòùÀÈÉÌÒÙ]/g, function (ch) { return assenti.indexOf(ch) >= 0 ? RIPIEGO[ch] : ch; });
   }
 
-  // --- frasi in attesa: nascoste al massimo ATTESA_MS (solo se sono l'unico testo del loro elemento) -------------
-  var nascosti = new Map();  // elemento -> visibilita' di prima
+  // --- pending sentences: hidden for at most ATTESA_MS (only if they are the only text of their element) ---------
+  var nascosti = new Map();  // element -> previous visibility
   function nascondi(p) {
     if (nascosti.has(p) || !p.style || p.childNodes.length !== 1) return;
     nascosti.set(p, p.style.visibility);
@@ -179,7 +180,7 @@
     nascosti.delete(p);
   }
 
-  // --- pagina --------------------------------------------------------------------------------------------------
+  // --- page ----------------------------------------------------------------------------------------------------
   var IGNORA = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1, CODE: 1, PRE: 1 };
   var ATTRIBUTI = ["title", "placeholder", "aria-label", "alt"];
   var scritti = new WeakMap(), originali = new WeakMap(), scrittiAttr = new WeakMap();
@@ -187,7 +188,7 @@
     var p = n.parentNode;
     if (!p || IGNORA[p.nodeName] || p.isContentEditable) return;
     var attuale = n.nodeValue;
-    var originale = scritti.get(n) === attuale ? originali.get(n) : attuale;  // gia' nostro: si rifa' dall'originale
+    var originale = scritti.get(n) === attuale ? originali.get(n) : attuale;  // already ours: redo it from the original
     var t = traduci(originale, p);
     if (t === null) { if (atteso && originale === attuale) nascondi(p); return; }
     if (t !== attuale) {
@@ -202,7 +203,7 @@
     var nostri = scrittiAttr.get(el);
     for (var i = 0; i < ATTRIBUTI.length; i++) {
       var nome = ATTRIBUTI[i], v = el.getAttribute(nome);
-      if (!v || (nostri && nostri[nome] === v)) continue;  // scritto da noi: non e' un testo nuovo
+      if (!v || (nostri && nostri[nome] === v)) continue;  // written by us: not a new text
       var t = traduci(v, el);
       if (t === null || t === v) continue;
       if (!nostri) { nostri = {}; scrittiAttr.set(el, nostri); }
@@ -218,7 +219,7 @@
     while ((n = w.nextNode())) { if (n.nodeType === 3) nodoTesto(n); else elemento(n); }
   }
   var inProgramma = false;
-  function ridisegna() {  // traduzioni nuove (o font appena caricati): di nuovo tutta la pagina, al massimo ogni 100 ms
+  function ridisegna() {  // new translations (or fonts just loaded): the whole page again, at most every 100 ms
     if (inProgramma) return;
     inProgramma = true;
     setTimeout(function () { inProgramma = false; if (document.body) visita(document.body); }, 100);

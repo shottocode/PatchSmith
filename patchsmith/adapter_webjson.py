@@ -1,7 +1,7 @@
-"""Adapter web-json: estrae e reinserisce i testi nei file JSON (giochi Electron/NW.js/HTML5,
-RPG Maker MV/MZ e qualsiasi gioco che tenga i testi in JSON).
+"""Web-json adapter: extracts and reinserts the texts in JSON files (Electron/NW.js/HTML5 games,
+RPG Maker MV/MZ and any game that keeps its texts in JSON).
 
-I campi si selezionano per "schema di percorso", per esempio rooms[].rewards[].text.
+Fields are selected by "path schema", for example rooms[].rewards[].text.
 """
 import copy
 import json
@@ -10,11 +10,11 @@ import re
 
 from .text import e_testo_leggibile
 
-# Tutti i file creati da PatchSmith nella cartella del gioco contengono questo marcatore nel nome.
+# All the files PatchSmith creates in the game's folder contain this marker in their name.
 MARCATORE = "patchsmith-"
 SUFFISSO_TMP = ".patchsmith-tmp"
 
-# Ultime chiavi che quasi sempre contengono dati tecnici o crediti, non testo da tradurre.
+# Last keys that almost always hold technical data or credits, not text to translate.
 CHIAVI_TECNICHE = {
     "id", "uid", "uuid", "guid", "key", "keys", "type", "kind", "class", "classname", "url", "uri",
     "href", "src", "path", "file", "filename", "image", "img", "icon", "sprite", "texture", "sound",
@@ -22,18 +22,18 @@ CHIAVI_TECNICHE = {
     "author_name", "email", "lang", "language", "locale", "code", "hash", "checksum", "token",
     "format", "mime", "encoding", "event", "action", "method", "script", "eval", "regex", "source",
 }
-# Chiavi che FINISCONO con un suffisso tecnico: achievementId, imageUrl, music_path, ruleType...
+# Keys that END with a technical suffix: achievementId, imageUrl, music_path, ruleType...
 _SUFFISSO_TECNICO = re.compile(
     r"(?:[a-z0-9](?:Id|ID|Ids|IDs|Key|Keys|Url|URL|Uri|Path|File|Color|Colour|Hash|Type|Code)"
     r"|_(?:id|ids|key|keys|url|uri|path|file|color|colour|hash|type|code))$"
 )
 
 
-# --- JSON "tollerante": commenti // e /* */ e virgole in fondo (es. Another Door: localization/stringsEN.json) -----
-# Molti giochi leggono i loro JSON con un lettore che accetta commenti e virgole prima di } o ]. PatchSmith li legge
-# togliendo commenti e virgole (al loro posto spazi: le posizioni restano le stesse) e li riscrive sostituendo nel
-# testo originale solo i letterali delle stringhe tradotte: commenti, spazi, a capo e tutto il resto restano identici
-# byte per byte.
+# --- "Tolerant" JSON: // and /* */ comments and trailing commas (e.g. Another Door: localization/stringsEN.json) ---
+# Many games read their JSON with a reader that accepts comments and commas before } or ]. PatchSmith reads them
+# removing comments and commas (spaces in their place: positions stay the same) and rewrites them replacing in the
+# original text only the literals of the translated strings: comments, spaces, newlines and everything else stay
+# identical byte for byte.
 
 _STRINGA = r'"[^"\\]*(?:\\.[^"\\]*)*"'
 _STRINGA_O_COMMENTO = re.compile(_STRINGA + r"|//[^\n]*|/\*.*?(?:\*/|\Z)", re.S)
@@ -41,19 +41,19 @@ _STRINGA_O_VIRGOLA = re.compile(_STRINGA + r"|,(?=\s*[}\]])", re.S)
 
 
 def _spazi(pezzo):
-    """Il pezzo coperto da spazi, tenendo gli a capo (stesse posizioni e stesse righe nei messaggi di errore)."""
+    """The piece covered with spaces, keeping the newlines (same positions and same lines in error messages)."""
     return re.sub(r"[^\r\n]", " ", pezzo)
 
 
 def senza_commenti(testo):
-    """Il testo JSON senza commenti // e /* */ e senza virgole prima di } o ] (fuori dalle stringhe), con degli spazi
-    al loro posto: ogni carattere rimasto e' nella stessa posizione dell'originale."""
+    """The JSON text without // and /* */ comments and without commas before } or ] (outside strings), with spaces
+    in their place: every remaining character is in the same position as in the original."""
     testo = _STRINGA_O_COMMENTO.sub(lambda m: m.group(0) if m.group(0).startswith('"') else _spazi(m.group(0)), testo)
     return _STRINGA_O_VIRGOLA.sub(lambda m: m.group(0) if m.group(0).startswith('"') else " ", testo)
 
 
 def leggi_tollerante(testo):
-    """I dati di un testo JSON, anche con commenti e virgole in fondo. Solleva ValueError se non e' JSON."""
+    """The data of a JSON text, even with comments and trailing commas. Raises ValueError if it is not JSON."""
     return json.loads(senza_commenti(testo))
 
 
@@ -62,8 +62,8 @@ _DECODIFICATORE = json.JSONDecoder()
 
 
 def posizioni_stringhe(testo):
-    """{percorso: (inizio, fine)} dei letterali delle stringhe che sono valori (non chiavi) in un testo JSON gia'
-    senza commenti (vedi senza_commenti). Con chiavi ripetute vale l'ultima, come per json.loads."""
+    """{percorso: (inizio, fine)} of the string literals that are values (not keys) in a JSON text already
+    without comments (see senza_commenti). With repeated keys the last one wins, as with json.loads."""
     uscita = {}
 
     def spazi(i):
@@ -109,7 +109,7 @@ def posizioni_stringhe(testo):
             uscita[percorso] = (i, fine)
             return fine
         try:
-            _, fine = _DECODIFICATORE.scan_once(testo, i)  # numeri, true, false, null
+            _, fine = _DECODIFICATORE.scan_once(testo, i)  # numbers, true, false, null
         except StopIteration:
             raise ValueError("valore atteso alla posizione %d" % i) from None
         return fine
@@ -128,8 +128,8 @@ def _al_percorso(dati, percorso):
 
 
 class FileJSON:
-    """Un file JSON letto dal disco, con le informazioni per riscriverlo nello stesso formato. Un file con commenti o
-    virgole in fondo (tollerante=True) si riscrive sostituendo solo i letterali delle stringhe cambiate."""
+    """A JSON file read from disk, with the information to rewrite it in the same format. A file with comments or
+    trailing commas (tollerante=True) is rewritten replacing only the literals of the changed strings."""
 
     def __init__(self, percorso):
         self.percorso = percorso
@@ -153,7 +153,7 @@ class FileJSON:
         self.a_capo_finale = testo.endswith("\n")
 
     def serializza(self, dati):
-        """Stesso formato dell'originale. Solleva ValueError se servirebbe NaN/Infinity (JSON non valido)."""
+        """Same format as the original. Raises ValueError if NaN/Infinity would be needed (invalid JSON)."""
         if self.tollerante:
             return self._sostituisci(dati)
         if self.indent is None:
@@ -166,9 +166,9 @@ class FileJSON:
         return (b"\xef\xbb\xbf" + dati_byte) if self.bom else dati_byte
 
     def _sostituisci(self, dati):
-        """Il testo originale con i soli letterali delle stringhe cambiate riscritti; il resto (commenti, spazi,
-        virgole in fondo, numeri scritti com'erano) resta identico. Solleva ValueError se e' cambiato qualcosa che
-        non e' una stringa, o se il risultato riletto non da' 'dati'."""
+        """The original text with only the literals of the changed strings rewritten; the rest (comments, spaces,
+        trailing commas, numbers written as they were) stays identical. Raises ValueError if something that is not
+        a string changed, or if the result, read back, does not give 'dati'."""
         pezzi, ultimo = [], 0
         for percorso, (inizio, fine) in sorted(posizioni_stringhe(senza_commenti(self._testo)).items(),
                                                key=lambda x: x[1][0]):
@@ -194,14 +194,14 @@ def _rifiuta_costante(nome):
 
 
 def rileggi_rigoroso(dati_byte, tollerante=False):
-    """Rilegge con le regole di JSON.parse (niente NaN/Infinity). Solleva ValueError se non valido. tollerante: il
-    file originale aveva commenti o virgole in fondo (FileJSON.tollerante), che il gioco accetta: si tolgono prima."""
+    """Reads back with the rules of JSON.parse (no NaN/Infinity). Raises ValueError if invalid. tollerante: the
+    original file had comments or trailing commas (FileJSON.tollerante), which the game accepts: removed first."""
     testo = dati_byte.decode("utf-8-sig")
     return json.loads(senza_commenti(testo) if tollerante else testo, parse_constant=_rifiuta_costante)
 
 
 def foglie(dati, percorso=(), schema=""):
-    """Genera (percorso_tupla, schema, valore) per ogni stringa del JSON."""
+    """Yields (percorso_tupla, schema, valore) for every string of the JSON."""
     if isinstance(dati, dict):
         for k, v in dati.items():
             yield from foglie(v, percorso + (k,), (schema + "." + k) if schema else k)
@@ -213,7 +213,7 @@ def foglie(dati, percorso=(), schema=""):
 
 
 def statistiche_schemi(dati, max_esempi=3):
-    """Per ogni schema: quante stringhe, quante leggibili, caratteri, esempi."""
+    """For each schema: how many strings, how many readable, characters, examples."""
     stat = {}
     for _, schema, valore in foglie(dati):
         s = stat.setdefault(schema, {"stringhe": 0, "leggibili": 0, "caratteri": 0, "esempi": []})
@@ -236,7 +236,7 @@ def chiave_tecnica(schema):
 
 
 def proponi_schemi(stat):
-    """Divide gli schemi in (includi, escludi) con regole generiche."""
+    """Splits the schemas into (includi, escludi) with generic rules."""
     includi, escludi = [], []
     for schema, s in sorted(stat.items()):
         if s["leggibili"] == 0:
@@ -249,13 +249,13 @@ def proponi_schemi(stat):
 
 
 def estrai(dati, includi, leggibile=e_testo_leggibile):
-    """[(percorso_tupla, testo)] delle stringhe da tradurre ('leggibile' decide quali valori sono testo)."""
+    """[(percorso_tupla, testo)] of the strings to translate ('leggibile' decides which values are text)."""
     includi = set(includi)
     return [(p, v) for p, schema, v in foglie(dati) if schema in includi and leggibile(v)]
 
 
 def applica(dati, sostituzioni):
-    """Copia dei dati con le stringhe sostituite. sostituzioni: {percorso_tupla: nuovo_testo}."""
+    """Copy of the data with the strings replaced. sostituzioni: {percorso_tupla: nuovo_testo}."""
     nuovi = copy.deepcopy(dati)
     for percorso, testo in sostituzioni.items():
         nodo = nuovi
@@ -266,7 +266,7 @@ def applica(dati, sostituzioni):
 
 
 def verifica_struttura(originale, nuovo, consentiti, percorso=()):
-    """Elenco dei problemi: la struttura deve essere identica, cambiano solo le stringhe consentite."""
+    """List of problems: the structure must be identical, only the allowed strings change."""
     problemi = []
     if type(originale) is not type(nuovo):
         return ["tipo diverso in %s" % (percorso,)]
@@ -293,7 +293,7 @@ def scrivi_atomico(percorso, dati_byte):
             f.flush()
             os.fsync(f.fileno())
         os.replace(temporaneo, percorso)
-    except BaseException:  # nessun temporaneo lasciato accanto al file del gioco
+    except BaseException:  # no temporary file left next to the game's file
         if os.path.exists(temporaneo):
             try:
                 os.remove(temporaneo)

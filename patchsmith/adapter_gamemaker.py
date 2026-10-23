@@ -1,20 +1,20 @@
-"""Adapter GameMaker: traduce i file di localizzazione esterni del gioco (es. Dokimon: Localization/*.txt).
+"""GameMaker adapter: translates the game's external localization files (e.g. Dokimon: Localization/*.txt).
 
-Molti giochi GameMaker leggono i testi da file inclusi accanto all'eseguibile, uno per lingua
+Many GameMaker games read their texts from files included next to the executable, one per language
 (Localization/english_ui.txt, Localization/french/ui.txt...). PatchSmith:
-1. trova i file della lingua originale nel formato "a righe con id" (adapter_righe);
-2. li traduce (memoria + Google, con i codici come /name/ e /n/ protetti);
-3. adatta i caratteri a quelli dei font del gioco (letti da data.win: in GameMaker un carattere che
-   il font non ha diventa un quadratino), per l'italiano ì -> í, ò -> ó, ù -> ú se il font ha gli acuti;
-4. ripara cio' che il gioco leggerebbe male (una "/" in piu' viene presa per l'inizio di un codice);
-5. li riscrive al loro posto con il backup verificato degli originali (come per i giochi web).
-Nel gioco resta selezionata la lingua dei file tradotti (di solito English).
+1. finds the files of the original language in the "lines with id" format (adapter_righe);
+2. translates them (translation memory + Google, with codes like /name/ and /n/ protected);
+3. adapts the characters to those of the game's fonts (read from data.win: in GameMaker a character that
+   the font lacks becomes a small square), for Italian ì -> í, ò -> ó, ù -> ú if the font has the acute ones;
+4. repairs what the game would read wrongly (an extra "/" is taken as the start of a code);
+5. writes them back in place with a verified backup of the originals (as for web games).
+In the game the language of the translated files stays selected (usually English).
 
-Altri formati riconosciuti: file JSON per lingua (local/english.json, anche con sezioni, commenti // e virgole in
-fondo, e con il codice attaccato al nome come localization/stringsEN.json) e tabelle CSV con una colonna per lingua
-(translations.csv: id,english,french...; vedi adapter_csv).
-Limiti: i testi scritti nel codice del gioco (data.win) restano in originale; altri formati di localizzazione non
-sono coperti.
+Other recognized formats: JSON files per language (local/english.json, also with sections, // comments and trailing
+commas, and with the code attached to the name as in localization/stringsEN.json) and CSV tables with one column per
+language (translations.csv: id,english,french...; see adapter_csv).
+Limits: texts written in the game's code (data.win) are left untranslated; other localization formats are not
+covered.
 """
 import os
 import re
@@ -23,7 +23,7 @@ import struct
 from . import adapter_lines as adapter_righe, gamemaker, language as lingua
 from .characters import ASCII
 
-# nomi completi delle lingue (valgono ovunque nel percorso) e codici brevi (valgono solo in posizioni sicure)
+# full language names (valid anywhere in the path) and short codes (valid only in safe positions)
 NOMI_LINGUE = {
     "en": {"english", "inglese"}, "fr": {"french", "francais", "français"}, "de": {"german", "deutsch"},
     "es": {"spanish", "espanol", "español"}, "it": {"italian", "italiano"},
@@ -36,7 +36,7 @@ NOMI_LINGUE = {
     "id": {"indonesian"},
 }
 _CINESE_TRADIZIONALE = re.compile(r"(?<![a-z])(?:traditional|tradition|tchinese|hant|cht|tw)(?![a-z])")
-# parole che accompagnano la lingua nel nome di un file (chinese_traditional, portuguese_br): fanno parte della lingua
+# words that go with the language in a file name (chinese_traditional, portuguese_br): they are part of the language
 _QUALIFICATORI = {"traditional", "tradition", "simplified", "hant", "hans", "tw", "cn", "hk", "br", "pt", "latam",
                   "mx", "us", "uk", "gb", "eu", "es"}
 CODICI_LINGUE = {
@@ -47,7 +47,7 @@ CODICI_LINGUE = {
 }
 _ESTENSIONI = (".txt", ".lang", ".loc", ".csv")
 _MASSIMO = 20 * 1024 * 1024
-# file che non sono testi del gioco anche se ne hanno l'aspetto
+# files that are not game texts even if they look like them
 _DA_SALTARE = re.compile(r"copia|copy|backup|\bbak\b|_bak|\.bak|_old|\bold\b|readme|license|licence|changelog|"
                          r"patch.?notes|credits?_?list|save|score|config|settings|\blog\b|debug", re.I)
 
@@ -66,15 +66,15 @@ def _codice_breve(parola):
     return None
 
 
-# codice della lingua attaccato in fondo al nome, in maiuscolo dopo una minuscola (Another Door: stringsEN.json,
-# stringsIT.json, stringsJP.json, stringsBR.json, stringsSC.json): anche i codici usati solo cosi'
+# language code attached at the end of the name, in uppercase after a lowercase letter (Another Door: stringsEN.json,
+# stringsIT.json, stringsJP.json, stringsBR.json, stringsSC.json): also the codes used only this way
 _ATTACCATO = re.compile(r"^(.*[a-z])([A-Z]{2,4})$")
 _CODICI_ATTACCATI = {"br": "pt", "ptbr": "pt", "sc": "zh", "chs": "zh", "tc": "zh-TW", "cht": "zh-TW", "tw": "zh-TW"}
 
 
 def _attaccato(parola):
-    """(radice, codice) se la parola (con le maiuscole com'erano) finisce con il codice di una lingua attaccato
-    (stringsEN -> ('strings', 'en')), altrimenti None."""
+    """(radice, codice) if the word (with its original capitalization) ends with an attached language code
+    (stringsEN -> ('strings', 'en')), otherwise None."""
     m = _ATTACCATO.match(parola or "")
     if not m:
         return None
@@ -83,18 +83,18 @@ def _attaccato(parola):
 
 
 def _ultima_parola(rel):
-    """L'ultima parte del nome del file (senza estensione), con le maiuscole com'erano: strings_menuEN -> menuEN."""
+    """The last part of the file name (without extension), with the original capitals: strings_menuEN -> menuEN."""
     nome = rel.split("/")[-1].rsplit(".", 1)[0]
     pezzi = [p for p in re.split(r"[\s_.\-]+", nome) if p]
     return pezzi[-1] if pezzi else ""
 
 
 def lingua_del_percorso(rel):
-    """Codice della lingua indicata dal percorso, oppure None.
+    """Code of the language indicated by the path, or None.
 
-    I nomi completi (english, french...) valgono ovunque; i codici brevi (en, it, pt...) solo se sono
-    il nome di una cartella, il nome intero del file, o la prima/ultima parte del nome (ui_it, en_ui), anche
-    attaccati in maiuscolo alla fine del nome (stringsEN)."""
+    Full names (english, french...) are valid anywhere; short codes (en, it, pt...) only if they are
+    a folder name, the whole file name, or the first/last part of the name (ui_it, en_ui), also
+    attached in uppercase at the end of the name (stringsEN)."""
     parti = rel.lower().split("/")
     cartelle, nome = parti[:-1], parti[-1].rsplit(".", 1)[0]
     trovate = set()
@@ -121,8 +121,8 @@ def lingua_del_percorso(rel):
 
 
 def famiglia(rel):
-    """Il percorso con la lingua al posto di '{L}': 'local/{L}.json', 'lang/{L}/ui.json', '{L}_credits.json'.
-    I file della stessa famiglia in lingue diverse sono traduzioni l'uno dell'altro."""
+    """The path with '{L}' in place of the language: 'local/{L}.json', 'lang/{L}/ui.json', '{L}_credits.json'.
+    Files of the same family in different languages are translations of each other."""
     parti = rel.lower().split("/")
     cartelle = ["{L}" if (_codice_di(c) or _codice_breve(c)) else c for c in parti[:-1]]
     nome = parti[-1]
@@ -136,7 +136,7 @@ def famiglia(rel):
         p = pezzi[i]
         if _codice_di(p) or (_codice_breve(p) and (len(parole) == 1 or n in (0, len(parole) - 1))):
             pezzi[i] = "{L}"
-    for n, i in enumerate(parole):  # qualificatori accanto alla lingua: chinese_traditional, portuguese_br
+    for n, i in enumerate(parole):  # qualifiers next to the language: chinese_traditional, portuguese_br
         vicini = [pezzi[parole[m]] for m in (n - 1, n + 1) if 0 <= m < len(parole)]
         if pezzi[i] in _QUALIFICATORI and "{L}" in vicini:
             pezzi[i] = "{L}"
@@ -145,8 +145,8 @@ def famiglia(rel):
 
 
 def leggi_originale(percorso, lettore):
-    """I dati del file com'era in origine: dal backup di PatchSmith se c'e' ed e' valido (il file puo' essere gia'
-    tradotto), altrimenti dal file stesso. 'lettore' legge un percorso."""
+    """The data of the file as it originally was: from PatchSmith's backup if there is one and it is valid (the file
+    may already be translated), otherwise from the file itself. 'lettore' reads a path."""
     from . import project as progetto
     backup = percorso + progetto.SUFFISSO_BACKUP
     if os.path.exists(backup):
@@ -157,7 +157,7 @@ def leggi_originale(percorso, lettore):
 
 
 def file_localizzazione(cartella):
-    """{relativo: lingua o None} dei file nel formato 'a righe con id' (sola lettura)."""
+    """{relativo: language or None} of the files in the 'lines with id' format (read-only)."""
     trovati = {}
     for radice, dirs, files in os.walk(cartella):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
@@ -172,24 +172,25 @@ def file_localizzazione(cartella):
                 continue
             rel = os.path.relpath(p, cartella).replace(os.sep, "/")
             lingua_file = lingua_del_percorso(rel)
-            # un file con la lingua nel nome (english_ui.txt) basta che abbia pochi testi
+            # a file with the language in its name (english_ui.txt) only needs a few texts
             if adapter_righe.sembra_localizzazione(p, minimo=2 if lingua_file else 5):
                 trovati[rel] = lingua_file
     return trovati
 
 
 def scegli_sorgenti(trovati, origine="auto", cartella=None):
-    """(file da tradurre, lingue presenti, lingua dei file scelti).
+    """(files to translate, languages present, language of the chosen files).
 
-    Si traducono i file della lingua originale; se sono sparsi in piu' cartelle si tiene quella che ne
-    ha di piu' (es. Localization/), cosi' file isolati altrove non vengono toccati."""
+    The files of the original language are translated; if they are spread over several folders the one with
+    the most is kept (e.g. Localization/), so isolated files elsewhere are not touched."""
     lingue = {l for l in trovati.values() if l}
     base = (origine or "auto").split("-")[0].lower()
     if base == "auto":
         base = "en" if "en" in lingue else None
     sorgenti = sorted(r for r, l in trovati.items() if l == base) if base else []
     if not sorgenti:
-        # file senza lingua nel nome accanto alle traduzioni (es. ui.txt + french/ui.txt): sono l'originale
+        # files without a language in the name next to the translations (e.g. ui.txt + french/ui.txt): they are
+        # the original
         senza = sorted(r for r, l in trovati.items() if l is None)
         if senza and cartella:
             testi = []
@@ -212,7 +213,7 @@ def scegli_sorgenti(trovati, origine="auto", cartella=None):
     return sorgenti, lingue, base
 
 
-# script diversi dal latino: un font con solo questi oltre all'ASCII serve ad altre lingue (es. coreano)
+# scripts other than Latin: a font with only these besides ASCII is for other languages (e.g. Korean)
 def _altro_alfabeto(c):
     o = ord(c)
     return 0x3040 <= o <= 0x30FF or 0x4E00 <= o <= 0x9FFF or 0xAC00 <= o <= 0xD7A3 or 0x0400 <= o <= 0x04FF \
@@ -223,12 +224,12 @@ def _latino_accentato(c):
     return 0xC0 <= ord(c) <= 0x24F and c.isalpha()
 
 
-# font che una libreria aggiunge al gioco come ripiego (Scribble: scribble_fallback_font, solo ASCII)
+# fonts that a library adds to the game as a fallback (Scribble: scribble_fallback_font, ASCII only)
 _FONT_DI_RIPIEGO = re.compile(r"fallback", re.I)
 
 
 def file_dati(cartella):
-    """Percorso del data.win del gioco (quello meno profondo), oppure None."""
+    """Path of the game's data.win (the least deep one), or None."""
     radici = gamemaker.radici(cartella)
     for r in radici:
         for nome in gamemaker.NOMI_DATI:
@@ -238,7 +239,7 @@ def file_dati(cartella):
 
 
 def _font_della_lingua(nome_font, codice):
-    """True se il nome del font dice che e' per la lingua 'codice' (es. fnt_english, font_en)."""
+    """True if the font name says it is for the language 'codice' (e.g. fnt_english, font_en)."""
     if not codice or not nome_font:
         return False
     base = codice.split("-")[0].lower()
@@ -247,21 +248,22 @@ def _font_della_lingua(nome_font, codice):
 
 
 def caratteri_font(cartella, log=None, ufficiali=None, sorgente=None):
-    """Caratteri che i font di testo del gioco (data.win) sanno disegnare, oppure None se non si sa.
+    """Characters that the game's text fonts (data.win) can draw, or None if not known.
 
-    - contano i font con almeno 20 lettere latine, tranne quelli per un altro alfabeto: oltre all'ASCII hanno
-      soprattutto un'altra scrittura (es. un font coreano o giapponese con qualche lettera accentata: almeno 100
-      caratteri dell'altra scrittura e piu' di 10 volte le lettere accentate), e tranne i font di ripiego delle
-      librerie (scribble_fallback_font: solo ASCII, il gioco non lo usa per i suoi testi);
-    - 'ufficiali': lettere accentate che le traduzioni ufficiali del gioco usano (es. é, ü, ç). Se sono
-      almeno 3, un font che non ne ha nessuna non e' usato per i testi tradotti (font della chat, dei numeri,
-      di un'altra scrittura come il thai) e non conta, tranne se il nome dice che e' il font della lingua
-      'sorgente' (es. fnt_english: e' quello che disegnera' la traduzione). Un font con qualche lettera accentata
-      invece conta: puo' essere quello dei testi della lingua originale, con le sole lettere che usano (Another
-      Door: ftPixeloidSans ha proprio le Á ç é ô del file inglese), e una lettera che non ha sarebbe un quadratino;
-    - un font di sole maiuscole (il gioco mette in maiuscolo) vale anche per le minuscole;
-    - se qualche font non si riesce a leggere, per sicurezza solo ASCII;
-    - il quadratino U+25AF (carattere mancante) non conta come carattere disegnabile."""
+    - fonts with at least 20 Latin letters count, except those for another alphabet: besides ASCII they mostly
+      have another script (e.g. a Korean or Japanese font with a few accented letters: at least 100 characters
+      of the other script and more than 10 times the accented letters), and except the fallback fonts of
+      libraries (scribble_fallback_font: ASCII only, the game does not use it for its texts);
+    - 'ufficiali': accented letters that the game's official translations use (e.g. é, ü, ç). If there are
+      at least 3, a font that has none of them is not used for the translated texts (chat font, numbers font,
+      font of another script such as Thai) and does not count, unless its name says it is the font of the
+      'sorgente' language (e.g. fnt_english: it is the one that will draw the translation). A font with a few
+      accented letters does count instead: it can be the one for the original language's texts, with only the
+      letters they use (Another Door: ftPixeloidSans has exactly the Á ç é ô of the English file), and a letter
+      it lacks would be a small square;
+    - an uppercase-only font (the game puts text in uppercase) also works for lowercase letters;
+    - if some font cannot be read, to be safe ASCII only;
+    - the small square U+25AF (missing character) does not count as a drawable character."""
     ufficiali = {c for c in (ufficiali or ()) if _latino_accentato(c)}
     percorso = file_dati(cartella)
     if not percorso:
@@ -280,7 +282,7 @@ def caratteri_font(cartella, log=None, ufficiali=None, sorgente=None):
             continue
         altro = sum(1 for c in caratteri if _altro_alfabeto(c))
         if altro >= 100 and altro > 10 * sum(1 for c in caratteri if _latino_accentato(c)):
-            continue  # font per un'altra lingua (es. coreano, o giapponese con ç ê ñ Œ œ)
+            continue  # font for another language (e.g. Korean, or Japanese with ç ê ñ Œ œ)
         if _FONT_DI_RIPIEGO.search(f.get("nome") or ""):
             if log:
                 log("  Font %s non considerato: e' il font di ripiego di una libreria" % f.get("nome"))
@@ -306,7 +308,7 @@ def caratteri_font(cartella, log=None, ufficiali=None, sorgente=None):
     return comuni
 
 
-# --- file di localizzazione JSON (es. Forager: local/english.json, local/french.json...) ----------
+# --- JSON localization files (e.g. Forager: local/english.json, local/french.json...) -------------
 
 _MINIMO_VOCI_JSON = 20
 
@@ -317,9 +319,9 @@ def _leggi_json(percorso):
 
 
 def _valori(dati):
-    """I valori di un JSON, anche dentro le sezioni e le liste di testi, nell'ordine del file. Un elenco di oggetti
-    ([{"id": "sword", "name": "Sword"}]) e' un file di dati, non di lingua: ValueError (i suoi identificativi, come
-    'sword', tradotti non si troverebbero piu')."""
+    """The values of a JSON, also inside sections and lists of texts, in file order. A list of objects
+    ([{"id": "sword", "name": "Sword"}]) is a data file, not a language file: ValueError (its identifiers, such as
+    'sword', would no longer be found once translated)."""
     sezione = isinstance(dati, dict)
     for v in (dati.values() if sezione else dati):
         if isinstance(v, (dict, list)):
@@ -331,8 +333,9 @@ def _valori(dati):
 
 
 def _stringhe(dati):
-    """Valori stringa di un dizionario {chiave: testo}, anche diviso in sezioni ({"menu": {"_play": "Play"...}}) o
-    con liste di testi: almeno _MINIMO_VOCI_JSON testi e l'80% dei valori (None se il file non ha questa forma)."""
+    """String values of a {chiave: testo} dictionary, also split into sections ({"menu": {"_play": "Play"...}}) or
+    with lists of texts: at least _MINIMO_VOCI_JSON texts and 80% of the values (None if the file does not have this
+    shape)."""
     if not isinstance(dati, dict):
         return None
     try:
@@ -344,20 +347,20 @@ def _stringhe(dati):
 
 
 def chiave_di(percorso):
-    """La chiave di un testo in un file di localizzazione: quella del file ('_play'), o per un testo dentro una sezione
-    le chiavi unite con '.' ('menu._play')."""
+    """The key of a text in a localization file: the file's own key ('_play'), or for a text inside a section the
+    keys joined with '.' ('menu._play')."""
     return ".".join(str(x) for x in percorso)
 
 
 def piatto(dati):
-    """{chiave: testo} dei testi di un file di localizzazione (vedi chiave_di): per un dizionario piatto e' lui stesso
-    (solo i valori stringa)."""
+    """{chiave: testo} of the texts of a localization file (see chiave_di): for a flat dictionary it is the
+    dictionary itself (only the string values)."""
     from .adapter_webjson import foglie
     return {chiave_di(p): v for p, _, v in foglie(dati)} if isinstance(dati, dict) else {}
 
 
 def al_percorso(dati, percorso):
-    """Il valore di 'dati' alla posizione 'percorso' (tupla di chiavi e indici), oppure None se non c'e'."""
+    """The value of 'dati' at position 'percorso' (tuple of keys and indexes), or None if it is not there."""
     for passo in percorso:
         try:
             dati = dati[passo]
@@ -367,9 +370,9 @@ def al_percorso(dati, percorso):
 
 
 def creati_da_patchsmith(cartella):
-    """Nomi dei file che PatchSmith ha creato in questa cartella (es. la lingua nuova local/italiano.json), letti
-    dalle informazioni dei backup: non sono file del gioco. Un file creato e poi sostituito da altri (es. un
-    italiano.json ufficiale arrivato con un aggiornamento: impronta diversa da quella scritta) non conta piu'."""
+    """Names of the files that PatchSmith created in this folder (e.g. the new language local/italiano.json), read
+    from the backup information: they are not game files. A file created and then replaced by someone else (e.g. an
+    official italiano.json that came with an update: fingerprint different from the recorded one) no longer counts."""
     from . import project as progetto
     creati = set()
     try:
@@ -389,10 +392,11 @@ def creati_da_patchsmith(cartella):
 
 
 def file_json_lingue(cartella, log=None):
-    """{relativo: lingua} dei file JSON di localizzazione: dizionari {chiave: testo} (anche divisi in sezioni, e anche
-    con commenti // e virgole in fondo, che molti giochi accettano) con la lingua nel percorso, presenti in almeno due
-    lingue nella stessa famiglia (local/{L}.json, lang/{L}/ui.json, localization/strings{L}.json; sola lettura).
-    I file creati da PatchSmith (la lingua aggiunta) non contano. Con 'log': i file di lingua che non si leggono."""
+    """{relativo: lingua} of the JSON localization files: {chiave: testo} dictionaries (also split into sections, and
+    also with // comments and trailing commas, which many games accept) with the language in the path, present in at
+    least two languages in the same family (local/{L}.json, lang/{L}/ui.json, localization/strings{L}.json;
+    read-only). Files created by PatchSmith (the added language) do not count. With 'log': the language files that
+    cannot be read."""
     per_famiglia, illeggibili = {}, []
     for radice, dirs, files in os.walk(cartella):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
@@ -426,7 +430,7 @@ def file_json_lingue(cartella, log=None):
 
 
 def lettere_ufficiali(cartella, trovati, sorgenti):
-    """Lettere accentate latine usate dalle traduzioni ufficiali del gioco (gli altri file di lingua)."""
+    """Accented Latin letters used by the game's official translations (the other language files)."""
     lettere = set()
     for rel in trovati:
         if rel in sorgenti:
@@ -443,8 +447,8 @@ def lettere_ufficiali(cartella, trovati, sorgenti):
     return "".join(sorted(lettere))
 
 
-# in un file di localizzazione ogni valore e' un testo dell'interfaccia, anche una parola sola ("wood"); non lo
-# sono solo gli identificativi rimasti al posto di un testo mancante ("Structure.NuclearFurnace", "menu_title_2")
+# in a localization file every value is an interface text, even a single word ("wood"); only the identifiers left in
+# place of a missing text are not ("Structure.NuclearFurnace", "menu_title_2")
 _IDENTIFICATIVO = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:[.:/\\][A-Za-z0-9_]+)+$|^[a-z0-9]+(?:_[a-z0-9]+)+$")
 
 
@@ -454,19 +458,19 @@ def testo_localizzazione(valore):
 
 
 def schemi_json(dati):
-    """Le chiavi con testo di un file di localizzazione: si traducono tutte (sono testi dell'interfaccia; le regole
-    sulle chiavi "tecniche" dei JSON generici qui non valgono)."""
+    """The keys with text of a localization file: they are all translated (they are interface texts; the rules on
+    the "technical" keys of generic JSON files do not apply here)."""
     from .adapter_webjson import foglie
     return sorted({schema for _, schema, v in foglie(dati) if testo_localizzazione(v)})
 
 
-_ASTERISCO_TRA_PAROLE = re.compile(r"[^\W\d_]\*+[^\W\d_]")  # tra due lettere: non e' enfasi ("*sigh*")
+_ASTERISCO_TRA_PAROLE = re.compile(r"[^\W\d_]\*+[^\W\d_]")  # between two letters: not emphasis ("*sigh*")
 
 
 def _confermato(altri, posti, prova, forte, debole):
-    """True se le traduzioni ufficiali confermano la convenzione: almeno una lingua la segue quasi sempre
-    ('prova(valore, posto)' vera in almeno 'forte' dei posti che ha) e almeno meta' delle lingue la segue almeno in
-    parte ('debole'): i traduttori la tolgono dove non serve (es. una parola che sta in una riga sola)."""
+    """True if the official translations confirm the convention: at least one language almost always follows it
+    ('prova(valore, posto)' true in at least 'forte' of the places it has) and at least half of the languages follow
+    it at least in part ('debole'): translators remove it where it is not needed (e.g. a word that fits on one line)."""
     quote = []
     for a in altri:
         validi = [p for p in posti if isinstance(a.get(p[0]), str)]
@@ -476,9 +480,10 @@ def _confermato(altri, posti, prova, forte, debole):
 
 
 def markup(dati, altri):
-    """Convenzioni di scrittura dei testi del file sorgente, confermate dalla maggioranza delle traduzioni ufficiali
-    ('altri': gli altri dizionari della stessa cartella): {'a_capo': '*' se l'asterisco fa da a capo (es.
-    "iron*ore"), 'punto_elenco': lettera usata come simbolo a inizio paragrafo (es. "U unlocks...**U gain...")}."""
+    """Writing conventions of the source file's texts, confirmed by the majority of the official translations
+    ('altri': the other dictionaries of the same folder): {'a_capo': '*' if the asterisk acts as a line break (e.g.
+    "iron*ore"), 'punto_elenco': letter used as a symbol at the start of a paragraph (e.g.
+    "U unlocks...**U gain...")}."""
     esito = {"a_capo": None, "punto_elenco": None}
     testi = {k: v for k, v in dati.items() if isinstance(v, str)} if isinstance(dati, dict) else {}
     altri = [a for a in altri if isinstance(a, dict)]
@@ -489,7 +494,7 @@ def markup(dati, altri):
             _confermato(altri, con_asterisco, lambda valore, _posto: "*" in valore, 0.6, 0.2):
         esito["a_capo"] = "*"
     separatore = "**" if esito["a_capo"] else "\n\n"
-    occorrenze = {}  # lettera -> [(chiave, numero del paragrafo)]
+    occorrenze = {}  # letter -> [(key, paragraph number)]
     for k, v in testi.items():
         for n, paragrafo in enumerate(v.split(separatore)):
             m = re.match(r"([A-Z]) +[a-z]", paragrafo)
@@ -524,11 +529,12 @@ def _corpo(paragrafo, segno, punto):
 
 
 def _gruppi_frase(paragrafi, segno, punto):
-    """Paragrafi raggruppati per frase (liste di indici). Il segno doppio separa i paragrafi ma in molti giochi
-    spezza anche una frase a meta' (Forager: "U items discarded from your**inventory are instantly**sold
-    instead"): tradotti da soli, i pezzi perdono il senso. Un paragrafo continua il precedente se non ha il simbolo
-    d'elenco, comincia con una minuscola e il precedente non chiude la frase con la punteggiatura; il precedente
-    deve essere una voce d'elenco o avere almeno tre parole (un titolo come "Controls**move with WASD" resta a se')."""
+    """Paragraphs grouped by sentence (lists of indexes). The double marker separates paragraphs but in many games
+    it also splits a sentence in the middle (Forager: "U items discarded from your**inventory are instantly**sold
+    instead"): translated on their own, the pieces lose their meaning. A paragraph continues the previous one if it
+    has no bullet symbol, starts with a lowercase letter and the previous one does not end the sentence with
+    punctuation; the previous one must be a bullet item or have at least three words (a title such as
+    "Controls**move with WASD" stays on its own)."""
     gruppi = []
     for i, p in enumerate(paragrafi):
         corpo = _corpo(p, segno, punto)
@@ -543,9 +549,9 @@ def _gruppi_frase(paragrafi, segno, punto):
 
 
 def normalizza_a_capo(testo, segno=None, punto=None):
-    """Il testo come lo si traduce: gli a capo 'segno' diventano spazi (la frase si traduce intera), i paragrafi
-    (segno doppio) diventano righe separate da una riga vuota, unendo i pezzi della stessa frase; il simbolo a
-    inizio paragrafo si toglie."""
+    """The text as it is translated: the 'segno' line breaks become spaces (the sentence is translated whole),
+    paragraphs (double marker) become lines separated by a blank line, joining the pieces of the same sentence; the
+    symbol at the start of a paragraph is removed."""
     if (not segno and not punto) or "\n" in testo:
         return testo
     separatore = segno * 2 if segno else None
@@ -558,9 +564,10 @@ def normalizza_a_capo(testo, segno=None, punto=None):
 
 
 def _a_capo_bilanciato(testo, segmenti, segno):
-    """Rimette nel testo tradotto gli a capo dell'originale: stesso numero (o meno, se le parole non bastano),
-    in proporzione alle lunghezze delle righe originali, sempre tra due parole. 'segno' e' il segno di a capo,
-    oppure l'elenco dei separatori originali tra un segmento e l'altro (a capo e paragrafi della stessa frase)."""
+    """Puts the original's line breaks back into the translated text: the same number (or fewer, if there are not
+    enough words), in proportion to the lengths of the original lines, always between two words. 'segno' is the
+    line break marker, or the list of the original separators between one segment and the next (line breaks and
+    paragraphs of the same sentence)."""
     separatori = [segno] * (len(segmenti) - 1) if isinstance(segno, str) else list(segno)
     n = len(segmenti) - 1
     parole = testo.split(" ")
@@ -568,7 +575,7 @@ def _a_capo_bilanciato(testo, segmenti, segno):
         return testo
     n = min(n, len(parole) - 1)
     totale_o = sum(len(s) for s in segmenti) or 1
-    posizioni, cumulato = [], 0  # posizione nel testo di ogni spazio tra le parole
+    posizioni, cumulato = [], 0  # position in the text of each space between words
     for parola in parole[:-1]:
         cumulato += len(parola)
         posizioni.append(cumulato)
@@ -577,7 +584,7 @@ def _a_capo_bilanciato(testo, segmenti, segno):
     for i in range(1, n + 1):
         fatto += len(segmenti[i - 1])
         obiettivo = fatto / totale_o * len(testo)
-        rimasti = n - i  # tagli ancora da fare dopo questo: lasciano almeno uno spazio ciascuno
+        rimasti = n - i  # cuts still to make after this one: each leaves at least one space
         scelte = range(inizio, len(posizioni) - rimasti)
         k = min(scelte, key=lambda j: abs(posizioni[j] - obiettivo))
         tagli.append(k)
@@ -587,17 +594,17 @@ def _a_capo_bilanciato(testo, segmenti, segno):
         righe.append(" ".join(parole[da:k + 1]))
         da = k + 1
     righe.append(" ".join(parole[da:]))
-    if n < len(separatori):  # meno parole che a capo: si tengono prima i separatori di paragrafo (i piu' lunghi)
+    if n < len(separatori):  # fewer words than line breaks: paragraph separators (the longest) are kept first
         tenuti = sorted(sorted(range(len(separatori)), key=lambda j: -len(separatori[j]))[:n])
         separatori = [separatori[j] for j in tenuti]
     return righe[0] + "".join(sep + r for sep, r in zip(separatori, righe[1:]))
 
 
 def ricomponi_a_capo(originale, tradotto, segno=None, punto=None, larghezza=None, righe=None):
-    """Il testo tradotto (normalizzato) riportato alle convenzioni del gioco, con i paragrafi, il simbolo a inizio
-    paragrafo e gli a capo dell'originale. None se i paragrafi non corrispondono (resta l'originale).
-    Con 'larghezza' e 'righe' (la riga piu' lunga e il numero di righe delle versioni del gioco per questo testo):
-    se una riga esce dalla larghezza, gli a capo si ridistribuiscono, aggiungendo righe fino a 'righe'."""
+    """The translated (normalized) text brought back to the game's conventions, with the original's paragraphs,
+    paragraph-start symbol and line breaks. None if the paragraphs do not match (the original stays).
+    With 'larghezza' and 'righe' (the longest line and the number of lines of the game's versions of this text):
+    if a line exceeds the width, the line breaks are redistributed, adding lines up to 'righe'."""
     risultato = _ricomponi(originale, tradotto, segno, punto)
     if risultato is None or not segno or not larghezza or _riga_piu_lunga(risultato, segno) <= larghezza:
         return risultato
@@ -605,7 +612,7 @@ def ricomponi_a_capo(originale, tradotto, segno=None, punto=None, larghezza=None
 
 
 def _righe_di(testo, segno):
-    """Le righe non vuote del testo come le disegna il gioco (a capo = segno o '\\n')."""
+    """The non-empty lines of the text as the game draws them (line break = segno or '\\n')."""
     pezzi = re.split("%s|\n" % re.escape(segno), testo) if segno else testo.split("\n")
     return [x.strip() for x in pezzi if x.strip()]
 
@@ -615,16 +622,16 @@ def _riga_piu_lunga(testo, segno):
 
 
 def _taglio_minimo(parole, k, prima=0):
-    """Le parole su k righe in modo che la riga piu' lunga sia la piu' corta possibile (programmazione dinamica).
-    'prima': caratteri gia' occupati all'inizio della prima riga (es. il simbolo 'U ').
-    Restituisce (indici delle parole che cominciano ogni riga dopo la prima, lunghezza della riga piu' lunga)."""
+    """The words on k lines so that the longest line is as short as possible (dynamic programming).
+    'prima': characters already taken at the start of the first line (e.g. the symbol 'U ').
+    Returns (indexes of the words that start each line after the first, length of the longest line)."""
     n = len(parole)
     k = max(1, min(k, n))
     lunghezze = [0]
     for w in parole:
         lunghezze.append(lunghezze[-1] + len(w))
 
-    def lunga(i, j):  # parole i..j-1 su una riga
+    def lunga(i, j):  # words i..j-1 on one line
         return lunghezze[j] - lunghezze[i] + (j - i - 1) + (prima if i == 0 else 0)
     infinito = float("inf")
     costo = [[infinito] * (n + 1) for _ in range(k + 1)]
@@ -646,8 +653,9 @@ def _taglio_minimo(parole, k, prima=0):
 
 
 def _entro_larghezza(testo, segno, punto, larghezza, righe):
-    """Ridistribuisce gli a capo dei paragrafi troppo larghi (solo quelli con soli a capo semplici: i paragrafi
-    del gioco e le righe vuote restano dove sono), aggiungendo righe finche' il totale non supera 'righe'."""
+    """Redistributes the line breaks of paragraphs that are too wide (only those with simple line breaks only: the
+    game's paragraphs and blank lines stay where they are), adding lines as long as the total does not exceed
+    'righe'."""
     separatore = segno * 2
     paragrafi = testo.split(separatore)
     totale = len(_righe_di(testo, segno))
@@ -666,7 +674,7 @@ def _entro_larghezza(testo, segno, punto, larghezza, righe):
         bordo = r"[\s%s]*" % re.escape(segno)
         testa, interno, coda = re.match(r"(%s)(.*?)(%s)$" % (bordo, bordo), p[len(prefisso):], re.S).groups()
         if re.search("%s\\s*%s" % (re.escape(segno), re.escape(segno)), interno) or "\n" in interno:
-            continue  # paragrafi o righe vuote dentro: non si tocca
+            continue  # paragraphs or blank lines inside: left alone
         parole = interno.replace(segno, " ").split()
         if not parole:
             continue
@@ -696,7 +704,7 @@ def _ricomponi(originale, tradotto, segno=None, punto=None):
     separatore = segno * 2 if segno else None
     paragrafi = originale.split(separatore) if separatore else [originale]
     paragrafi_o = [separatore.join(paragrafi[i] for i in g) if separatore else paragrafi[g[0]]
-                   for g in _gruppi_frase(paragrafi, segno, punto)]  # i pezzi della stessa frase, insieme
+                   for g in _gruppi_frase(paragrafi, segno, punto)]  # the pieces of the same sentence, together
     paragrafi_t = tradotto.split("\n\n") if len(paragrafi_o) > 1 else [tradotto]
     if len(paragrafi_o) != len(paragrafi_t) or any("\n" in t for t in paragrafi_t):
         return None
@@ -705,15 +713,15 @@ def _ricomponi(originale, tradotto, segno=None, punto=None):
     for o, t in zip(paragrafi_o, paragrafi_t):
         prefisso = _prefisso_punto(o, punto)
         corpo = o[len(prefisso):]
-        # a capo e spazi in testa e in coda restano fissi ("*attacks burn!" , "your time: ")
+        # leading and trailing line breaks and spaces stay fixed ("*attacks burn!" , "your time: ")
         testa, interno, coda = re.match(r"(%s)(.*?)(%s)$" % (bordo, bordo), corpo, re.S).groups()
         t = re.sub(r" {2,}", " ", t.strip())
         if segno and segno in t:
-            return None  # il traduttore ha lasciato un segno: non so dove andrebbe
+            return None  # the translator left a marker: I do not know where it would go
         if not t and interno.strip():
-            return None  # paragrafo perso nella traduzione
+            return None  # paragraph lost in translation
         if segno and t:
-            # a capo singoli e paragrafi della frase; "* *" (riga vuota con uno spazio) e' un separatore solo
+            # single line breaks and paragraphs of the sentence; "* *" (blank line with a space) is one separator
             divisi = re.split("(%s(?:\\s*%s)*)" % (re.escape(segno), re.escape(segno)), interno)
             t = _a_capo_bilanciato(t, divisi[0::2], divisi[1::2])
         uscita.append(prefisso + testa + t + coda)
@@ -724,12 +732,12 @@ _CODICE = re.compile(r"/[A-Za-z_]{1,16}/")
 
 
 def ripara(originale, tradotto):
-    """Traduzione che il gioco legge come l'originale, oppure None.
+    """Translation that the game reads like the original, or None.
 
-    In GameMaker molti giochi (es. Dokimon) espandono codici tra barre (/name/, /n/): una barra in piu'
-    viene presa per l'inizio di un codice e il resto della riga sparisce; un codice proprio alla fine di
-    una riga di dialogo non viene chiuso. Quindi: stessi codici dell'originale, nessuna barra in piu'
-    (diventa '-'), e uno spazio dopo un codice che finisce la riga."""
+    In GameMaker many games (e.g. Dokimon) expand codes between slashes (/name/, /n/): an extra slash
+    is taken as the start of a code and the rest of the line disappears; a code right at the end of
+    a dialogue line is not closed. So: the same codes as the original, no extra slash
+    (it becomes '-'), and a space after a code that ends the line."""
     if sorted(_CODICE.findall(originale)) != sorted(_CODICE.findall(tradotto)):
         return None
     barre_originale = _CODICE.sub("", originale).count("/")
@@ -738,7 +746,7 @@ def ripara(originale, tradotto):
     extra = sum(p.count("/") for p in pezzi) - barre_originale
     if extra > 0:
         pezzi = [p.replace("/", "-") for p in pezzi]
-        if barre_originale:  # non so quali barre tenere: meglio l'originale
+        if barre_originale:  # I do not know which slashes to keep: better the original
             return None
     testo = pezzi[0] + "".join(c + p for c, p in zip(codici, pezzi[1:]))
     righe_o, righe_t = originale.split("\n"), testo.split("\n")
@@ -748,13 +756,13 @@ def ripara(originale, tradotto):
     return testo
 
 
-# --- maiuscole: giochi scritti tutti in minuscolo, con le maiuscole usate come icone (Forager) -------------
+# --- capitals: games written all in lowercase, with capitals used as icons (Forager) ----------------------
 
 _PAROLA = re.compile(r"[^\W\d_]+")
 
 
 def _parole_miste(testo):
-    """True se il testo ha una parola con maiuscole e minuscole insieme (Hello, CamelCase)."""
+    """True if the text has a word with both uppercase and lowercase letters (Hello, CamelCase)."""
     return any(not w.isupper() and not w.islower() for w in _PAROLA.findall(testo))
 
 
@@ -764,9 +772,9 @@ def _senza_segnaposto(testo):
 
 
 def stile_maiuscole(testi):
-    """Come il gioco usa le maiuscole nei suoi testi: 'minuscolo' (quasi tutto in minuscolo: le maiuscole sono
-    codici o icone), 'maiuscolo', 'normale', oppure 'non applicabile' (pochi testi, o scritture senza maiuscole
-    come cinese, giapponese, coreano, thai). Identificatori e segnaposto non contano."""
+    """How the game uses capitals in its texts: 'minuscolo' (almost all lowercase: capitals are codes or icons),
+    'maiuscolo', 'normale', or 'non applicabile' (few texts, or scripts without capitals such as Chinese,
+    Japanese, Korean, Thai). Identifiers and placeholders do not count."""
     validi, lettere_casi, lettere = [], 0, 0
     for t in testi:
         if not isinstance(t, str) or _IDENTIFICATIVO.match(t.strip()):
@@ -789,9 +797,9 @@ def stile_maiuscole(testi):
 
 
 def codici_maiuscoli(testi, mappa=None, punto=None):
-    """Nei giochi in minuscolo, le parole tutte maiuscole (al massimo 4 lettere, in almeno 3 testi) sono codici o
-    icone del font (Forager: 'EP' = icona XP, 'H' = cuore). Si tengono solo quelle che il font a sprite disegna
-    come maiuscole (le sue icone): senza la mappa del font non si puo' sapere, e non si protegge nulla."""
+    """In lowercase games, all-uppercase words (at most 4 letters, in at least 3 texts) are codes or font icons
+    (Forager: 'EP' = XP icon, 'H' = heart). Only those that the sprite font draws as capitals (its icons) are kept:
+    without the font map there is no way to know, and nothing is protected."""
     if not mappa:
         return []
     icone = {c for c in mappa if c.isupper()}
@@ -806,9 +814,9 @@ def codici_maiuscoli(testi, mappa=None, punto=None):
 
 
 def in_minuscolo(tradotto, originale, codici=(), lingua_dest="it"):
-    """La traduzione con le maiuscole come le scrive il gioco: per un testo il cui originale e' in minuscolo,
-    tutte le lettere in minuscolo tranne i codici dell'originale (icone) e i segnaposto. I testi con maiuscole
-    normali (messaggi di sistema) restano come sono."""
+    """The translation with capitals as the game writes them: for a text whose original is in lowercase, all
+    letters in lowercase except the original's codes (icons) and the placeholders. Texts with normal capitals
+    (system messages) stay as they are."""
     from .text import _SEGNAPOSTO
     if _parole_miste(_senza_segnaposto(originale)):
         return tradotto
@@ -837,11 +845,11 @@ def in_minuscolo(tradotto, originale, codici=(), lingua_dest="it"):
     return "".join(pezzi)
 
 
-# --- larghezza delle righe: quanto spazio danno al testo le versioni del gioco ----------------------------------
+# --- line width: how much space the game's versions give to the text -------------------------------------------
 
 def font_dedicati(dati_win, codici):
-    """Lingue che hanno un font tutto loro (dal nome: fntGerman, fntRussian...): le loro righe hanno un'altra
-    larghezza e non servono a misurare lo spazio del testo."""
+    """Languages that have a font of their own (from the name: fntGerman, fntRussian...): their lines have a
+    different width and cannot be used to measure the text's space."""
     try:
         elenco, _ = gamemaker.font(dati_win)
     except (gamemaker.ErroreGameMaker, struct.error, ValueError, IndexError):
@@ -855,9 +863,9 @@ def _altra_scrittura_testo(testo):
 
 
 def limiti_righe(dati, altri, segno):
-    """{chiave: [larghezza, righe, uguali]} per ogni testo: la riga piu' lunga (in caratteri) e il numero massimo
-    di righe tra l'originale e le traduzioni ufficiali che usano lo stesso font ('altri': i loro dizionari), e
-    quante traduzioni ufficiali lasciano il testo uguale all'originale (es. 'vsync:')."""
+    """{chiave: [larghezza, righe, uguali]} for each text: the longest line (in characters) and the maximum number
+    of lines among the original and the official translations that use the same font ('altri': their
+    dictionaries), and how many official translations leave the text the same as the original (e.g. 'vsync:')."""
     uscita = {}
     if not isinstance(dati, dict):
         return uscita
@@ -874,8 +882,8 @@ def limiti_righe(dati, altri, segno):
 
 
 def nome_lingua_nuova(destinazione, cartella, estensione=".json"):
-    """Nome del file della lingua da aggiungere (es. 'italiano.json'): il nome della lingua com'e' nella lingua
-    stessa, che il gioco mostra nel suo menu. None se un file con quel nome c'e' gia' e non e' di PatchSmith."""
+    """File name of the language to add (e.g. 'italiano.json'): the language's name in the language itself,
+    which the game shows in its menu. None if a file with that name already exists and is not PatchSmith's."""
     nome = (lingua.endonimo(destinazione) or destinazione).split(" (")[0].strip().lower()
     nome = re.sub(r"[^\w]+", "_", nome).strip("_") or destinazione
     file = nome + estensione
@@ -885,7 +893,7 @@ def nome_lingua_nuova(destinazione, cartella, estensione=".json"):
 
 
 def caratteri_font_sprite(cartella):
-    """Caratteri del font a sprite principale del gioco (la mappa piu' lunga), oppure None se non ce n'e'."""
+    """Characters of the game's main sprite font (the longest map), or None if there is none."""
     dati = file_dati(cartella)
     if not dati:
         return None

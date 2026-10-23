@@ -6,14 +6,14 @@ Thanks for your interest! Bug reports, games that do not work, translations of t
 - **Questions:** [Discussions](https://github.com/shottocode/PatchSmith/discussions).
 - **Security problems:** privately, with [Report a vulnerability](https://github.com/shottocode/PatchSmith/security/advisories/new).
 
-## The code is written in Italian
+## Italian names in the code
 
-File names, the command line and the documentation are in English. **Inside the files, names, comments and docstrings are in Italian**: PatchSmith started as a personal project. The [glossary](#glossary) below covers the words you will meet most often.
+File names, the command line, the documentation, comments and docstrings are in English. **The names inside the code (functions, variables, classes) are still in Italian**: PatchSmith started as a personal project. The [glossary](#glossary) below covers the words you will meet most often.
 
 - Imports use the English file name with the Italian name the code uses: `from . import text as testo`, `from . import project as progetto`.
 - The interface texts are written in Italian in the code. The English interface comes from `patchsmith/ui_language/en.json` (Italian text → English text).
 - The keys saved in user files (settings, profiles, translation memory: `"cartella_gioco"`, `"non_tradurre"`, `"lingua_destinazione"`...) are in Italian too. They are a file format: do not rename them.
-- When you add code, match the file you are working in. If you do not write Italian, write your comments in English: that is fine.
+- When you add code, match the names of the file you are working in, and write comments and docstrings in English.
 
 Issues and pull requests can be in English or Italian.
 
@@ -67,7 +67,7 @@ Please add or update a test with every change, and run the whole suite before op
 
 ## Glossary
 
-The Italian words you will meet most often in names, comments and messages.
+The Italian words you will meet most often in names, data keys and messages.
 
 | Italian | English | Notes |
 |---|---|---|

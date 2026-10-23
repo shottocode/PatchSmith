@@ -1,4 +1,4 @@
-"""Interfaccia a riga di comando."""
+"""Command-line interface."""
 import argparse
 import json
 import os
@@ -17,7 +17,7 @@ def _log(messaggio=""):
 
 
 def _lingua_interfaccia():
-    """La lingua della finestra (settings.json, se no quella di Windows): anche per l'aiuto e i messaggi qui."""
+    """The window's language (settings.json, otherwise the Windows one): also for the help and the messages here."""
     try:
         with open(progetto.cartella_dati("settings.json"), encoding="utf-8") as f:
             scelta = json.load(f).get("interfaccia")
@@ -27,21 +27,21 @@ def _lingua_interfaccia():
 
 
 def _traduci_aiuto(parser):
-    """L'aiuto (-h) nella lingua dell'interfaccia: descrizione e spiegazioni di comandi e opzioni."""
+    """The help (-h) in the interface language: description and explanations of commands and options."""
     parser.description = interfaccia.traduci(parser.description)
     for azione in parser._actions:
         azione.help = interfaccia.traduci(azione.help)
         if isinstance(azione, argparse._SubParsersAction):
             for scelta in azione._choices_actions:
                 scelta.help = interfaccia.traduci(scelta.help)
-            for sotto in {id(p): p for p in azione.choices.values()}.values():  # (gli alias: stesso parser)
+            for sotto in {id(p): p for p in azione.choices.values()}.values():  # (the aliases: same parser)
                 _traduci_aiuto(sotto)
 
 
 def _profilo(valore):
-    """Accetta un percorso di profilo oppure solo il nome (cercato in profiles/). Un percorso che non c'e' piu' (es.
-    profili\\<gioco>.json, il nome di prima della cartella, scritto nel comando del traduttore dentro un gioco gia'
-    tradotto) vale per il suo nome."""
+    """Accepts a game profile path or just the name (looked up in profiles/). A path that no longer exists (e.g.
+    profili\\<gioco>.json, the former name of the folder, written in the translator's command inside an already
+    translated game) counts for its name."""
     if os.path.isfile(valore):
         return valore
     if os.path.isdir(valore):
@@ -110,7 +110,7 @@ def _profilo_motore(percorso, motore):
 
 
 def _profilo_unity(percorso):
-    """Il profilo se e' di un gioco Unity (tradotto da XUnity), altrimenti None."""
+    """The game profile if it belongs to a Unity game (translated by XUnity), otherwise None."""
     return _profilo_motore(percorso, "unity")
 
 
@@ -127,7 +127,7 @@ def cmd_traduci(a):
     with open(percorso, encoding="utf-8") as f:
         backend_profilo = json.load(f).get("backend", "google")
     unity = _profilo_unity(percorso)
-    if unity:  # installa/aggiorna XUnity e pre-traduce i testi del gioco
+    if unity:  # installs/updates XUnity and pre-translates the game's texts
         return 0 if automatico.unity_completo(percorso, _log, rete=True, backend=a.backend or backend_profilo) else 2
     if _profilo_unreal(percorso):
         return 0 if automatico.unreal_completo(percorso, _log, rete=True, backend=a.backend or backend_profilo) else 2
@@ -141,7 +141,7 @@ def cmd_traduci(a):
 
 def cmd_applica(a):
     percorso = _profilo(a.profilo)
-    if _profilo_unity(percorso):  # per Unity: componenti gia' scaricati e traduzioni in memoria, senza rete
+    if _profilo_unity(percorso):  # for Unity: components already downloaded and translations in memory, no network
         return 0 if automatico.unity_completo(percorso, _log, rete=False) else 2
     if _profilo_unreal(percorso):
         return 0 if automatico.unreal_completo(percorso, _log, rete=False,
@@ -152,13 +152,13 @@ def cmd_applica(a):
 
 
 def cmd_ripristina(a):
-    if os.path.isdir(a.profilo):  # cartella del gioco: tutto, anche la lingua impostata da PatchSmith
+    if os.path.isdir(a.profilo):  # game folder: everything, including the language set by PatchSmith
         automatico.ripristina(a.profilo, _log)
         return 0
     percorso = _profilo(a.profilo)
     with open(percorso, encoding="utf-8") as f:
         cartella = json.load(f).get("cartella_gioco")
-    if cartella and os.path.isdir(cartella):  # tutto, anche la lingua impostata o aggiunta da PatchSmith
+    if cartella and os.path.isdir(cartella):  # everything, including the language set or added by PatchSmith
         automatico.ripristina(cartella, _log)
         return 0
     Progetto(percorso, _log).ripristina()
@@ -191,17 +191,17 @@ def cmd_auto(a):
         _log("Per attivarla: ripeti con --modify-executables (il consenso vale poi per questo gioco)")
     elif not percorso and esito.get("lingua_ufficiale"):
         if a.modifica_eseguibili and esito.get("lingua_impostata") is False:
-            return 2  # attivazione chiesta ma non riuscita (il motivo e' gia' stato scritto)
+            return 2  # activation requested but failed (the reason has already been written)
         if esito.get("motore_supportato", True):
             _log("Per una traduzione automatica comunque: aggiungi --translate-anyway")
-        return 0  # la lingua ufficiale e' stata gestita: non e' un errore
+        return 0  # the official language has been handled: not an error
     return 0 if completato else 2
 
 
 def cmd_controlla(a):
-    """Controllo dopo aver giocato (checks.py) di un gioco, o di tutti i giochi con la traduzione installata.
-    Codice di uscita: 0 se non resta niente da fare, 2 se resta qualcosa (anche una correzione rimandata col gioco
-    aperto o non fatta con --dry-run), 1 se il controllo di un gioco non e' riuscito."""
+    """After-play check (checks.py) of one game, or of all the games with the translation installed.
+    Exit code: 0 if nothing is left to do, 2 if something is left (including a fix postponed because the game was
+    open, or not made because of --dry-run), 1 if the check of a game failed."""
     from . import checks as controllo
     if a.cartella:
         if os.path.isdir(a.cartella):
@@ -213,14 +213,14 @@ def cmd_controlla(a):
             percorso = _profilo(a.cartella)
         percorsi = [percorso]
     else:
-        percorsi = [p for p, profilo in automatico.elenco_profili()  # (non i profili delle prove: traduttore finto)
+        percorsi = [p for p, profilo in automatico.elenco_profili()  # (not the test profiles: fake translator)
                     if profilo.get("cartella_gioco") and os.path.isdir(profilo["cartella_gioco"])
                     and profilo.get("backend") != "finto"]
     resta = errori = False
     for percorso in percorsi:
         try:
             problemi = controllo.controlla(percorso, applica=not a.solo_leggi, log=_log, traduttore=a.backend)
-        except Exception as e:  # noqa: BLE001 - un profilo rovinato non ferma il controllo degli altri giochi
+        except Exception as e:  # noqa: BLE001 - a broken game profile does not stop the check of the other games
             _log("ERRORE nel controllo di %s (%s: %s)" % (os.path.basename(percorso), type(e).__name__, e))
             errori = True
             continue
@@ -234,7 +234,7 @@ def cmd_controlla(a):
 
 
 def cmd_servizi(a):
-    """Stato dei traduttori online (pause dopo un blocco) e, con --reset, riattivazione di uno."""
+    """Status of the online translators (pauses after a block) and, with --reset, reactivation of one."""
     from .limiter import NOMI, Limitatore
     if a.azzera:
         Limitatore(a.azzera, _log).azzera()
@@ -251,8 +251,8 @@ def cmd_servizi(a):
 
 
 def cmd_servizio_xunity(a):
-    """Traduttore delle frasi nuove per XUnity (avviato dal plugin di PatchSmith all'avvio del gioco, senza
-    finestra): scrive in components/ollama/servizio-xunity.log; le frasi chieste vanno nel diario
+    """Translator of new lines for XUnity (started by the PatchSmith plugin when the game starts, without a
+    window): writes to components/ollama/servizio-xunity.log; the requested lines go into the journal
     memory/<gioco>.richieste.jsonl."""
     import datetime
     from . import ollama, xunity_service as servizio_xunity
@@ -273,7 +273,7 @@ def cmd_servizio_xunity(a):
 
 
 def cmd_locale(a):
-    """Stato del traduttore locale e, con --install, installazione (scaricamenti: si avviano solo cosi')."""
+    """Status of the local translator and, with --install, installation (downloads: they only start this way)."""
     from . import ollama
     if a.installa:
         righe = ollama.descrizione_download(a.installa)
@@ -305,8 +305,8 @@ def cmd_locale(a):
 
 
 def cmd_interfaccia(a):
-    """Lingue dell'interfaccia: elenco, oppure --create <codice> per tradurre i testi del programma con il traduttore
-    locale (quelli gia' nel file restano: le correzioni a mano non si perdono)."""
+    """Interface languages: list, or --create <codice> to translate the program's texts with the local translator
+    (those already in the file stay: fixes made by hand are not lost)."""
     if not a.crea:
         for codice, info in interfaccia.lingue().items():
             _log("%s  %s" % (codice, info["nome"]))
@@ -317,13 +317,13 @@ def cmd_interfaccia(a):
     try:
         n = interfaccia.crea_lingua(a.crea, a.nome or a.crea, traduttore, _log, bandiera)
     finally:
-        traduttore.chiudi()  # libera la scheda video e chiude il server del traduttore
+        traduttore.chiudi()  # frees the graphics card and closes the translator's server
     _log("Aggiunti %d testi in patchsmith/ui_language/%s.json: rivedili a mano." % (n, a.crea))
     return 0
 
 
 def cmd_pacchetto(a):
-    """Il pacchetto da pubblicare: cartella e zip con PatchSmith.exe e il Python portatile (vedi package.py)."""
+    """The package to publish: folder and zip with PatchSmith.exe and the portable Python (see package.py)."""
     from . import package as pacchetto
     try:
         pacchetto.prepara(a.uscita, a.python, _log)
@@ -341,13 +341,13 @@ def cmd_gui(a):
 def main(argv=None):
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    progetto.migra_dati()  # i dati con i nomi italiani di prima (profili, memoria...) passano a quelli inglesi
+    progetto.migra_dati()  # data with the former Italian names (game profiles, memory...) move to the English ones
     _lingua_interfaccia()
     ap = argparse.ArgumentParser(
         prog="smith",
         description="PatchSmith %s: traduce i testi dei giochi direttamente nei file del gioco." % __version__)
     sub = ap.add_subparsers(dest="comando", required=True)
-    # comandi e opzioni in inglese; i nomi italiani di prima restano come alias (dest: il nome di prima)
+    # commands and options in English; the former Italian names stay as aliases (dest: the former name)
     lingua_gioco = dict(dest="da", metavar="LANG", default="auto", type=lingua.codice,
                         help="lingua del gioco (predefinita: auto = rilevata)")
     lingua_arrivo = dict(dest="a", metavar="LANG", default=lingua.lingua_di_windows(), type=lingua.codice,
@@ -472,6 +472,6 @@ def main(argv=None):
             dotnet.ErroreDotnet, xnb.ErroreXnb, ErroreBackend,
             RuntimeError, ValueError) as e:
         _log("ERRORE: %s" % e)
-        if getattr(e, "comando", None):  # i messaggi parlano dei pulsanti dell'interfaccia: qui il comando
+        if getattr(e, "comando", None):  # the messages talk about the interface buttons: here the command
             _log("Da riga di comando: %s" % e.comando)
         return 1

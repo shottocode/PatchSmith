@@ -1,4 +1,4 @@
-"""Avvio dell'interfaccia grafica con doppio clic (Windows: .pyw = senza finestra del terminale)."""
+"""Starts the graphical interface with a double click (Windows: .pyw = no terminal window)."""
 import os
 import sys
 

@@ -1,8 +1,8 @@
-/* Patchsmith - iniettore per giochi web (generato automaticamente, non modificare).
- * Sostituisce i testi visualizzati che corrispondono esattamente a una voce del dizionario:
- * nodi di testo, attributi title/placeholder/aria-label/alt, pulsanti, titolo della pagina e testo
- * disegnato su canvas. Il codice del gioco non viene modificato.
- * Per tornare all'originale: python -I smith.py ripristina <profilo>
+/* Patchsmith - injector for web games (generated automatically, do not edit).
+ * Replaces the displayed texts that exactly match an entry of the dictionary:
+ * text nodes, title/placeholder/aria-label/alt attributes, buttons, the page title and text
+ * drawn on canvas. The game's code is not changed.
+ * To go back to the original: python -I smith.py restore <profile>
  */
 (function () {
   "use strict";
@@ -13,11 +13,11 @@
 
   var ATTRIBUTI = ["title", "placeholder", "aria-label", "alt"];
   var IGNORA = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1, CODE: 1, PRE: 1 };
-  var scrittiTesto = new WeakMap(); // nodo di testo -> valore scritto da noi
-  var scrittiAttr = new WeakMap(); // elemento -> {attributo: valore scritto da noi}
+  var scrittiTesto = new WeakMap(); // text node -> value written by us
+  var scrittiAttr = new WeakMap(); // element -> {attribute: value written by us}
 
   function traduci(s) {
-    // nessuna lunghezza minima: in giapponese/cinese/coreano un menu puo' essere di 1-2 caratteri
+    // no minimum length: in Japanese/Chinese/Korean a menu can be 1-2 characters
     if (typeof s !== "string" || !s || s.length > 2000) return null;
     var t = mappa.get(s);
     if (t === undefined) {
@@ -31,7 +31,7 @@
     return s.slice(0, inizio) + t + s.slice(fine);
   }
 
-  // Nomi di tasti (<kbd>, class="key"...): restano in originale, come sulla tastiera.
+  // Key names (<kbd>, class="key"...): they stay untranslated, as on the keyboard.
   var CLASSI_TASTO = ["key", "kbd", "keycap", "hotkey", "keybind", "shortcut-key"];
   function contestoTasto(el) {
     for (var i = 0; el && el.nodeType === 1 && i < 3; i++, el = el.parentNode) {
@@ -50,7 +50,7 @@
     if (scrittiTesto.get(n) === attuale) return;
     var t = traduci(attuale);
     if (t === null || t === attuale || p.isContentEditable || contestoTasto(p)) return;
-    // <option> senza value: il suo valore e' il testo, che il gioco puo' leggere come dato
+    // <option> without value: its value is the text, which the game may read as data
     if (p.nodeName === "OPTION" && !p.hasAttribute("value")) p.setAttribute("value", p.value);
     scrittiTesto.set(n, t);
     n.nodeValue = t;
@@ -72,7 +72,7 @@
       var v = el.getAttribute(ATTRIBUTI[i]);
       if (v) attributo(el, ATTRIBUTI[i], v);
     }
-    // pulsanti <input>: solo se il valore non viene inviato come dato (nessun attributo name)
+    // <input> buttons: only if the value is not sent as data (no name attribute)
     if (el.nodeName === "INPUT" && (el.type === "button" || el.type === "submit") && !el.name && el.value) {
       var tv = traduci(el.value);
       if (tv !== null && tv !== el.value) el.value = tv;
@@ -102,7 +102,7 @@
       else if (m.type === "attributes") elemento(m.target);
       else for (var j = 0; j < m.addedNodes.length; j++) aggiunti.add(m.addedNodes[j]);
     }
-    // visita solo i nodi aggiunti il cui antenato non e' gia' stato aggiunto nello stesso giro
+    // visit only the added nodes whose ancestor was not already added in the same round
     aggiunti.forEach(function (n) {
       for (var a = n.parentNode; a; a = a.parentNode) if (aggiunti.has(a)) return;
       if (n.isConnected !== false) visita(n);
@@ -113,7 +113,7 @@
     attributes: true, attributeFilter: ATTRIBUTI.concat(["value"])
   });
 
-  // Testo disegnato su canvas (giochi HTML5: Phaser, RPG Maker MV/MZ, ...)
+  // Text drawn on canvas (HTML5 games: Phaser, RPG Maker MV/MZ, ...)
   var C = window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype;
   if (C) {
     ["fillText", "strokeText", "measureText"].forEach(function (nome) {

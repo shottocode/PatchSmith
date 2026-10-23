@@ -1,8 +1,8 @@
-"""Test della lingua ufficiale: Steam finto, gioco Unreal finto e gioco Unity (I2) finto.
+"""Test of the official language: fake Steam, fake Unreal game and fake Unity (I2) game.
 
-Uso: python -I test/test_official_language.py <cartella_temporanea_vuota>
-Scrive solo nella cartella temporanea e in una chiave di registro di prova (HKCU\\Software\\PatchsmithTest),
-che alla fine viene cancellata. Steam e i giochi veri non vengono toccati.
+Usage: python -I test/test_official_language.py <empty_temp_folder>
+Writes only to the temporary folder and to a test registry key (HKCU\\Software\\PatchsmithTest),
+which is deleted at the end. Steam and the real games are not touched.
 """
 import hashlib
 import os
@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from patchsmith import (auto as automatico, official_language as lingua_ufficiale, language_unity as lingua_unity,
                         language_unreal as lingua_unreal, project as progetto, steam)  # noqa: E402
-import test_unreal  # noqa: E402  (costruttori di pak e .locres)
+import test_unreal  # noqa: E402  (builders of pak and .locres)
 
 ESITI = []
 
@@ -28,10 +28,10 @@ def silenzio(_):
     pass
 
 
-# --- appinfo.vdf finto (v41: chiavi nella tabella delle stringhe) ------------------------------------
+# --- fake appinfo.vdf (v41: keys in the string table) ------------------------------------------------
 
 def appinfo(app):
-    """app: {appid: albero di dizionari}. Restituisce i byte di un appinfo.vdf versione 0x07564429."""
+    """app: {appid: tree of dictionaries}. Returns the bytes of an appinfo.vdf version 0x07564429."""
     chiavi, indice = [], {}
 
     def k(nome):
@@ -76,11 +76,11 @@ def main(base):
         '"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n\t// commento\n\t"1"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n}\n'
         % (radice_steam.replace("\\", "\\\\"), libreria.replace("\\", "\\\\")))
 
-    # --- VDF di testo
+    # --- text VDF
     v = steam.leggi_vdf('"A"\n{\n\t"x"\t"1 \\"q\\""\n\t// commento\n\t"B" { "y" "2" }\n}\n')
     controlla("VDF di testo: annidamento, virgolette con escape, commenti", v == {"A": {"x": '1 "q"', "B": {"y": "2"}}})
 
-    # --- appinfo: tre giochi
+    # --- appinfo: three games
     open(os.path.join(radice_steam, "appcache", "appinfo.vdf"), "wb").write(appinfo({
         100: {"common": {"name": "Gioco Steam", "type": "Game",
                          "supported_languages": {"english": {"supported": "true"}, "italian": {"supported": "true",
@@ -100,7 +100,7 @@ def main(base):
     controlla("appinfo: lingue selezionabili da Steam (baselanguages)", steam.lingue_selezionabili(100) == {"english", "italian"}
               and steam.lingue_selezionabili(200) == set())
 
-    # --- gioco installato da Steam (appmanifest)
+    # --- game installed by Steam (appmanifest)
     gioco_steam = os.path.join(libreria, "steamapps", "common", "Gioco Steam")
     os.makedirs(os.path.join(gioco_steam, "bin"))
     open(os.path.join(libreria, "steamapps", "appmanifest_100.acf"), "w").write(
@@ -114,7 +114,7 @@ def main(base):
     controlla("Steam: italiano ufficiale e selezionabile -> istruzioni per il menu Lingua di Steam",
               r["presente"] and r["selezionabile_steam"] and any("Generali > Lingua" in x for x in righe))
 
-    # --- cartella fuori da Steam, riconosciuta dall'eseguibile (la demo non conta)
+    # --- folder outside Steam, recognized by the executable (the demo does not count)
     fuori = os.path.join(base, "Fuori")
     os.makedirs(fuori)
     open(os.path.join(fuori, "GiocoFuoriSteam.exe"), "wb").write(b"MZ")
@@ -125,9 +125,9 @@ def main(base):
               r["presente"] and r["steam"] is None and
               any("non e' un'installazione di Steam" in x for x in lingua_ufficiale.messaggio(r, "it")))
 
-    # --- Unreal: gioco con italiano, impostazione e ripristino in GameUserSettings.ini
+    # --- Unreal: game with Italian, setting and restore in GameUserSettings.ini
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     automatico.CARTELLA_PROFILI = os.path.join(base, "patchsmith", "profiles")
     os.makedirs(automatico.CARTELLA_PROFILI)
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
@@ -172,7 +172,7 @@ def main(base):
     controlla("Unreal: gioco aperto -> non scrivo", not fatto and open(gus, "rb").read() == originale_gus)
     sistema.gioco_aperto = lambda c: False
 
-    # --- Unity con I2: lista di lingue negli asset, preferenza nel registro (chiave di prova)
+    # --- Unity with I2: list of languages in the assets, preference in the registry (test key)
     controlla("PlayerPrefs: nome del valore come Unity", lingua_unity.nome_pref("I2 Language") == "I2 Language_h3293684300")
     un = os.path.join(base, "GiocoUnity")
     dati = os.path.join(un, "Gioco_Data")

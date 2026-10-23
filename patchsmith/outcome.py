@@ -1,23 +1,23 @@
-"""Esito di un'operazione (Analizza e traduci, Riapplica, Ripristina) in una forma che l'interfaccia sa leggere:
-un codice, i conteggi, il motivo in una frase e le azioni possibili dopo. Da qui anche il testo delle finestre che
-l'interfaccia mostra alla fine, una per codice, con i pulsanti per il passo successivo.
+"""Outcome of an operation (Analyze and translate, Reapply, Restore) in a form the interface can read:
+a code, the counts, the reason in one sentence and the possible actions afterwards. From here also the text of the
+windows the interface shows at the end, one per code, with the buttons for the next step.
 
-Le funzioni di automatico restituiscono ancora i valori di prima (la riga di comando e le prove li usano): l'esito
-si trova in esito["esito"], nel dizionario del riconoscimento del motore (o in quello passato a riapplica/ripristina).
+The functions of automatico still return the same values as before (the command line and the tests use them): the
+outcome is in esito["esito"], in the engine detection dictionary (or in the one passed to riapplica/ripristina).
 """
 from dataclasses import asdict, dataclass, field
 
 CODICI = ("OK", "PARZIALE", "NULLA_DA_FARE", "UFFICIALE", "NON_SUPPORTATO", "ANTICHEAT", "GIOCO_APERTO",
           "TRADUTTORE_BLOCCATO", "TRADUTTORE_ASSENTE", "GIA_ORIGINALE", "PERMESSI", "CARTELLA_SBAGLIATA", "ERRORE")
-# azioni proposte dopo un esito (ognuna diventa un pulsante, tranne scegli_lingua che e' un'istruzione)
+# actions proposed after an outcome (each becomes a button, except scegli_lingua which is an instruction)
 AZIONI = ("chiudi_gioco", "usa_locale", "installa_locale", "mostra_rimasti", "crea_rapporto", "riapplica",
           "scegli_lingua", "traduci_comunque", "sperimentale", "ripristina", "traduci", "ritraduci", "correggi")
-MAX_ESEMPI = 20  # testi rimasti in originale da mostrare (i primi)
+MAX_ESEMPI = 20  # texts left untranslated to show (the first ones)
 DAL_VIVO = {"locale": "PatchSmith, con il traduttore locale (sul tuo PC)",
             "online": "PatchSmith, con il traduttore online (con le pause che evitano i blocchi)",
             "google": "XUnity, con Google gratuito (via internet)",
             "nessuno": "nessuno, restano in originale"}
-# perche' le frasi nuove non le traduce PatchSmith (Esito.extra["dal_vivo_nota"], vedi automatico._dal_vivo)
+# why PatchSmith is not the one translating the new sentences (Esito.extra["dal_vivo_nota"], see automatico._dal_vivo)
 NOTE_DAL_VIVO = {
     "senza_traduttore": "Adesso non c'è un traduttore disponibile: il traduttore locale non è installato e quelli "
                         "online sono in pausa. Installa il traduttore locale: dalla prossima volta che avvii il "
@@ -32,14 +32,14 @@ NOTE_DAL_VIVO = {
 
 @dataclass
 class Esito:
-    """codice: uno di CODICI. motore: unity, unity-localization, unreal, xna, gamemaker, web... (None se non si sa).
-    scritto: in questa operazione e' stata scritta nel gioco almeno una traduzione (per Unity: BepInEx e XUnity
-    installati, che traducono anche mentre si gioca). tradotti/rimasti: testi tradotti e rimasti in
-    originale; esempi_rimasti: i primi originali rimasti. dal_vivo (Unity): chi traduce le frasi nuove mentre si
-    gioca, 'locale', 'google', 'nessuno' (None: non c'e' traduzione dal vivo). motivo: una frase per l'utente.
-    azioni: da AZIONI. extra: dati per le domande dell'interfaccia (lingua ufficiale, lingua aggiunta...) e cosa ha
-    gia' rifatto PatchSmith da solo (ritentati, rifatte, cache_corrette, corrette_a_mano_scartate, adattate_font,
-    accorciate, troppo_lunghe: vedi automatico._extra_tentativi)."""
+    """codice: one of CODICI. motore: unity, unity-localization, unreal, xna, gamemaker, web... (None if unknown).
+    scritto: in this operation at least one translation was written to the game (for Unity: BepInEx and XUnity
+    installed, which also translate while playing). tradotti/rimasti: texts translated and left
+    untranslated; esempi_rimasti: the first originals left. dal_vivo (Unity): who translates the new sentences while
+    playing, 'locale', 'google', 'nessuno' (None: there is no live translation). motivo: one sentence for the user.
+    azioni: from AZIONI. extra: data for the interface's questions (official language, added language...) and what
+    PatchSmith has already redone on its own (ritentati, rifatte, cache_corrette, corrette_a_mano_scartate,
+    adattate_font, accorciate, troppo_lunghe: see automatico._extra_tentativi)."""
     codice: str
     motivo: str = ""
     motore: str = None
@@ -66,7 +66,7 @@ class Esito:
         return asdict(self)
 
     def riassunto(self):
-        """Una riga per il registro su disco."""
+        """One line for the log on disk."""
         parti = ["Esito: %s" % self.codice]
         if self.motore:
             parti.append("motore %s" % self.motore)
@@ -81,18 +81,18 @@ class Esito:
 
 
 def imposta(esito, codice, motivo="", **campi):
-    """Registra l'esito in esito["esito"] (il dizionario del riconoscimento, o quello dato dall'interfaccia) e
-    restituisce il dizionario. Con esito None non fa nulla."""
+    """Records the outcome in esito["esito"] (the detection dictionary, or the one given by the interface) and
+    returns the dictionary. With esito None it does nothing."""
     if esito is not None:
         esito["esito"] = Esito(codice, motivo, **campi)
     return esito
 
 
-# --- eccezioni ---------------------------------------------------------------------------------------
+# --- exceptions --------------------------------------------------------------------------------------
 
 def da_eccezione(errore):
-    """Esito per un errore arrivato fino all'interfaccia. Gli errori di PatchSmith hanno un messaggio per l'utente
-    (e a volte un codice: errore.codice); gli altri sono imprevisti: si dice il tipo e si propone un rapporto."""
+    """Outcome for an error that made it up to the interface. PatchSmith's errors have a message for the user
+    (and sometimes a code: errore.codice); the others are unexpected: the type is stated and a report is proposed."""
     from .backend import ErroreBackend
     from .system import ErroreSistema
     codice = getattr(errore, "codice", None)
@@ -120,7 +120,7 @@ def _azioni_per(codice):
 
 
 def _errore_noto(errore):
-    """True per gli errori con un messaggio scritto per l'utente (gli stessi che la riga di comando mostra come
+    """True for the errors with a message written for the user (the same ones the command line shows as
     'ERRORE: ...')."""
     from . import adapter_unity, adapter_unreal, adapter_xna, components as componenti, dotnet, ollama, xnb
     noti = (adapter_unity.ErroreUnity, adapter_unreal.ErroreUnreal, adapter_xna.ErroreXna, componenti.ErroreComponente,
@@ -128,7 +128,7 @@ def _errore_noto(errore):
     return isinstance(errore, noti) and type(errore) not in (UnicodeDecodeError, NotImplementedError, RecursionError)
 
 
-# --- finestre dell'interfaccia --------------------------------------------------------------------
+# --- interface windows ----------------------------------------------------------------------------
 
 COME_VEDERLA = {
     "unity": "La traduzione è installata nel gioco (BepInEx + XUnity.AutoTranslator).\n\nAvvia il gioco come al "
@@ -179,17 +179,17 @@ PULSANTI = {"mostra_rimasti": "Mostra i rimasti", "crea_rapporto": "Crea rapport
 NOMI_OPERAZIONE = {"traduci": "Analizza e traduci", "riapplica": "Riapplica",
                    "ripristina": "Ripristina originali", "controlla": "Controllo dopo aver giocato",
                    "ritraduci": "Ritraduci"}
-# operazioni dopo le quali, con testi rimasti in originale o traduzioni che il gioco non sa mostrare, si propone
-# "Correggi traduzioni" (la finestra con l'elenco giusto gia' scelto)
+# operations after which, with texts left untranslated or translations the game cannot show, "Fix translations"
+# is proposed (the window with the right list already chosen)
 CON_CORREZIONI = ("traduci", "riapplica", "ritraduci")
-# stato dei problemi del controllo dopo aver giocato (controllo.Problema.stato) -> gruppo nella finestra
+# status of the problems of the after-play check (controllo.Problema.stato) -> group in the window
 GRUPPI_CONTROLLO = (("corretto", "Corretto da solo:"),
                     ("da_fare", "Da fare:"), ("rimandato", "Da correggere quando il gioco è chiuso:"),
                     ("info", "Da sapere:"))
 STATI_GRUPPO = {"corretto": "corretto", "non_riuscito": "da_fare", "gia_tentato": "da_fare", "da_fare": "da_fare",
                 "rimandato": "rimandato", "da_correggere": "rimandato", "info": "info"}
-# operazioni che non toccano i file del gioco (installazione del traduttore locale, rapporto, comandi della
-# finestra): niente "Riprova" (ripeterebbe l'ultima operazione sul gioco) ne' consigli sul gioco aperto
+# operations that do not touch the game's files (installation of the local translator, report, window
+# commands): no "Try again" (it would repeat the last operation on the game) nor advice about the open game
 FUORI_DAL_GIOCO = ("installa", "rapporto", "interfaccia")
 
 
@@ -223,14 +223,14 @@ def _conteggi(e):
 
 
 def finestra(e, operazione="traduci", locale_pronto=False, attuale=None):
-    """La finestra di fine operazione: {"titolo", "tipo" (info/avviso/errore/domanda), "testo",
-    "pulsanti": [(etichetta, azione)], "stato" (riga sotto il registro)}. Il primo pulsante e' "OK" (azione None).
-    locale_pronto: il traduttore locale e' installato (allora 'usa_locale' lo sceglie, se no lo installa);
-    attuale: il traduttore scelto (se e' gia' quello locale, 'usa_locale' non serve)."""
+    """The end-of-operation window: {"titolo", "tipo" (info/avviso/errore/domanda), "testo",
+    "pulsanti": [(label, action)], "stato" (line under the log)}. The first button is "OK" (action None).
+    locale_pronto: the local translator is installed (then 'usa_locale' chooses it, otherwise it installs it);
+    attuale: the chosen translator (if it is already the local one, 'usa_locale' is not needed)."""
     op = NOMI_OPERAZIONE.get(operazione, operazione)
-    altro = "usa_locale" in e.azioni and not (attuale == "locale" and locale_pronto)  # proporre un altro traduttore
+    altro = "usa_locale" in e.azioni and not (attuale == "locale" and locale_pronto)  # propose another translator
     righe = []
-    if operazione == "rapporto":  # niente registro su disco ne' rapporto da proporre: si dice solo il motivo
+    if operazione == "rapporto":  # no log on disk nor report to propose: only the reason is given
         righe.append("Non sono riuscito a creare il rapporto: %s" % (
             "errore imprevisto (%s): %s" % (e.extra.get("tipo", "?"), e.motivo) if e.extra.get("imprevisto")
             else e.motivo or "motivo sconosciuto"))
@@ -256,8 +256,8 @@ def finestra(e, operazione="traduci", locale_pronto=False, attuale=None):
     for azione in e.azioni:
         if azione in ("usa_locale", "installa_locale"):
             if azione == "usa_locale" and attuale == "locale" and locale_pronto:
-                continue  # e' gia' quello scelto
-            # installato e non scelto: si usa (installarlo non farebbe nulla); altrimenti si installa
+                continue  # it is already the chosen one
+            # installed and not chosen: use it (installing it would do nothing); otherwise install it
             azione = "usa_locale" if locale_pronto and attuale != "locale" else "installa_locale"
         if operazione in FUORI_DAL_GIOCO and azione == "chiudi_gioco":
             continue
@@ -277,9 +277,9 @@ def finestra(e, operazione="traduci", locale_pronto=False, attuale=None):
 
 
 def da_correggere(e, operazione="traduci"):
-    """True se dopo questo esito ha senso proporre "Correggi traduzioni": dopo Analizza e traduci, Riapplica o
-    Ritraduci, con testi rimasti in originale, traduzioni che il gioco non sa mostrare o testi gia' riprovati senza
-    riuscirci (non per gli errori imprevisti)."""
+    """True if after this outcome it makes sense to propose "Fix translations": after Analyze and translate, Reapply or
+    Re-translate, with texts left untranslated, translations the game cannot show or texts already retried without
+    success (not for unexpected errors)."""
     if operazione not in CON_CORREZIONI or e.extra.get("imprevisto") or \
             e.codice not in ("OK", "PARZIALE", "TRADUTTORE_BLOCCATO", "GIOCO_APERTO"):
         return False
@@ -288,10 +288,10 @@ def da_correggere(e, operazione="traduci"):
 
 
 def filtro_correzioni(e):
-    """L'elenco da mostrare in "Correggi traduzioni" aperta da questo esito (vedi correzioni.FILTRI)."""
+    """The list to show in "Fix translations" when opened from this outcome (see correzioni.FILTRI)."""
     if e is not None and (e.extra.get("corrette_a_mano_scartate") or (
             e.extra.get("scartate") and e.rimasti <= e.extra["scartate"] and not e.extra.get("ritentati"))):
-        return "gioco"  # (rimaste fuori dal gioco solo traduzioni che il gioco non saprebbe mostrare)
+        return "gioco"  # (only translations the game could not show were left out of the game)
     if e is not None and (e.rimasti or e.extra.get("ritentati")):
         return "rimasti"
     if e is not None and e.extra.get("troppo_lunghe"):
@@ -310,7 +310,8 @@ def _testo_ritraduzione(r):
 
 
 def _testo_scritto(e, op, altro=True):
-    """Qualcosa e' nel gioco: come vederla, i conteggi, chi traduce le frasi nuove e cosa fare per il resto."""
+    """Something is in the game: how to see it, the counts, who translates the new sentences and what to do for the
+    rest."""
     righe = []
     if e.codice == "GIOCO_APERTO":
         righe.append(e.motivo or "Il gioco è aperto.")
@@ -344,12 +345,12 @@ def _testo_scritto(e, op, altro=True):
 
 
 def _testo_tentativi(e):
-    """Cosa ha gia' fatto PatchSmith da solo per i testi rimasti (Esito.extra, vedi automatico._extra_tentativi): al
-    posto del vecchio "rilancia", che ripeteva le stesse domande e dava le stesse risposte."""
+    """What PatchSmith has already done on its own for the texts left (Esito.extra, see automatico._extra_tentativi):
+    in place of the old "rilancia", which repeated the same questions and gave the same answers."""
     righe = []
     if e.extra.get("ritentati"):
         n = e.extra["ritentati"]
-        # frasi intere, al singolare e al plurale (a pezzi non si traducono nella lingua dell'interfaccia)
+        # whole sentences, singular and plural (in pieces they cannot be translated into the interface language)
         righe.append("Un testo scartato dai controlli l'ho già riprovato da solo (frasi separate, parametri diversi): "
                      "lo vedi con \"Mostra i rimasti\". Alla prossima \"Analizza e traduci\" lo riprovo con parametri "
                      "nuovi." if n == 1 else
@@ -391,8 +392,8 @@ def _testo_tentativi(e):
 
 
 def testo_controllo(e):
-    """Il controllo dopo aver giocato (controllo.come_esito): il riassunto e i problemi divisi per gruppo (corretti da
-    soli, da fare, rimandati perche' il gioco era aperto, da sapere)."""
+    """The after-play check (controllo.come_esito): the summary and the problems split by group (fixed on their
+    own, to do, postponed because the game was open, good to know)."""
     righe = [e.motivo] if e.motivo else []
     problemi = e.extra.get("controllo") or []
     for stato, intestazione in GRUPPI_CONTROLLO:
@@ -425,7 +426,7 @@ def _testo_ripristino(e):
 
 
 def _testo_problema(e, op, altro=True):
-    """Niente (o non tutto) e' stato scritto: il motivo e il passo successivo."""
+    """Nothing (or not everything) was written: the reason and the next step."""
     motivo = e.motivo
     if e.codice == "NON_SUPPORTATO":
         righe = ["Questo gioco non si può ancora tradurre: %s" % _minuscola(motivo) if motivo else
@@ -471,12 +472,12 @@ def _testo_problema(e, op, altro=True):
 
 
 def _minuscola(testo):
-    """La frase dopo i due punti: iniziale minuscola, tranne le sigle (es. 'IL2CPP')."""
+    """The sentence after the colon: lowercase initial, except acronyms (e.g. 'IL2CPP')."""
     return testo if testo[1:2].isupper() else testo[:1].lower() + testo[1:]
 
 
 def testo_rimasti(e):
-    """Il testo della finestra "Mostra i rimasti": i primi originali rimasti, uno per riga."""
+    """The text of the "Show remaining" window: the first originals left, one per line."""
     righe = ["- " + " ".join(t.split())[:90] for t in e.esempi_rimasti]
     intestazione = ("Testi rimasti in originale: %d. Eccone %d:" % (e.rimasti, len(righe)) if e.rimasti > len(righe)
                     else "Testi rimasti in originale: %d." % e.rimasti)

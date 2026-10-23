@@ -1,6 +1,6 @@
-"""Test dell'adapter Unity con un gioco finto e pacchetti finti (nessun download, nessun gioco vero).
+"""Tests of the Unity adapter with a fake game and fake packages (no downloads, no real game).
 
-Uso: python -I test/test_unity.py <cartella_temporanea_vuota>
+Usage: python -I test/test_unity.py <empty_temp_folder>
 """
 import hashlib
 import io
@@ -77,7 +77,7 @@ def config(cartella):
 
 
 def prova_estrazione_bundle(gioco):
-    """estrai_testi con i pezzi dei giochi Unity di oggi (bundle finti, vedi fake_unity.py)."""
+    """estrai_testi with the pieces of today's Unity games (fake bundles, see fake_unity.py)."""
     crea_gioco(gioco)
     dati = os.path.join(gioco, "Gioco_Data")
     managed = os.path.join(dati, "Managed")
@@ -86,10 +86,10 @@ def prova_estrazione_bundle(gioco):
         p = os.path.join(dati, *rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "wb").write(byte)
-    # codice del gioco in un suo modulo (come SunHaven.Core.dll) e una libreria di terzi (non sono testi del gioco)
+    # game code in a module of its own (like SunHaven.Core.dll) and a third-party library (not game texts)
     scrivi("Managed/Gioco.Core.dll", finto.dll(["Harvest the golden wheat before winter", "Talk to the mayor"]))
     scrivi("Managed/Newtonsoft.Json.dll", finto.dll(["Unexpected end when reading the JSON document"]))
-    # data.unity3d compresso (LZ4 a blocchi piccoli): un testo a cavallo di due blocchi; le immagini (.resS) no
+    # compressed data.unity3d (LZ4 in small blocks): a text straddling two blocks; not the images (.resS)
     lungo = "The ancient bridge collapsed behind you, there is no way back now"
     risorse = finto.stringhe_serializzate(["Open the treasure chest", lungo, "Rest at the campfire"])
     taglio = risorse.index(lungo.encode()) + 10
@@ -97,8 +97,8 @@ def prova_estrazione_bundle(gioco):
                             ("sharedassets0.assets.resS", finto.stringhe_serializzate(["Texture label here"]))],
                            compressione="lz4", blocco=taglio)
     scrivi("data.unity3d", unity3d)
-    # StreamingAssets: un bundle di Addressables (LZMA) e le tabelle dei testi (l'inglese si legge tutto, anche le
-    # frasi lunghe; le altre lingue no)
+    # StreamingAssets: an Addressables bundle (LZMA) and the text tables (English is read in full, long sentences
+    # included; the other languages are not)
     aa = "StreamingAssets/aa/StandaloneWindows64/"
     dialogo = "Long ago, before the kingdom fell, " + "the river carried songs from village to village. " * 10
     scrivi(aa + "items_assets_all.bundle", finto.bundle(
@@ -109,7 +109,7 @@ def prova_estrazione_bundle(gioco):
     scrivi(aa + "localization-string-tables-french_assets_all.bundle",
            finto.bundle_tabelle([("Dialoghi_fr", "fr", ["Bienvenue chez toi, voyageur !"])]))
     scrivi(aa + "rotto.bundle", b"UnityFS\x00non proprio")
-    # un file grande letto a pezzi: un testo a cavallo di due pezzi
+    # a large file read in pieces: a text straddling two pieces
     vecchio_pezzo = adapter_unity._PEZZO
     adapter_unity._PEZZO = 4096
     try:
@@ -136,7 +136,7 @@ def prova_estrazione_bundle(gioco):
     controlla("pre-traduzione: il registro dice cosa ha letto",
               any("Tabelle dei testi di Unity Localization" in r for r in righe)
               and any("Bundle del gioco: letti" in r for r in righe))
-    # limite di tempo esaurito: i bundle restano alla traduzione dal vivo, il resto si legge
+    # time limit used up: the bundles are left to the live translation, the rest is read
     vecchio = adapter_unity.MAX_SECONDI_BUNDLE
     adapter_unity.MAX_SECONDI_BUNDLE = -1
     try:
@@ -153,7 +153,7 @@ def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
-    progetto.RADICE_DATI = os.path.join(base, "dati")  # la memoria del gioco finto: mai tra i dati veri
+    progetto.RADICE_DATI = os.path.join(base, "dati")  # the fake game's translation memory: never among the real data
     adapter_unity.in_esecuzione = lambda *_: False
     prepara_componenti(os.path.join(base, "componenti"))
     memoria = adapter_unity._cartella_memoria(NOME)
@@ -167,7 +167,7 @@ def main(base):
     controlla("analisi: mono x64 Unity 6000.3.12f1", (info["backend"], info["architettura"], info["versione_unity"])
               == ("mono", "x64", "6000.3.12f1"))
 
-    # 1) installazione con lingua rilevata
+    # 1) installation with detected language
     righe = []
     adapter_unity.installa(gioco, "auto", "it", NOME, righe.append)
     controlla("lingua rilevata: inglese", any("Inglese (en)" in r for r in righe))
@@ -185,7 +185,7 @@ def main(base):
     controlla("manifesto completo (changelog escluso)", m and not m["in_corso"] and len(m["file"]) == 8
               and m["radice_prima"] == prima and not os.path.exists(os.path.join(gioco, "changelog.txt")))
 
-    # 2) simulo il primo avvio del gioco
+    # 2) simulate the game's first start
     os.makedirs(os.path.join(gioco, "BepInEx", "Translation", "it", "Text"))
     open(os.path.join(gioco, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt"), "w",
          encoding="utf-8").write("Start a new game=Inizia una nuova partita\nSettings and options=Impostazioni e opzioni\n")
@@ -196,7 +196,7 @@ def main(base):
     open(os.path.join(gioco, *adapter_unity.STATO_SERVIZIO.split("/")), "w", encoding="utf-8").write(
         "# Scritto dal plugin di PatchSmith a ogni avvio del gioco\r\nEsito=python-mancante\r\n"
         "Data=2026-10-18 04:29:33\r\nProcesso=1234\r\nProgramma=C:\\Python311\\pythonw.exe\r\nDettaglio=\r\n")
-    # XUnity riscrive la config con tutte le chiavi: simulo una chiave in piu' e un commento
+    # XUnity rewrites the config with all the keys: simulate an extra key and a comment
     open(os.path.join(gioco, "BepInEx", "config", "AutoTranslatorConfig.ini"), "w", encoding="utf-8").write(
         "[Service]\nEndpoint=GoogleTranslateV2\nFallbackEndpoint=\n\n[General]\nLanguage=it\nFromLanguage=en\n"
         "\n[Behaviour]\nMaxCharactersPerTranslation=500\nEnableBatching=True\nHandleRichText=True\n")
@@ -208,7 +208,7 @@ def main(base):
               adapter_unity.leggi_stato_servizio(gioco).get("Esito") == "python-mancante"
               and any("ultimo avvio del gioco: python-mancante (2026-10-18 04:29:33)" in r for r in righe))
 
-    # 3) gia' installato: cambio lingua senza perdere le altre chiavi
+    # 3) already installed: language change without losing the other keys
     adapter_unity.installa(gioco, "en", "es", NOME, silenzio)
     c = config(gioco)
     controlla("riconfigura: Language=es, nostre chiavi imposte, altre conservate", "Language=es" in c
@@ -216,19 +216,19 @@ def main(base):
               and "FallbackEndpoint=" in c and c.count("[General]") == 1)
     adapter_unity.installa(gioco, "en", "it", NOME, silenzio)
 
-    # 3b) traduzione corretta a mano nel gioco: un nuovo "Riapplica" non la sovrascrive
+    # 3b) translation fixed by hand in the game: a new "Reapply" does not overwrite it
     vivo = os.path.join(gioco, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
     open(vivo, "w", encoding="utf-8").write("Start a new game=Nuova partita (corretta a mano)\n")
     adapter_unity.installa(gioco, "en", "it", NOME, silenzio)
     controlla("riapplica: correzione nel gioco conservata", "corretta a mano" in open(vivo, encoding="utf-8").read())
 
-    # 3c) file tolto dall'antivirus: viene rimesso, il resto non si tocca
+    # 3c) file removed by the antivirus: it is put back, the rest is not touched
     os.remove(os.path.join(gioco, "winhttp.dll"))
     adapter_unity.installa(gioco, "en", "it", NOME, silenzio)
     controlla("antivirus: file mancante rimesso, traduzioni intatte", os.path.exists(os.path.join(gioco, "winhttp.dll"))
               and "corretta a mano" in open(vivo, encoding="utf-8").read())
 
-    # 3d) mod aggiunta dall'utente dentro BepInEx: non va cancellata
+    # 3d) mod added by the user inside BepInEx: it must not be deleted
     os.makedirs(os.path.join(gioco, "BepInEx", "plugins", "ModUtente"))
     open(os.path.join(gioco, "BepInEx", "plugins", "ModUtente", "ModUtente.dll"), "wb").write(b"mod")
     adapter_unity.disinstalla(gioco, NOME, silenzio)
@@ -239,25 +239,25 @@ def main(base):
     shutil.rmtree(os.path.join(gioco, "BepInEx"))
     adapter_unity.installa(gioco, "en", "it", NOME, silenzio)
 
-    # 4) disinstallazione: traduzioni salvate, cartella com'era
+    # 4) uninstall: translations saved, folder as it was
     adapter_unity.disinstalla(gioco, NOME, silenzio)
     controlla("disinstalla: cartella identica a prima", sorted(os.listdir(gioco)) == prima)
     salvate = os.path.join(memoria, "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
     controlla("disinstalla: traduzioni salvate in memoria", os.path.exists(salvate))
 
-    # 5) reinstallazione: le traduzioni tornano
+    # 5) reinstall: the translations come back
     adapter_unity.installa(gioco, "en", "it", NOME, silenzio)
     tornate = os.path.join(gioco, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
     controlla("reinstalla: traduzioni rimesse", os.path.exists(tornate) and "corretta a mano" in open(tornate, encoding="utf-8").read())
 
-    # 6) file nella radice sostituito da altri: non lo cancello
+    # 6) file in the root replaced by someone else: not deleted
     open(os.path.join(gioco, "doorstop_config.ini"), "w").write("modificato a mano")
     adapter_unity.disinstalla(gioco, NOME, silenzio)
     controlla("file modificato da altri: lasciato", os.path.exists(os.path.join(gioco, "doorstop_config.ini"))
               and not os.path.exists(os.path.join(gioco, "BepInEx")))
     os.remove(os.path.join(gioco, "doorstop_config.ini"))
 
-    # 7) altro loader gia' presente: nessuna scrittura
+    # 7) another loader already present: no writing
     gioco2 = os.path.join(base, "gioco-con-mod")
     crea_gioco(gioco2, conflitto="winhttp.dll")
     prima2 = sorted(os.listdir(gioco2))
@@ -267,7 +267,7 @@ def main(base):
     except adapter_unity.ErroreUnity:
         controlla("conflitto: installazione rifiutata", sorted(os.listdir(gioco2)) == prima2)
 
-    # 8) pacchetto con percorso malevolo: rifiutato prima di scrivere
+    # 8) package with a malicious path: rejected before writing
     gioco3 = os.path.join(base, "gioco-zip-malevolo")
     crea_gioco(gioco3)
     prima3 = sorted(os.listdir(gioco3))
@@ -282,7 +282,7 @@ def main(base):
                   and not os.path.exists(os.path.join(base, "fuori.dll")))
     componenti.CATALOGO["xunity_bepinex5"] = buono
 
-    # 9) interruzione a meta': tutto annullato
+    # 9) interruption halfway: everything undone
     originale = adapter_unity.configura
 
     def guasto(*_, **__):
@@ -296,7 +296,7 @@ def main(base):
         controlla("interruzione: tutto annullato", sorted(os.listdir(gioco3)) == prima3)
     adapter_unity.configura = originale
 
-    # 9b) processo morto a meta' installazione (nessun annullamento): "Ripristina" pulisce tutto
+    # 9b) process dead halfway through the installation (no undo): "Restore" cleans everything up
     vera_scrivi, vera_rimuovi = adapter_unity._scrivi_voce, adapter_unity._rimuovi
     scritti = []
 
@@ -307,7 +307,7 @@ def main(base):
         vera_scrivi(cartella, rel, voce)
 
     adapter_unity._scrivi_voce = scrivi_poi_muori
-    adapter_unity._rimuovi = lambda *a, **k: []  # simula la morte: nessun annullamento
+    adapter_unity._rimuovi = lambda *a, **k: []  # simulates the death: no undo
     try:
         adapter_unity.installa(gioco3, "en", "it", NOME, silenzio)
     except KeyboardInterrupt:
@@ -318,7 +318,7 @@ def main(base):
     adapter_unity.disinstalla(gioco3, NOME, silenzio)
     controlla("interruzione dura: ripristino pulisce tutto", sorted(os.listdir(gioco3)) == prima3)
 
-    # 9c) manifesto alterato: non si cancella nulla
+    # 9c) tampered manifest: nothing is deleted
     gioco4 = os.path.join(base, "gioco-manifesto-alterato")
     crea_gioco(gioco4)
     falso = {"versione": 2, "patchsmith": True, "radice_prima": [], "cartelle_create": ["Gioco_Data"],
@@ -330,7 +330,7 @@ def main(base):
     except adapter_unity.ErroreUnity:
         controlla("manifesto alterato: nulla cancellato", os.path.isdir(os.path.join(gioco4, "Gioco_Data")))
 
-    # 9d) pre-traduzione: estrazione dagli asset (lunghezza + UTF-8) con i filtri
+    # 9d) pre-translation: extraction from the assets (length + UTF-8) with the filters
     gioco5 = os.path.join(base, "gioco-pretraduzione")
     crea_gioco(gioco5)
 
@@ -348,10 +348,10 @@ def main(base):
     controlla("pre-traduzione: testi giusti estratti, scarti esclusi", attesi <= set(testi)
               and not any(x in testi for x in ("Paper (17)", "EyeTreeLevel_Grass_0", "Base Layer.Run", "joystick 4 analog 1")))
 
-    # 9f) pre-traduzione nei giochi Unity di oggi: codice in altre DLL, data.unity3d compresso, bundle, tabelle
+    # 9f) pre-translation in today's Unity games: code in other DLLs, compressed data.unity3d, bundles, tables
     prova_estrazione_bundle(os.path.join(base, "gioco-bundle"))
 
-    # 9e) cache di XUnity: aggiunge solo cio' che manca, conserva le correzioni, non traduce i nomi delle lingue
+    # 9e) XUnity cache: adds only what is missing, keeps the fixes, does not translate the language names
     cache = os.path.join(gioco5, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
     os.makedirs(os.path.dirname(cache))
     open(cache, "wb").write("﻿Back to Game=Torna al gioco (corretto)\nPortuguês - Brasil=Português - Brasile\n".encode("utf-8"))
@@ -366,7 +366,7 @@ def main(base):
     controlla("cache: nomi delle lingue invariati", "English=English" in testo
               and "Português - Brasil=Português - Brasil\n" in testo)
 
-    # 10) impronta sbagliata: il componente viene scartato
+    # 10) wrong fingerprint: the component is rejected
     import pathlib
     sorgente = componenti.percorso("xunity_bepinex5")
     componenti.CATALOGO["xunity_bepinex5"] = dict(buono, sha256="0" * 64, url=pathlib.Path(sorgente).as_uri())
@@ -384,22 +384,23 @@ def main(base):
 
 
 def _plugin_finto(cartella, info):
-    """Al posto della compilazione con csc (le librerie del gioco finto non sono vere): un plugin finto."""
+    """Instead of compiling with csc (the fake game's libraries are not real): a fake plugin."""
     dest = os.path.join(cartella, *adapter_unity.PLUGIN_SERVIZIO.split("/"))
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     open(dest, "wb").write(b"MZ plugin finto")
 
 
 def prova_dal_vivo(base):
-    """Chi traduce le frasi nuove mentre si gioca, con Analizza e traduci e con Riapplica (automatico): sempre il
-    traduttore di PatchSmith se il plugin si prepara; altrimenti XUnity con Google, ma mai con Google in pausa."""
+    """Who translates the new sentences while playing, with Analyze and translate and with Reapply (automatic):
+    always PatchSmith's translator if the plugin can be prepared; otherwise XUnity with Google, but never with Google
+    paused."""
     from patchsmith import (auto as automatico, backend, outcome as esito, limiter as limitatore, ollama,
                             scan as scansione)
-    prepara_componenti(os.path.join(base, "componenti-dal-vivo"))  # quelli di prima li ha scartati la prova 10
+    prepara_componenti(os.path.join(base, "componenti-dal-vivo"))  # the earlier ones were rejected by test 10
     automatico.CARTELLA_PROFILI = os.path.join(base, "profiles")
     vero_stato, vera_compila, vero_csc, vero_crea = (ollama.stato, adapter_unity._compila_plugin, adapter_unity._csc,
                                                      automatico.crea_backend)
-    automatico.crea_backend = lambda nome, log=print: backend.Finto()  # nessuna rete: traduzioni finte
+    automatico.crea_backend = lambda nome, log=print: backend.Finto()  # no network: fake translations
     stato = limitatore.percorso_stato()
 
     def unity(nome, profilo=None):
@@ -419,7 +420,7 @@ def prova_dal_vivo(base):
     try:
         ollama.stato = lambda: "pronto"
         adapter_unity._compila_plugin = _plugin_finto
-        gioco, percorso = unity("con-servizio", {"backend": "xunity-google"})  # profilo di una versione precedente
+        gioco, percorso = unity("con-servizio", {"backend": "xunity-google"})  # game profile from an earlier version
         e = completo(percorso, backend="google")
         c = config(gioco)
         controlla("Google scelto, traduttore locale installato: frasi nuove al traduttore di PatchSmith "
@@ -452,7 +453,7 @@ def prova_dal_vivo(base):
                   and "installa_locale" in e.azioni and e.extra.get("dal_vivo_nota") == "senza_traduttore")
 
         adapter_unity._compila_plugin = vera_compila
-        adapter_unity._csc = lambda: None  # manca il compilatore C#: il plugin non si prepara
+        adapter_unity._csc = lambda: None  # the C# compiler is missing: the plugin cannot be prepared
         gioco, percorso = unity("senza-csc-in-pausa")
         e = completo(percorso, backend="google")
         c = config(gioco)
@@ -472,7 +473,7 @@ def prova_dal_vivo(base):
                   and e.extra.get("dal_vivo_nota") == "plugin_google")
 
         class BloccaGoogle(backend.Finto):
-            """Traduce, ma intanto Google blocca le richieste (come un 429 durante la pre-traduzione)."""
+            """Translates, but meanwhile Google blocks the requests (like a 429 during the pre-translation)."""
 
             def traduci_righe(self, righe, origine, destinazione):
                 limitatore.Limitatore("google", log=None).bloccato(429, "prova")
@@ -489,7 +490,7 @@ def prova_dal_vivo(base):
         if os.path.exists(stato):
             os.remove(stato)
 
-        # nomi del gioco nel profilo, da app.info (prepara)
+        # the game's names in the game profile, from app.info (prepara)
         gioco = os.path.join(base, "dal-vivo", "con-nomi")
         crea_gioco(gioco)
         with open(os.path.join(gioco, "Gioco_Data", "app.info"), "w", encoding="utf-8") as f:
@@ -499,7 +500,7 @@ def prova_dal_vivo(base):
             salvato = json.load(f)
         controlla("prepara: i nomi del gioco (azienda, anche senza 'LLC', e titolo da app.info) nel profilo, da non "
                   "tradurre", salvato.get("non_tradurre", [])[:3] == ["Cup Dog Games LLC", "Cup Dog Games", "Rubinite"])
-        # un nome tolto a mano (un titolo che si vuole tradotto) non torna; uno aggiunto a mano resta
+        # a name removed by hand (a title one wants translated) does not come back; one added by hand stays
         salvato["non_tradurre"] = [n for n in salvato["non_tradurre"] if n != "Rubinite"] + ["Lanterna"]
         with open(percorso, "w", encoding="utf-8") as f:
             json.dump(salvato, f)
@@ -519,8 +520,8 @@ def prova_dal_vivo(base):
 
 
 def prova_cache_dal_vivo(base, unity, completo):
-    """La cache di XUnity: righe sbagliate scritte da PatchSmith (memoria o diario del traduttore dal vivo) rifatte e
-    sostituite con "Analizza e traduci"; quelle cambiate a mano mai."""
+    """The XUnity cache: wrong lines written by PatchSmith (translation memory or the live translator's journal) redone
+    and replaced with "Analyze and translate"; those changed by hand never."""
     from patchsmith import auto as automatico, backend, xunity_service as servizio_xunity
 
     class Traduce(backend.Backend):
@@ -530,16 +531,17 @@ def prova_cache_dal_vivo(base, unity, completo):
             return [{"Open the door to the castle": "Apri la porta del castello",
                      "Collect [[0]] coins": "Raccogli [[0]] monete",
                      "Hold [[0]] to leap": "Tieni premuto [[0]] per saltare",
-                     # se la riga cambiata a mano si rifacesse, avrebbe una traduzione buona: non deve succedere
+                     # if the line changed by hand were redone, it would get a good translation: this must not
+                     # happen
                      "Talk to the guard and the king": "Parla con la guardia e il re"}.get(r, "IT " + r)
                     for r in righe]
 
     automatico.crea_backend = lambda nome, log=print: Traduce()
     gioco, percorso = unity("cache-da-correggere")
-    completo(percorso, backend="google")  # installazione e pre-traduzione
+    completo(percorso, backend="google")  # installation and pre-translation
     nome = "cache-da-correggere"
     memoria = progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"})
-    salvate = {"Collect {{A}} coins": "Raccogli monete"}  # scritta in automatico, ma ha perso il {{A}}
+    salvate = {"Collect {{A}} coins": "Raccogli monete"}  # machine-written, but it lost the {{A}}
     os.makedirs(os.path.dirname(memoria), exist_ok=True)
     for p in (memoria, memoria[:-5] + ".automatiche.json"):
         with open(p, "w", encoding="utf-8") as f:
@@ -569,7 +571,7 @@ def prova_cache_dal_vivo(base, unity, completo):
     controlla("cache: la riga cambiata a mano (anche se sembra sbagliata) e il nome restano come sono",
               voci["Talk to the guard and the king"] == "Parla con the guard and the king"
               and voci["Xbox Series"] == "Xbox Series")
-    # scrittura: si sostituisce solo se la riga ha ancora la traduzione attesa
+    # writing: a line is replaced only if it still has the expected translation
     with open(cache, "a", encoding="utf-8") as f:
         f.write("Quit=Esci (a mano)\n")
     conteggi = {}

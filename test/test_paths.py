@@ -1,22 +1,22 @@
-"""Percorsi completi di chi usa solo l'interfaccia (revisione finale della 0.16): giochi finti, traduttori finti,
-nessuna rete, nessun gioco vero, nessun Ollama.
+"""Complete paths of someone who only uses the interface (final review of 0.16): fake games, fake translators,
+no network, no real game, no Ollama.
 
-Uso: python -I test/test_paths.py <cartella_temporanea_vuota>
-Apre la finestra di PatchSmith (come test/test_gui.py: le finestre di dialogo si registrano e si risponde da qui) e
-fa quello che farebbe chi gioca:
-- un gioco web nuovo: Analizza e traduci, controllo dopo aver giocato, Correggi traduzioni, Ripristina e Riapplica,
-  Crea rapporto;
-- un gioco GameMaker nuovo (file di lingua alla maniera di Another Door): traduzione, una traduzione che il font non sa
-  disegnare (scartata e mostrata in "Correggi traduzioni");
-- un gioco Unity Mono nuovo: BepInEx e XUnity (pacchetti finti), il traduttore delle frasi nuove di PatchSmith; dopo una
-  partita (registri veri ridotti di test/data/signals) il controllo all'apertura, "Dettagli" e "Ritraduci";
-  una correzione fatta con il gioco aperto scritta dal controllo dopo, Ripristina e Riapplica, il rapporto;
-- il gioco aperto prima di partire e durante il lavoro, il traduttore online in pausa o bloccato a meta', il traduttore
-  locale non installato, testi rimasti in originale.
-Per ogni finestra si controlla che dica in italiano semplice il passo dopo (un pulsante o un'istruzione), senza nomi
-tecnici (smith.py, file JSON, traceback).
-I dati di PatchSmith vanno in PATCHSMITH_DATI (test/run_all.py ne crea una per la prova); senza, in una
-cartella dentro quella della prova.
+Usage: python -I test/test_paths.py <empty_temp_folder>
+Opens PatchSmith's window (like test/test_gui.py: the dialogs are recorded and answered from here) and
+does what a player would do:
+- a new web game: Analyze and translate, after-play check, Fix translations, Restore and Reapply,
+  Create report;
+- a new GameMaker game (language files in the style of Another Door): translation, a translation the font cannot
+  draw (rejected and shown in "Fix translations");
+- a new Unity Mono game: BepInEx and XUnity (fake packages), PatchSmith's translator of new lines; after a
+  session (real logs, reduced, from test/data/signals) the check on opening, "Details" and "Re-translate";
+  a fix made with the game open, written by the check afterwards, Restore and Reapply, the report;
+- the game open before starting and during the work, the online translator paused or blocked halfway, the local
+  translator not installed, texts left untranslated.
+For each dialog it checks that it tells the next step in plain Italian (a button or an instruction), without
+technical names (smith.py, JSON file, traceback).
+PatchSmith's data go to PATCHSMITH_DATI (test/run_all.py creates one for the test); without it, to a
+folder inside the test's folder.
 """
 import glob
 import hashlib
@@ -35,17 +35,17 @@ sys.path.insert(0, QUI)
 import tkinter as tk  # noqa: E402
 
 import fake_web_game as gioco_web_finto  # noqa: E402
-import test_checks as pc  # noqa: E402  (gioco Unity finto, pacchetti finti, registri veri ridotti)
-import test_formats as pf  # noqa: E402  (gioco GameMaker alla Another Door, traduttore finto)
+import test_checks as pc  # noqa: E402  (fake Unity game, fake packages, reduced real logs)
+import test_formats as pf  # noqa: E402  (GameMaker game in the style of Another Door, fake translator)
 import fake_unity as unity_finto  # noqa: E402
 from patchsmith import (adapter_unity, auto as automatico, backend, checks as controllo, corrections as correzioni,
                         outcome as esito, gui, limiter as limitatore, ollama, project as progetto, report as rapporto,
                         xunity_service as servizio_xunity, system as sistema, steam, theme as tema)
 
 ESITI = []
-FINESTRE = []  # (tipo, titolo, testo, pulsanti)
-RISPOSTE = {}  # titolo -> risposta (o lista di risposte): None = OK/Annulla/finestra chiusa
-# parole che dicono a chi gioca cosa fare dopo (un pulsante o un'istruzione nel testo)
+FINESTRE = []  # (type, title, text, buttons)
+RISPOSTE = {}  # title -> answer (or list of answers): None = OK/Cancel/dialog closed
+# words that tell the player what to do next (a button or an instruction in the text)
 PASSO = re.compile(r"\b(premi|avvia|scegli|chiudi|riprova|installa|usa|apri|crea|correggi|lascia|gioca|controlla|"
                    r"riapplica|aspetta|puoi|serve|basta|sposta|incolla|riavvia|torna|resta|restano|dimmi|fai)\w*",
                    re.I)
@@ -88,11 +88,11 @@ def _informa(_g, _c, titolo, testo):
 
 
 def chiara(f):
-    """La finestra dice il passo dopo (un pulsante diverso da OK/Annulla, o un'istruzione nel testo) senza nomi
-    tecnici."""
+    """The dialog tells the next step (a button other than OK/Cancel, or an instruction in the text) without technical
+    names."""
     _, titolo, testo, pulsanti = f
     altri = [p for p, v in pulsanti if v not in (None, False, True)]
-    finito = re.search(r"nessun problema|Avvia il gioco", testo)  # niente da fare: OK basta
+    finito = re.search(r"nessun problema|Avvia il gioco", testo)  # nothing to do: OK is enough
     return not TECNICI.search(titolo + " " + testo) and bool(altri or finito or PASSO.search(testo))
 
 
@@ -110,7 +110,7 @@ def pulsanti(f):
 
 
 def aspetta(app, radice, secondi=120):
-    """Aspetta la fine del lavoro in corso e lascia arrivare gli ultimi messaggi (e la finestra di fine)."""
+    """Waits for the end of the running work and lets the last messages (and the final dialog) arrive."""
     inizio = time.time()
     for _ in range(3):
         radice.update()
@@ -134,8 +134,8 @@ def impronte(cartella):
 
 
 class Traduttore(backend.Backend):
-    """Traduttore finto "vero" (non il backend 'finto': memoria vera): parole al contrario, riconoscibili; quelle in
-    STRANE tornano con un carattere che nessun font ha o uguali all'originale."""
+    """A "real" fake translator (not the 'finto' backend: real translation memory): words reversed, recognizable;
+    those in STRANE come back with a character no font has, or the same as the original."""
     nome = "dizionario"
     STRANE = {}
 
@@ -150,7 +150,7 @@ class Traduttore(backend.Backend):
 
 
 class Bloccato(Traduttore):
-    """Traduce il primo gruppo di testi, poi il servizio online blocca le richieste (come un 429 di Google)."""
+    """Translates the first group of texts, then the online service blocks the requests (like a Google 429)."""
     max_testi = 3
 
     def traduci_righe(self, righe, origine, destinazione, *_a, **_k):
@@ -161,7 +161,7 @@ class Bloccato(Traduttore):
         return super().traduci_righe(righe, origine, destinazione)
 
 
-# --- preparazione ------------------------------------------------------------------------------------------
+# --- setup -------------------------------------------------------------------------------------------------
 
 def prepara(base):
     tema.informa = tema.avvisa = tema.errore = _informa
@@ -177,21 +177,21 @@ def prepara(base):
         progetto.RADICE_DATI = os.path.join(base, "dati")
     gui.IMPOSTAZIONI = None
     for v, rel in (("LOCALAPPDATA", "appdata"), ("USERPROFILE", "utente"), ("TEMP", "temp")):
-        if not os.environ.get("PATCHSMITH_DATI"):  # (con esegui_tutto sono gia' cartelle della prova)
+        if not os.environ.get("PATCHSMITH_DATI"):  # (with esegui_tutto they are already test folders)
             os.environ[v] = os.path.join(base, rel)
         os.makedirs(os.environ[v], exist_ok=True)
     steam.cartella_steam = lambda: None
     steam.gioco_installato = lambda cartella, steam=None: None
     steam.riconosci_da_eseguibili = lambda cartella: None
-    controllo.eventi_crash = lambda dal: []  # mai il registro vero di Windows
-    # il traduttore locale "installato" (stato simulato) e il traduttore finto al posto di tutti
+    controllo.eventi_crash = lambda dal: []  # never the real Windows log
+    # the local translator "installed" (simulated state) and the fake translator in place of all of them
     STATO["locale"] = "pronto"
     ollama.stato = lambda: STATO["locale"]
     ollama.installato = lambda: STATO["locale"] == "pronto"
     ollama.modello_presente = lambda chiave=None: STATO["locale"] == "pronto"
     automatico.crea_backend = controllo.crea_backend = crea_backend
     STATO["traduttore"] = Traduttore
-    # Unity: pacchetti di BepInEx e XUnity gia' "scaricati", plugin del traduttore senza compilatore
+    # Unity: BepInEx and XUnity packages already "downloaded", the translator's plugin without a compiler
     pc.prepara_componenti(os.path.join(base, "componenti"))
     adapter_unity._compila_plugin = pc._plugin_finto
 
@@ -200,8 +200,8 @@ STATO = {}
 
 
 def crea_backend(nome, log=print):
-    """Come backend.crea_backend, ma con il traduttore finto: il traduttore locale non installato non parte, quello
-    online in pausa lo dice (pausa(), come GoogleGratis)."""
+    """Like backend.crea_backend, but with the fake translator: the local translator not installed does not start,
+    the online one, if paused, says so (pausa(), like GoogleGratis)."""
     if nome == "locale" and STATO["locale"] != "pronto":
         raise backend.ErroreBackend(backend.NON_INSTALLATO, "TRADUTTORE_ASSENTE", comando=backend.COMANDO_INSTALLA)
     t = STATO["traduttore"]()
@@ -221,7 +221,7 @@ def apri_finestra():
     return radice, app
 
 
-# --- 1. gioco web ------------------------------------------------------------------------------------------
+# --- 1. web game -------------------------------------------------------------------------------------------
 
 def percorso_web(app, radice, base):
     gioco = os.path.join(base, "giochi", "Lantern Keeper")
@@ -239,7 +239,7 @@ def percorso_web(app, radice, base):
         tradotto = f.read()
     controlla("web: il file del gioco e' tradotto", "Start a new game" not in tradotto)
 
-    # controllo dopo aver giocato dal pulsante: niente da fare
+    # after-play check from the button: nothing to do
     n = len(FINESTRE)
     app._controlla()
     aspetta(app, radice)
@@ -248,7 +248,7 @@ def percorso_web(app, radice, base):
               fine[1] == "Controllo dopo aver giocato" and chiara(fine)
               and "nessun problema" in app.stato_controllo.get())
 
-    # Correggi traduzioni: una riga corretta e salvata, poi Riapplica da sola
+    # Fix translations: one line fixed and saved, then Reapply on its own
     finestra = app._correggi()
     finestra._vai_a("Start a new game")
     finestra.testo_traduzione.delete("1.0", "end")
@@ -263,7 +263,7 @@ def percorso_web(app, radice, base):
         controlla("web: correzione salvata e scritta nel gioco da sola ('Traduzione riapplicata')",
                   "Inizia una nuova partita" in f.read() and fine[1] == "Traduzione riapplicata" and chiara(fine))
 
-    # Ripristina (conferma) e poi Riapplica
+    # Restore (confirm) and then Reapply
     RISPOSTE["Ripristina"] = True
     n = len(FINESTRE)
     app._ripristina()
@@ -279,7 +279,7 @@ def percorso_web(app, radice, base):
         controlla("web: 'Riapplica' dopo Ripristina -> di nuovo tradotto, con la correzione",
                   "Inizia una nuova partita" in f.read() and fine[1] == "Traduzione riapplicata" and chiara(fine))
 
-    # Crea rapporto: lo zip con i registri, il profilo e i testi con problemi, senza file del gioco
+    # Create report: the zip with the logs, the game profile and the texts with problems, without game files
     n = len(FINESTRE)
     app._crea_rapporto()
     aspetta(app, radice)
@@ -292,14 +292,14 @@ def percorso_web(app, radice, base):
     return gioco
 
 
-# --- 2. gioco aperto, traduttore in pausa o bloccato, locale non installato, testi rimasti ---------------------
+# --- 2. game open, translator paused or blocked, local one not installed, texts left untranslated -------------
 
 def percorso_imprevisti(app, radice, base):
     gioco = os.path.join(base, "giochi", "Ember Road")
     gioco_web_finto.crea(gioco)
     app.cartella.set(gioco)
     vero_aperto = sistema.gioco_aperto
-    # gioco aperto prima di partire: niente parte, "Riprova" a gioco chiuso parte
+    # game open before starting: nothing starts, "Try again" with the game closed starts
     stato = {"aperto": True}
     sistema.gioco_aperto = lambda _c: stato["aperto"]
     RISPOSTE["Il gioco è aperto"] = ["riprova"]
@@ -316,7 +316,7 @@ def percorso_imprevisti(app, radice, base):
               domanda[1] == "Il gioco è aperto" and "riprova" in pulsanti(domanda) and chiara(domanda)
               and fine[1] == "Traduzione installata")
 
-    # traduttore online in pausa prima di partire: "Continua comunque" -> solo le traduzioni salvate
+    # online translator paused before starting: "Continue anyway" -> only the saved translations
     altro = os.path.join(base, "giochi", "Frost Hollow")
     gioco_web_finto.crea(altro)
     app.cartella.set(altro)
@@ -336,7 +336,7 @@ def percorso_imprevisti(app, radice, base):
               "(%s: %s)" % (fine[1], pulsanti(fine)), pausa[1] and "usa_locale" in pulsanti(pausa) and chiara(pausa)
               and fine[1] in ("Traduzione interrotta", "Traduzione installata in parte") and chiara(fine)
               and "usa_locale" in pulsanti(fine))
-    # "Usa il traduttore locale" dalla finestra di fine: lo sceglie e traduce
+    # "Use the local translator" from the final dialog: selects it and translates
     n = len(FINESTRE)
     app._azione("usa_locale", app.ultimo_esito)
     aspetta(app, radice)
@@ -344,7 +344,7 @@ def percorso_imprevisti(app, radice, base):
     controlla("... 'Usa il traduttore locale': scelto e tradotto ('%s')" % fine[1],
               app._scelto == "locale" and fine[1] == "Traduzione installata")
 
-    # Google bloccato a meta' lavoro: "Traduzione interrotta", le traduzioni fatte restano
+    # Google blocked halfway through the work: "Translation interrupted", the translations done stay
     terzo = os.path.join(base, "giochi", "Moss Gate")
     gioco_web_finto.crea(terzo)
     app.cartella.set(terzo)
@@ -363,8 +363,8 @@ def percorso_imprevisti(app, radice, base):
               % (fine[1], pulsanti(fine)), fine[1] in ("Traduzione interrotta", "Traduzione installata in parte")
               and chiara(fine) and "usa_locale" in pulsanti(fine))
 
-    # traduttore locale non installato: "Continua comunque" -> "Traduttore non pronto" con "Installa"; installato
-    # (finto) -> la traduzione riparte da sola
+    # local translator not installed: "Continue anyway" -> "Translator not ready" with "Install"; once installed
+    # (fake) -> the translation starts again on its own
     app.traduttore.set(gui.TRADUTTORI["locale"])
     app._cambia_traduttore()
     STATO["locale"] = "non installato"
@@ -399,8 +399,8 @@ def percorso_imprevisti(app, radice, base):
         STATO["locale"] = "non installato"
         n = len(FINESTRE)
         app._traduci()
-        aspetta(app, radice)  # l'installazione
-        aspetta(app, radice)  # e poi la traduzione che aspettava
+        aspetta(app, radice)  # the installation
+        aspetta(app, radice)  # and then the translation that was waiting
     finally:
         ollama.descrizione_download, ollama.installa, backend.prova_locale = veri
         STATO["locale"] = "pronto"
@@ -408,7 +408,7 @@ def percorso_imprevisti(app, radice, base):
     controlla("'Installa ora' prima di partire: installa (finto), frase di prova, poi traduce da solo ('%s')"
               % fine[1], fine[1] == "Traduzione installata")
 
-    # un testo rimasto in originale (il traduttore non lo traduce mai): "Mostra i rimasti" e "Correggi traduzioni"
+    # a text left untranslated (the translator never translates it): "Show remaining" and "Fix translations"
     quinto = os.path.join(base, "giochi", "Tide Bell")
     gioco_web_finto.crea(quinto)
     app.cartella.set(quinto)
@@ -437,16 +437,16 @@ def percorso_imprevisti(app, radice, base):
         finestra.chiudi()
 
 
-# --- 3. gioco GameMaker ------------------------------------------------------------------------------------
+# --- 3. GameMaker game -------------------------------------------------------------------------------------
 
 def percorso_gamemaker(app, radice, base):
     gioco = os.path.join(base, "giochi", "Porta finta")
     pf.gioco_porta(gioco)
     originali = impronte(gioco)
     app.cartella.set(gioco)
-    # il gioco aperto durante il lavoro (aperto dopo i controlli prima di partire): le traduzioni restano salvate e
-    # non si scrive nulla; "Riprova" a gioco chiuso le scrive. Una traduzione ha un carattere che nessun font del gioco
-    # ha (una stella): il gioco non la saprebbe mostrare
+    # the game open during the work (opened after the checks before starting): the translations stay saved and
+    # nothing is written; "Try again" with the game closed writes them. One translation has a character that no font
+    # of the game has (a star): the game could not show it
     vero_aperto = progetto.gioco_aperto
     progetto.gioco_aperto = lambda _c: True
     Traduttore.STRANE = {"VULTURE TOKEN": "GETTONE ★ AVVOLTOIO"}
@@ -462,7 +462,7 @@ def percorso_gamemaker(app, radice, base):
               and chiara(fine) and impronte(gioco) == originali)
     try:
         n = len(FINESTRE)
-        app._azione("chiudi_gioco", app.ultimo_esito)  # "Riprova", a gioco chiuso
+        app._azione("chiudi_gioco", app.ultimo_esito)  # "Try again", with the game closed
         aspetta(app, radice)
     finally:
         Traduttore.STRANE = {}
@@ -476,7 +476,7 @@ def percorso_gamemaker(app, radice, base):
         tradotto = f.read()
     controlla("GameMaker: file inglese tradotto, la stella mai scritta nel gioco", "Gioca" in tradotto
               and "★" not in tradotto)
-    # il controllo dopo aver giocato: niente da fare
+    # the after-play check: nothing to do
     n = len(FINESTRE)
     app._controlla()
     aspetta(app, radice)
@@ -495,7 +495,7 @@ def percorso_gamemaker(app, radice, base):
     return gioco
 
 
-# --- 4. gioco Unity Mono -----------------------------------------------------------------------------------
+# --- 4. Unity Mono game ------------------------------------------------------------------------------------
 
 AZIENDA, PRODOTTO = "Studio Finto", "Lumen Mine"
 
@@ -537,7 +537,7 @@ def percorso_unity(app, radice, base):
         profilo = json.load(f)
     nome = profilo["nome"]
 
-    # una correzione fatta con il gioco aperto: resta in attesa ("Riprova" non premuto, si gioca)
+    # a fix made with the game open: it stays waiting ("Try again" not pressed, the player plays)
     vero_aperto = sistema.gioco_aperto
     finestra = app._correggi()
     finestra._vai_a("Start a new game")
@@ -557,10 +557,10 @@ def percorso_unity(app, radice, base):
               domanda[1] == "Il gioco è aperto" and chiara(domanda))
     controlla("Unity: la correzione aspetta di essere scritta", "Start a new game" in correzioni.da_scrivere(profilo))
 
-    # dopo la partita: i registri veri ridotti (Google fermo nel Player-prev.log, lettere che il font non ha nel
-    # Player.log, crash all'avvio) e il diario delle frasi nuove
+    # after the session: the reduced real logs (Google stopped in Player-prev.log, letters the font lacks in
+    # Player.log, crash on start) and the journal of new lines
     time.sleep(1.2)
-    dopo = time.time() - 0.5  # (dopo l'ultima scrittura di PatchSmith nel gioco, prima del controllo)
+    dopo = time.time() - 0.5  # (after PatchSmith's last write to the game, before the check)
     utente = os.environ["USERPROFILE"]
     locallow = os.path.join(utente, "AppData", "LocalLow", AZIENDA, PRODOTTO)
     errore_google = pc.con_percorso(pc.leggi(os.path.join(pc.SEGNALI, "unity-player-errore-google.log")),
@@ -577,8 +577,8 @@ def percorso_unity(app, radice, base):
 
 
 def percorso_unity_dopo(app, radice, base, gioco, nome, percorso):
-    """Alla prossima apertura di PatchSmith (finestra nuova): il controllo dopo aver giocato parte da solo, senza
-    finestre; la riga sotto la cartella, "Dettagli", "Ritraduci"; poi Ripristina, Riapplica e il rapporto."""
+    """At the next opening of PatchSmith (new window): the after-play check starts on its own, without
+    dialogs; the line under the folder, "Details", "Re-translate"; then Restore, Reapply and the report."""
     originali = ORIGINALI_UNITY
     n = len(FINESTRE)
     inizio = time.time()
@@ -614,7 +614,7 @@ def percorso_unity_dopo(app, radice, base, gioco, nome, percorso):
     controlla("Unity: 'Ritraduci 5 frasi' -> tradotte e messe nel gioco, finestra con il passo dopo (%s)" % fine[1],
               chiara(fine) and "5 frasi tradotte e messe nel gioco" in fine[2])
 
-    # Ripristina e Riapplica: tutto via e tutto di nuovo, con le lettere adattate
+    # Restore and Reapply: everything removed and everything back, with the adapted letters
     RISPOSTE["Ripristina"] = True
     n = len(FINESTRE)
     app._ripristina()
@@ -632,7 +632,7 @@ def percorso_unity_dopo(app, radice, base, gioco, nome, percorso):
               fine[1] == "Traduzione riapplicata" and voci.get("Start a new game") == "Nuova partita"
               and not any("è" in v for v in voci.values()) and adapter_unity.registro_unity_attivo(gioco))
 
-    # il rapporto: i registri di Unity e di BepInEx, la configurazione, il controllo, le lettere dei font
+    # the report: the Unity and BepInEx logs, the configuration, the check, the fonts' letters
     n = len(FINESTRE)
     app._crea_rapporto()
     aspetta(app, radice)
@@ -658,7 +658,7 @@ def main(base):
         percorso_imprevisti(app, radice, base)
         percorso_gamemaker(app, radice, base)
         gioco, nome, percorso = percorso_unity(app, radice, base)
-        radice.destroy()  # chiusa PatchSmith, si gioca; poi si riapre
+        radice.destroy()  # PatchSmith closed, the player plays; then it is reopened
         radice, app = apri_finestra()
         percorso_unity_dopo(app, radice, base, gioco, nome, percorso)
     finally:

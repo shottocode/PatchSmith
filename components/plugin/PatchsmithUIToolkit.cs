@@ -1,8 +1,9 @@
-// Patchsmith - traduzione dei testi di UI Toolkit (Unity 6 e successivi) per BepInEx 5.
-// XUnity.AutoTranslator non vede i testi di UI Toolkit in Unity 6: questo plugin sostituisce il testo quando il gioco
-// lo assegna a un'etichetta (TextElement.text), usando le traduzioni gia' pronte di Patchsmith (la cache di XUnity,
-// BepInEx/Translation/<lingua>/Text/*.txt). Testi con numeri ("Coins: 123"): si traducono i pezzi tra i numeri.
-// Compilato da Patchsmith con csc (C# 5).
+// Patchsmith - translation of UI Toolkit texts (Unity 6 and later) for BepInEx 5.
+// XUnity.AutoTranslator does not see UI Toolkit texts in Unity 6: this plugin replaces the text when the game
+// assigns it to a label (TextElement.text), using Patchsmith's ready translations (XUnity's cache,
+// BepInEx/Translation/<language>/Text/*.txt). Texts with numbers ("Coins: 123"): the pieces between the numbers
+// are translated.
+// Compiled by Patchsmith with csc (C# 5).
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -121,7 +122,7 @@ public class PatchsmithUIToolkit : BaseUnityPlugin
     {
         string r = Cerca(t);
         if (r != null) return r;
-        // pezzi tra numeri e simboli: "Coins: 1,234" -> "Monete: 1,234"
+        // pieces between numbers and symbols: "Coins: 1,234" -> "Monete: 1,234"
         string[] pezzi = Separatori.Split(t);
         if (pezzi.Length > 1)
         {

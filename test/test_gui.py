@@ -1,19 +1,19 @@
-"""Collaudo automatico dell'interfaccia grafica.
+"""Automatic test of the graphical interface.
 
-Uso: python -I test/test_gui.py <cartella_di_un_gioco_di_prova>
-Apre la finestra, imposta la cartella, preme "Analizza e traduci" con il backend di prova (senza rete),
-aspetta la fine, controlla il registro, ripristina gli originali e chiude. Non usare su un gioco vero.
-Controlla anche le finestre di fine operazione (una per ogni esito, outcome.py), il registro salvato su disco in
-registri/ (anche con un errore imprevisto e il suo traceback) e "Crea rapporto" (lo zip va in una cartella di prova,
-mai sul Desktop vero). Dal punto 5: al primo avvio senza traduttore salvato il traduttore locale "da installare" con
-"Installa…" e il modello adatto alla scheda video (simulata); i controlli prima di partire (gioco aperto e "Riprova",
-cartella protetta, lingua, Google in pausa, traduttore locale da installare: l'operazione non parte); una copia del
-gioco in un'altra cartella che riusa le sue traduzioni; il pulsante "Ritraduci" dopo il controllo all'apertura. Dal
-punto 6: "Correggi traduzioni…" (una riga corretta nella finestra e salvata: memoria valida, Riapplica da sola) e il
-pulsante "Correggi traduzioni" nella finestra di fine (il resto in test/test_corrections.py).
-Profilo, memoria e impostazioni vanno nella cartella PATCHSMITH_DATI (test/run_all.py ne crea una temporanea);
-senza, in "dati-prova-gui" accanto al gioco di prova: mai tra i dati veri di PatchSmith. Le impostazioni che c'erano
-gia' in quella cartella si rimettono com'erano alla fine (anche se PATCHSMITH_DATI indica i dati veri).
+Usage: python -I test/test_gui.py <test_game_folder>
+Opens the window, sets the folder, presses "Analyze and translate" with the test backend (no network),
+waits for the end, checks the log, restores the originals and closes. Do not use on a real game.
+It also checks the end-of-operation dialogs (one for each outcome, outcome.py), the log saved to disk in
+logs/ (also with an unexpected error and its traceback) and "Create report" (the zip goes to a test folder,
+never to the real Desktop). From step 5: at the first start with no saved translator, the local translator "to
+install" with "Install…" and the model suited to the (simulated) graphics card; the preliminary checks (game open and
+"Try again", protected folder, language, Google paused, local translator to install: the operation does not start); a
+copy of the game in another folder that reuses its translations; the "Re-translate" button after the check at
+startup. From step 6: "Fix translations…" (a line fixed in the window and saved: valid translation memory, Reapply on
+its own) and the "Fix translations" button in the end dialog (the rest in test/test_corrections.py).
+Game profile, translation memory and settings go to the PATCHSMITH_DATI folder (test/run_all.py creates a temporary
+one); without it, to "dati-prova-gui" next to the test game: never among PatchSmith's real data. The settings that
+were already in that folder are put back as they were at the end (even if PATCHSMITH_DATI points to the real data).
 """
 import glob
 import json
@@ -33,7 +33,7 @@ import fake_web_game as gioco_web_finto  # noqa: E402
 from patchsmith import (auto as automatico, outcome as esito, gui, ollama, project as progetto, report as rapporto,
                         theme as tema)  # noqa: E402
 
-# il titolo atteso della finestra di fine "Analizza e traduci" per ogni esito
+# the expected title of the "Analyze and translate" end dialog for each outcome
 TITOLI = {"OK": "Traduzione installata", "PARZIALE": "Traduzione installata in parte",
           "NULLA_DA_FARE": "Niente da fare", "UFFICIALE": "Il gioco ha già la tua lingua",
           "NON_SUPPORTATO": "Gioco non ancora supportato", "ANTICHEAT": "Gioco con anti-cheat",
@@ -41,7 +41,7 @@ TITOLI = {"OK": "Traduzione installata", "PARZIALE": "Traduzione installata in p
           "TRADUTTORE_ASSENTE": "Traduttore non pronto", "GIA_ORIGINALE": "Gioco già originale",
           "PERMESSI": "File bloccati", "CARTELLA_SBAGLIATA": "Cartella da cambiare",
           "ERRORE": "Operazione non riuscita"}
-FINESTRE = []  # (titolo, testo, pulsanti) delle finestre a scelta mostrate dall'interfaccia
+FINESTRE = []  # (titolo, testo, pulsanti) of the choice dialogs shown by the interface
 CONTROLLI = []
 
 
@@ -53,10 +53,10 @@ def controlla(nome, condizione):
 def _scegli(_g, _c, titolo, testo, pulsanti, tipo="info"):
     FINESTRE.append((titolo, testo, list(pulsanti)))
     print("FINESTRA:", titolo, "|", " ".join(testo.split())[:160], "|", [p for p, _ in pulsanti])
-    return None  # come chiudere con OK: nessuna azione
+    return None  # like closing with OK: no action
 
 
-AVVISI = []  # titoli delle finestre di avviso
+AVVISI = []  # titles of the warning dialogs
 
 
 def _informa(_g, _c, titolo, testo):
@@ -65,32 +65,32 @@ def _informa(_g, _c, titolo, testo):
 
 
 def main(cartella):
-    # le finestre di avviso e le domande aspetterebbero un clic: si stampano, e alle domande si risponde "no"
+    # the warning dialogs and the questions would wait for a click: they are printed, and questions are answered "no"
     tema.informa = _informa
     tema.avvisa = tema.errore = tema.informa
     tema.chiedi = lambda _g, _c, titolo, testo: print("DOMANDA (risposta: no):", titolo) or False
     tema.scegli = _scegli
     gui.mostra_file = lambda _p: None
     rapporti = os.path.join(os.path.dirname(os.path.abspath(cartella)), "rapporti-prova-gui")
-    rapporto.cartella_desktop = lambda: rapporti  # mai il Desktop vero
-    # il rapporto non deve copiare i registri veri del traduttore dal vivo (componenti/ollama)
+    rapporto.cartella_desktop = lambda: rapporti  # never the real Desktop
+    # the report must not copy the real logs of the live translator (components/ollama)
     ollama.cartella = lambda: os.path.join(os.path.dirname(os.path.abspath(cartella)), "ollama-prova-gui")
-    automatico.SPAZIO_GIOCO = automatico.SPAZIO_DATI = 0  # lo spazio libero del disco delle prove non conta qui
-    # la scheda video (per il modello proposto) e' simulata: 8 GB -> Qualita' (12B)
+    automatico.SPAZIO_GIOCO = automatico.SPAZIO_DATI = 0  # the free space of the test disk does not count here
+    # the graphics card (for the proposed model) is simulated: 8 GB -> Quality (12B)
     ollama.modello_consigliato = lambda gb=None: ("12b", "La tua scheda video ha 8 GB di memoria: ti propongo il "
                                                   "modello Qualità (12B).")
     if not os.environ.get("PATCHSMITH_DATI"):
         progetto.RADICE_DATI = os.path.join(os.path.dirname(os.path.abspath(cartella)), "dati-prova-gui")
-    gui.IMPOSTAZIONI = None  # quelle della cartella dei dati di prova
-    impostazioni_prima = _leggi_byte(gui._impostazioni())  # la finestra le riscrive: alla fine si rimettono
-    # le opzioni dei giochi GameMaker stanno in %LOCALAPPDATA%\<nome del gioco>: una copia di prova le condivide con
-    # il gioco vero, quindi il collaudo usa una cartella sua
+    gui.IMPOSTAZIONI = None  # those of the test data folder
+    impostazioni_prima = _leggi_byte(gui._impostazioni())  # the window rewrites them: they are put back at the end
+    # the options of GameMaker games are in %LOCALAPPDATA%\<game name>: a test copy shares them with the real game,
+    # so the test uses a folder of its own
     os.environ["LOCALAPPDATA"] = os.path.join(os.path.dirname(os.path.abspath(cartella)), "appdata-prova-gui")
     try:
         percorso, esito_ok = _collaudo(cartella, rapporti)
         _collaudo_lingue_salvate()
         _collaudo_diario_dal_vivo()
-    finally:  # anche se il collaudo si interrompe a meta'
+    finally:  # even if the test stops halfway
         if impostazioni_prima is None:
             if os.path.exists(gui._impostazioni()):
                 os.remove(gui._impostazioni())
@@ -105,7 +105,7 @@ def main(cartella):
 
 
 def _aspetta(app, radice, secondi=120):
-    """Aspetta la fine del lavoro in corso e lascia arrivare gli ultimi messaggi (e la finestra di fine)."""
+    """Waits for the end of the running job and lets the last messages (and the end dialog) arrive."""
     inizio = time.time()
     while (app.lavoro is None or app.lavoro.is_alive()) and time.time() - inizio < secondi:
         radice.update()
@@ -125,8 +125,8 @@ def _leggi_testo(percorso):
 
 
 def _collaudo_lingue_salvate():
-    """Cartella, Da e A si scelgono soltanto (niente testo scritto a mano); lingue salvate non valide (vecchie
-    impostazioni) tornano alle predefinite."""
+    """Folder, From and To can only be chosen (no hand-typed text); invalid saved languages (old settings) go back
+    to the defaults."""
     with open(gui._impostazioni(), "w", encoding="utf-8") as f:
         json.dump({"da": "Klingon", "a": "xx-zz", "cartella": ""}, f)
     radice = tk.Tk()
@@ -139,7 +139,7 @@ def _collaudo_lingue_salvate():
                   and sola_scelta and all(str(w.cget("state")) == "readonly" for w in sola_scelta))
     finally:
         radice.destroy()
-    # traduttore e chiave scelti e la finestra chiusa senza fare altro: alla riapertura ci sono ancora
+    # translator and key chosen and the window closed without doing anything else: on reopening they are still there
     radice = tk.Tk()
     app = gui.App(radice)
     app.traduttore.set(gui.TRADUTTORI["deepl"])
@@ -156,7 +156,7 @@ def _collaudo_lingue_salvate():
 
 
 def _collaudo_diario_dal_vivo():
-    """Mentre si gioca: le frasi nuove del diario del traduttore riassunte nel registro (solo quelle da adesso)."""
+    """During play: the new lines of the translator's journal summarized in the log (only those from now on)."""
     from patchsmith import xunity_service as servizio_xunity
     nome = "gioco-dal-vivo-prova"
     diario = servizio_xunity.percorso_diario(nome)
@@ -167,7 +167,7 @@ def _collaudo_diario_dal_vivo():
     radice = tk.Tk()
     try:
         app = gui.App(radice)
-        app._diario_letto[nome] = os.path.getsize(diario)  # come alla prima occhiata: la storia di prima non conta
+        app._diario_letto[nome] = os.path.getsize(diario)  # as at the first look: the earlier history does not count
         nuove = [{"testo": "Upgrades", "esito": "ok", "backend": "locale", "risposta": "Potenziamenti"},
                  {"testo": "Settings", "esito": "ok", "backend": "memoria", "risposta": "Impostazioni"},
                  {"testo": "Hire {{A}} warriors", "esito": "ok", "backend": "locale", "risposta": "Assumi {{A}} guerrieri"},
@@ -175,7 +175,7 @@ def _collaudo_diario_dal_vivo():
         with open(diario, "a", encoding="utf-8") as f:
             f.write("".join(json.dumps(r) + "\n" for r in nuove))
         app._riassumi_diario(nome)
-        app._riassumi_diario(nome)  # niente di nuovo: nessuna riga in piu'
+        app._riassumi_diario(nome)  # nothing new: no extra line
         radice.update()
         app._svuota_coda()
         testo = app.testo.get("1.0", "end")
@@ -193,16 +193,16 @@ def _collaudo(cartella, rapporti):
     app = gui.App(radice)
     inizio = time.time()
     while app.modello_locale.get() != gui.MODELLI_LOCALI["12b"] and time.time() - inizio < 5:
-        radice.update()  # (il modello adatto alla scheda video arriva da un thread)
+        radice.update()  # (the model suited to the graphics card comes from a thread)
         time.sleep(0.02)
     controlla("primo avvio senza traduttore salvato: 'Traduttore locale' da installare con 'Installa…' e il modello "
               "adatto alla scheda video (12B con 8 GB)", app.traduttore.get() == gui.TRADUTTORI["locale"]
               and app._scelto == "locale" and app.stato_traduttore.cget("text") == "da installare"
               and app.btn_installa.winfo_manager() == "pack" and app.modello_locale.get() == gui.MODELLI_LOCALI["12b"])
     app.cartella.set(cartella)
-    app.backend_forzato = "finto"  # traduttore di prova, non presente nel menu
+    app.backend_forzato = "finto"  # test translator, not in the menu
     app._traduci()
-    # mentre lavora: niente secondo lavoro, ne' cambio di traduttore o installazione a meta'
+    # while it works: no second job, no change of translator or installation halfway
     primo = app.lavoro
     app._avvia("Secondo lavoro", lambda _c: None)
     un_lavoro = app.lavoro is primo and all(w.instate(["disabled"]) for w in (
@@ -216,7 +216,7 @@ def _collaudo(cartella, rapporti):
     print("stato:", stato)
     print("\n".join(registro.strip().splitlines()[-6:]))
 
-    # finestra di fine e registro su disco
+    # end dialog and log on disk
     controlla("finestra di fine 'Traduzione installata' anche per un gioco web, con il riepilogo",
               FINESTRE and FINESTRE[-1][0] == "Traduzione installata" and "Testi tradotti:" in FINESTRE[-1][1])
     salvati = _registri()
@@ -225,7 +225,7 @@ def _collaudo(cartella, rapporti):
               salvati and "Analisi e traduzione" in testo and "Fatto. Avvia il gioco" in testo
               and "Esito: OK" in testo and os.path.basename(salvati[-1])[:8].isdigit())
 
-    # una finestra per ogni esito, con il suo titolo
+    # a dialog for each outcome, with its title
     app._operazione = "traduci"
     sbagliati = []
     for codice, atteso in TITOLI.items():
@@ -245,7 +245,7 @@ def _collaudo(cartella, rapporti):
               len(FINESTRE) == finestre + 1 and FINESTRE[-1][0] == "Motore non ancora supportato"
               and "RenPy" in FINESTRE[-1][1] and ("Sì", "sperimentale") in FINESTRE[-1][2])
 
-    # errore imprevisto durante il lavoro: finestra con il tipo, traceback nel registro su disco
+    # unexpected error during the job: dialog with the type, traceback in the log on disk
     vero = automatico.analizza_e_traduci
 
     def guasto(*_a, **_k):
@@ -265,7 +265,7 @@ def _collaudo(cartella, rapporti):
               "Traceback (most recent call last)" in testo and "KeyError: 'cartella_gioco'" in testo
               and "in guasto" in testo)
 
-    # errore in un comando della finestra (report_callback_exception): registro e finestra
+    # error in a window command (report_callback_exception): log and dialog
     finestre = len(FINESTRE)
     radice.after(0, lambda: 1 / 0)
     for _ in range(10):
@@ -276,9 +276,9 @@ def _collaudo(cartella, rapporti):
               "ZeroDivisionError" in testo and "Traceback" in testo and len(FINESTRE) == finestre + 1
               and FINESTRE[-1][0] == "Errore imprevisto")
 
-    # dopo un'operazione senza cartella (installazione del traduttore locale) un errore della finestra va comunque
-    # nel registro 'interfaccia'; un errore di permessi in un comando non propone "Riprova" (ripeterebbe l'ultima
-    # operazione sul gioco) ne' consigli sul gioco
+    # after an operation without a folder (installation of the local translator) a window error still goes to the
+    # 'interfaccia' log; a permission error in a command does not offer "Try again" (it would repeat the last
+    # operation on the game) nor advice about the game
     app._avvia("Installazione del traduttore locale", lambda _c: True, serve_cartella=False, operazione="installa")
     _aspetta(app, radice)
     finestre = len(FINESTRE)
@@ -296,7 +296,7 @@ def _collaudo(cartella, rapporti):
               and len(FINESTRE) == finestre + 1 and FINESTRE[-1][0] == "Errore imprevisto"
               and not any(a == "chiudi_gioco" for _, a in FINESTRE[-1][2]) and "Programmi" not in FINESTRE[-1][1])
 
-    # un errore nel cercare il profilo per il nome del registro non lascia i pulsanti disattivati
+    # an error while looking for the game profile for the log name does not leave the buttons disabled
     vero = automatico.trova_profilo
 
     def profilo_rovinato(_c):
@@ -311,8 +311,8 @@ def _collaudo(cartella, rapporti):
     controlla("registro: un profilo rovinato non blocca l'operazione (pulsanti di nuovo attivi, registro aperto)",
               app.btn_traduci.instate(["!disabled"]) and "Prova del registro" in _leggi_testo(_registri()[-1]))
 
-    # "Usa il traduttore locale" dopo un errore (che non ha le scelte nell'esito): Analizza e traduci di nuovo con le
-    # stesse scelte dell'ultima volta (es. "Traduci comunque")
+    # "Use the local translator" after an error (which has no choices in the outcome): Analyze and translate again
+    # with the same choices as last time (e.g. "Translate anyway")
     chiamate, scelto = [], app.traduttore.get()
     app._traduci = lambda **kw: chiamate.append(kw)
     app._locale_pronto = lambda: True
@@ -333,13 +333,13 @@ def _collaudo(cartella, rapporti):
     _collaudo_installazione(app, radice)
     _collaudo_correzioni(app, radice, cartella)
 
-    # ripristino dalla finestra: esito OK, 'Originali ripristinati'
+    # restore from the window: outcome OK, 'Originals restored'
     app._ripristina(chiedi=False)
     _aspetta(app, radice)
     controlla("ripristino: finestra 'Originali ripristinati'", FINESTRE[-1][0] == "Originali ripristinati")
 
-    # Crea rapporto: zip nella cartella di prova (al posto del Desktop) con il registro dell'operazione
-    gia_presenti = set(glob.glob(os.path.join(glob.escape(rapporti), "*.zip")))  # di un giro precedente
+    # Create report: zip in the test folder (instead of the Desktop) with the operation's log
+    gia_presenti = set(glob.glob(os.path.join(glob.escape(rapporti), "*.zip")))  # from a previous run
     app._crea_rapporto()
     _aspetta(app, radice)
     creati = sorted(set(glob.glob(os.path.join(glob.escape(rapporti), "*.zip"))) - gia_presenti)
@@ -350,9 +350,9 @@ def _collaudo(cartella, rapporti):
               and any(n.endswith("-interfaccia.log") for n in nomi)
               and "settings.json" in nomi and any(n.startswith("profilo/") for n in nomi))
 
-    # Desktop dove non si puo' scrivere (es. accesso controllato alle cartelle): il rapporto va nei registri
+    # Desktop that cannot be written to (e.g. controlled folder access): the report goes to the logs
     bloccato = os.path.join(rapporti, "non-una-cartella")
-    open(bloccato, "w").close()  # un file al posto della cartella: dentro non si scrive
+    open(bloccato, "w").close()  # a file instead of the folder: nothing can be written inside
     gia_presenti = set(glob.glob(os.path.join(glob.escape(gui.cartella_registri()), "*.zip")))
     rapporto.cartella_desktop = lambda: bloccato
     try:
@@ -364,7 +364,7 @@ def _collaudo(cartella, rapporti):
     ripiego = sorted(set(glob.glob(os.path.join(glob.escape(gui.cartella_registri()), "*.zip"))) - gia_presenti)
     controlla("Crea rapporto con il Desktop bloccato: rapporto nella cartella dei registri, finestra 'Rapporto creato'",
               len(ripiego) == 1 and FINESTRE[-1][0] == "Rapporto creato" and ripiego[0] in FINESTRE[-1][1])
-    for p in ripiego:  # non resta tra i dati di prova
+    for p in ripiego:  # it does not stay among the test data
         os.remove(p)
 
     automatico.ripristina(cartella, print)
@@ -374,10 +374,11 @@ def _collaudo(cartella, rapporti):
 
 
 def _collaudo_controllo(app, radice, cartella):
-    """Controllo dopo aver giocato: controllo del gioco scelto, all'apertura (senza finestre), riga sotto la cartella,
-    "Dettagli" con i pulsanti per il gioco giusto, avviso di PatchSmith aggiornato con la finestra aperta."""
+    """After-play check: check of the chosen game, at startup (without dialogs), line under the folder,
+    "Last session details" with the buttons for the right game, notice that PatchSmith was updated while the window
+    is open."""
     from patchsmith import checks as controllo
-    # dal pulsante, sul gioco web appena tradotto: niente da fare, finestra di fine e riga
+    # from the button, on the web game just translated: nothing to do, end dialog and line
     finestre = len(FINESTRE)
     app._controlla()
     _aspetta(app, radice)
@@ -387,7 +388,7 @@ def _collaudo_controllo(app, radice, cartella):
               % os.path.basename(os.path.normpath(cartella)))
     controlla("controllo: registro su disco con il risultato", "Controllo dopo aver giocato" in _leggi_testo(
         _registri()[-1]) and "Esito: OK" in _leggi_testo(_registri()[-1]))
-    # all'apertura, con un problema da fare in un altro gioco: nessuna finestra, la riga con 'Dettagli'
+    # at startup, with a problem to do in another game: no dialog, the line with 'Last session details'
     altro = os.path.join(os.path.dirname(os.path.abspath(cartella)), "Altro Gioco")
     vero = controllo.controlla
 
@@ -411,7 +412,7 @@ def _collaudo_controllo(app, radice, cartella):
               "1 problema corretto, 1 da fare" and app.btn_dettagli.winfo_manager() == "pack")
     nomi = [os.path.basename(p) for p in _registri()]
     controlla("controllo all'apertura: registro 'controllo'", nomi[-1].endswith("-controllo.log"))
-    # Dettagli: la finestra con "Da fare" e "Ripristina originali"; scelto, vale per quel gioco
+    # Last session details: the dialog with "To do" and "Restore originals"; once chosen, it applies to that game
     app.esiti_controllo[0].extra["cartella"] = altro
     scelte, vero_ripristina, vera_scegli = [], app._ripristina, tema.scegli
 
@@ -429,7 +430,7 @@ def _collaudo_controllo(app, radice, cartella):
     controlla("Dettagli: 'Qualcosa da fare' con 'Ripristina originali', per la cartella di quel gioco",
               FINESTRE[-1][0] == "Qualcosa da fare" and "Da fare:" in FINESTRE[-1][1]
               and ("Ripristina originali", "ripristina") in FINESTRE[-1][2] and scelte == [os.path.normpath(altro)])
-    # un gioco che non si controlla (errore imprevisto) non ferma gli altri: "da fare" con il rapporto
+    # a game that cannot be checked (unexpected error) does not stop the others: "to do" with the report
     def rotto(percorso, applica=True, log=print, traduttore=None, eventi=None, **_k):
         if percorso == "rotto":
             raise KeyError("cartella_gioco")
@@ -445,8 +446,8 @@ def _collaudo_controllo(app, radice, cartella):
     controlla("controllo all'apertura: un gioco con un errore non ferma gli altri (errore da fare, con il rapporto)",
               len(app.esiti_controllo) == 2 and len(errori) == 1 and errori[0]["azione"] == "crea_rapporto"
               and "KeyError" in errori[0]["messaggio"] and "1 da fare" in app.stato_controllo.get())
-    # "Riprova" nella finestra di un controllo (gioco aperto): di nuovo il controllo di quel gioco, non l'ultima
-    # operazione fatta (es. una traduzione)
+    # "Try again" in the dialog of a check (game open): the check of that game again, not the last operation done
+    # (e.g. a translation)
     rifatti, vero_controlla = [], app._controlla
     app._controlla = lambda profili=None, all_apertura=None: rifatti.append((profili, all_apertura))
     try:
@@ -456,7 +457,8 @@ def _collaudo_controllo(app, radice, cartella):
         app._controlla = vero_controlla
     controlla("'Riprova' dopo un controllo con il gioco aperto: rifa' il controllo di quel gioco, con la finestra",
               rifatti == [(["profilo-x"], False)])
-    # all'apertura, ma hai gia' avviato qualcosa: non parte subito, lo dice la riga; parte da solo appena finisce
+    # at startup, but you have already started something: it does not start right away, the line says so; it starts
+    # by itself as soon as that finishes
     lavoro_prima = app.lavoro
     app.lavoro = object()
     app._controlla = lambda profili=None, all_apertura=None: rifatti.append((profili, all_apertura))
@@ -480,7 +482,7 @@ def _collaudo_controllo(app, radice, cartella):
     controlla("controllo all'apertura durante un'altra operazione: la riga lo dice e parte da solo appena finisce "
               "(%s)" % rifatti, "appena finisce" in riga and durante == []
               and rifatti == [(["profilo-finto"], None)])
-    # "Crea rapporto" dai Dettagli di un altro gioco: il rapporto e' di quel gioco, con il suo esito
+    # "Create report" from the Last session details of another game: the report is for that game, with its outcome
     rapporti_chiesti, vera_crea = [], rapporto.crea
     rapporto.crea = lambda c, destinazione=None, esito=None, **_k: rapporti_chiesti.append((c, esito)) or \
         os.path.join(destinazione or "", "rapporto-finto.zip")
@@ -493,7 +495,7 @@ def _collaudo_controllo(app, radice, cartella):
         app.cartella.set(cartella)
     controlla("'Crea rapporto' dai Dettagli di un altro gioco: rapporto di quel gioco con il suo esito",
               rapporti_chiesti == [(os.path.normpath(altro), e_altro)])
-    # PatchSmith aggiornato mentre la finestra e' aperta: avviso, una volta sola
+    # PatchSmith updated while the window is open: notice, only once
     vera_impronta = gui.impronta_codice
     gui.impronta_codice = lambda: ("9.9.9", 0)
     try:
@@ -509,9 +511,9 @@ def _collaudo_controllo(app, radice, cartella):
 
 
 def _collaudo_ritraduci(app, radice):
-    """Il controllo all'apertura non ritraduce le frasi del diario (la finestra resterebbe ferma): pulsante
-    "Ritraduci N frasi" nella riga, che (come "Ritraduci le frasi" nei Dettagli) rifa' il controllo con la
-    ritraduzione."""
+    """The check at startup does not re-translate the journal's lines (the window would freeze): a
+    "Re-translate N lines" button in the line, which (like "Re-translate the phrases" in the Last session details)
+    redoes the check with the re-translation."""
     from patchsmith import checks as controllo
     ricevuti, vero, vero_come = [], controllo.controlla, controllo.come_esito
 
@@ -549,8 +551,8 @@ def _collaudo_ritraduci(app, radice):
 
 
 def _collaudo_preliminari(app, radice, cartella):
-    """I controlli prima di partire: con un problema l'operazione non parte (_avvia non viene chiamata) e la finestra
-    propone il passo giusto; poi una copia del gioco in un'altra cartella riusa le sue traduzioni."""
+    """The preliminary checks: with a problem the operation does not start (_avvia is not called) and the dialog
+    offers the right step; then a copy of the game in another folder reuses its translations."""
     from patchsmith import limiter as limitatore, system as sistema
     avviati, risposte = [], []
     app._avvia = lambda descrizione, *_a, **_k: avviati.append(descrizione)
@@ -558,12 +560,12 @@ def _collaudo_preliminari(app, radice, cartella):
 
     def scegli(_g, _c, titolo, testo, pulsanti, tipo="info"):
         _scegli(_g, _c, titolo, testo, pulsanti, tipo)
-        return risposte.pop(0) if risposte else None  # nessuna risposta: Annulla (o OK)
+        return risposte.pop(0) if risposte else None  # no answer: Cancel (or OK)
 
     tema.scegli = scegli
     vero_aperto = sistema.gioco_aperto
     try:
-        # gioco aperto: "Riprova"; annullato non parte nulla
+        # game open: "Try again"; when cancelled nothing starts
         sistema.gioco_aperto = lambda _c: True
         try:
             app._traduci()
@@ -580,7 +582,7 @@ def _collaudo_preliminari(app, radice, cartella):
         risposte[:] = ["riprova"]
         try:
             app._traduci()
-            stato["aperto"] = False  # chiuso il gioco: "Riprova" rifa' i controlli e parte
+            stato["aperto"] = False  # game closed: "Try again" redoes the checks and starts
             for _ in range(15):
                 radice.update()
                 time.sleep(0.02)
@@ -589,7 +591,7 @@ def _collaudo_preliminari(app, radice, cartella):
         controlla("'Riprova' a gioco chiuso: di nuovo i controlli, poi l'operazione parte",
                   avviati == ["Analisi e traduzione"])
         avviati.clear()
-        # cartella protetta e lingua sbagliata: si ferma, con il motivo
+        # protected folder and wrong language: it stops, with the reason
         vera_prova = automatico.prova_scrittura
         automatico.prova_scrittura = lambda _c: PermissionError(13, "Accesso negato")
         try:
@@ -607,7 +609,7 @@ def _collaudo_preliminari(app, radice, cartella):
             app.a.set(a_prima)
         controlla("lingua non riconosciuta in A: 'Lingua da controllare', nessuna operazione",
                   avviati == [] and FINESTRE[-1][0] == "Lingua da controllare" and "Italianoo" in FINESTRE[-1][1])
-        # Google in pausa: "Installa il traduttore locale" lo sceglie, lo installa e poi ripete Analizza e traduci
+        # Google paused: "Install the local translator" chooses it, installs it and then repeats Analyze and translate
         scelto, app.backend_forzato = app.traduttore.get(), None
         app.traduttore.set(gui.TRADUTTORI["google"])
         app._cambia_traduttore()
@@ -620,9 +622,9 @@ def _collaudo_preliminari(app, radice, cartella):
             risposte[:] = ["installa_locale"]
             app._traduci()
             dopo_pausa = app._scelto
-            app._traduci()  # ora e' scelto il traduttore locale, che non e' installato
+            app._traduci()  # now the local translator is chosen, and it is not installed
             assente = FINESTRE[-1]
-            # il si' alla lingua ufficiale (consenso) non traduce nulla: niente domande sul traduttore
+            # the yes to the official language (consenso) translates nothing: no questions about the translator
             finestre = len(FINESTRE)
             app._traduci(consenso=True)
             consenso = (list(avviati), [f[0] for f in FINESTRE[finestre:]])
@@ -651,11 +653,11 @@ def _collaudo_preliminari(app, radice, cartella):
         del app._avvia
         tema.scegli = vera_scegli
 
-    # una copia del gioco (stesso nome di cartella, altrove): "Sì, riusale" -> la memoria dell'originale
+    # a copy of the game (same folder name, elsewhere): "Yes, use them again" -> the original's translation memory
     copia = os.path.join(os.path.dirname(os.path.abspath(cartella)), "copia-prova-gui",
                          os.path.basename(os.path.normpath(cartella)))
     shutil.rmtree(os.path.dirname(copia), ignore_errors=True)
-    for p, prof in list(automatico.elenco_profili()):  # (di un giro precedente della prova lanciata da sola)
+    for p, prof in list(automatico.elenco_profili()):  # (from a previous run of the test launched on its own)
         if prof.get("cartella_gioco") and automatico._dentro(prof["cartella_gioco"], os.path.dirname(copia)):
             os.remove(p)
     gioco_web_finto.crea(copia)
@@ -686,10 +688,10 @@ def _collaudo_preliminari(app, radice, cartella):
 
 
 def _collaudo_installazione(app, radice):
-    """L'installazione del traduttore locale chiesta prima di partire ("Installa ora"): dopo la frase di prova
-    riuscita l'operazione che aspettava riparte da sola; se la prova non riesce una finestra lo dice e l'operazione non
-    parte. Poi: il controllo all'apertura aspetta che si chiuda una finestra aperta (l'operazione scelta li' non
-    partirebbe, un lavoro alla volta)."""
+    """The installation of the local translator requested before starting ("Install now"): after the successful test
+    sentence the operation that was waiting restarts by itself; if the test fails a dialog says so and the operation
+    does not start. Then: the check at startup waits for an open dialog to close (the operation chosen there would not
+    start, one job at a time)."""
     from patchsmith import backend
     veri = ollama.descrizione_download, ollama.installa, backend.prova_locale, tema.chiedi
     rifatte, prove, esiti_prova = [], [], [
@@ -715,8 +717,8 @@ def _collaudo_installazione(app, radice):
     controlla("frase di prova non riuscita: finestra con il motivo, l'operazione che aspettava non parte",
               rifatte == ["di nuovo"] and AVVISI[-1] == "Prova del traduttore locale non riuscita"
               and "non risponde" in app.stato.get())
-    # gia' installato: "Installa ora" fa subito l'operazione che aspettava; controlli prima di partire che non
-    # riescono (errore imprevisto): si parte lo stesso, e il registro lo dice
+    # already installed: "Install now" runs the waiting operation right away; preliminary checks that fail
+    # (unexpected error): it starts anyway, and the log says so
     ollama.descrizione_download = lambda scelti: []
     subito, vero_cp = [], automatico.controlli_preliminari
     automatico.controlli_preliminari = lambda *_a, **_k: 1 / 0
@@ -733,7 +735,7 @@ def _collaudo_installazione(app, radice):
               and scelte == {"riusa": None}
               and "Controlli prima di partire non riusciti" in app.testo.get("1.0", "end"))
 
-    # il controllo all'apertura arriva mentre una finestra e' aperta: aspetta che si chiuda
+    # the check at startup arrives while a dialog is open: it waits for it to close
     finestra = tk.Toplevel(radice)
     finestra.grab_set()
     controlli, lavoro = [], app.lavoro
@@ -748,7 +750,7 @@ def _collaudo_installazione(app, radice):
         finestra.grab_release()
         finestra.destroy()
         radice.update()
-        subito = list(controlli)  # (appena chiusa si aspetta ancora un attimo: la scelta fatta li' parte prima)
+        subito = list(controlli)  # (right after closing it still waits a moment: the choice made there starts first)
         inizio = time.time()
         while not controlli and time.time() - inizio < 3:
             radice.update()
@@ -758,8 +760,8 @@ def _collaudo_installazione(app, radice):
         app.lavoro = lavoro
     controlla("controllo all'apertura con una finestra aperta: parte solo dopo che si e' chiusa",
               durante == [] and subito == [] and controlli == [["profilo-in-attesa"]])
-    # chiusa la finestra con una scelta che fa partire un'operazione subito dopo (es. "Riprova"): il controllo non
-    # parte subito, aspetta che l'operazione finisca
+    # dialog closed with a choice that starts an operation right after (e.g. "Try again"): the check does not start
+    # right away, it waits for the operation to finish
     finestra = tk.Toplevel(radice)
     finestra.grab_set()
     controlli[:] = []
@@ -772,7 +774,7 @@ def _collaudo_installazione(app, radice):
             time.sleep(0.02)
         finestra.grab_release()
         finestra.destroy()
-        radice.after(250, lambda: setattr(app, "lavoro", lavoro))  # l'operazione scelta nella finestra (entro 300 ms)
+        radice.after(250, lambda: setattr(app, "lavoro", lavoro))  # the operation chosen in the dialog (within 300 ms)
         inizio = time.time()
         while time.time() - inizio < 1.2:
             radice.update()
@@ -782,16 +784,16 @@ def _collaudo_installazione(app, radice):
         app.lavoro = lavoro
     controlla("finestra chiusa con un'operazione che parte subito dopo: il controllo all'apertura aspetta che finisca",
               controlli == [] and "appena finisce" in app.stato_controllo.get())
-    if app._attesa_controllo:  # (nella prova non deve ripartire piu' tardi)
+    if app._attesa_controllo:  # (in the test it must not restart later)
         radice.after_cancel(app._attesa_controllo)
         app._attesa_controllo = None
     app.stato_controllo.set("")
 
 
 def _collaudo_correzioni(app, radice, cartella):
-    """"Correggi traduzioni…" (punto 6): la finestra con l'elenco, una traduzione cambiata nella riga e "Salva e applica
-    al gioco": la memoria (quella del traduttore di prova) resta un JSON valido con il valore nuovo e Riapplica parte da
-    sola e cambia il file del gioco. Poi "Correggi traduzioni" nella finestra di fine con dei testi rimasti."""
+    """"Fix translations…" (step 6): the window with the list, a translation changed in the line and "Save and apply to
+    the game": the translation memory (the test translator's) stays valid JSON with the new value and Reapply starts on
+    its own and changes the game's file. Then "Fix translations" in the end dialog with some texts left."""
     import hashlib
     app.cartella.set(cartella)
     file_testi = os.path.join(cartella, *gioco_web_finto.FILE_TESTI.split("/"))

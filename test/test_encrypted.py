@@ -1,6 +1,6 @@
-"""Giochi con i file cifrati (GemShell) e cartelle degli emulatori di Steam: PatchSmith non li tocca.
+"""Games with encrypted files (GemShell) and Steam emulator folders: PatchSmith does not touch them.
 
-Uso: python -I test/test_encrypted.py <cartella_di_prova_che_non_esiste>
+Usage: python -I test/test_encrypted.py <test_folder_that_does_not_exist>
 """
 import hashlib
 import json
@@ -44,7 +44,7 @@ def main(base):
     obiettivi = json.dumps([{"name": "a1", "displayName": "Defeat the dragon",
                              "description": "Beat the first dragon of the game"}]).encode()
 
-    # gioco Electron con i file cifrati da GemShell (come "Now That's a Big Dragon")
+    # Electron game with files encrypted by GemShell (like "Now That's a Big Dragon")
     gioco = os.path.join(base, "Drago", "game")
     for nome, dati in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "drago.exe": b"MZ",
                        "resources/app/main.js": b"require('./gemshell-native.node')",
@@ -65,7 +65,7 @@ def main(base):
     controlla("file cifrati: nessun file del gioco cambiato (neanche quello dell'emulatore di Steam)",
               impronte(gioco) == prima)
 
-    # gioco web normale con la cartella di un emulatore di Steam accanto: si traduce solo il gioco
+    # ordinary web game with a Steam emulator folder next to it: only the game is translated
     web = os.path.join(base, "Web")
     scrivi(os.path.join(web, "data", "testi.json"), json.dumps({"titolo": "Start the adventure now",
                                                                 "esci": "Quit to the main menu"}).encode())

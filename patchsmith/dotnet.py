@@ -1,11 +1,11 @@
-"""Lettura di assembly .NET (exe/dll) e dei file .resources, in sola libreria standard.
+"""Reading of .NET assemblies (exe/dll) and of .resources files, with the standard library only.
 
-Serve ai giochi XNA/FNA/MonoGame e in generale ai giochi .NET:
-- PE + intestazione CLI + metadati (ECMA-335 II.24): tabelle Assembly, ManifestResource, CustomAttribute...;
-- risorse incorporate (es. "RogueCastle.Resources.LocStrings.resources" dentro RogueLegacy.exe);
-- formato .resources (System.Resources.ResourceWriter) in lettura e scrittura, solo stringhe;
-- heap #US (stringhe scritte nel codice), per analisi.
-Niente di questo esegue codice del gioco: si leggono solo byte.
+Used for XNA/FNA/MonoGame games and for .NET games in general:
+- PE + CLI header + metadata (ECMA-335 II.24): Assembly, ManifestResource, CustomAttribute... tables;
+- embedded resources (e.g. "RogueCastle.Resources.LocStrings.resources" inside RogueLegacy.exe);
+- .resources format (System.Resources.ResourceWriter) for reading and writing, strings only;
+- #US heap (strings written in the code), for analysis.
+None of this runs the game's code: only bytes are read.
 """
 import struct
 
@@ -16,9 +16,9 @@ class ErroreDotnet(ValueError):
 
 # --- PE + CLI ----------------------------------------------------------------------------------
 
-# tabelle dei metadati (ECMA-335 II.22): nome, colonne. Tipi di colonna:
-#   numero = byte fissi; "s" heap stringhe; "g" heap guid; "b" heap blob;
-#   ("t", n) indice semplice nella tabella n; ("c", nome) indice codificato
+# metadata tables (ECMA-335 II.22): name, columns. Column types:
+#   number = fixed bytes; "s" strings heap; "g" guid heap; "b" blob heap;
+#   ("t", n) simple index into table n; ("c", name) coded index
 TABELLE = {
     0x00: ("Module", [2, "s", "g", "g", "g"]),
     0x01: ("TypeRef", [("c", "ResolutionScope"), "s", "s"]),
@@ -67,7 +67,7 @@ TABELLE = {
     0x2C: ("GenericParamConstraint", [("t", 0x2A), ("c", "TypeDefOrRef")]),
 }
 
-# indici codificati: bit di etichetta, tabelle (None = valore non usato)
+# coded indexes: tag bits, tables (None = unused value)
 CODIFICATI = {
     "TypeDefOrRef": (2, [0x02, 0x01, 0x1B]),
     "HasConstant": (2, [0x04, 0x08, 0x17]),
@@ -92,7 +92,7 @@ def _cstr(dati, pos):
 
 
 def leggi_compresso(dati, pos):
-    """Intero compresso dei blob ECMA-335 (1, 2 o 4 byte). Restituisce (valore, nuova posizione)."""
+    """Compressed integer of the ECMA-335 blobs (1, 2 or 4 bytes). Returns (value, new position)."""
     b = dati[pos]
     if b & 0x80 == 0:
         return b, pos + 1
@@ -104,7 +104,7 @@ def leggi_compresso(dati, pos):
 
 
 class Assembly:
-    """Assembly .NET letto da file (sola lettura)."""
+    """.NET assembly read from a file (read only)."""
 
     def __init__(self, percorso=None, dati=None):
         self.percorso = percorso
@@ -157,15 +157,15 @@ class Assembly:
 
     @property
     def solo_32bit(self):
-        """True se l'assembly richiede un processo a 32 bit (COMIMAGE_FLAGS_32BITREQUIRED senza 32BITPREFERRED)."""
+        """True if the assembly requires a 32-bit process (COMIMAGE_FLAGS_32BITREQUIRED without 32BITPREFERRED)."""
         return bool(self.cli_flags & 0x2) and not (self.cli_flags & 0x20000)
 
     @property
     def firmato(self):
-        """True se ha una firma con nome sicuro (strong name)."""
+        """True if it has a strong name signature."""
         return bool(self.cli_flags & 0x8) and self.firma_dim > 0
 
-    # metadati ------------------------------------------------------------------------------------
+    # metadata ------------------------------------------------------------------------------------
     def _metadati(self):
         d = self.dati
         base = self.offset(self.meta_rva)
@@ -203,7 +203,7 @@ class Assembly:
             if valide >> t & 1:
                 self.righe[t] = struct.unpack_from("<I", d, p)[0]
                 p += 4
-        if heap_dim & 0x40:  # dati extra (rari)
+        if heap_dim & 0x40:  # extra data (rare)
             p += 4
         self._dim_str = 4 if heap_dim & 1 else 2
         self._dim_guid = 4 if heap_dim & 2 else 2
@@ -239,7 +239,7 @@ class Assembly:
         return 2 if massimo < (1 << (16 - bit)) else 4
 
     def riga(self, tabella, indice):
-        """Valori grezzi della riga 'indice' (da 1) della tabella."""
+        """Raw values of row 'indice' (from 1) of the table."""
         if not 1 <= indice <= self.righe.get(tabella, 0):
             raise ErroreDotnet("riga %d fuori dalla tabella %s" % (indice, TABELLE[tabella][0]))
         p = self._inizio[tabella] + (indice - 1) * self._dim_riga[tabella]
@@ -263,13 +263,13 @@ class Assembly:
 
     @staticmethod
     def decodifica(codificato, tipo):
-        """Indice codificato -> (tabella, riga)."""
+        """Coded index -> (table, row)."""
         bit, tab = CODIFICATI[tipo]
         return tab[codificato & ((1 << bit) - 1)], codificato >> bit
 
-    # informazioni di alto livello ----------------------------------------------------------------
+    # high-level information ----------------------------------------------------------------------
     def identita(self):
-        """Nome, versione, cultura e chiave pubblica dell'assembly."""
+        """Name, version, culture and public key of the assembly."""
         if not self.righe.get(0x20):
             raise ErroreDotnet("manca la tabella Assembly (e' un modulo, non un assembly)")
         _, ma, mi, bu, re, flags, chiave, nome, cultura = self.riga(0x20, 1)
@@ -277,14 +277,14 @@ class Assembly:
                 "cultura": self.stringa(cultura), "chiave_pubblica": self.blob(chiave).hex(), "flags": flags}
 
     def riferimenti(self):
-        """Assembly referenziati: [(nome, versione)]."""
+        """Referenced assemblies: [(name, version)]."""
         return [(self.stringa(r[6]), "%d.%d.%d.%d" % tuple(r[:4])) for r in self.righe_di(0x23)]
 
     def risorse(self):
-        """Risorse incorporate: {nome: (offset nel file dei dati, lunghezza)}."""
+        """Embedded resources: {name: (offset of the data in the file, length)}."""
         uscita = {}
         for offset, _flags, nome, impl in self.righe_di(0x28):
-            if impl:  # risorsa in un altro file/assembly
+            if impl:  # resource in another file/assembly
                 continue
             if not self.risorse_rva:
                 raise ErroreDotnet("risorse dichiarate ma directory delle risorse assente")
@@ -309,7 +309,7 @@ class Assembly:
         return (self.stringa(spazio) + "." if spazio else "") + self.stringa(nome)
 
     def attributi_assembly(self):
-        """Attributi dell'assembly: [(nome completo del tipo, blob del valore)]."""
+        """Attributes of the assembly: [(full name of the type, blob of the value)]."""
         uscita = []
         for genitore, tipo, valore in self.righe_di(0x0C):
             tab, r = self.decodifica(genitore, "HasCustomAttribute")
@@ -320,7 +320,7 @@ class Assembly:
             if tab_c == 0x0A:
                 classe, _, _ = self.riga(0x0A, r_c)
                 nome = self._nome_tipo(*self.decodifica(classe, "MemberRefParent"))
-            elif tab_c == 0x06:  # costruttore definito nello stesso assembly: cerco il tipo proprietario
+            elif tab_c == 0x06:  # constructor defined in the same assembly: look for the owning type
                 nome = self._tipo_del_metodo(r_c)
             uscita.append((nome, self.blob(valore)))
         return uscita
@@ -335,7 +335,7 @@ class Assembly:
         return ""
 
     def lingua_neutra(self):
-        """Valore di [assembly: NeutralResourcesLanguage("..")] e posizione di ripiego (0 = MainAssembly)."""
+        """Value of [assembly: NeutralResourcesLanguage("..")] and fallback location (0 = MainAssembly)."""
         for nome, valore in self.attributi_assembly():
             if nome == "System.Resources.NeutralResourcesLanguageAttribute" and valore[:2] == b"\x01\x00":
                 if valore[2] == 0xFF:
@@ -348,19 +348,19 @@ class Assembly:
         return None, None
 
     def versione_satelliti(self):
-        """Versione che devono avere i satelliti: [SatelliteContractVersion] se c'e', altrimenti la propria."""
+        """Version the satellites must have: [SatelliteContractVersion] if present, otherwise its own."""
         for nome, valore in self.attributi_assembly():
             if (nome == "System.Resources.SatelliteContractVersionAttribute" and valore[:2] == b"\x01\x00"
                     and len(valore) > 2 and valore[2] != 0xFF):
                 n, p = leggi_compresso(valore, 2)
                 parti = valore[p:p + n].decode("utf-8", "replace").strip().split(".")
-                # come csc per AssemblyVersion: "1.0" diventa "1.0.0.0"
+                # like csc for AssemblyVersion: "1.0" becomes "1.0.0.0"
                 if 2 <= len(parti) <= 4 and all(x.isdigit() and int(x) < 65535 for x in parti):
                     return ".".join(str(int(x)) for x in parti + ["0"] * (4 - len(parti)))
         return self.identita()["versione"]
 
     def stringhe_codice(self):
-        """Stringhe dell'heap #US (letterali scritti nel codice), in ordine di comparsa."""
+        """Strings of the #US heap (literals written in the code), in order of appearance."""
         us, uscita, p = self._us, [], 1
         while p < len(us):
             n, q = leggi_compresso(us, p)
@@ -372,7 +372,7 @@ class Assembly:
         return uscita
 
 
-# --- file .resources (System.Resources.ResourceWriter) -----------------------------------------
+# --- .resources files (System.Resources.ResourceWriter) ----------------------------------------
 
 MAGIC_RISORSE = 0xBEEFCACE
 LETTORE_PREDEFINITO = ("System.Resources.ResourceReader, mscorlib, Version=4.0.0.0, Culture=neutral, "
@@ -408,7 +408,7 @@ def _scrivi_7bit(n):
 
 
 def _stringa_bw(dati, pos, codifica="utf-8"):
-    """Stringa come la scrive BinaryWriter: lunghezza in byte (7 bit) + testo."""
+    """String as BinaryWriter writes it: length in bytes (7 bit) + text."""
     n, pos = _leggi_7bit(dati, pos)
     return dati[pos:pos + n].decode(codifica, "surrogatepass"), pos + n
 
@@ -419,7 +419,7 @@ def _scrivi_stringa_bw(testo, codifica="utf-8"):
 
 
 def hash_nome(nome):
-    """FastResourceComparer.HashFunction di .NET (djb2 con xor, sui caratteri UTF-16)."""
+    """FastResourceComparer.HashFunction of .NET (djb2 with xor, on the UTF-16 characters)."""
     h = 5381
     for unita in struct.unpack("<%dH" % (len(nome.encode("utf-16-le", "surrogatepass")) // 2),
                                nome.encode("utf-16-le", "surrogatepass")):
@@ -428,9 +428,9 @@ def hash_nome(nome):
 
 
 def leggi_resources(dati):
-    """File .resources -> {"lettore", "insieme", "versione", "tipi", "voci": [(nome, codice_tipo, valore)]}.
+    """.resources file -> {"lettore", "insieme", "versione", "tipi", "voci": [(name, type_code, value)]}.
 
-    Le voci sono nell'ordine della sezione dati. I valori non stringa restano byte grezzi (non toccati)."""
+    The entries are in the order of the data section. Non-string values stay raw bytes (untouched)."""
     try:
         return _leggi_resources(dati)
     except (struct.error, IndexError, UnicodeDecodeError) as e:
@@ -473,7 +473,7 @@ def _leggi_resources(dati):
             raise ErroreDotnet("hash del nome '%s' non corrisponde" % nome)
         off_dato = struct.unpack_from("<i", dati, q)[0]
         voci.append((off_dato, nome))
-    ordine_hash = [nome for _, nome in voci]  # ordine dell'elenco degli hash (conta per i nomi con hash uguale)
+    ordine_hash = [nome for _, nome in voci]  # order of the hash list (matters for names with the same hash)
     voci.sort()
     risultato = []
     for k, (off_dato, nome) in enumerate(voci):
@@ -482,7 +482,7 @@ def _leggi_resources(dati):
         if versione == 2:
             codice, q2 = _leggi_7bit(dati, q)
         else:
-            codice_v1, q2 = _leggi_7bit(dati, q)  # v1: indice nella tabella dei tipi (-1 = null)
+            codice_v1, q2 = _leggi_7bit(dati, q)  # v1: index into the types table (-1 = null)
             codice = TIPO_STRINGA if 0 <= codice_v1 < len(tipi) and tipi[codice_v1].startswith("System.String") \
                 else ("v1", codice_v1)
         if codice == TIPO_STRINGA:
@@ -497,9 +497,9 @@ def _leggi_resources(dati):
 
 
 def scrivi_resources(info, nuove=None):
-    """Riscrive un .resources versione 2 come ResourceWriter. nuove: {nome: testo} sostituisce le stringhe.
+    """Rewrites a version 2 .resources like ResourceWriter. nuove: {name: text} replaces the strings.
 
-    Le voci non stringa vengono copiate identiche. Ordine e intestazioni come nel file letto."""
+    Non-string entries are copied identically. Order and headers as in the file read."""
     if info["versione"] != 2:
         raise ErroreDotnet("scrittura supportata solo per .resources versione 2")
     nuove = nuove or {}
@@ -523,8 +523,8 @@ def scrivi_resources(info, nuove=None):
             dati_sez += _scrivi_7bit(TIPO_STRINGA) + _scrivi_stringa_bw(testo)
         else:
             dati_sez += _scrivi_7bit(codice) + valore
-    # hash in ordine crescente; a parita' di hash resta l'ordine del file letto (qualsiasi ordine e' valido:
-    # ResourceReader controlla tutti i nomi con lo stesso hash)
+    # hashes in ascending order; for equal hashes the order of the file read is kept (any order is valid:
+    # ResourceReader checks all the names with the same hash)
     elenco.sort(key=lambda v: (v[0], v[1]))
     uscita += struct.pack("<%di" % len(elenco), *[h for h, _, _ in elenco])
     uscita += struct.pack("<%di" % len(elenco), *[p for _, _, p in elenco])
@@ -533,5 +533,5 @@ def scrivi_resources(info, nuove=None):
 
 
 def stringhe_resources(info):
-    """{nome: testo} delle sole risorse di tipo stringa."""
+    """{name: text} of the string resources only."""
     return {nome: valore for nome, codice, valore in info["voci"] if codice == TIPO_STRINGA}

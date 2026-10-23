@@ -1,12 +1,12 @@
-"""Lettura e scrittura dei file Unity: AssetBundle (UnityFS) e file serializzati al loro interno (sola libreria
-standard).
+"""Reading and writing Unity files: AssetBundles (UnityFS) and the serialized files inside them (standard library
+only).
 
-- UnityFS: intestazione, blocchi compressi (LZ4/LZ4HC in puro Python, LZMA con la libreria standard) e i file
-  interni. Si riscrive senza compressione (Unity lo accetta); i dati dei file interni restano byte per byte uguali
-  tranne quelli cambiati. Indice legge un bundle grande a pezzi, solo i blocchi che servono (sola lettura).
-- File serializzato (versioni 17-22): tipi con il loro albero dei campi (type tree), tabella degli oggetti, dati.
-  Un oggetto si legge seguendo l'albero dei campi; per cambiare dei testi si riscrivono solo quelle stringhe
-  (lunghezza, testo, allineamento a 4) e si aggiornano posizioni e dimensioni nella tabella degli oggetti.
+- UnityFS: header, compressed blocks (LZ4/LZ4HC in pure Python, LZMA with the standard library) and the inner
+  files. It is rewritten without compression (Unity accepts it); the data of the inner files stays identical byte for
+  byte except for the changed ones. Indice reads a large bundle in pieces, only the blocks it needs (read only).
+- Serialized file (versions 17-22): types with their field tree (type tree), object table, data.
+  An object is read by following the field tree; to change some texts only those strings are rewritten
+  (length, text, 4-byte alignment) and positions and sizes are updated in the object table.
 """
 import lzma
 import struct
@@ -17,14 +17,14 @@ class ErroreUnity(ValueError):
 
 
 class _Variabile(Exception):
-    """Campo con struttura variabile (es. i dati dei riferimenti gestiti, in fondo all'oggetto)."""
+    """Field with a variable structure (e.g. the data of managed references, at the end of the object)."""
 
     def __init__(self, percorso):
         Exception.__init__(self, "/".join(map(str, percorso)))
         self.percorso = percorso
 
 
-# --- LZ4 (formato a blocchi, quello dei bundle) ----------------------------------------------------------------
+# --- LZ4 (block format, the one used by bundles) ---------------------------------------------------------------
 
 def lz4_decomprimi(src, dimensione):
     dst = bytearray()
@@ -75,7 +75,7 @@ def _decomprimi(dati, tipo, dimensione):
         return dati
     if tipo in (2, 3):
         return lz4_decomprimi(dati, dimensione)
-    if tipo == 1:  # LZMA di Unity: 5 byte di proprieta', poi il flusso senza dimensione
+    if tipo == 1:  # Unity's LZMA: 5 bytes of properties, then the stream without a size
         props = dati[0]
         lc, lp, pb = props % 9, (props // 9) % 5, (props // 9) // 5
         dizionario = struct.unpack_from("<I", dati, 1)[0]
@@ -92,9 +92,9 @@ def _cstringa(dati, p):
 # --- UnityFS ----------------------------------------------------------------------------------------------------
 
 def _intestazione(leggi, dimensione_file):
-    """Intestazione di un AssetBundle: (versione, versione del player, versione di Unity, segni, blocchi, nodi,
-    inizio dei dati). leggi(posizione, quanti) restituisce i byte del file; blocchi = [(decompresso, compresso,
-    segni)], nodi = [(nome, inizio, dimensione, segni)] con le posizioni nei dati decompressi."""
+    """Header of an AssetBundle: (version, player version, Unity version, flags, blocks, nodes, start of the
+    data). leggi(posizione, quanti) returns the file's bytes; blocks = [(decompresso, compresso, segni)],
+    nodes = [(nome, inizio, dimensione, segni)] with the positions in the decompressed data."""
     testa = leggi(0, 1024)
     if not testa.startswith(b"UnityFS\x00"):
         raise ErroreUnity("non e' un AssetBundle UnityFS")
@@ -110,7 +110,7 @@ def _intestazione(leggi, dimensione_file):
     p += 20
     if versione >= 7:
         p = (p + 15) // 16 * 16
-    if segni & 0x80:  # informazioni sui blocchi in fondo al file
+    if segni & 0x80:  # block information at the end of the file
         info = leggi(dimensione_file - compresso, compresso)
         inizio_dati = p
     else:
@@ -125,7 +125,7 @@ def _intestazione(leggi, dimensione_file):
     if segni & 0x200:
         inizio_dati = (inizio_dati + 15) // 16 * 16
     try:
-        q = 16  # impronta (non usata)
+        q = 16  # hash (not used)
         nblocchi = struct.unpack_from(">i", info, q)[0]
         q += 4
         blocchi = []
@@ -146,7 +146,7 @@ def _intestazione(leggi, dimensione_file):
 
 
 class Bundle:
-    """Un AssetBundle: self.file = {nome: bytes} dei file interni, nell'ordine originale."""
+    """An AssetBundle: self.file = {nome: bytes} of the inner files, in the original order."""
 
     def __init__(self, dati):
         (self.versione, self.versione_player, self.versione_unity, self.segni, blocchi, nodi,
@@ -163,7 +163,7 @@ class Bundle:
         self.file = {nome: tutto[s:s + d] for nome, s, d, _ in nodi}
 
     def serializza(self):
-        """Il bundle senza compressione (un blocco), con gli stessi file interni."""
+        """The bundle without compression (one block), with the same inner files."""
         dati = b"".join(self.file[nome] for nome, _ in self.nodi)
         info = bytearray(16)
         info += struct.pack(">i", 1) + struct.pack(">IIH", len(dati), len(dati), 0x40)
@@ -173,7 +173,7 @@ class Bundle:
             d = len(self.file[nome])
             info += struct.pack(">qqI", p, d, segni) + nome.encode("utf-8") + b"\x00"
             p += d
-        segni = 0x40 | (self.segni & 0x200)  # informazioni subito dopo l'intestazione, nessuna compressione
+        segni = 0x40 | (self.segni & 0x200)  # information right after the header, no compression
         testa = b"UnityFS\x00" + struct.pack(">I", self.versione) + self.versione_player.encode() + b"\x00" + \
             self.versione_unity.encode() + b"\x00"
         lunghezza_testa = len(testa) + 20
@@ -189,15 +189,15 @@ class Bundle:
         return uscita
 
 
-MAX_BLOCCO = 256 * 1024 * 1024  # blocchi LZ4 piu' grandi (decompressi) non si leggono: troppa memoria in una volta
-# (i blocchi senza compressione e quelli LZMA grandi si leggono a pezzi da _PEZZO_LZMA)
+MAX_BLOCCO = 256 * 1024 * 1024  # larger LZ4 blocks (decompressed) are not read: too much memory at once
+# (uncompressed blocks and large LZMA ones are read in pieces of _PEZZO_LZMA)
 _PEZZO_LZMA = 16 * 1024 * 1024
 
 
 class Indice:
-    """Un AssetBundle letto dal file a pezzi, senza decomprimerlo tutto (es. data.unity3d da centinaia di MB): solo
-    l'indice dei blocchi e dei file interni (self.nodi = [(nome, inizio, dimensione, segni)]); pezzi() restituisce
-    a poco a poco i byte decompressi di una parte."""
+    """An AssetBundle read from the file in pieces, without decompressing all of it (e.g. a data.unity3d of hundreds of
+    MB): only the index of the blocks and of the inner files (self.nodi = [(nome, inizio, dimensione, segni)]);
+    pezzi() returns the decompressed bytes of a part little by little."""
 
     def __init__(self, percorso):
         self._f = open(percorso, "rb")
@@ -223,8 +223,8 @@ class Indice:
         self.chiudi()
 
     def _senza_compressione(self, posizione, quanti):
-        """I byte di un blocco senza compressione, a pezzi da 16 MB: un solo blocco puo' essere grande quanto il
-        bundle (anche GB). Un file troncato da' quello che c'e'."""
+        """The bytes of an uncompressed block, in pieces of 16 MB: a single block can be as large as the bundle
+        (even GBs). A truncated file gives what is there."""
         letti = 0
         while letti < quanti:
             pezzo = self._leggi(posizione + letti, min(_PEZZO_LZMA, quanti - letti))
@@ -234,11 +234,11 @@ class Indice:
             yield pezzo
 
     def _blocco(self, posizione, compresso, decompresso, tipo):
-        """I byte decompressi di un blocco, in uno o piu' pezzi (LZMA a pezzi da 16 MB)."""
+        """The decompressed bytes of a block, in one or more pieces (LZMA in pieces of 16 MB)."""
         if tipo == 0:
             yield from self._senza_compressione(posizione, compresso)
             return
-        if tipo == 1 and decompresso > _PEZZO_LZMA:  # LZMA grande (Unity vecchi): a pezzi, anche in lettura
+        if tipo == 1 and decompresso > _PEZZO_LZMA:  # large LZMA (old Unity versions): in pieces, reading too
             testa = self._leggi(posizione, 5)
             if len(testa) < 5:
                 raise ErroreUnity("bundle troncato")
@@ -247,7 +247,7 @@ class Indice:
                        "dict_size": struct.unpack_from("<I", testa, 1)[0]}]
             d = lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=filtri)
             letti, resto = 5, decompresso
-            while resto > 0 and not d.eof:  # flusso finito prima del previsto: un'altra decompress() darebbe EOFError
+            while resto > 0 and not d.eof:  # stream ended early: another decompress() would raise EOFError
                 entrata = b""
                 if d.needs_input:
                     entrata = self._leggi(posizione + letti, min(4 * 1024 * 1024, compresso - letti))
@@ -266,15 +266,15 @@ class Indice:
         yield _decomprimi(self._leggi(posizione, compresso), tipo, decompresso)
 
     def pezzi(self, inizio=0, fine=None):
-        """[(posizione, byte)] decompressi che coprono i dati da 'inizio' a 'fine' (posizioni nei dati
-        decompressi, es. un file interno: inizio, inizio + dimensione). Si leggono solo i blocchi che servono."""
+        """Decompressed [(posizione, byte)] covering the data from 'inizio' to 'fine' (positions in the decompressed
+        data, e.g. an inner file: inizio, inizio + dimensione). Only the blocks needed are read."""
         if fine is None:
             fine = sum(b[0] for b in self.blocchi)
         pos_c, pos_u = self.inizio_dati, 0
         for decompresso, compresso, segni in self.blocchi:
             if pos_u >= fine:
                 break
-            if pos_u + decompresso > inizio and segni & 0x3F == 0:  # senza compressione: solo la parte che serve
+            if pos_u + decompresso > inizio and segni & 0x3F == 0:  # uncompressed: only the part needed
                 a = max(inizio, pos_u)
                 for pezzo in self._senza_compressione(pos_c + a - pos_u,
                                                       min(fine, pos_u + min(decompresso, compresso)) - a):
@@ -288,13 +288,13 @@ class Indice:
                         if a < b:
                             yield a, pezzo[a - p:b - p]
                         p += len(pezzo)
-                except (lzma.LZMAError, IndexError, struct.error) as e:  # dati rovinati
+                except (lzma.LZMAError, IndexError, struct.error) as e:  # corrupted data
                     raise ErroreUnity("blocco del bundle non valido (%s)" % type(e).__name__) from e
             pos_c += compresso
             pos_u += decompresso
 
 
-# --- file serializzato ------------------------------------------------------------------------------------------
+# --- serialized file --------------------------------------------------------------------------------------------
 
 _SEMPLICI = {"SInt8": "b", "UInt8": "B", "char": "B", "bool": "?", "SInt16": "h", "UInt16": "H", "short": "h",
              "unsigned short": "H", "SInt32": "i", "UInt32": "I", "int": "i", "unsigned int": "I", "Type*": "I",
@@ -314,7 +314,7 @@ _STRINGHE_COMUNI = None
 
 
 def _stringhe_comuni():
-    """Le stringhe predefinite dei type tree (quando il bit alto dell'offset e' 1)."""
+    """The built-in strings of type trees (when the offset's high bit is 1)."""
     global _STRINGHE_COMUNI
     if _STRINGHE_COMUNI is None:
         testo = ("AABB\x00AnimationClip\x00AnimationCurve\x00AnimationState\x00Array\x00Base\x00BitField\x00bitset\x00"
@@ -351,7 +351,7 @@ class Oggetto:
 
 
 class FileSerializzato:
-    """File serializzato di Unity (versioni 17-22, little endian, con type tree)."""
+    """Unity serialized file (versions 17-22, little endian, with type tree)."""
 
     def __init__(self, dati):
         self.dati = dati
@@ -367,7 +367,7 @@ class FileSerializzato:
             p += 28
         self.inizio_dati = inizio_dati
         self.versione_unity, p = _cstringa(dati, p)
-        p += 4  # piattaforma
+        p += 4  # platform
         self.con_alberi = dati[p] != 0
         p += 1
         ntipi = struct.unpack_from("<i", dati, p)[0]
@@ -399,10 +399,10 @@ class FileSerializzato:
     def _leggi_tipo(self, p, riferimento):
         d = self.dati
         classe = struct.unpack_from("<i", d, p)[0]
-        p += 4 + 1 + 2  # classe, stripped, indice dello script
+        p += 4 + 1 + 2  # class, stripped, script index
         if (riferimento and True) or classe == 114:
             p += 16
-        p += 16  # impronta
+        p += 16  # hash
         radice = None
         if self.con_alberi:
             nnodi, lbuffer = struct.unpack_from("<ii", d, p)
@@ -436,8 +436,8 @@ class FileSerializzato:
         return self.dati[self.inizio_dati + o.inizio:self.inizio_dati + o.inizio + o.dimensione]
 
     def stringhe(self, o, valori=()):
-        """[(percorso dei campi, inizio, fine)] di tutte le stringhe dell'oggetto (posizioni nei suoi dati). Con
-        'valori' (nomi di campi numerici, es. 'm_Unicode') anche [(percorso, 'valore', numero)] di quei campi."""
+        """[(field path, start, end)] of all the object's strings (positions in its data). With 'valori' (names of
+        numeric fields, e.g. 'm_Unicode') also [(percorso, 'valore', numero)] of those fields."""
         albero = self.tipi[o.tipo]["albero"]
         if albero is None:
             raise ErroreUnity("il file non ha gli alberi dei campi (type tree)")
@@ -445,14 +445,14 @@ class FileSerializzato:
         try:
             _leggi(albero, self.dati_oggetto(o), 0, [], uscita, set(valori))
         except _Variabile as e:
-            # campi a struttura variabile (es. 'references' dei riferimenti gestiti, sempre in fondo): le stringhe
-            # lette fin li' valgono; quelle dentro quei campi non si toccano
+            # fields with a variable structure (e.g. 'references' of managed references, always at the end): the
+            # strings read up to there count; those inside these fields are left untouched
             uscita.append((("...",) + tuple(e.percorso), None, None))
         return uscita
 
     def con_testi_nuovi(self, nuovi):
-        """Il file con le stringhe cambiate: nuovi = {path_id: {(inizio, fine): testo}}. Si riscrivono solo quelle
-        stringhe; gli oggetti si spostano (allineati a 8 come fa Unity) e la tabella degli oggetti si aggiorna."""
+        """The file with the strings changed: nuovi = {path_id: {(inizio, fine): testo}}. Only those strings are
+        rewritten; the objects move (aligned to 8 as Unity does) and the object table is updated."""
         testa = bytearray(self.dati[:self.inizio_dati])
         corpo = bytearray()
         for o in sorted(self.oggetti, key=lambda x: x.inizio):
@@ -465,7 +465,7 @@ class FileSerializzato:
                     t = testo.encode("utf-8")
                     nuovo += struct.pack("<i", len(t)) + t
                     nuovo += b"\x00" * (-len(nuovo) % 4)
-                    vecchia_fine = b + (-b % 4)  # la stringa vecchia con il suo allineamento
+                    vecchia_fine = b + (-b % 4)  # the old string with its alignment
                     ultimo = vecchia_fine
                 nuovo += vecchio[ultimo:]
                 vecchio = bytes(nuovo)
@@ -486,7 +486,7 @@ class FileSerializzato:
 
 
 def _leggi(nodo, d, p, percorso, uscita, valori=frozenset()):
-    """Legge il campo 'nodo' dalla posizione p; registra le stringhe; restituisce la posizione dopo il campo."""
+    """Reads the field 'nodo' from position p; records the strings; returns the position after the field."""
     percorso = percorso + [nodo.nome]
     if nodo.tipo == "string":
         n = struct.unpack_from("<i", d, p)[0]

@@ -1,11 +1,11 @@
-"""Lettura di data.win di GameMaker (sola lettura, libreria standard): pezzi, stringhe, font.
+"""Reading GameMaker's data.win (read-only, standard library): chunks, strings, fonts.
 
-data.win = "FORM" + dimensione + pezzi ("GEN8", "STRG", "FONT", ...), ognuno nome + dimensione + contenuto.
-I riferimenti tra pezzi sono posizioni assolute nel file; le stringhe sono lunghezza (uint32) + UTF-8 + 0,
-e i riferimenti puntano al testo (cioe' alla lunghezza + 4).
+data.win = "FORM" + size + chunks ("GEN8", "STRG", "FONT", ...), each one name + size + content.
+References between chunks are absolute offsets in the file; strings are length (uint32) + UTF-8 + 0,
+and references point to the text (that is, to the length + 4).
 
-I font di GameMaker hanno i caratteri "cotti" al momento della compilazione: un carattere che non c'e'
-viene disegnato come un quadratino (o non compare). Per questo una traduzione deve usare i caratteri dei font.
+GameMaker fonts have their characters "baked" at compile time: a character that is not there
+is drawn as a small square (or does not appear). That is why a translation must use the fonts' characters.
 """
 import os
 import re
@@ -19,7 +19,7 @@ class ErroreGameMaker(ValueError):
 
 
 def pezzi(dati):
-    """{nome: (inizio contenuto, dimensione)} dei pezzi di un data.win."""
+    """{nome: (content start, size)} of the chunks of a data.win."""
     if len(dati) < 8 or dati[:4] != b"FORM":
         raise ErroreGameMaker("non e' un data.win di GameMaker (manca FORM)")
     fine = 8 + struct.unpack_from("<I", dati, 4)[0]
@@ -37,7 +37,7 @@ def pezzi(dati):
 
 
 def stringa(dati, puntatore):
-    """Stringa di GameMaker dal riferimento (che punta al testo, preceduto dalla lunghezza)."""
+    """GameMaker string from its reference (which points to the text, preceded by the length)."""
     if not 4 <= puntatore <= len(dati) - 1:
         raise ErroreGameMaker("riferimento a stringa non valido")
     n = struct.unpack_from("<I", dati, puntatore - 4)[0]
@@ -47,9 +47,9 @@ def stringa(dati, puntatore):
 
 
 def _glifi(dati, inizio, fine, p):
-    """Prova a leggere in p un elenco di puntatori a glifi; restituisce i caratteri o None.
+    """Tries to read a list of glyph pointers at p; returns the characters or None.
 
-    L'elenco e' valido solo se i glifi cominciano subito dopo i puntatori, in ordine crescente."""
+    The list is valid only if the glyphs start right after the pointers, in increasing order."""
     if p + 4 > fine:
         return None
     n = struct.unpack_from("<I", dati, p)[0]
@@ -63,7 +63,7 @@ def _glifi(dati, inizio, fine, p):
         if not inizio <= q <= fine - 16 or q <= ultimo:
             return None
         c, x, y, w, h = struct.unpack_from("<HHHHH", dati, q)
-        if w > 4096 or h > 4096 or c <= precedente:  # i glifi sono in ordine di carattere
+        if w > 4096 or h > 4096 or c <= precedente:  # glyphs are in character order
             return None
         caratteri.append(chr(c))
         precedente, ultimo = c, q
@@ -71,7 +71,7 @@ def _glifi(dati, inizio, fine, p):
 
 
 def font(dati):
-    """([{'nome', 'caratteri'}], quanti font non si sono potuti leggere)."""
+    """([{'nome', 'caratteri'}], how many fonts could not be read)."""
     tabella = pezzi(dati)
     if "FONT" not in tabella:
         return [], 0
@@ -92,7 +92,7 @@ def font(dati):
         except (ErroreGameMaker, struct.error):
             illeggibili += 1
             continue
-        # i campi dopo il nome cambiano con la versione di GameMaker: cerco l'elenco dei glifi
+        # the fields after the name change with the GameMaker version: look for the glyph list
         for spostamento in range(40, 96, 4):
             caratteri = _glifi(dati, inizio, fine, p + spostamento)
             if caratteri:
@@ -109,7 +109,7 @@ def leggi(percorso):
 
 
 def e_dati(percorso):
-    """True se il file e' un data.win (o game.unx...) di GameMaker."""
+    """True if the file is a GameMaker data.win (or game.unx...)."""
     try:
         with open(percorso, "rb") as f:
             return f.read(4) == b"FORM"
@@ -118,7 +118,7 @@ def e_dati(percorso):
 
 
 def radici(cartella, profondita=2):
-    """Cartelle (fino a 'profondita' livelli sotto quella scelta) che contengono un data.win di GameMaker."""
+    """Folders (up to 'profondita' levels below the chosen one) that contain a GameMaker data.win."""
     trovate = []
     base = os.path.abspath(cartella)
     for radice, dirs, files in os.walk(base):
@@ -132,8 +132,8 @@ def radici(cartella, profondita=2):
 
 
 def sprite(dati):
-    """[{'nome', 'fotogrammi'}] degli sprite (pezzo SPRT). Formato di GameMaker Studio 1 e 2 (con il segno -1
-    dopo i 14 campi fissi); gli sprite che non si riescono a leggere sono saltati."""
+    """[{'nome', 'fotogrammi'}] of the sprites (SPRT chunk). GameMaker Studio 1 and 2 format (with the -1 marker
+    after the 14 fixed fields); sprites that cannot be read are skipped."""
     tabella = pezzi(dati)
     if "SPRT" not in tabella:
         return []
@@ -151,9 +151,9 @@ def sprite(dati):
             nome = stringa(dati, struct.unpack_from("<I", dati, p)[0])
             q = p + 56
             segno = struct.unpack_from("<i", dati, q)[0]
-            if segno == -1:  # GameMaker Studio 2: versione, tipo, velocita', [campi della versione], fotogrammi
+            if segno == -1:  # GameMaker Studio 2: version, type, speed, [version fields], frames
                 versione, tipo = struct.unpack_from("<II", dati, q + 4)
-                if tipo != 0:  # sprite vettoriali o spine: niente fotogrammi normali
+                if tipo != 0:  # vector or Spine sprites: no normal frames
                     continue
                 q += 20 + (4 if versione >= 2 else 0) + (4 if versione >= 3 else 0)
                 fotogrammi = struct.unpack_from("<I", dati, q)[0]
@@ -167,8 +167,8 @@ def sprite(dati):
 
 
 def nomi_del_gioco(dati):
-    """Nomi del gioco scritti in GEN8 (nome del file, nome, nome visualizzato): servono a trovare la cartella dei
-    salvataggi in %LOCALAPPDATA%."""
+    """Names of the game written in GEN8 (file name, name, display name): they are used to find the save folder
+    in %LOCALAPPDATA%."""
     tabella = pezzi(dati)
     if "GEN8" not in tabella:
         return []
@@ -183,7 +183,7 @@ def nomi_del_gioco(dati):
 
 
 def stringhe(dati):
-    """Tutte le stringhe del pezzo STRG (giochi compilati per la macchina virtuale)."""
+    """All the strings of the STRG chunk (games compiled for the virtual machine)."""
     tabella = pezzi(dati)
     if "STRG" not in tabella:
         return []
@@ -202,13 +202,13 @@ def stringhe(dati):
 
 
 def compilato_yyc(dati):
-    """True se il gioco e' compilato in codice nativo (YYC): data.win non ha il codice (pezzo CODE), che sta
-    nell'eseguibile insieme alle stringhe che usa."""
+    """True if the game is compiled to native code (YYC): data.win does not have the code (CODE chunk), which is
+    in the executable together with the strings it uses."""
     return "CODE" not in pezzi(dati)
 
 
 def eseguibili(cartella):
-    """Gli .exe del gioco nella cartella di data.win (senza disinstallatori e simili)."""
+    """The game's .exe files in the data.win folder (without uninstallers and the like)."""
     try:
         nomi = sorted(os.listdir(cartella))
     except OSError:
@@ -221,8 +221,8 @@ _PEZZO_TESTO = re.compile(rb"(?<=\x00)[^\x00]{20,2400}(?=\x00)")
 
 
 def _candidate(testi, lunghezze):
-    """Le stringhe che possono essere la mappa di un font a sprite: tanti caratteri quanti i fotogrammi di uno
-    sprite con 'font' nel nome, tutti diversi, con almeno 20 lettere a-z nell'ordine dell'alfabeto."""
+    """The strings that can be the map of a sprite font: as many characters as the frames of a sprite with 'font'
+    in its name, all different, with at least 20 letters a-z in alphabetical order."""
     uscita = []
     for t in testi:
         if len(t) not in lunghezze or len(set(t)) != len(t):
@@ -234,9 +234,9 @@ def _candidate(testi, lunghezze):
 
 
 def mappe_font_sprite(cartella, dati=None):
-    """[(nome dello sprite, mappa dei caratteri)] dei font a sprite (font_add_sprite_ext): i giochi che disegnano
-    il testo con immagini di lettere invece che con un font. La mappa e' una stringa con un carattere per
-    fotogramma: nei giochi compilati per la macchina virtuale sta nel pezzo STRG, in quelli YYC nell'eseguibile."""
+    """[(sprite name, character map)] of the sprite fonts (font_add_sprite_ext): games that draw text with images
+    of letters instead of a font. The map is a string with one character per frame: in games compiled for the
+    virtual machine it is in the STRG chunk, in YYC ones in the executable."""
     if dati is None:
         percorso = next((os.path.join(cartella, n) for n in NOMI_DATI if os.path.exists(os.path.join(cartella, n))),
                         None)
@@ -270,9 +270,9 @@ def mappe_font_sprite(cartella, dati=None):
 
 
 def cartella_maschera(cartella, relativa, estensione, dati=None):
-    """True se il gioco cerca da solo i file '<relativa>/*<estensione>' (es. 'local/*.json'): allora un file di
-    lingua nuovo messo li' diventa una lingua selezionabile nel gioco. Si cerca la maschera tra le stringhe del
-    gioco (pezzo STRG, o l'eseguibile se e' compilato YYC)."""
+    """True if the game looks for the '<relativa>/*<estensione>' files by itself (e.g. 'local/*.json'): then a new
+    language file put there becomes a selectable language in the game. The mask is searched among the game's
+    strings (STRG chunk, or the executable if it is compiled with YYC)."""
     maschere = {("%s/*%s" % (relativa, estensione)).encode("utf-8"), ("%s\\*%s" % (relativa, estensione)).encode("utf-8")}
     if dati is None:
         percorso = next((os.path.join(cartella, n) for n in NOMI_DATI if os.path.exists(os.path.join(cartella, n))),

@@ -1,23 +1,24 @@
-"""Caratteri che i font TextMeshPro di un gioco Unity sanno disegnare (sola lettura).
+"""Characters that the TextMeshPro fonts of a Unity game can draw (read-only).
 
-I testi di Unity Localization si scrivono nelle tabelle dei bundle (adapter_unity_loc): se i font del gioco non hanno
-una lettera (es. un atlante "statico" fatto per l'inglese, senza à è ì ò ù), nel gioco al suo posto compare un
-quadratino. Prima di scrivere una traduzione, Progetto adatta i caratteri che nessun font ha (caratteri.adatta_caratteri:
-è -> e', come per GameMaker e XNA).
+Unity Localization texts are written in the tables of the bundles (adapter_unity_loc): if the game's fonts lack
+a letter (e.g. a "static" atlas made for English, without à è ì ò ù), a small square appears in its place in the
+game. Before a translation is written, Progetto adapts the characters that no font has
+(caratteri.adatta_caratteri: è -> e', as for GameMaker and XNA).
 
-Dove si cercano i font: i file serializzati di <gioco>_Data (resources.assets, sharedassets, level...), data.unity3d e
-i bundle in StreamingAssets (Addressables). Di ogni font TextMeshPro (TMP_FontAsset) si leggono:
-- la tabella dei caratteri (m_CharacterTable, m_Unicode; nelle versioni vecchie m_glyphInfoList, id) con l'albero dei
-  campi (type tree, sempre nei bundle). Nei file senza albero (quelli di _Data) la tabella si riconosce dalla forma:
-  un numero N e N voci da 16 byte (tipo 1, codice, glifo, scala 1.0);
-- il modo dell'atlante (m_AtlasPopulationMode): 0 statico, 1 dinamico (i caratteri si disegnano al momento dal file
-  del font, il .ttf), 2 dinamico dai font di Windows.
-Dei font .ttf/.otf del gioco (oggetti Font con i dati del file) si legge la tabella cmap.
+Where fonts are looked for: the serialized files of <gioco>_Data (resources.assets, sharedassets, level...),
+data.unity3d and the bundles in StreamingAssets (Addressables). For each TextMeshPro font (TMP_FontAsset) these are
+read:
+- the character table (m_CharacterTable, m_Unicode; in old versions m_glyphInfoList, id) with the field tree
+  (type tree, always in bundles). In files without a tree (those of _Data) the table is recognized by its shape:
+  a number N and N entries of 16 bytes (type 1, code, glyph, scale 1.0);
+- the atlas mode (m_AtlasPopulationMode): 0 static, 1 dynamic (characters are drawn on the fly from the font
+  file, the .ttf), 2 dynamic from the Windows fonts.
+For the game's .ttf/.otf fonts (Font objects with the file's data) the cmap table is read.
 
-Regola (caratteri_ammessi): un carattere si puo' scrivere se almeno un font lo sa disegnare, perche' TextMeshPro cerca
-i caratteri mancanti nei font di ripiego (fallback). Se c'e' un font dinamico contano anche i caratteri dei file .ttf
-del gioco; se non si sa (nessun font TextMeshPro, font dinamici senza il loro .ttf, font di Windows, lettura non
-finita) non c'e' nessun limite: meglio una lettera giusta che una sostituzione inutile.
+Rule (caratteri_ammessi): a character can be written if at least one font can draw it, because TextMeshPro looks for
+missing characters in the fallback fonts. If there is a dynamic font, the characters of the game's .ttf files count
+too; if it is not known (no TextMeshPro font, dynamic fonts without their .ttf, Windows fonts, reading not
+finished) there is no limit: better a correct letter than a needless replacement.
 """
 import hashlib
 import json
@@ -29,28 +30,28 @@ import time
 from . import interruption as interruzione, unityfs
 from .adapter_webjson import scrivi_atomico
 
-MAX_SECONDI = 180  # lettura dei font: oltre, non si sa (nessun limite); il risultato poi si tiene (vedi cache)
+MAX_SECONDI = 180  # reading the fonts: beyond this, not known (no limit); the result is then kept (see cache)
 _VERSIONE_CACHE = 1
-MAX_MB_OGGETTO = 256  # un oggetto piu' grande non si legge (non e' un font)
-MIN_LETTERE = 20  # un insieme di caratteri con meno lettere ASCII non e' credibile come font dei testi
+MAX_MB_OGGETTO = 256  # a larger object is not read (it is not a font)
+MIN_LETTERE = 20  # a character set with fewer ASCII letters is not credible as a font for the texts
 _CLASSE_FONT = 128
-_CLASSE_SCRIPT = 114  # MonoBehaviour (i font TextMeshPro sono ScriptableObject)
+_CLASSE_SCRIPT = 114  # MonoBehaviour (TextMeshPro fonts are ScriptableObjects)
 _ESTENSIONI_SALTATE = (".ress", ".resource", ".json", ".txt", ".bank", ".bnk", ".wem", ".pck", ".mp4", ".webm",
                        ".ogg", ".wav", ".mp3", ".dll", ".exe", ".pdb", ".xml", ".csv", ".info", ".config", ".hash",
                        ".manifest", ".bin")
 _STATICO, _DINAMICO, _DINAMICO_OS = 0, 1, 2
-# voce della tabella dei caratteri di TextMeshPro (senza albero dei campi): tipo 1 (carattere), codice, glifo, scala
+# entry of the TextMeshPro character table (without field tree): type 1 (character), code, glyph, scale
 _VOCE_TMP = re.compile(rb"(?s)\x01\x00\x00\x00.{8}\x00\x00\x80\x3f")
-_CACHE = {}  # (cartella, impronta dei file) -> risultato di font_del_gioco
+_CACHE = {}  # (folder, fingerprint of the files) -> result of font_del_gioco
 
 
-# --- file .ttf / .otf: tabella cmap ----------------------------------------------------------------------------
+# --- .ttf / .otf files: cmap table -----------------------------------------------------------------------------
 
 def caratteri_ttf(dati, inizio=0):
-    """I caratteri (set di str) della tabella cmap di un font TrueType/OpenType che inizia a 'inizio', o None."""
+    """The characters (set of str) of the cmap table of a TrueType/OpenType font starting at 'inizio', or None."""
     try:
         etichetta = dati[inizio:inizio + 4]
-        if etichetta == b"ttcf":  # raccolta di font: il primo
+        if etichetta == b"ttcf":  # font collection: the first one
             inizio = struct.unpack_from(">I", dati, inizio + 12)[0] + inizio
             etichetta = dati[inizio:inizio + 4]
         if etichetta not in (b"\x00\x01\x00\x00", b"OTTO", b"true"):
@@ -62,7 +63,7 @@ def caratteri_ttf(dati, inizio=0):
         for k in range(ntab):
             tag, _, off, lung = struct.unpack_from(">4sIII", dati, inizio + 12 + 16 * k)
             if tag == b"cmap":
-                cmap = inizio + off  # (nelle raccolte gli spostamenti sono dall'inizio del file)
+                cmap = inizio + off  # (in collections the offsets are from the start of the file)
         if cmap is None:
             return None
         sottotabelle = []
@@ -115,7 +116,7 @@ def _cmap_12(dati, p):
 
 
 def _ttf_in(dati):
-    """I caratteri del primo file .ttf/.otf dentro i dati di un oggetto Font (m_FontData), o None."""
+    """The characters of the first .ttf/.otf file inside the data of a Font object (m_FontData), or None."""
     for magia in (b"\x00\x01\x00\x00", b"OTTO", b"true", b"ttcf"):
         p = dati.find(magia)
         while p >= 0:
@@ -126,10 +127,10 @@ def _ttf_in(dati):
     return None
 
 
-# --- font TextMeshPro --------------------------------------------------------------------------------------------
+# --- TextMeshPro fonts -------------------------------------------------------------------------------------------
 
 def _nome_oggetto(dati):
-    """Il nome (m_Name) di un MonoBehaviour senza albero dei campi: dopo m_GameObject, m_Enabled e m_Script."""
+    """The name (m_Name) of a MonoBehaviour without field tree: after m_GameObject, m_Enabled and m_Script."""
     try:
         n = struct.unpack_from("<i", dati, 28)[0]
         if 0 <= n <= 200:
@@ -140,9 +141,9 @@ def _nome_oggetto(dati):
 
 
 def tabella_tmp(dati):
-    """I codici della tabella dei caratteri di un font TextMeshPro in dati senza albero dei campi, o None: un numero
-    N seguito da N voci da 16 byte (tipo 1, codice < 0x110000, glifo, scala 1.0), codici tutti diversi. La tabella piu'
-    lunga dell'oggetto."""
+    """The codes of the character table of a TextMeshPro font in data without field tree, or None: a number N
+    followed by N entries of 16 bytes (type 1, code < 0x110000, glyph, scale 1.0), all codes different. The longest
+    table of the object."""
     migliore = None
     visti = set()
     for m in _VOCE_TMP.finditer(dati):
@@ -166,12 +167,12 @@ def tabella_tmp(dati):
 
 
 def _font_da_albero(albero, dati):
-    """(nome, modo, codici) di un font TextMeshPro letto con l'albero dei campi."""
+    """(nome, modo, codici) of a TextMeshPro font read with the field tree."""
     uscita = []
     try:
         unityfs._leggi(albero, dati, 0, [], uscita, {"m_Unicode", "id", "m_AtlasPopulationMode"})
     except unityfs._Variabile:
-        pass  # campi variabili in fondo: quello letto fin li' vale
+        pass  # variable fields at the end: what was read up to there is valid
     except (struct.error, IndexError, ValueError):
         return None
     nome, modo, codici = "", None, []
@@ -193,27 +194,27 @@ def _e_font_tmp(albero):
 
 
 def _oggetti_utili(s):
-    """[(oggetto, tipo)] degli oggetti da leggere di un file serializzato: 'tmp' (font TextMeshPro con l'albero),
-    'tmp?' (MonoBehaviour senza albero, da riconoscere dalla forma), 'font' (font .ttf/.otf)."""
+    """[(oggetto, tipo)] of the objects to read in a serialized file: 'tmp' (TextMeshPro font with the tree),
+    'tmp?' (MonoBehaviour without tree, to recognize by its shape), 'font' (.ttf/.otf font)."""
     uscita = []
     for o in s.oggetti:
         if not 0 <= o.tipo < len(s.tipi) or o.dimensione > MAX_MB_OGGETTO * 1024 * 1024:
             continue
         tipo = s.tipi[o.tipo]
-        if tipo["classe"] == _CLASSE_FONT and o.dimensione > 128:  # (con i byte di un file .ttf dentro)
+        if tipo["classe"] == _CLASSE_FONT and o.dimensione > 128:  # (with the bytes of a .ttf file inside)
             uscita.append((o, "font"))
         elif tipo["classe"] == _CLASSE_SCRIPT:
             if tipo["albero"] is not None:
                 if _e_font_tmp(tipo["albero"]):
                     uscita.append((o, "tmp"))
-            elif o.dimensione >= 16 * MIN_LETTERE:  # piu' piccolo non ha la tabella di un font dei testi
+            elif o.dimensione >= 16 * MIN_LETTERE:  # a smaller one does not have the table of a text font
                 uscita.append((o, "tmp?"))
     return uscita
 
 
 def _estrai(pezzi, voluti):
-    """I byte degli oggetti voluti [(inizio, fine, chiave)] (in ordine, senza sovrapposizioni) da un file letto a
-    pezzi consecutivi [(posizione, byte)]: {chiave: byte}. Si tiene in memoria solo l'oggetto in lettura."""
+    """The bytes of the wanted objects [(inizio, fine, chiave)] (in order, without overlaps) from a file read in
+    consecutive pieces [(posizione, byte)]: {chiave: byte}. Only the object being read is kept in memory."""
     uscita, i, buffer, da = {}, 0, bytearray(), None
     for posizione, pezzo in pezzi:
         while i < len(voluti):
@@ -247,7 +248,7 @@ class _Raccolta:
         return not self.completa
 
     def file_serializzato(self, leggi, dimensione, etichetta):
-        """Un file serializzato letto con leggi(inizio, fine) -> [(posizione, byte)] a pezzi."""
+        """A serialized file read with leggi(inizio, fine) -> [(posizione, byte)] in pieces."""
         testa = b"".join(p for _, p in leggi(0, min(dimensione, 65536)))
         try:
             _ms, _fs, versione, inizio_dati = struct.unpack_from(">IIII", testa, 0)
@@ -268,7 +269,7 @@ class _Raccolta:
             return
         voluti = sorted((s.inizio_dati + o.inizio, s.inizio_dati + o.inizio + o.dimensione, k)
                         for k, (o, _) in enumerate(utili))
-        # oggetti sovrapposti (file rovinato): solo il primo
+        # overlapping objects (damaged file): only the first one
         puliti, fine = [], -1
         for a, b, k in voluti:
             if a >= fine and b <= dimensione:
@@ -330,15 +331,15 @@ class _Raccolta:
 
 
 def _da_saltare(nome, nomi):
-    """File che non si leggono: immagini, suoni, testi..., i file di PatchSmith e quelli che PatchSmith ha riscritto
-    (le tabelle dei testi tradotte, con il loro .patchsmith-originale accanto: cambiano a ogni Riapplica)."""
+    """Files that are not read: images, sounds, texts..., PatchSmith's files and those that PatchSmith rewrote
+    (the translated text tables, with their .patchsmith-originale next to them: they change at every Reapply)."""
     basso = nome.lower()
     return basso.endswith(_ESTENSIONI_SALTATE) or ".patchsmith-" in nome or nome + ".patchsmith-originale" in nomi
 
 
 def _file_da_leggere(cartella_dati):
-    """[(percorso, 'bundle'|'file', dimensione, data)] dei file del gioco dove possono stare i font: i file di
-    <gioco>_Data (non la cartella Resources di Unity: i font del motore), data.unity3d, i bundle di StreamingAssets."""
+    """[(percorso, 'bundle'|'file', dimensione, data)] of the game files where fonts can be: the files of
+    <gioco>_Data (not Unity's Resources folder: the engine's fonts), data.unity3d, the bundles of StreamingAssets."""
     uscita = []
     try:
         voci = sorted(os.scandir(cartella_dati), key=lambda e: e.name.lower())
@@ -374,7 +375,8 @@ def _file_da_leggere(cartella_dati):
 
 
 def impronta(cartella_dati, elenco=None):
-    """L'impronta dei file dove possono stare i font (nomi, dimensioni, date): se non cambia, i font sono gli stessi."""
+    """The fingerprint of the files where fonts can be (names, sizes, dates): if it does not change, the fonts are
+    the same."""
     elenco = _file_da_leggere(cartella_dati) if elenco is None else elenco
     h = hashlib.sha1()
     for percorso, _, dimensione, data in sorted(elenco):
@@ -391,15 +393,16 @@ def _e_bundle(percorso):
 
 
 def font_del_gioco(cartella_dati, log=None, secondi=MAX_SECONDI, elenco=None):
-    """{'tmp': [{nome, modo, fonte, caratteri}], 'ttf': [{fonte, caratteri}], 'completa': bool} dei font del gioco
-    (sola lettura). Il risultato resta in memoria finche' i file del gioco non cambiano."""
+    """{'tmp': [{nome, modo, fonte, caratteri}], 'ttf': [{fonte, caratteri}], 'completa': bool} of the game's fonts
+    (read-only). The result stays in memory until the game's files change."""
     elenco = list(_file_da_leggere(cartella_dati) if elenco is None else elenco)
     chiave = (os.path.normcase(os.path.abspath(cartella_dati)),
               tuple((os.path.normcase(p), d, t) for p, _, d, t in elenco))
     if chiave in _CACHE:
         return _CACHE[chiave]
     raccolta = _Raccolta(time.monotonic() + secondi)
-    # prima i file di _Data e i bundle con "font" o "tmp" nel nome: se il tempo finisce, i font di solito sono letti
+    # first the _Data files and the bundles with "font" or "tmp" in their name: if time runs out, the fonts are
+    # usually already read
     elenco.sort(key=lambda x: (0 if x[1] == "file" or re.search(r"(?i)font|tmp|textmesh", os.path.basename(x[0]))
                                else 1))
     for percorso, tipo, _, _ in elenco:
@@ -424,8 +427,8 @@ def _lettere(caratteri):
 
 
 def intervalli(caratteri):
-    """[[primo, ultimo], ...] dei codici dei caratteri (per salvarli in poco spazio: i font CJK ne hanno decine di
-    migliaia, quasi tutti di seguito)."""
+    """[[primo, ultimo], ...] of the character codes (to save them in little space: CJK fonts have tens of
+    thousands of them, almost all consecutive)."""
     uscita = []
     for c in sorted(ord(x) for x in caratteri):
         if uscita and c == uscita[-1][1] + 1:
@@ -455,10 +458,10 @@ def _leggi_cache(percorso, chiave):
 
 
 def caratteri_ammessi(cartella_dati, log=None, secondi=MAX_SECONDI, cache=None):
-    """(insieme dei caratteri che almeno un font del gioco sa disegnare, descrizione) oppure (None, motivo) se non si
-    sa: vedi la regola all'inizio del file. cache: un file .json dove tenere il risultato finche' i file del gioco non
-    cambiano (un gioco con migliaia di bundle richiede anche qualche minuto). Anche una lettura non finita in tempo
-    resta (None: nessun limite, come prima), per non rifarla a ogni "Riapplica"."""
+    """(set of the characters that at least one of the game's fonts can draw, descrizione) or (None, motivo) if it is
+    not known: see the rule at the start of the file. cache: a .json file where the result is kept until the game's
+    files change (a game with thousands of bundles can take a few minutes). A reading not finished in time is kept
+    too (None: no limit, as before), so as not to redo it at every "Reapply"."""
     elenco = _file_da_leggere(cartella_dati)
     chiave = impronta(cartella_dati, elenco)
     if cache:
@@ -478,12 +481,12 @@ def caratteri_ammessi(cartella_dati, log=None, secondi=MAX_SECONDI, cache=None):
                 "intervalli": intervalli(risultato[0]) if risultato[0] is not None else None},
                 separators=(",", ":")).encode("utf-8"))
         except OSError:
-            pass  # e' solo una scorciatoia: la prossima volta si rilegge
+            pass  # it is only a shortcut: next time it is read again
     return risultato
 
 
 def _regola(trovati):
-    """(caratteri, descrizione) o (None, motivo) dai font trovati (vedi la regola all'inizio del file)."""
+    """(caratteri, descrizione) or (None, motivo) from the fonts found (see the rule at the start of the file)."""
     tmp = trovati["tmp"]
     if not tmp:
         return None, "nessun font TextMeshPro"
@@ -493,7 +496,7 @@ def _regola(trovati):
     dinamici = []
     for f in tmp:
         ammessi |= f["caratteri"]
-        # dinamico, o senza albero dei campi e quasi vuoto (un dinamico svuotato alla creazione del gioco)
+        # dynamic, or without field tree and almost empty (a dynamic one emptied when the game was built)
         if f["modo"] == _DINAMICO or (f["modo"] is None and _lettere(f["caratteri"]) < MIN_LETTERE):
             dinamici.append(f)
     if dinamici:
@@ -509,7 +512,7 @@ def _regola(trovati):
 
 
 def dati_del_bundle(cartella_gioco, rel_bundle):
-    """La cartella <gioco>_Data di un bundle (percorso relativo alla cartella del gioco), o None."""
+    """The <gioco>_Data folder of a bundle (path relative to the game folder), or None."""
     parti = rel_bundle.replace("\\", "/").split("/")
     for k, p in enumerate(parti):
         if p.endswith("_Data"):

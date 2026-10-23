@@ -1,12 +1,14 @@
-"""Lingua dell'interfaccia (ui_language.py, patchsmith/ui_language/*.json).
+"""Interface language (ui_language.py, patchsmith/ui_language/*.json).
 
-Uso: python -I test/test_ui_language.py <cartella_di_prova_che_non_esiste>
-- traduzione dei testi: uguali, con valori dentro (%s, %d), pezzi tradotti dentro, prefissi del registro, piu' righe;
-- il file inglese: ogni traduzione ha gli stessi segnaposto del testo italiano; i testi gia' in un'altra lingua restano
-  com'erano e il codice non c'e';
-- riga di comando: comandi inglesi e alias italiani uguali; aiuto (-h) nella lingua dell'interfaccia;
-- la finestra in inglese: pulsanti, menu a tendina, lingue "Da"/"A" (e ritorno al codice), bandierina con il menu delle
-  lingue; scelta una lingua, tutta la finestra (registro compreso) cambia subito, senza riaprire, e la ricorda.
+Usage: python -I test/test_ui_language.py <test_folder_that_does_not_exist>
+- translation of the texts: identical, with values inside (%s, %d), translated pieces inside, log prefixes, several
+  lines;
+- the English file: every translation has the same placeholders as the Italian text; texts already in another language
+  stay as they were and the code is not there;
+- command line: English commands and Italian aliases are the same; help (-h) in the interface language;
+- the window in English: buttons, drop-down menus, "From"/"To" languages (and back to the code), little flag with the
+  languages menu; once a language is chosen, the whole window (log included) changes at once, without reopening, and
+  remembers it.
 """
 import collections
 import json
@@ -40,7 +42,8 @@ def prova_traduzione():
               and t("Inglese (en)") == "English (en)"
               and t("Una frase che non c'e' nel file") == "Una frase che non c'e' nel file"
               and t("Crea rapporto\nCrea rapporto") == "Create report\nCreate report")
-    # un messaggio fatto di piu' voci del file messe una dopo l'altra (anche una voce di due frasi): a gruppi di frasi
+    # a message made of several entries of the file one after the other (also an entry of two sentences): in groups
+    # of sentences
     voci = interfaccia._stato["testi"]
     prova = {"Mancano %s. Le metto io.": "%s are missing. I'll add them.", "%d frasi sono rimaste.": "%d sentences are left."}
     voci.update(prova)
@@ -68,8 +71,8 @@ def prova_file():
                != collections.Counter(interfaccia._SEGNO.findall(v))]
     controlla("file inglese: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(testi), diversi[:3]),
               len(testi) > 1000 and not diversi)
-    # i testi del codice che non sono italiani (istruzioni per il traduttore locale, parole per riconoscere le lingue)
-    # restano come sono, e il codice (es. lo script per Godot) non e' tra i testi da tradurre
+    # the code's texts that are not Italian (instructions for the local translator, words to recognize the languages)
+    # stay as they are, and the code (e.g. the script for Godot) is not among the texts to translate
     cambiati = [k for k, v in testi.items() if lingua.lingua_evidente(k, "it") and v != k]
     codice = [k for k in testi if k.startswith("if ") or "==" in k or k.startswith("the and of ")]
     controlla("file inglese: testi in altre lingue lasciati com'erano (%s), niente codice (%s)" % (cambiati[:2], codice[:2]),
@@ -84,8 +87,8 @@ def prova_file():
 
 
 def _pixel_png(percorso):
-    """Le righe di pixel RGBA di un PNG scritto da icona.png (senza filtri), per confrontare i pixel e non i byte
-    compressi: zlib e zlib-ng (Python 3.14+) comprimono in modo diverso."""
+    """The RGBA pixel rows of a PNG written by icona.png (without filters), to compare the pixels and not the
+    compressed bytes: zlib and zlib-ng (Python 3.14+) compress differently."""
     import struct
     import zlib
     with open(percorso, "rb") as f:
@@ -102,8 +105,8 @@ def _pixel_png(percorso):
 
 
 def prova_suoni(app, radice):
-    """Suoni: spenti di default, il pulsante li accende (e li ricorda); alla fine di un'operazione la prima finestra
-    suona una volta sola il suono del suo tipo; il controllo all'apertura no; tutti di suoni.DURATA secondi."""
+    """Sounds: off by default, the button turns them on (and remembers it); at the end of an operation the first dialog
+    plays the sound of its type only once; the check at startup does not; all of them suoni.DURATA seconds long."""
     import wave
     import io
     from patchsmith import sounds as suoni, theme as tema
@@ -117,7 +120,7 @@ def prova_suoni(app, radice):
         acceso = sentiti == ["clic"]
         del sentiti[:]
 
-        def finta_operazione(*_a):  # come _fine_operazione: due finestre una dopo l'altra
+        def finta_operazione(*_a):  # like _fine_operazione: two dialogs one after the other
             tema.AL_MOSTRARE("errore")
             tema.AL_MOSTRARE("info")
         reale = app._fine_operazione
@@ -126,25 +129,25 @@ def prova_suoni(app, radice):
         dopo_errore = list(sentiti)
         app._fine_operazione = lambda *_a: tema.AL_MOSTRARE("domanda")
         app._fine("Analisi e traduzione", None, None)
-        app._fine_operazione = lambda *_a: tema.AL_MOSTRARE("avviso")  # un avviso: come una domanda
+        app._fine_operazione = lambda *_a: tema.AL_MOSTRARE("avviso")  # a warning: like a question
         app._fine("Analisi e traduzione", None, None)
 
-        def in_parte(*_a):  # tradotto in parte (avviso), come in _mostra_finestra: "fatto"
+        def in_parte(*_a):  # partly translated (warning), as in _mostra_finestra: "fatto"
             app._suono_forzato = "fatto"
             tema.AL_MOSTRARE("avviso")
         app._fine_operazione = in_parte
         app._fine("Analisi e traduzione", None, None)
         app._operazione, app._controllo_automatico = "controlla", True
-        app._fine("Controllo", None, None)  # all'apertura niente "fatto" (anche tradotto in parte): l'avviso suona
+        app._fine("Controllo", None, None)  # at startup no "fatto" (even partly translated): the warning plays
         app._operazione, app._controllo_automatico = None, False
         app._fine_operazione = reale
-        tema.AL_MOSTRARE("info")  # fuori dalla fine di un'operazione ogni finestra suona: informazioni e avvisi
-        tema.AL_MOSTRARE("avviso")  # come le domande (es. l'avviso di Google quando lo scegli), errori come errori
+        tema.AL_MOSTRARE("info")  # outside the end of an operation every dialog plays: information and warnings
+        tema.AL_MOSTRARE("avviso")  # like questions (e.g. the Google warning when you choose it), errors as errors
         tema.AL_MOSTRARE("errore")
         radice.after(150, lambda: [w.destroy() for w in radice.winfo_children() if isinstance(w, tk.Toplevel)])
         app._suono_atteso = True
         tema.informa(radice, app.colori, "Prova", "Una finestra vera: chiama AL_MOSTRARE")
-        # il clic dei pulsanti: uno premuto suona, uno disattivato no (anche in un'altra finestra)
+        # the buttons' click: a pressed one plays, a disabled one does not (also in another window)
         eventi = list(sentiti)
         del sentiti[:]
         altra = tk.Toplevel(radice)
@@ -157,12 +160,12 @@ def prova_suoni(app, radice):
         spento.event_generate("<ButtonPress-1>", x=5, y=5)
         clic_pulsanti = list(sentiti)
         altra.destroy()
-        app._cambia_suoni()  # di nuovo spenti
+        app._cambia_suoni()  # off again
         pulsante_muto = gui.ttk.Button(radice, text="Muto")
         pulsante_muto.place(x=0, y=0)
         radice.update()
         del sentiti[:]
-        pulsante_muto.event_generate("<ButtonPress-1>", x=5, y=5)  # suoni spenti: niente
+        pulsante_muto.event_generate("<ButtonPress-1>", x=5, y=5)  # sounds off: nothing
         clic_pulsanti.append(list(sentiti))
         pulsante_muto.destroy()
         with open(gui._impostazioni(), encoding="utf-8") as f:
@@ -186,8 +189,8 @@ def prova_suoni(app, radice):
 
 
 def prova_musica(app):
-    """Musica di sottofondo: spenta di default, il pulsante con la nota la accende e la spegne (e lo ricorda); il loop
-    lo fa Windows senza stacchi (provato in silenzio); "Miniera" di 16 battute giuste."""
+    """Background music: off by default, the button with the note turns it on and off (and remembers it); Windows does
+    the loop without gaps (tested with silence); "Miniera" with exactly 16 bars."""
     import inspect
     import re
     import time
@@ -204,13 +207,13 @@ def prova_musica(app):
             spenta_dopo = json.load(f).get("musica") is False
     finally:
         musica.avvia, musica.ferma = veri
-    silenzio = b"\0\0" * int(0.2 * musica.FREQUENZA)  # 0,2 secondi di silenzio, ripetuti dal loop di Windows
+    silenzio = b"\0\0" * int(0.2 * musica.FREQUENZA)  # 0.2 seconds of silence, repeated by the Windows loop
     aperta = musica._apri(silenzio)
     time.sleep(0.7)
     suonati = musica._suonati()
     musica._chiudi()
-    # pronta in anticipo: la prima volta generata e scritta in un file (qui in una cartella temporanea di prova), poi
-    # letta dal file in un attimo
+    # ready in advance: the first time generated and written to a file (here in a temporary test folder), then read
+    # from the file in an instant
     import tempfile
     vecchia, tempfile.tempdir = tempfile.tempdir, tempfile.mkdtemp()
     try:
@@ -262,7 +265,7 @@ def prova_finestra(base):
         app._menu_lingue()
         voci = [str(v.cget("text")).strip() for _c, v in app._voci_lingue]
         aperta = app._tendina_lingue is not None
-        app._menu_lingue()  # di nuovo: si chiude
+        app._menu_lingue()  # again: it closes
         controlla("bandierina con la tendina delle lingue (%s), nomi nella loro lingua; si apre e si chiude" % voci,
                   "Italiano (it)" in voci and "English (en)" in voci and app.btn_lingua.cget("image") and aperta
                   and app._tendina_lingue is None)
@@ -322,8 +325,8 @@ def prova_finestra(base):
 
 
 def prova_eseguibile(base):
-    """PatchSmith.exe con l'icona accanto a un PatchSmith.pyw di prova: compilato, non rifatto se e' gia' aggiornato,
-    e al doppio clic apre il .pyw con il Python installato (qui il .pyw di prova scrive solo un file)."""
+    """PatchSmith.exe with the icon next to a test PatchSmith.pyw: compiled, not rebuilt if already up to date, and on
+    double click it opens the .pyw with the installed Python (here the test .pyw only writes a file)."""
     if not sys.platform.startswith("win"):
         return
     cartella = os.path.join(base, "programma con spazi")
@@ -354,7 +357,7 @@ def prova_eseguibile(base):
 
 
 def prova_riga_di_comando(base):
-    """Comandi e opzioni in inglese, i nomi italiani di prima come alias; l'aiuto nella lingua dell'interfaccia."""
+    """Commands and options in English, the former Italian names as aliases; the help in the interface language."""
     smith = os.path.join(progetto.CARTELLA_PROGETTO, "smith.py")
     gioco = os.path.join(base, "gioco vuoto")
     os.makedirs(gioco)

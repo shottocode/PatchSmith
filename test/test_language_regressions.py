@@ -1,8 +1,8 @@
-"""Test di regressione della lingua ufficiale: i problemi trovati dalla revisione della 0.8.0.
+"""Regression tests of the official language: the problems found by the review of 0.8.0.
 
-Uso: python -I test/test_language_regressions.py <cartella_temporanea_vuota>
-Scrive solo nella cartella temporanea e in una chiave di registro di prova (HKCU\\Software\\PatchsmithTest2),
-che alla fine viene cancellata. Steam e i giochi veri non vengono toccati.
+Usage: python -I test/test_language_regressions.py <empty_temp_folder>
+Writes only in the temporary folder and in a test registry key (HKCU\\Software\\PatchsmithTest2),
+which is deleted at the end. Steam and the real games are not touched.
 """
 import hashlib
 import os
@@ -44,10 +44,10 @@ def leggi(percorso):
         return f.read()
 
 
-# --- pak con punto di montaggio ---------------------------------------------------------------------
+# --- pak with a mount point -------------------------------------------------------------------------
 
 def pak_v9(mount, file):
-    """Pak v9 non compresso con un punto di montaggio a scelta (i nomi sono relativi a quello)."""
+    """Uncompressed pak v9 with a mount point of choice (the names are relative to it)."""
     corpo, voci = b"", []
     for nome, dati in file:
         h = hashlib.sha1(dati).digest()
@@ -62,7 +62,7 @@ def pak_v9(mount, file):
 
 
 def pak_v11(mount, nomi):
-    """Pak v11 (UE 4.26+/UE5) con solo l'indice delle cartelle (FullDirectoryIndex), senza dati."""
+    """Pak v11 (UE 4.26+/UE5) with only the folder index (FullDirectoryIndex), without data."""
     cartelle = {}
     for n in nomi:
         c, _, f = n.rpartition("/")
@@ -85,14 +85,14 @@ def main(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     automatico.CARTELLA_PROFILI = os.path.join(base, "patchsmith", "profiles")
     os.makedirs(automatico.CARTELLA_PROFILI)
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
     os.environ["LOCALAPPDATA"] = os.path.join(base, "LocalAppData")
     sistema.gioco_aperto = lambda c: False
 
-    # === lingue: confronto con le varianti (il cinese per scrittura) =================================
+    # === languages: comparison with the variants (Chinese by script) =================================
     controlla("lingua: zh-TW non e' zh-CN, pt-BR e' portoghese",
               not lingua.stessa_lingua("zh-TW", "zh-CN") and lingua.stessa_lingua("zh-HK", "zh-Hant")
               and lingua.stessa_lingua("zh", "zh-CN") and lingua.stessa_lingua("pt-BR", "pt"))
@@ -200,7 +200,7 @@ def main(base):
             errore = None
         except steam.ErroreSteam as e:
             errore = e
-        except Exception as e:  # noqa: BLE001 - e' proprio quello che non deve succedere
+        except Exception as e:  # noqa: BLE001 - this is exactly what must not happen
             errore = "SBAGLIATO: %r" % e
         avvisi = []
         try:
@@ -268,7 +268,7 @@ def main(base):
                      b"Culture=it")
     scrivi(prova, b"[Internationalization]\r\nLanguage=en\r\nLanguage=en\r\n")
     modifiche = lingua_unreal.imposta_cultura(prova, "it")
-    scrivi(prova, b"[Internationalization]\r\nLanguage=it\r\nLanguage=de\r\n")  # il giocatore cambia la seconda
+    scrivi(prova, b"[Internationalization]\r\nLanguage=it\r\nLanguage=de\r\n")  # the player changes the second one
     lingua_unreal.ripristina_cultura(prova, modifiche, "it")
     controlla("Unreal: ripristino riga per riga, solo dove c'e' ancora il valore scritto",
               leggi(prova) == b"[Internationalization]\r\nLanguage=en\r\nLanguage=de\r\n")
@@ -311,7 +311,7 @@ def main(base):
               and not fatto2 and not any("avvialo una volta" in x for x in righe2) and any("menu" in x for x in righe2))
     scrivi(gus, originale_gus)
 
-    # traduci comunque: niente rilevamento, e la lingua impostata prima torna com'era
+    # translate anyway: no detection, and the language set before goes back to how it was
     percorso, esito = automatico.prepara(ue, "auto", "it", "finto", silenzio)
     impostata_prima = lingua_ufficiale.impostata(ue) and b"Language=it" in leggi(gus)
     vero_rileva = lingua_ufficiale.rileva
@@ -400,7 +400,7 @@ def main(base):
         except OSError:
             pass
 
-    # === GameMaker: traduci comunque anche se il gioco ha i file in italiano ==============================
+    # === GameMaker: translate anyway even if the game has the files in Italian ============================
     gm = os.path.join(base, "Gioco GM")
     scrivi(os.path.join(gm, "Localization", "english_ui.txt"), test_gamemaker.UI.encode())
     scrivi(os.path.join(gm, "Localization", "italian", "ui.txt"), b"0 Combatti\r\n1 Cambia\r\n")

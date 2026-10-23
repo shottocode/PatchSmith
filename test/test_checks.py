@@ -1,30 +1,31 @@
-"""Prove del controllo dopo aver giocato (checks.py) con giochi finti e registri veri ridotti (test/data/signals).
+"""Tests of the after-play check (checks.py) with fake games and reduced real logs (test/data/signals).
 
-Uso: python -I test/test_checks.py <cartella_temporanea_vuota>
-TEMP, TMP, USERPROFILE e LOCALAPPDATA puntano a cartelle di prova (li' stanno i registri di Unity, i crash e le
-opzioni dei giochi), i dati di PatchSmith in <cartella>/dati, il registro del traduttore dal vivo in <cartella>/ollama:
-nessun gioco vero, nessun dato vero, nessuna rete, nessun programma avviato (tranne smith.py in sola lettura).
-Copre:
-- Unity: crash all'avvio dentro Application:.cctor (copia giusta) corretto con il punto d'ingresso di BepInEx; crash di
-  un'altra copia del gioco (stesse cartelle LocalLow e %TEMP%) ignorato; LogOutput.log senza 'startup complete';
-  Google che si ferma in Player-prev.log ("Failed: 'MASTER'"); comando del traduttore con un Python che non c'e';
-  configurazione di XUnity cambiata; diario del traduttore dal vivo con frasi provvisorie e frasi perse; file
-  temporanei rimasti; dopo la correzione un secondo controllo non fa nulla; un nuovo crash dopo la correzione propone
-  "Ripristina originali" senza toccare nulla; con il gioco aperto non si scrive nulla; in sola lettura nemmeno;
-- versione vecchia (come Rubinite): Google in pausa, nessun plugin, nessuna versione nel manifesto;
-- file mancanti (antivirus): rimessi una volta; se tornano a mancare restano da fare (una volta per segnale);
-- giochi con file tradotti: file rimessi originali dal gioco -> Riapplica; file aggiornati -> "Analizza e traduci";
-  crash nel registro di Windows (eventi 1000 e 1026 veri, ridotti) -> "Ripristina originali" da confermare;
-- GameMaker con la lingua aggiunta non scelta nel gioco; Unreal (lingua e pak non caricato), XNA (satelliti tolti);
-- riga di comando `smith.py controlla --solo-leggi`, finestra dell'esito, rapporto, file di stato non cancellato;
-- dalla verifica: registri oltre 2 MB (una partita lunga non e' un crash, gli errori in fondo contano),
-  installazione interrotta (solo "Ripristina originali"), profilo senza cartella, registro di Unreal con la cartella
-  del progetto, crash di Windows gia' passati, PatchSmith aggiornato (giochi Unity da ricontrollare), traduttore dal
-  vivo senza traduttori, riga di comando con un profilo rovinato (gli altri giochi si controllano, codice 1);
-- dalla revisione 0.16: le correzioni di "Correggi traduzioni" salvate con il gioco Unity aperto scritte dal controllo
-  (a gioco chiuso, una volta; una riga cambiata a mano resta), un'altra versione con la configurazione da
-  rimettere detta in un solo messaggio, il rapporto con le correzioni in attesa e le lettere dei font; "Ritraduci"
-  con il traduttore locale non installato (le frasi perse si salvano, il pulsante e' "Installa il traduttore locale").
+Usage: python -I test/test_checks.py <empty_temp_folder>
+TEMP, TMP, USERPROFILE and LOCALAPPDATA point to test folders (that is where Unity's logs, the crashes and the games'
+options are), PatchSmith's data in <cartella>/dati, the live translator's log in <cartella>/ollama:
+no real game, no real data, no network, no program started (except smith.py in read-only mode).
+Covers:
+- Unity: crash at startup inside Application:.cctor (right copy) fixed with BepInEx's entry point; crash of another
+  copy of the game (same LocalLow and %TEMP% folders) ignored; LogOutput.log without 'startup complete';
+  Google stopping in Player-prev.log ("Failed: 'MASTER'"); translator command with a Python that does not exist;
+  XUnity configuration changed; live translator journal with provisional sentences and lost sentences; temporary
+  files left behind; after the fix a second check does nothing; a new crash after the fix proposes
+  "Restore originals" without touching anything; with the game open nothing is written; in read-only mode neither;
+- old version (like Rubinite): Google paused, no plugin, no version in the manifest;
+- missing files (antivirus): put back once; if they go missing again they remain to do (once per signal);
+- games with translated files: files put back to the originals by the game -> Reapply; updated files -> "Analyze and
+  translate"; crash in the Windows event log (real events 1000 and 1026, reduced) -> "Restore originals" to confirm;
+- GameMaker with the added language not chosen in the game; Unreal (language and pak not loaded), XNA (satellites
+  removed);
+- command line `smith.py controlla --solo-leggi`, outcome window, report, status file not deleted;
+- from the verification: logs over 2 MB (a long session is not a crash, the errors at the end count),
+  interrupted installation (only "Restore originals"), game profile without folder, Unreal log with the project
+  folder, Windows crashes already past, PatchSmith updated (Unity games to check again), live translator without
+  translators, command line with a broken game profile (the other games are checked, code 1);
+- from revision 0.16: the fixes from "Fix translations" saved with the Unity game open written by the check
+  (with the game closed, once; a line changed by hand stays), another version with the configuration to put back
+  told in a single message, the report with the pending fixes and the fonts' letters; "Re-translate" with the local
+  translator not installed (the lost sentences are saved, the button is "Install the local translator").
 """
 import hashlib
 import json
@@ -49,7 +50,7 @@ from patchsmith import (__version__, adapter_unity, auto as automatico, backend,
 ESITI = []
 SEGNALI = os.path.join(QUI, "data", "signals")
 SMITH = os.path.join(progetto.CARTELLA_PROGETTO, "smith.py")
-# i percorsi dei giochi nei registri veri (anonimizzati: due copie di One Million Coins)
+# the game paths in the real logs (anonymized: two copies of One Million Coins)
 COPIA_VECCHIA = "C:/Giochi/Copia vecchia/One Million Coins"
 COPIA_NUOVA = "C:/Giochi/One Million Coins"
 TRADUZIONI = {"MASTER": "GENERALE", "Hold [[0]] to leap": "Tieni premuto [[0]] per saltare",
@@ -80,7 +81,7 @@ def scrivi(percorso, testo, data=None):
 
 
 def istantanea(cartella):
-    """{percorso relativo: (dimensione, data)} di tutti i file (per dire "non e' cambiato nulla")."""
+    """{relative path: (size, date)} of all the files (to say "nothing changed")."""
     uscita = {}
     for radice, _, files in os.walk(cartella):
         for f in files:
@@ -98,7 +99,7 @@ def per_codice(problemi, codice):
     return next((p for p in problemi if p.codice == codice), None)
 
 
-# --- giochi finti ---------------------------------------------------------------------------------------
+# --- fake games -----------------------------------------------------------------------------------------
 
 def crea_gioco_unity(cartella, nome_exe, versione, azienda, prodotto):
     dati = os.path.join(cartella, nome_exe + "_Data")
@@ -125,7 +126,7 @@ def _zip(percorso, voci):
 
 
 def prepara_componenti(cartella):
-    """Pacchetti finti di BepInEx e XUnity gia' 'scaricati' (nessun download)."""
+    """Fake BepInEx and XUnity packages already 'downloaded' (no download)."""
     componenti.CARTELLA = cartella
     os.makedirs(cartella, exist_ok=True)
     componenti.CATALOGO = {
@@ -140,7 +141,7 @@ def prepara_componenti(cartella):
 
 
 def _plugin_finto(cartella, info):
-    """Al posto della compilazione con csc (le librerie del gioco finto non sono vere)."""
+    """In place of the compilation with csc (the fake game's libraries are not real)."""
     dest = os.path.join(cartella, *adapter_unity.PLUGIN_SERVIZIO.split("/"))
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     open(dest, "wb").write(b"MZ plugin finto")
@@ -155,7 +156,7 @@ def profilo_unity(nome, gioco, **altro):
 
 
 def con_percorso(testo, vecchio, nuovo):
-    """Un registro vero con il percorso di un gioco al posto di un altro (con '/' e con '\\')."""
+    """A real log with the path of one game in place of another (with '/' and with '\\')."""
     return testo.replace(vecchio, nuovo.replace("\\", "/")).replace(vecchio.replace("/", "\\"),
                                                                      nuovo.replace("/", "\\"))
 
@@ -178,21 +179,21 @@ def test_unity(base):
     controlla("installazione: manifesto con la versione di PatchSmith",
               adapter_unity.leggi_manifesto(gioco).get("patchsmith_versione") == __version__)
     controlla("da controllare: un gioco installato e mai controllato", percorso in controllo.da_controllare(eventi=[]))
-    prima = time.time() - 600  # l'ultima scrittura di PatchSmith: 10 minuti fa
-    dopo = time.time() - 120  # la partita: 2 minuti fa
+    prima = time.time() - 600  # PatchSmith's last write: 10 minutes ago
+    dopo = time.time() - 120  # the play session: 2 minutes ago
     cfg = os.path.join(gioco, *adapter_unity.CONFIG_SERVIZIO.split("/"))
     comando = leggi(cfg)
     scrivi(cfg, comando.replace("Programma=", "Programma=C:\\non-esiste\\python\\pythonw.exe#"), prima)
     for rel in (adapter_unity.MANIFESTO, adapter_unity.PLUGIN_SERVIZIO):
         os.utime(os.path.join(gioco, *rel.split("/")), (prima, prima))
-    # il primo avvio: BepInEx scrive la sua configurazione; XUnity con Google e un'opzione di prova accesa
+    # the first start: BepInEx writes its configuration; XUnity with Google and a debug option on
     scrivi(os.path.join(gioco, *adapter_unity.CONFIG_BEPINEX.split("/")),
            "[Preloader.Entrypoint]\n\n## The local filename\nAssembly = UnityEngine.CoreModule.dll\n\n"
            "Type = Application\n\nMethod = .cctor\n", dopo)
     ini = os.path.join(gioco, *adapter_unity.CONFIG_XUNITY.split("/"))
     scrivi(ini, leggi(ini).replace("Endpoint=CustomTranslate", "Endpoint=GoogleTranslateV2").replace(
         "EnableTextPathLogging=False", "EnableTextPathLogging=True"), dopo)
-    # crash: uno di questa copia, uno dell'altra copia (stesse cartelle %TEMP% e LocalLow)
+    # crashes: one from this copy, one from the other copy (same %TEMP% and LocalLow folders)
     crashes = os.path.join(base, "temp", "OyenUmiGames", "One Million Coins", "Crashes")
     crash_vero = leggi(os.path.join(SEGNALI, "unity-crash-player.log"))
     scrivi(os.path.join(crashes, "Crash_2026-10-17_211234219", "Player.log"),
@@ -201,17 +202,17 @@ def test_unity(base):
     locallow = os.path.join(base, "utente", "AppData", "LocalLow", "OyenUmiGames", "One Million Coins")
     scrivi(os.path.join(locallow, "Player-prev.log"),
            con_percorso(leggi(os.path.join(SEGNALI, "unity-player-errore-google.log")), COPIA_NUOVA, gioco), dopo)
-    scrivi(os.path.join(locallow, "Player.log"), leggi(os.path.join(SEGNALI, "unity-player.log")), dopo)  # altra copia
+    scrivi(os.path.join(locallow, "Player.log"), leggi(os.path.join(SEGNALI, "unity-player.log")), dopo)  # other copy
     scrivi(os.path.join(gioco, *adapter_unity.LOG_BEPINEX.split("/")),
            leggi(os.path.join(SEGNALI, "bepinex-logoutput-crash.log")), dopo)
-    # diario del traduttore dal vivo, memoria e cache di XUnity
+    # live translator journal, translation memory and XUnity cache
     memoria = progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"})
     scrivi(memoria, json.dumps({"Tea and maintenance bench": "Tavolo per il tè e per la manutenzione"}))
-    # (piu' una frase data dalla memoria che poi hai tolto a mano dalla memoria: non deve tornare)
+    # (plus a sentence given by the translation memory that you then removed by hand from it: it must not come back)
     scrivi(servizio_xunity.percorso_diario(nome), leggi(os.path.join(SEGNALI, "diario-richieste.jsonl")) + "\n" +
            json.dumps({"ts": "2026-10-18T04:30:24", "testo": "Pool entry tread 3", "esito": "ok",
                        "backend": "memoria", "risposta": "Piattaforma della piscina 3"}) + "\n" +
-           # (e un pezzo gia' in italiano lasciato com'era dal servizio: non e' una traduzione da salvare)
+           # (and a piece already in Italian left as it was by the service: it is not a translation to save)
            json.dumps({"ts": "2026-10-18T04:30:25", "testo": "Generosamente donato da", "esito": "ok",
                        "backend": "gia' tradotta", "risposta": "Generosamente donato da"}) + "\n")
     cache = os.path.join(gioco, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
@@ -219,16 +220,16 @@ def test_unity(base):
                   "Continuous glove=Guanto (a mano)\nTea and maintenance bench=Tavolo per il tè e per la manutenzione\n")
     temporaneo = memoria + ".tmp"
     scrivi(temporaneo, "", prima)
-    di_altri = os.path.join(os.path.dirname(memoria), "altro-gioco.it.json.tmp")  # di un altro gioco: non si tocca
+    di_altri = os.path.join(os.path.dirname(memoria), "altro-gioco.it.json.tmp")  # of another game: not touched
     scrivi(di_altri, "", prima)
 
-    # adapter_unity.stato: il crash non e' "BepInEx avviato"
+    # adapter_unity.stato: the crash is not "BepInEx started"
     righe = []
     adapter_unity.stato(gioco, nome, "it", righe.append)
     controlla("stato: 'Chainloader started' senza 'startup complete' non vale come avviato",
               any("NO  BepInEx avviato" in r for r in righe))
 
-    # 1) sola lettura: trova tutto, non scrive nulla
+    # 1) read-only: finds everything, writes nothing
     tutto = istantanea(base)
     problemi = controllo.controlla(percorso, applica=False, log=silenzio)
     attesi = ["CONFIGURAZIONE", "CRASH_AVVIO", "FRASI_DA_RIFARE", "SERVIZIO", "TEMPORANEI", "TRADUTTORE_FERMO"]
@@ -248,7 +249,7 @@ def test_unity(base):
     controlla("nessun messaggio con nomi tecnici per chi gioca (smith.py, JSON)",
               not any("smith.py" in p.messaggio or ".json" in p.messaggio for p in problemi))
 
-    # 2) gioco aperto: nessuna correzione e nessuna scrittura
+    # 2) game open: no fixes and no writes
     vero = sistema.gioco_aperto
     sistema.gioco_aperto = lambda _c: True
     try:
@@ -260,9 +261,9 @@ def test_unity(base):
               istantanea(base) == tutto and all(p.stato == "rimandato" for p in problemi if p.sicuro)
               and e.codice == "GIOCO_APERTO" and "chiudi_gioco" in e.azioni)
     controlla("gioco aperto: LogOutput.log incompleto non conta (il gioco potrebbe ancora caricare)",
-              "CRASH_AVVIO" in codici(problemi))  # c'e' per la cartella del crash, non per il registro
+              "CRASH_AVVIO" in codici(problemi))  # it is there because of the crash folder, not the log
 
-    # 3) gioco chiuso: si corregge da solo
+    # 3) game closed: it fixes itself
     righe = []
     problemi = controllo.controlla(percorso, applica=True, log=righe.append, traduttore="prova")
     e = controllo.come_esito(problemi, percorso)
@@ -308,13 +309,13 @@ def test_unity(base):
               finestra["titolo"] == "Controllo dopo aver giocato" and "Corretto da solo:" in finestra["testo"]
               and "smith.py" not in finestra["testo"])
 
-    # 4) un secondo controllo non fa nulla
+    # 4) a second check does nothing
     tutto = istantanea(gioco)
     problemi = controllo.controlla(percorso, applica=True, log=silenzio, traduttore="prova")
     controlla("secondo controllo: niente da fare, il gioco non cambia (%s)" % ", ".join(codici(problemi)),
               problemi == [] and istantanea(gioco) == tutto)
 
-    # 5) il gioco crasha di nuovo dopo la correzione: non accetta mod, si propone Ripristina (da confermare)
+    # 5) the game crashes again after the fix: it does not accept mods, Restore originals is proposed (to confirm)
     nuovo = time.time() + 5
     scrivi(os.path.join(crashes, "Crash_2026-10-18_090000000", "Player.log"),
            con_percorso(crash_vero, COPIA_VECCHIA, gioco), nuovo)
@@ -334,7 +335,7 @@ def test_unity(base):
     controlla("l'ultimo controllo resta salvato (per ricordarlo all'apertura)",
               salvato is not None and salvato.extra.get("da_fare") == 1)
 
-    # riga di comando in sola lettura: codice 2 (c'e' qualcosa da fare), niente scritto
+    # read-only command line: code 2 (there is something to do), nothing written
     tutto = istantanea(base)
     ambiente = dict(os.environ, PATCHSMITH_DATI=progetto.RADICE_DATI)
     r = subprocess.run([sys.executable, "-I", SMITH, "controlla", gioco, "--solo-leggi"], capture_output=True,
@@ -349,7 +350,7 @@ def test_unity(base):
     controlla("riga di comando: cartella senza traduzione -> codice 0", r.returncode == 0
               and "niente da controllare" in r.stdout.decode("utf-8", "replace"))
 
-    # il file di stato non e' un profilo e Progetto non lo cancella (come il vecchio .stato.json)
+    # the status file is not a game profile and Progetto does not delete it (like the old .stato.json)
     progetto.Progetto(percorso, silenzio)
     controlla("<nome>.controllo.json: non e' un profilo e resta dopo Progetto",
               os.path.exists(controllo.percorso_stato(percorso))
@@ -362,8 +363,8 @@ def test_unity(base):
 
 
 def prova_solo_crash(base):
-    """Solo il crash all'avvio (nient'altro da correggere): dopo la correzione il crash vecchio non conta piu', anche
-    se la correzione non riscrive il manifesto (conta l'ora della correzione salvata nello stato)."""
+    """Only the crash at startup (nothing else to fix): after the fix the old crash no longer counts, even if the
+    fix does not rewrite the manifest (what counts is the time of the fix saved in the status)."""
     nome = "solo-crash-prova"
     gioco = os.path.join(base, "giochi", "Solo Crash")
     crea_gioco_unity(gioco, "One Million Coins", "2022.3.10f1", "Studio Prova", "Solo Crash")
@@ -384,8 +385,8 @@ def prova_solo_crash(base):
 
 
 def prova_versione_vecchia(base):
-    """Come Rubinite: installato da una versione vecchia (niente versione nel manifesto, niente traduttore di
-    PatchSmith, XUnity con Google) e Google in pausa."""
+    """Like Rubinite: installed by an old version (no version in the manifest, no PatchSmith translator, XUnity
+    with Google) and Google paused."""
     from patchsmith import limiter as limitatore
     nome = "rubinite-prova"
     gioco = os.path.join(base, "giochi", "Rubinite")
@@ -421,7 +422,7 @@ def prova_versione_vecchia(base):
     controlla("versione vecchia: dopo la correzione niente da fare (%s)" % ", ".join(codici(problemi)),
               problemi == [])
 
-    # file installati tolti (antivirus): rimessi una volta; se tornano a mancare, restano da fare
+    # installed files removed (antivirus): put back once; if they go missing again, they remain to do
     winhttp = os.path.join(gioco, "winhttp.dll")
     os.remove(winhttp)
     problemi = controllo.controlla(percorso, applica=True, log=silenzio)
@@ -435,7 +436,7 @@ def prova_versione_vecchia(base):
               and "riapplica" in e.azioni and "crea_rapporto" in e.azioni)
 
 
-# --- giochi con file tradotti, crash di Windows --------------------------------------------------------
+# --- games with translated files, Windows crashes ------------------------------------------------------
 
 def prova_file(base):
     gioco = os.path.join(base, "giochi", "Lantern Keeper")
@@ -454,7 +455,7 @@ def prova_file(base):
               and progetto.leggi_info(testi).get("patchsmith_versione") == __version__)
     problemi = controllo.controlla(percorso, applica=True, log=silenzio, eventi=[])
     controlla("gioco web appena tradotto: niente da fare", problemi == [])
-    # le informazioni con il nome delle versioni fino alla 0.12 (.patchsmith-info.json) contano come ultima scrittura
+    # the info files with the name used up to 0.12 (.patchsmith-info.json) count as the last write
     vecchio = os.path.join(base, "giochi", "vecchio")
     os.makedirs(vecchio)
     scrivi(os.path.join(vecchio, "testi.json"), "{}")
@@ -465,7 +466,7 @@ def prova_file(base):
                             None)
     controlla("ultima scrittura anche dalle informazioni con il nome vecchio (.patchsmith-info.json)",
               abs(controllo.riferimento(c) - (time.time() - 3600)) < 5)
-    # un aggiornamento (o la verifica dei file di Steam) rimette l'originale
+    # an update (or Steam's file verification) puts the original back
     shutil.copyfile(testi + progetto.SUFFISSO_BACKUP, testi)
     controlla("file rimesso originale dal gioco: da controllare all'apertura",
               percorso in controllo.da_controllare(eventi=[]))
@@ -473,7 +474,7 @@ def prova_file(base):
     controlla("file rimesso originale dal gioco: traduzioni rimesse da sole (Riapplica)",
               codici(problemi) == ["RIPRISTINATO_DAL_GIOCO"] and problemi[0].stato == "corretto"
               and "Inizia una nuova partita" in leggi(testi))
-    # un aggiornamento con testi nuovi: si dice di premere "Analizza e traduci", senza toccare nulla
+    # an update with new texts: the user is told to press "Analyze and translate", without touching anything
     dati = json.loads(leggi(testi + progetto.SUFFISSO_BACKUP))
     dati["menu"]["nuovo"] = "A brand new menu entry"
     scrivi(testi, json.dumps(dati))
@@ -482,7 +483,7 @@ def prova_file(base):
     e = controllo.come_esito(problemi, percorso)
     controlla("file aggiornato dal gioco: 'Analizza e traduci' da fare, nulla cambiato",
               codici(problemi) == ["AGGIORNATO"] and "traduci" in e.azioni and istantanea(gioco) == tutto)
-    # crash nel registro di Windows dopo la traduzione: da confermare, non si ripristina da solo
+    # crash in the Windows event log after the translation: to confirm, it is not restored automatically
     evento = {"id": "999", "istante": time.time() + 5, "codice": 1000, "app": "Lantern Keeper.exe",
               "percorso": os.path.join(gioco, "Lantern Keeper.exe"), "testo": ""}
     altro = dict(evento, id="998", percorso=os.path.join(base, "altro", "Lantern Keeper.exe"))
@@ -496,8 +497,8 @@ def prova_file(base):
     controlla("crash di Windows gia' visto: non piu' da controllare all'apertura",
               percorso not in controllo.da_controllare(eventi=[evento, altro]))
 
-    # eventi veri (ridotti): 1000 con il percorso dell'eseguibile, 1026 (.NET) con il solo nome, nella codifica di
-    # Windows
+    # real events (reduced): 1000 with the executable's path, 1026 (.NET) with only the name, in the Windows
+    # encoding
     eventi = controllo.leggi_eventi(open(os.path.join(SEGNALI, "evento-crash-1000.xml"), "rb").read())
     controlla("evento 1000 vero: letto, del gioco giusto (non dell'altra copia)",
               len(eventi) == 1 and eventi[0]["app"] == "One Million Coins.exe"
@@ -514,8 +515,8 @@ def prova_file(base):
 
 
 def test_gamemaker(base):
-    """Lingua aggiunta (local/italiano.json): un'altra lingua scelta nel gioco si dice e basta; se il gioco ha tolto
-    il file della lingua, Riapplica e poi la lingua si rimette (l'aveva cambiata il gioco, non chi gioca)."""
+    """Added language (local/italiano.json): another language chosen in the game is only reported; if the game
+    removed the language file, Reapply and then the language is put back (the game changed it, not the player)."""
     gioco = os.path.join(base, "giochi", "Forager")
     os.makedirs(os.path.join(gioco, "local"))
     originale = os.path.join(gioco, "local", "english.json")
@@ -610,9 +611,9 @@ def prova_unreal_xna(base):
 
 
 def prova_dopo_verifica(base):
-    """Casi trovati nella verifica del punto 2: registri grandi, installazione interrotta, profilo senza cartella,
-    registro di Unreal con la cartella del progetto, crash di Windows gia' passati, PatchSmith aggiornato, riga di
-    comando con un profilo rovinato, traduttore dal vivo senza traduttori."""
+    """Cases found in the verification of point 2: large logs, interrupted installation, game profile without folder,
+    Unreal log with the project folder, Windows crashes already past, PatchSmith updated, command line with a broken
+    game profile, live translator without translators."""
     import datetime
     from patchsmith import adapter_unreal
     nome = "lunga-prova"
@@ -623,8 +624,8 @@ def prova_dopo_verifica(base):
     prima, dopo = time.time() - 600, time.time() - 120
     for rel in (adapter_unity.MANIFESTO, adapter_unity.PLUGIN_SERVIZIO, adapter_unity.CONFIG_SERVIZIO):
         os.utime(os.path.join(gioco, *rel.split("/")), (prima, prima))
-    # una partita lunga e riuscita: "startup complete" all'inizio, poi oltre 2 MB di avvisi; il Player.log di questa
-    # copia con il percorso all'inizio e gli errori di Google in fondo
+    # a long, successful session: "startup complete" at the start, then over 2 MB of warnings; this copy's
+    # Player.log with the path at the start and the Google errors at the end
     avvisi = "".join("[Warning: XUnity.AutoTranslator] Avviso di prova numero %d con un po' di testo\n" % i
                      for i in range(40000))
     scrivi(os.path.join(gioco, *adapter_unity.LOG_BEPINEX.split("/")),
@@ -633,7 +634,7 @@ def prova_dopo_verifica(base):
                          gioco).split("\n")
     scrivi(os.path.join(base, "utente", "AppData", "LocalLow", "Studio Lungo", "Partita Lunga", "Player.log"),
            "\n".join(righe[:20]) + "\n" + avvisi + "\n".join(righe[20:]), dopo)
-    # il traduttore dal vivo e' partito senza traduttori (registro del servizio, comune a tutti i giochi)
+    # the live translator started without translators (service log, shared by all games)
     ora = datetime.datetime.fromtimestamp(dopo).strftime("%Y-%m-%d %H:%M:%S")
     scrivi(os.path.join(base, "ollama", "servizio-xunity.log"),
            "%s Traduttore per XUnity in ascolto su http://127.0.0.1:1/translate (gioco: %s)\n"
@@ -646,7 +647,7 @@ def prova_dopo_verifica(base):
     controlla("esito: '1 problema corretto' (singolare)",
               "1 problema corretto." in controllo.come_esito([corretto], percorso).motivo)
 
-    # PatchSmith aggiornato: i giochi Unity si ricontrollano all'apertura (versione da riconciliare)
+    # PatchSmith updated: Unity games are checked again at startup (version to reconcile)
     altro = os.path.join(automatico.cartella_profili(), "solo-crash-prova.json")
     vera = controllo.__version__
     prima_sel = altro in controllo.da_controllare(eventi=[])
@@ -658,7 +659,7 @@ def prova_dopo_verifica(base):
     controlla("PatchSmith aggiornato: i giochi Unity gia' controllati tornano da controllare all'apertura",
               not prima_sel and dopo_sel)
 
-    # installazione interrotta a meta': nessuna correzione da sola, si propone Ripristina
+    # installation interrupted halfway: no automatic fix, Restore originals is proposed
     interrotta = os.path.join(base, "giochi", "Interrotta")
     crea_gioco_unity(interrotta, "Interrotta", "2022.3.10f1", "Studio", "Interrotta")
     p_interrotta = profilo_unity("interrotta-prova", interrotta)
@@ -674,7 +675,7 @@ def prova_dopo_verifica(base):
               and problemi[0].stato == "da_fare" and problemi[0].azione == "ripristina"
               and istantanea(interrotta) == tutto)
 
-    # profilo senza cartella del gioco: niente da controllare (non la cartella attuale del programma)
+    # game profile without the game's folder: nothing to check (not the program's current folder)
     senza = os.path.join(automatico.cartella_profili(), "senza-cartella.json")
     scansione.salva_json(senza, {"nome": "senza-cartella", "motore": "gamemaker", "file": [{"percorso": "x.json"}]})
     righe = []
@@ -683,7 +684,7 @@ def prova_dopo_verifica(base):
               problemi == [] and not any(os.getcwd() in r for r in righe))
     os.remove(senza)
 
-    # Unreal: il registro del gioco si trova anche se la cartella scelta e' quella del progetto
+    # Unreal: the game's log is found even if the chosen folder is the project's
     attesi = [os.path.join(os.environ["LOCALAPPDATA"], "DDS", "Saved", "Logs", "DDS.log")]
     radice = os.path.join(base, "giochi", "Dungeon Defenders Awakened")
     pak = "zz_Patchsmith_it_999_P.pak"
@@ -692,8 +693,8 @@ def prova_dopo_verifica(base):
               and controllo._registri_unreal(os.path.join(radice, "DDS"), {"file": {"Content/Paks/" + pak: "h"}})
               == attesi and adapter_unreal.PREFISSO_PAK in pak)
 
-    # crash di Windows di prima dell'ultimo controllo (non suo: es. di prima di un Riapplica): non si ricontrolla a
-    # ogni apertura
+    # Windows crash from before the last check (not its own: e.g. from before a Reapply): it is not checked again at
+    # every startup
     web = automatico.trova_profilo(os.path.join(base, "giochi", "Lantern Keeper"))
     dal = controllo.leggi_stato(web).get("eventi_dal")
     vecchio = {"id": "997", "istante": dal - 30, "codice": 1000, "app": "Lantern Keeper.exe",
@@ -701,7 +702,7 @@ def prova_dopo_verifica(base):
     controlla("crash di Windows di prima dell'ultimo controllo: non da controllare all'apertura",
               web and dal and web not in controllo.da_controllare(eventi=[vecchio]))
 
-    # riga di comando su tutti i giochi con un profilo rovinato: gli altri si controllano, codice 1
+    # command line on all games with a broken game profile: the others are checked, code 1
     rotto = os.path.join(automatico.cartella_profili(), "rotto-prova.json")
     scansione.salva_json(rotto, {"nome": "rotto-prova", "cartella_gioco": gioco.replace(os.sep, "/"),
                                  "motore": "gamemaker", "file": [{"percorso": 5}]})
@@ -716,9 +717,9 @@ def prova_dopo_verifica(base):
 
 
 def prova_ritraduci_e_avvio(base):
-    """Punto 5: all'apertura le frasi del diario non si ritraducono (restano da fare, con il pulsante "Ritraduci"),
-    le frasi perse si salvano lo stesso; "non accetta mod" solo con un crash vero (non con il solo LogOutput.log
-    incompleto di un gioco Unity 6 che parte gia' al primo MonoBehaviour)."""
+    """Point 5: at startup the journal's sentences are not re-translated (they remain to do, with the "Re-translate"
+    button), the lost sentences are saved anyway; "does not accept mods" only with a real crash (not with just the
+    incomplete LogOutput.log of a Unity 6 game that already starts at the first MonoBehaviour)."""
     nome = "diario-rimandato-prova"
     gioco = os.path.join(base, "giochi", "Diario Rimandato")
     crea_gioco_unity(gioco, "Diario Rimandato", "2022.3.10f1", "Studio Diario", "Diario Rimandato")
@@ -765,7 +766,7 @@ def prova_ritraduci_e_avvio(base):
     finally:
         controllo.crea_backend = vero
 
-    # Unity 6, gia' con il punto d'ingresso MonoBehaviour: LogOutput.log incompleto senza un crash = solo da sapere
+    # Unity 6, already with the MonoBehaviour entry point: incomplete LogOutput.log without a crash = only for info
     nome = "avvio-lento-prova"
     gioco = os.path.join(base, "giochi", "Avvio Lento")
     crea_gioco_unity(gioco, "Avvio Lento", "6000.3.12f1", "Studio Sei", "Avvio Lento")
@@ -797,10 +798,10 @@ def prova_ritraduci_e_avvio(base):
 
 
 def prova_correzioni_in_attesa(base):
-    """Revisione 0.16: le correzioni di "Correggi traduzioni" salvate con il gioco Unity aperto (righe della cache di
-    XUnity in attesa in .da_scrivere.json) le scrive il controllo, a gioco chiuso, una volta; una riga cambiata a mano
-    dopo la correzione resta. Installato con una versione precedente e configurazione da rimettere: un solo messaggio
-    (CONFIGURAZIONE che dice la versione), non anche VERSIONE."""
+    """Revision 0.16: the fixes from "Fix translations" saved with the Unity game open (XUnity cache lines pending in
+    .da_scrivere.json) are written by the check, with the game closed, once; a line changed by hand after the fix
+    stays. Installed with a previous version and configuration to put back: a single message (CONFIGURAZIONE that
+    states the version), not VERSIONE as well."""
     from patchsmith import corrections as correzioni
     nome = "correzioni-in-attesa"
     gioco = os.path.join(base, "giochi", "Correzioni In Attesa")
@@ -810,10 +811,10 @@ def prova_correzioni_in_attesa(base):
     profilo = json.loads(leggi(percorso))
     adapter_unity.scrivi_cache_xunity(gioco, "it", {"Start a new game": "Inizia nuovo gioco",
                                                     "Load game": "Carica partita", "Quit": "Esci"}, silenzio)
-    controllo.controlla(percorso, applica=True, log=silenzio)  # (lo stato di partenza: niente da fare)
+    controllo.controlla(percorso, applica=True, log=silenzio)  # (the starting state: nothing to do)
     controlla("correzioni in attesa: nessuna, nessun problema",
               "CORREZIONI_IN_ATTESA" not in codici(controllo.controlla(percorso, applica=False, log=silenzio)))
-    # due correzioni salvate con il gioco aperto; poi una delle due righe cambiata a mano nel file
+    # two fixes saved with the game open; then one of the two lines changed by hand in the file
     correzioni.segna_da_scrivere(profilo, {"Start a new game": ("Inizia nuovo gioco", "Nuova partita"),
                                            "Load game": ("Carica partita", "Carica una partita")})
     cache = os.path.join(gioco, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
@@ -844,7 +845,7 @@ def prova_correzioni_in_attesa(base):
               and "una lasciata" in p.dettaglio and not correzioni.da_scrivere(profilo))
     controlla("correzioni in attesa: il controllo dopo non trova piu' nulla",
               "CORREZIONI_IN_ATTESA" not in codici(controllo.controlla(percorso, applica=True, log=silenzio)))
-    # installato con una versione precedente e con la configurazione da rimettere: un messaggio solo
+    # installed with a previous version and with the configuration to put back: a single message
     m = json.loads(leggi(os.path.join(gioco, adapter_unity.MANIFESTO)))
     m["patchsmith_versione"] = "0.15.0"
     scrivi(os.path.join(gioco, adapter_unity.MANIFESTO), json.dumps(m))
@@ -859,7 +860,7 @@ def prova_correzioni_in_attesa(base):
     controlla("... dopo la correzione: versione nel manifesto aggiornata, niente da fare",
               adapter_unity.leggi_manifesto(gioco).get("patchsmith_versione") == __version__
               and controllo.controlla(percorso, applica=True, log=silenzio) == [])
-    # il rapporto ha le correzioni in attesa e le lettere dei font letti (Unity Localization: font.json)
+    # the report has the pending fixes and the letters of the fonts read (Unity Localization: font.json)
     correzioni.segna_da_scrivere(profilo, {"Quit": ("Esci", "Esci dal gioco")})
     font = progetto.cartella_dati("memory", "%s.unity" % nome, "font.json")
     scrivi(font, json.dumps({"descrizione": "prova"}))
@@ -873,8 +874,8 @@ def prova_correzioni_in_attesa(base):
 
 
 def prova_ritraduci_senza_traduttore(base):
-    """Revisione 0.16: "Ritraduci" con il traduttore locale scelto ma non installato: le frasi perse si salvano lo
-    stesso e il pulsante per rimediare e' "Installa il traduttore locale" (prima solo "Analizza e traduci")."""
+    """Revision 0.16: "Re-translate" with the local translator chosen but not installed: the lost sentences are saved
+    anyway and the button to fix it is "Install the local translator" (before, only "Analyze and translate")."""
     nome = "ritraduci-senza-traduttore"
     gioco = os.path.join(base, "giochi", "Senza Traduttore")
     crea_gioco_unity(gioco, "Senza Traduttore", "2022.3.10f1", "Studio Senza", "Senza Traduttore")
@@ -915,9 +916,9 @@ def main(base):
         os.environ[variabile] = os.path.join(base, nome)
         os.makedirs(os.environ[variabile], exist_ok=True)
     progetto.RADICE_DATI = os.path.join(base, "dati")
-    os.environ["PATCHSMITH_DATI"] = progetto.RADICE_DATI  # anche per smith.py lanciato dalle prove
+    os.environ["PATCHSMITH_DATI"] = progetto.RADICE_DATI  # also for smith.py launched by the tests
     automatico.CARTELLA_PROFILI = None
-    ollama.cartella = lambda: os.path.join(base, "ollama")  # niente traduttore locale, registro di prova
+    ollama.cartella = lambda: os.path.join(base, "ollama")  # no local translator, test log
     adapter_unity.in_esecuzione = lambda *_: False
     adapter_unity._compila_plugin = _plugin_finto
     controllo.crea_backend = lambda nome, log=print: Traduce()
@@ -928,7 +929,7 @@ def main(base):
     prova_file(base)
     test_gamemaker(base)
     prova_unreal_xna(base)
-    # tutti i giochi di prova insieme, in sola lettura: nessun errore, qualcosa da fare (codice 2), nulla scritto
+    # all the test games together, read-only: no errors, something to do (code 2), nothing written
     tutto = istantanea(base)
     r = subprocess.run([sys.executable, "-I", SMITH, "controlla", "--solo-leggi"], capture_output=True,
                        env=dict(os.environ), timeout=600)

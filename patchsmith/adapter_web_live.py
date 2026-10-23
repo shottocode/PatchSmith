@@ -1,14 +1,16 @@
-"""Giochi Electron con i file del gioco illeggibili (es. cifrati con GemShell) ma con resources/app/preload.js in
-chiaro: i testi si traducono mentre il gioco gira, nella sua pagina, come fa XUnity con Unity.
+"""Electron games whose game files are unreadable (e.g. encrypted with GemShell) but with resources/app/preload.js
+in clear text: the texts are translated while the game runs, in its page, as XUnity does with Unity.
 
-PatchSmith non apre ne' cambia il file cifrato: aggiunge in fondo a preload.js (con backup verificato, che
-"Ripristina originali" rimette) lo script injector_live.js, che
-- traduce i testi della pagina con patchsmith-dizionario.json (le traduzioni gia' fatte, dalla memoria del gioco);
-- chiede le frasi nuove al traduttore di PatchSmith (servizio_xunity: stesso servizio dei giochi Unity, su 127.0.0.1,
-  avviato da preload.js con il comando in patchsmith-vivo.json e chiuso con il gioco), che le salva in memoria.
+PatchSmith neither opens nor changes the encrypted file: it appends to preload.js (with a verified backup, which
+"Restore originals" puts back) the injector_live.js script, which
+- translates the page's texts with patchsmith-dizionario.json (the translations already made, from the game's
+  translation memory);
+- asks PatchSmith's translator for new sentences (servizio_xunity: the same service as for Unity games, on
+  127.0.0.1, started by preload.js with the command in patchsmith-vivo.json and closed with the game), which saves
+  them to the translation memory.
 
-Serve un preload.js che giri nella pagina con Node: nel main.js di Electron contextIsolation:false e sandbox:false
-(come nei giochi fatti con GemShell). Altrimenti il gioco non si puo' tradurre cosi'.
+It needs a preload.js that runs in the page with Node: in Electron's main.js contextIsolation:false and
+sandbox:false (as in games made with GemShell). Otherwise the game cannot be translated this way.
 """
 import hashlib
 import json
@@ -18,6 +20,8 @@ import sys
 
 from .adapter_webjson import scrivi_atomico
 
+# marker of our script inside the game's preload.js (first comment of injector_live.js): never change it, or the
+# games translated before would no longer be recognized
 SEGNO = "Patchsmith - traduzione dal vivo"
 NOME_DIZIONARIO = "patchsmith-dizionario.json"
 NOME_CONFIG = "patchsmith-vivo.json"
@@ -26,7 +30,7 @@ _SANDBOX = re.compile(r"sandbox\s*:\s*false")
 
 
 def trova_preload(cartella, profondita=4):
-    """resources/app/preload.js del gioco (anche in una sottocartella, es. game/), o None."""
+    """The game's resources/app/preload.js (also in a subfolder, e.g. game/), or None."""
     cartella = os.path.abspath(cartella)
     for radice, dirs, files in os.walk(cartella):
         if os.path.relpath(radice, cartella).count(os.sep) >= profondita:
@@ -40,7 +44,7 @@ def trova_preload(cartella, profondita=4):
 
 
 def adatto(cartella):
-    """preload.js se il gioco si puo' tradurre dal vivo (il preload gira nella pagina e ha Node), se no None."""
+    """preload.js if the game can be translated live (the preload runs in the page and has Node), otherwise None."""
     preload = trova_preload(cartella)
     if not preload:
         return None
@@ -70,8 +74,9 @@ def _comando(percorso_profilo, nome_profilo):
 
 
 def installa(cartella, percorso_profilo, nome_profilo, da, a, traduzioni, log=print, attivo=True):
-    """Aggiunge (o aggiorna) lo script in preload.js e scrive dizionario e comando del traduttore. attivo=False: senza
-    traduttore mentre si gioca (solo le traduzioni del dizionario). Restituisce il numero di traduzioni."""
+    """Adds (or updates) the script in preload.js and writes the dictionary and the translator's command.
+    attivo=False: no translator while playing (only the dictionary's translations). Returns the number of
+    translations."""
     from . import project as progetto
     preload = adatto(cartella)
     if not preload:
@@ -82,9 +87,9 @@ def installa(cartella, percorso_profilo, nome_profilo, da, a, traduzioni, log=pr
     info = progetto.leggi_info(preload)
     backup = preload + progetto.SUFFISSO_BACKUP
     if SEGNO.encode("utf-8") in attuale and info and os.path.exists(backup):
-        with open(backup, "rb") as f:  # gia' nostro: si riparte dall'originale salvato
+        with open(backup, "rb") as f:  # already ours: start again from the saved original
             originale = f.read()
-    else:  # prima volta, o il gioco ha rimesso il suo preload.js (aggiornamento): il backup e' di questo
+    else:  # first time, or the game put back its own preload.js (an update): the backup is of this one
         progetto.crea_backup(preload, extra={"creati": [NOME_DIZIONARIO, NOME_CONFIG], "web_vivo": True})
         originale = attuale
     porta, comando = _comando(percorso_profilo, nome_profilo)

@@ -1,6 +1,6 @@
-"""Genera test/web/index-inline.html: pagina di collaudo dell'iniettore con lo script incorporato.
+"""Generates test/web/index-inline.html: a test page for the injector with the script embedded.
 
-Uso: python -I test/web/make_page.py   (poi apri index-inline.html in un browser)
+Usage: python -I test/web/make_page.py   (then open index-inline.html in a browser)
 """
 import os
 import sys
@@ -15,11 +15,11 @@ DIZIONARIO = {
     "The menu music is playing now. Drag the": "La musica del menu è in riproduzione. Trascina il",
     "Music": "Musica", "Open menu": "Apri menu", "Search…": "Cerca…", "Score": "Punteggio",
     "Sudoku Mansion": "Villa Sudoku", "Room Cleared!": "Stanza completata!",
-    "Notes": "Note", "Note": "Nota",  # la traduzione di una voce e' la chiave di un'altra
+    "Notes": "Note", "Note": "Nota",  # the translation of one entry is the key of another
     "Large": "Grande", "Start Game": "Inizia partita", "Save & Quit": "Salva ed esci",
     "Delete": "Elimina", "Enter a digit": "Inserisci una cifra",
-    "設定": "Impostazioni", "はい": "Sì",  # menu giapponesi di 2 caratteri
-    "PLAY": "GIOCA",  # pulsante di una parola sola, tutto maiuscolo
+    "設定": "Impostazioni", "はい": "Sì",  # 2-character Japanese menus
+    "PLAY": "GIOCA",  # one-word button, all upper case
 }
 
 PAGINA = """<!doctype html>

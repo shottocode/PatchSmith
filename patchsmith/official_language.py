@@ -1,16 +1,17 @@
-"""Lingua ufficiale: se il gioco ha gia' la traduzione nella lingua di arrivo, si usa quella invece di tradurre.
+"""Official language: if the game already has the translation in the target language, that is used instead of
+translating.
 
-Fonti:
-1. Steam: per un gioco installato da Steam, la cache di Steam (appinfo.vdf) elenca le lingue ufficiali;
-2. i file del gioco, motore per motore (Unreal: .locres per lingua; Unity: lingue di I2 / Unity Localization;
-   XNA/.NET: satelliti; GameMaker: file per lingua);
-3. per una cartella che non e' un'installazione Steam, il gioco si puo' riconoscere dagli eseguibili: vale solo
-   se i file non dicono nulla e il nome della cartella somiglia a quello del gioco, altrimenti e' solo una nota.
-Per il cinese conta la scrittura (zh-TW e zh-CN sono lingue diverse).
-Quando la lingua c'e', PatchSmith la IMPOSTA dove esiste un'impostazione standard, sicura e reversibile
-(Unreal: GameUserSettings.ini; Unity con I2: la preferenza "I2 Language"), a gioco chiuso, con registro delle
-modifiche e ripristino; altrimenti spiega esattamente come sceglierla. Non modifica Steam ne' componenti non
-ufficiali.
+Sources:
+1. Steam: for a game installed from Steam, Steam's cache (appinfo.vdf) lists the official languages;
+2. the game's files, engine by engine (Unreal: .locres per language; Unity: I2 / Unity Localization languages;
+   XNA/.NET: satellites; GameMaker: files per language);
+3. for a folder that is not a Steam installation, the game can be recognized from its executables: this counts only
+   if the files say nothing and the folder name resembles the game's, otherwise it is just a note.
+For Chinese the script matters (zh-TW and zh-CN are different languages).
+When the language is there, PatchSmith SETS it where a standard, safe and reversible setting exists
+(Unreal: GameUserSettings.ini; Unity with I2: the "I2 Language" preference), with the game closed, with a log of the
+changes and restore; otherwise it explains exactly how to choose it. It does not modify Steam or unofficial
+components.
 """
 import datetime
 import hashlib
@@ -39,32 +40,32 @@ def _adesso():
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
-# --- rilevamento ----------------------------------------------------------------------------------
+# --- detection ------------------------------------------------------------------------------------
 
 def rileva(cartella, destinazione, motore=None, log=None):
-    """Cosa si sa della lingua 'destinazione' nel gioco.
+    """What is known about the 'destinazione' language in the game.
 
-    {'presente': True/False/None, 'fonti': [testo], 'note': [testo], 'steam': info installazione o None,
-     'steam_conosciuto': gioco riconosciuto dagli eseguibili o None, 'lingua_steam': lingua attuale in Steam,
-     'selezionabile_steam': True/False/None, 'motore': {...dati per l'impostazione...}}"""
+    {'presente': True/False/None, 'fonti': [text], 'note': [text], 'steam': installation info or None,
+     'steam_conosciuto': game recognized from the executables or None, 'lingua_steam': current language in Steam,
+     'selezionabile_steam': True/False/None, 'motore': {...data for the setting...}}"""
     r = {"presente": None, "fonti": [], "note": [], "steam": None, "steam_conosciuto": None, "lingua_steam": None,
          "selezionabile_steam": None, "motore": {}}
     nome = _nome_steam(destinazione)
     etichetta = lingua.etichetta(destinazione)
 
-    # 1) Steam (un problema con la cache di Steam non deve mai bloccare la traduzione)
+    # 1) Steam (a problem with Steam's cache must never block the translation)
     info, conosciuto, steam_dice, selezionabile = _dati_steam(cartella, nome, log)
-    # 2) file del gioco, secondo il motore
+    # 2) the game's files, according to the engine
     try:
         presenti, dati_motore = lingue_nei_file(cartella, motore, destinazione)
-    except Exception as e:  # un rilevatore che fallisce non deve bloccare la traduzione
+    except Exception as e:  # a detector that fails must not block the translation
         presenti, dati_motore = None, {}
         if log:
             log("  ! Controllo delle lingue nei file non riuscito (%s: %s)" % (type(e).__name__, e))
     r["motore"] = dati_motore
     radice = dati_motore.get("radice") if dati_motore.get("tipo") == "scheda" else None
     if not info and radice and os.path.normcase(radice) != os.path.normcase(os.path.abspath(cartella)):
-        # scelta la cartella sopra il gioco: l'installazione Steam si riconosce dalla cartella del gioco
+        # the folder above the game was chosen: the Steam installation is recognized from the game's folder
         info_radice, _, dice_radice, sel_radice = _dati_steam(radice, nome, log, solo_installato=True)
         if info_radice:
             info, conosciuto, steam_dice, selezionabile = info_radice, None, dice_radice, sel_radice
@@ -81,8 +82,8 @@ def rileva(cartella, destinazione, motore=None, log=None):
     if nei_file:
         r["fonti"].append("File del gioco: c'e' la lingua %s" % etichetta)
 
-    # 3) decisione
-    if info:  # installazione Steam: vale Steam (la lingua puo' stare in un pacchetto non ancora scaricato)
+    # 3) decision
+    if info:  # Steam installation: Steam wins (the language may be in a package not yet downloaded)
         r["presente"] = True if nei_file else steam_dice if steam_dice is not None else nei_file
     else:
         r["presente"] = nei_file
@@ -99,8 +100,8 @@ def rileva(cartella, destinazione, motore=None, log=None):
 
 
 def _dati_steam(cartella, nome, log, solo_installato=False):
-    """(installazione Steam, gioco riconosciuto dagli eseguibili, lingua ufficiale per Steam, selezionabile in
-    Steam); None dove non si sa. Gli errori di Steam non fermano nulla."""
+    """(Steam installation, game recognized from the executables, official language according to Steam, selectable
+    in Steam); None where it is not known. Steam errors stop nothing."""
     info = conosciuto = steam_dice = selezionabile = None
     try:
         info = steam.gioco_installato(cartella)
@@ -121,8 +122,8 @@ def _dati_steam(cartella, nome, log, solo_installato=False):
 
 
 def lingue_nei_file(cartella, motore, destinazione):
-    """({lingue} oppure None se non si sa, dati per impostarla; 'trovata' dice se c'e' la lingua cercata).
-    Le schede di gioco (giochi conosciuti uno per uno) vengono prima del motore."""
+    """({languages} or None if not known, data to set it; 'trovata' says whether the requested language is there).
+    Game sheets (games known one by one) come before the engine."""
     from . import games as schede
     scheda, radici = schede.riconosci(cartella)
     if scheda:
@@ -142,7 +143,7 @@ def lingue_nei_file(cartella, motore, destinazione):
         lingue, voce, i2, ul = set(), None, None, None
         try:
             i2 = lingua_unity.lingue_i2(dati) if lingua_unity.usa_i2(dati) else None
-        except Exception:  # I2 illeggibile: resta Unity Localization
+        except Exception:  # I2 unreadable: Unity Localization remains
             i2 = None
         if i2:
             lingue |= {c or n for n, c in i2}
@@ -151,8 +152,8 @@ def lingue_nei_file(cartella, motore, destinazione):
             ul = lingua_unity.lingue_unity_localization(dati)
         except Exception:
             ul = None
-        # anche le lingue delle tabelle dei testi, riconosciute dal contenuto dei bundle: il catalogo non le elenca
-        # sempre sotto "Locales/" (es. "Locals/Italian (it).asset", o nessun nome con il codice)
+        # also the languages of the text tables, recognized from the bundles' content: the catalog does not always
+        # list them under "Locales/" (e.g. "Locals/Italian (it).asset", or no name with the code)
         try:
             from . import adapter_unity_loc
             streaming = os.path.join(dati, "StreamingAssets")
@@ -172,7 +173,7 @@ def lingue_nei_file(cartella, motore, destinazione):
         return (lingue if (i2 or ul) else None), dati_motore
     if motore in ("XNA", "FNA", "MonoGame"):
         from . import adapter_xna
-        insiemi = adapter_xna.trova_risorse(cartella)  # i satelliti creati da PatchSmith non contano
+        insiemi = adapter_xna.trova_risorse(cartella)  # satellites created by PatchSmith do not count
         if not insiemi:
             return None, {"tipo": "xna"}
         codici = {c for i in insiemi for culture in i["basi"].values() for c in culture}
@@ -181,10 +182,10 @@ def lingue_nei_file(cartella, motore, destinazione):
     if motore == "GameMaker":
         from . import adapter_csv, adapter_gamemaker
         trovati = adapter_gamemaker.file_localizzazione(cartella)
-        trovati.update(adapter_gamemaker.file_json_lingue(cartella))  # anche i file JSON per lingua
+        trovati.update(adapter_gamemaker.file_json_lingue(cartella))  # also the JSON files per language
         lingue = {l for l in trovati.values() if l}
-        # e le tabelle CSV con una colonna per lingua: contano le colonne piene (una vuota e' una lingua prevista
-        # ma non tradotta)
+        # and the CSV tables with one column per language: the full columns count (an empty one is a language
+        # planned but not translated)
         tabelle = adapter_csv.tabelle(cartella)
         for f in tabelle.values():
             lingue |= f.lingue_piene()
@@ -193,7 +194,7 @@ def lingue_nei_file(cartella, motore, destinazione):
     return None, {}
 
 
-# --- impostazione e ripristino --------------------------------------------------------------------
+# --- setting and restore --------------------------------------------------------------------------
 
 def _registro(cartella):
     from .project import cartella_dati
@@ -217,8 +218,8 @@ def _salva_registro(cartella, dati):
 
 
 def _prima_volta(cartella):
-    """True la prima volta che si chiede di avviare il gioco per creare le sue impostazioni (poi non si ripete,
-    per non chiedere all'infinito di avviarlo se le impostazioni stanno altrove)."""
+    """True the first time the user is asked to start the game to create its settings (then it is not repeated,
+    so as not to keep asking to start it forever if the settings are somewhere else)."""
     segno = _registro(cartella)[:-len(".json")] + ".avvio"
     if os.path.exists(segno):
         return False
@@ -232,7 +233,7 @@ def _prima_volta(cartella):
 
 
 def _aperto(cartella):
-    """None se il gioco e' chiuso, altrimenti il motivo per non toccare nulla."""
+    """None if the game is closed, otherwise the reason not to touch anything."""
     from . import system as sistema
     try:
         if sistema.gioco_aperto(cartella):
@@ -243,15 +244,15 @@ def _aperto(cartella):
 
 
 def imposta(cartella, rilevamento, destinazione, log=print, consenso=False):
-    """Imposta la lingua dove si puo' farlo in sicurezza. Restituisce (fatto, [righe da mostrare]); fatto e' None
-    quando serve il consenso dell'utente (es. per modificare gli eseguibili): allora le righe sono la proposta."""
+    """Sets the language where it can be done safely. Returns (fatto, [lines to show]); fatto is None when the
+    user's consent is needed (e.g. to modify the executables): then the lines are the proposal."""
     m = rilevamento.get("motore") or {}
     nome = lingua.etichetta(destinazione)
     nel_menu = "scegli %s nel menu delle opzioni del gioco" % nome
     if m.get("tipo") == "scheda":
         from . import games as schede
         if rilevamento.get("steam") and rilevamento.get("selezionabile_steam"):
-            return False, []  # installato da Steam: la lingua si sceglie li' (il messaggio dice dove)
+            return False, []  # installed from Steam: the language is chosen there (the message says where)
         scheda = schede.per_id(m.get("scheda"))
         if scheda and not m.get("radice") and len(m.get("radici") or []) > 1:
             return False, ["Nella cartella ci sono %d copie di %s (%s): scegli la cartella di una sola."
@@ -284,7 +285,7 @@ def imposta(cartella, rilevamento, destinazione, log=print, consenso=False):
                           "Se il gioco e' ancora in un'altra lingua, %s." % nel_menu]
         precedente = _leggi_registro(cartella)
         if precedente and precedente.get("tipo") == "unreal" and precedente.get("file") == gus:
-            modifiche = precedente["modifiche"] + modifiche  # i valori piu' vecchi (quelli originali) vincono
+            modifiche = precedente["modifiche"] + modifiche  # the oldest values (the original ones) win
         righe = ["Ho impostato %s nelle impostazioni del gioco (%s, [Internationalization])." % (nome, gus),
                  "Avvia il gioco: se e' ancora in un'altra lingua, il gioco usa un suo menu: %s." % nel_menu]
         try:
@@ -324,7 +325,7 @@ def imposta(cartella, rilevamento, destinazione, log=print, consenso=False):
         vecchio = _leggi_registro(cartella)
         if vecchio and vecchio.get("tipo") == "unity_i2" and vecchio.get("azienda") == azienda and \
                 vecchio.get("prodotto") == prodotto:
-            prima = vecchio.get("precedente")  # il valore di prima della prima volta
+            prima = vecchio.get("precedente")  # the value from before the first time
         else:
             prima = [precedente[0], precedente[1].hex()] if precedente else None
         righe = ["Ho impostato la lingua del gioco su %s (preferenza di I2 Localization: \"%s\")." % (nome, valore),
@@ -341,11 +342,11 @@ def imposta(cartella, rilevamento, destinazione, log=print, consenso=False):
 
 
 def imposta_lingua_aggiunta(cartella, nome, lingue, log=print, sorgente=None, forza=False):
-    """Dopo aver aggiunto una lingua al gioco (es. local/italiano.json di un gioco GameMaker), la imposta nelle
-    opzioni salvate dal gioco, con copia di sicurezza e registro per il ripristino. (fatto, [righe]).
-    Se dopo la volta precedente il giocatore ha scelto un'altra lingua, la sua scelta resta. forza=True: la lingua
-    l'ha cambiata il gioco, non il giocatore (es. un aggiornamento aveva tolto il file della lingua aggiunta e il
-    gioco e' tornato all'originale: lo dice il controllo dopo aver giocato)."""
+    """After adding a language to the game (e.g. local/italiano.json of a GameMaker game), sets it in the options
+    saved by the game, with a backup copy and a log for the restore. (fatto, [righe]).
+    If the player chose another language after the previous time, their choice stays. forza=True: the language was
+    changed by the game, not by the player (e.g. an update had removed the added language's file and the game went
+    back to the original: the after-play check says so)."""
     from . import language_gamemaker as lingua_gamemaker
     from .project import cartella_dati
     motivo = _aperto(cartella)
@@ -363,9 +364,9 @@ def imposta_lingua_aggiunta(cartella, nome, lingue, log=print, sorgente=None, fo
     if registro is None:
         return False, ["Non imposto la lingua da fuori: %s." % motivo]
     if vecchio and vecchio.get("file") == registro["file"] and vecchio.get("precedente"):
-        registro["precedente"] = vecchio["precedente"]  # vale la lingua di prima della prima volta
+        registro["precedente"] = vecchio["precedente"]  # the language from before the first time wins
     elif not registro.get("precedente") and sorgente:
-        registro["precedente"] = sorgente  # gia' impostata (es. dal giocatore): al ripristino torna l'originale
+        registro["precedente"] = sorgente  # already set (e.g. by the player): on restore the original comes back
     registro["data"] = _adesso()
     try:
         _salva_registro(cartella, registro)
@@ -375,12 +376,12 @@ def imposta_lingua_aggiunta(cartella, nome, lingue, log=print, sorgente=None, fo
 
 
 def rimetti_lingua_aggiunta(cartella, aggiunte, sorgente, lingue, log=print):
-    """Prima di togliere le lingue aggiunte da PatchSmith (es. 'italiano'): se le opzioni salvate dal gioco ce
-    l'hanno ancora, si rimette la lingua di prima, cosi' il gioco non riparte con una lingua che non c'e' piu'.
-    Solo se e' stato PatchSmith a impostarla per QUESTA cartella (registro): le opzioni stanno in %LOCALAPPDATA%
-    con il nome del gioco, e una copia del gioco (es. di prova) le condivide con quello vero, che puo' avere la
-    sua lingua aggiunta. Senza registro si lascia tutto (Forager, senza il file della lingua, torna all'inglese).
-    None se non c'era niente da fare, True se rimessa, False se serviva ma non si e' potuto."""
+    """Before removing the languages added by PatchSmith (e.g. 'italiano'): if the options saved by the game still
+    have it, the previous language is put back, so the game does not restart with a language that no longer exists.
+    Only if PatchSmith set it for THIS folder (log): the options are in %LOCALAPPDATA% under the game's name, and a
+    copy of the game (e.g. a test copy) shares them with the real one, which may have its own added language.
+    Without a log everything is left alone (Forager, without the language file, goes back to English).
+    None if there was nothing to do, True if put back, False if it was needed but could not be done."""
     from . import language_gamemaker as lingua_gamemaker
     registro = _leggi_registro(cartella) or {}
     if registro.get("tipo") != "gamemaker_opzioni":
@@ -416,7 +417,7 @@ def rimetti_lingua_aggiunta(cartella, aggiunte, sorgente, lingue, log=print):
 
 
 def _radici_leva(cartella):
-    """Le cartelle in cui puo' esserci la leva della lingua del configuratore (la scelta e quella del gioco)."""
+    """The folders where the configurator's language lever can be (the chosen one and the game's)."""
     from . import configurator as configuratore, games as schede
     radici = [os.path.abspath(cartella)]
     for radice in schede.riconosci(cartella)[1]:
@@ -430,8 +431,8 @@ def impostata(cartella):
 
 
 def ripristina(cartella, log=print):
-    """Rimette la lingua com'era prima di PatchSmith. None se non c'era niente da rimettere, True se fatto (o se
-    nel frattempo era gia' cambiata), False se non si e' potuto: il registro resta per riprovare."""
+    """Puts the language back as it was before PatchSmith. None if there was nothing to put back, True if done (or
+    if it had already changed in the meantime), False if it could not be done: the log stays so it can be retried."""
     from . import configurator as configuratore
     esiti = [_ripristina_impostazione(cartella, log)]
     for radice in _radici_leva(cartella):
@@ -482,19 +483,19 @@ def _ripristina_impostazione(cartella, log):
     return True
 
 
-# --- messaggi -------------------------------------------------------------------------------------
+# --- messages -------------------------------------------------------------------------------------
 
 def messaggio(rilevamento, destinazione, impostazione=None, fatto=False):
-    """Righe da mostrare all'utente quando la lingua ufficiale c'e'."""
+    """Lines to show the user when the official language is there."""
     nome = lingua.etichetta(destinazione)
     righe = ["Il gioco ha gia' la traduzione ufficiale in %s: e' meglio di una traduzione automatica." % nome]
     righe += ["  - " + f for f in rilevamento["fonti"]]
     if impostazione:
         righe += impostazione
-    if fatto is None:  # proposta in attesa del consenso dell'utente: niente altre istruzioni
+    if fatto is None:  # proposal waiting for the user's consent: no other instructions
         return righe
     if (rilevamento.get("motore") or {}).get("tipo") == "scheda" and impostazione:
-        return righe  # la scheda ha gia' detto cosa ha fatto, o perche' no e cosa fare
+        return righe  # the game sheet already said what it did, or why not and what to do
     info = rilevamento.get("steam")
     if info:
         if rilevamento.get("lingua_steam") == _nome_steam(destinazione):

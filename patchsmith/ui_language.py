@@ -1,18 +1,18 @@
-"""Lingua dell'interfaccia di PatchSmith.
+"""PatchSmith's interface language.
 
-I testi del programma sono scritti in italiano nel codice. Le altre lingue stanno in
+The program's texts are written in Italian in the code. The other languages are in
 patchsmith/ui_language/<codice>.json:
     {"nome": "English", "bandiera": {"tipo": "gb"}, "testi": {"testo italiano": "traduzione", ...}}
-La traduzione avviene quando la finestra mostra un testo (aggancia_tk: pulsanti, etichette, titoli, menu, valori dei
-menu a tendina; TestoVar per le righe di stato; traduci() per il registro), anche per i testi con valori dentro: una
-voce con %s, %d... ("Testi del gioco: %d, gia' tradotti: %d") vale come modello per tutte le righe di quella forma. I
-testi senza traduzione restano in italiano. I testi originali restano ricordati nei widget: cambiata la lingua,
-ritraduci() rimette quelli gia' mostrati nella lingua nuova senza riaprire il programma.
+Translation happens when the window shows a text (aggancia_tk: buttons, labels, titles, menus, values of drop-down
+menus; TestoVar for status lines; traduci() for the log), also for texts with values inside: an entry with %s, %d...
+("Testi del gioco: %d, gia' tradotti: %d") works as a template for all the lines of that form. Texts without a
+translation stay in Italian. The original texts stay remembered in the widgets: when the language changes,
+ritraduci() puts the ones already shown back in the new language without reopening the program.
 
-Per aggiungere una lingua: il comando "interface --create fr" della riga di comando (traduce tutti i testi con il traduttore locale;
-quelli gia' nel file restano) e poi rivedere a mano il file patchsmith/ui_language/fr.json. La bandiera si descrive con
-strisce ({"verticali": [colori]} o {"orizzontali": [colori]}) oppure con un'immagine PNG 24x16 accanto al file
-({"file": "fr.png"}).
+To add a language: the command line command "interface --create fr" (translates all the texts with the local
+translator; those already in the file stay) and then review the file patchsmith/ui_language/fr.json by hand. The flag
+is described with stripes ({"verticali": [colori]} or {"orizzontali": [colori]}) or with a 24x16 PNG image next to
+the file ({"file": "fr.png"}).
 """
 import ast
 import json
@@ -23,20 +23,20 @@ import weakref
 CARTELLA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_language")
 SORGENTE = "it"
 ITALIANO = {"nome": "Italiano", "bandiera": {"verticali": ["#009246", "#ffffff", "#ce2b37"]}}
-# segnaposto dei testi del programma: %s, %d, %5.1f, %r, %(nome)s, %%
+# placeholders of the program's texts: %s, %d, %5.1f, %r, %(nome)s, %%
 _SEGNO = re.compile(r"%(?:\([^)]*\))?[-+ #0]*(?:\d+)?(?:\.\d+)?[sdrifxXceEgG%]")
-# a che cosa corrisponde ogni segnaposto in una riga gia' scritta
+# what each placeholder matches in a line already written
 _VALORE = {"d": r"-?\d[\d.,']*", "i": r"-?\d[\d.,']*", "f": r"-?[\d.,]+", "x": r"[0-9a-fA-F]+", "%": r"%"}
-# all'inizio delle righe del registro: rientro e segni ("! ", "~ ", "* ", "- ", "== ") che restano come sono
+# at the start of log lines: indentation and markers ("! ", "~ ", "* ", "- ", "== ") that stay as they are
 _PREFISSO = re.compile(r"^(\s*(?:(?:!|~|\*|-|==)\s+)?)(.*?)(\s*)$", re.S)
 _stato = {"codice": SORGENTE, "testi": {}, "modelli": None}
-FISSO = "⁠"  # all'inizio di un testo: resta com'e' in ogni lingua (es. i nomi delle lingue nel loro menu)
+FISSO = "⁠"  # at the start of a text: it stays as it is in every language (e.g. the language names in their menu)
 
 
-# --- lingue disponibili ----------------------------------------------------------------------------------------------
+# --- available languages ---------------------------------------------------------------------------------------------
 
 def lingue():
-    """{codice: {"nome", "bandiera"}}: l'italiano (la lingua del codice) e i file in patchsmith/ui_language/."""
+    """{codice: {"nome", "bandiera"}}: Italian (the language of the code) and the files in patchsmith/ui_language/."""
     uscita = {SORGENTE: ITALIANO}
     try:
         nomi = sorted(os.listdir(CARTELLA))
@@ -56,8 +56,8 @@ def lingue():
 
 
 def predefinita():
-    """La lingua dell'interfaccia se non e' stata scelta: PATCHSMITH_INTERFACCIA, poi quella di Windows se c'e', poi
-    l'inglese se c'e', poi l'italiano."""
+    """The interface language if none was chosen: PATCHSMITH_INTERFACCIA, then the Windows one if available, then
+    English if available, then Italian."""
     disponibili = lingue()
     scelta = os.environ.get("PATCHSMITH_INTERFACCIA")
     if scelta in disponibili:
@@ -70,7 +70,7 @@ def predefinita():
 
 
 def imposta(codice):
-    """Usa la lingua 'codice' (se non c'e', l'italiano). Restituisce quella usata."""
+    """Uses the language 'codice' (if it is not available, Italian). Returns the one used."""
     testi = {}
     if codice != SORGENTE:
         try:
@@ -86,10 +86,10 @@ def attuale():
     return _stato["codice"]
 
 
-# --- traduzione ------------------------------------------------------------------------------------------------------
+# --- translation -----------------------------------------------------------------------------------------------------
 
 def _regex_modello(chiave):
-    """(regex, segni) di una voce con segnaposto, o None se non ne ha."""
+    """(regex, segni) of an entry with placeholders, or None if it has none."""
     segni = _SEGNO.findall(chiave)
     if not segni:
         return None
@@ -110,23 +110,24 @@ def _modelli():
     if _stato["modelli"] is None:
         modelli = {}
         for chiave, valore in _stato["testi"].items():
-            if not _SEGNO.sub("", chiave).strip():  # solo segnaposto ("%s", "%s%s"): andrebbe bene per tutto
+            if not _SEGNO.sub("", chiave).strip():  # placeholders only ("%s", "%s%s"): it would match everything
                 continue
             r = _regex_modello(chiave)
             if r is None:
                 continue
             inizio = _SEGNO.split(chiave)[0][:6]
             modelli.setdefault(inizio, []).append((len(_SEGNO.sub("", chiave)), r[0], r[1], valore))
-        for elenco in modelli.values():  # prima i modelli con piu' testo fisso (i piu' precisi)
+        for elenco in modelli.values():  # first the templates with more fixed text (the most precise)
             elenco.sort(key=lambda m: -m[0])
-        # ultimo ripiego: due pezzi separati da ": " o tra parentesi, tradotti ciascuno per conto suo
+        # last fallback: two pieces separated by ": " or in parentheses, each translated on its own
         modelli[None] = [(0,) + _regex_modello(k) + (k,) for k in ("%s: %s", "%s (%s)", "%s - %s")]
         _stato["modelli"] = modelli
     return _stato["modelli"]
 
 
 def _riempi(traduzione, segni, valori):
-    """La traduzione con i valori al posto dei segnaposto: per tipo e in ordine (la traduzione puo' averli spostati)."""
+    """The translation with the values in place of the placeholders: by type and in order (the translation may have
+    moved them)."""
     code = {}
     for s, v in zip(segni, valori):
         code.setdefault(s, []).append(v)
@@ -150,22 +151,22 @@ def _traduci_nucleo(testo, profondita=0):
     if t is not None:
         return t
     modelli = _modelli()
-    # tra i modelli che cominciano come il testo vince quello con piu' testo fisso (il piu' preciso), non quello con
-    # l'inizio piu' lungo: "%s: interfaccia, %d testi tradotti..." batte "index.html: %s"
+    # among the templates that start like the text, the one with more fixed text wins (the most precise), not the one
+    # with the longest start: "%s: interfaccia, %d testi tradotti..." beats "index.html: %s"
     migliore = None
     for inizio in [testo[:n] for n in range(min(6, len(testo)), -1, -1)]:
         for fisso, regex, segni, traduzione in modelli.get(inizio, ()):
             if migliore is not None and fisso <= migliore[0]:
-                break  # (ordinati per testo fisso: gli altri del gruppo sono meno precisi)
+                break  # (sorted by fixed text: the others in the group are less precise)
             m = regex.match(testo)
             if m:
                 migliore = (fisso, m, segni, traduzione)
                 break
-    if migliore is None and profondita == 0:  # messaggi fatti di piu' frasi del file messe una dopo l'altra
+    if migliore is None and profondita == 0:  # messages made of several sentences of the file one after the other
         tradotto = _per_frasi(testo)
         if tradotto != testo:
             return tradotto
-    if migliore is None and profondita <= 1:  # ripieghi ("%s: %s", "%s (%s)"), anche per i pezzi dentro una frase
+    if migliore is None and profondita <= 1:  # fallbacks ("%s: %s", "%s (%s)"), also for the pieces inside a sentence
         for fisso, regex, segni, traduzione in modelli[None]:
             m = regex.match(testo)
             if m:
@@ -175,14 +176,15 @@ def _traduci_nucleo(testo, profondita=0):
         return testo
     _fisso, m, segni, traduzione = migliore
     valori = list(m.groups())
-    if profondita < 2:  # i pezzi di testo dentro (es. " (387 da altri giochi)"): anche loro tradotti
+    if profondita < 2:  # the pieces of text inside (e.g. " (387 da altri giochi)"): translated too
         valori = [_traduci_pezzo(v, profondita + 1) if s[-1] in "sr" else v for s, v in zip(segni, valori)]
     return _riempi(traduzione, segni, valori)
 
 
 def _per_frasi(testo):
-    """Il testo diviso in frasi ("... evitano. Una frase con..."), tradotto a gruppi: dall'inizio, il gruppo di frasi
-    consecutive piu' lungo che e' nel file (una voce puo' avere piu' frasi); le frasi che non ci sono restano com'erano."""
+    """The text split into sentences ("... evitano. Una frase con..."), translated in groups: from the start, the
+    longest group of consecutive sentences that is in the file (an entry can have several sentences); the sentences
+    that are not there stay as they were."""
     parti = re.split(r"(?<=[.!?])( +)(?=[A-ZÀ-Ý\"«(\d])", testo)
     frasi, spazi = parti[0::2], parti[1::2] + [""]
     if len(frasi) < 2:
@@ -191,7 +193,7 @@ def _per_frasi(testo):
     while i < len(frasi):
         for j in range(len(frasi), i, -1):
             if (i, j) == (0, len(frasi)):
-                continue  # (il testo intero non c'e' gia')
+                continue  # (the whole text is already known not to be there)
             pezzo = "".join(frasi[k] + spazi[k] for k in range(i, j - 1)) + frasi[j - 1]
             tradotto = _traduci_nucleo(pezzo, 1)
             if tradotto != pezzo or j == i + 1:
@@ -204,13 +206,13 @@ def _per_frasi(testo):
 def _traduci_pezzo(testo, profondita=0):
     m = _PREFISSO.match(testo)
     prefisso, nucleo, coda = m.group(1), m.group(2), m.group(3)
-    if not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo):  # numeri e simboli: solo una voce del file (es. "A:" -> "To:")
+    if not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo):  # numbers and symbols: only an entry of the file (e.g. "A:" -> "To:")
         return prefisso + _stato["testi"].get(nucleo, nucleo) + coda if nucleo else testo
     return prefisso + _traduci_nucleo(nucleo, profondita) + coda
 
 
 def traduci(testo):
-    """Il testo nella lingua dell'interfaccia (riga per riga; quello che non e' nel file resta com'e')."""
+    """The text in the interface language (line by line; what is not in the file stays as it is)."""
     if isinstance(testo, str) and testo.startswith(FISSO):
         return testo[len(FISSO):]
     if not isinstance(testo, str) or _stato["codice"] == SORGENTE or not _stato["testi"] or not testo.strip():
@@ -221,14 +223,14 @@ def traduci(testo):
     return "\n".join(_traduci_pezzo(riga) for riga in testo.split("\n"))
 
 
-# --- finestra (Tkinter) ----------------------------------------------------------------------------------------------
+# --- window (Tkinter) ------------------------------------------------------------------------------------------------
 
 _OPZIONI_TESTO = ("text", "label", "title", "message")
-_VARIABILI = weakref.WeakSet()  # le TestoVar, da ritradurre quando cambia la lingua
+_VARIABILI = weakref.WeakSet()  # the TestoVar objects, to translate again when the language changes
 
 
 def _ricorda(widget, cnf):
-    """I testi originali (italiani) dati al widget, per ritradurli se cambia la lingua (ritraduci)."""
+    """The original (Italian) texts given to the widget, to translate them again if the language changes (ritraduci)."""
     if not isinstance(cnf, dict):
         return
     for k in _OPZIONI_TESTO + ("values",):
@@ -238,8 +240,8 @@ def _ricorda(widget, cnf):
 
 
 def aggancia_tk():
-    """I testi dati a Tkinter (pulsanti, etichette, menu, titoli delle finestre, valori dei menu a tendina) passano da
-    traduci() e restano ricordati nel widget (ritraduci). Una volta sola; con l'italiano non cambia nulla."""
+    """The texts given to Tkinter (buttons, labels, menus, window titles, values of drop-down menus) go through
+    traduci() and stay remembered in the widget (ritraduci). Only once; with Italian nothing changes."""
     import tkinter
     if getattr(tkinter.Misc, "_patchsmith_lingua", False):
         return
@@ -273,7 +275,7 @@ def aggancia_tk():
     from tkinter import ttk
     originale_intestazione = ttk.Treeview.heading
 
-    def heading(self, column, option=None, **kw):  # (le intestazioni delle colonne non passano da _options)
+    def heading(self, column, option=None, **kw):  # (column headings do not go through _options)
         if isinstance(kw.get("text"), str):
             self.__dict__.setdefault("_patchsmith_intestazioni", {})[column] = kw["text"]
             kw["text"] = traduci(kw["text"])
@@ -283,16 +285,16 @@ def aggancia_tk():
 
 
 def ritraduci(radice):
-    """Dopo imposta(): i testi gia' mostrati dalla finestra radice e dalle sue finestre (pulsanti, etichette, valori dei
-    menu a tendina, titoli, intestazioni delle colonne, TestoVar) di nuovo dai loro originali, nella lingua nuova.
-    Le scelte dei menu a tendina (le loro variabili) e il registro le rimette chi li ha scritti."""
+    """After imposta(): the texts already shown by the root window and its windows (buttons, labels, values of
+    drop-down menus, titles, column headings, TestoVar) again from their originals, in the new language.
+    The choices of drop-down menus (their variables) and the log are put back by whoever wrote them."""
     import tkinter
 
     def visita(w):
         for opzione, originale in list(getattr(w, "_patchsmith_testi", {}).items()):
             try:
                 w.configure(**{opzione: originale})
-            except tkinter.TclError:  # non e' un'opzione del widget (per es. una voce di un menu): si lascia stare
+            except tkinter.TclError:  # not an option of the widget (e.g. a menu entry): leave it alone
                 del w._patchsmith_testi[opzione]
         if getattr(w, "_patchsmith_titolo", None) is not None:
             w.title(w._patchsmith_titolo)
@@ -304,18 +306,18 @@ def ritraduci(radice):
     for v in list(_VARIABILI):
         try:
             v.set(v.originale)
-        except tkinter.TclError:  # la sua finestra e' gia' chiusa
+        except tkinter.TclError:  # its window is already closed
             pass
 
 
 def TestoVar(*args, **kw):
-    """Una StringVar per i testi mostrati (righe di stato): quello che si scrive passa da traduci() (e resta ricordato,
-    per ritraduci)."""
+    """A StringVar for the texts shown (status lines): what is written goes through traduci() (and stays remembered,
+    for ritraduci)."""
     import tkinter
 
     class _TestoVar(tkinter.StringVar):
         originale = ""
-        __hash__ = object.__hash__  # (Variable ridefinisce == e non l'hash: serve per stare in _VARIABILI)
+        __hash__ = object.__hash__  # (Variable redefines == but not the hash: needed to be in _VARIABILI)
 
         def set(self, value):
             self.originale = value
@@ -328,7 +330,7 @@ def TestoVar(*args, **kw):
 
 
 def bandiera(codice, master=None):
-    """La bandiera della lingua come immagine di Tkinter (24x16), o None."""
+    """The language's flag as a Tkinter image (24x16), or None."""
     import tkinter
     info = lingue().get(codice, {}).get("bandiera") or {}
     larghezza, altezza = 24, 16
@@ -338,9 +340,9 @@ def bandiera(codice, master=None):
         except tkinter.TclError:
             pass
     img = tkinter.PhotoImage(master=master, width=larghezza, height=altezza)
-    if info.get("tipo") == "gb":  # Union Jack semplificata
+    if info.get("tipo") == "gb":  # simplified Union Jack
         img.put("#012169", to=(0, 0, larghezza, altezza))
-        for x in range(larghezza):  # diagonali bianche con quelle rosse sopra
+        for x in range(larghezza):  # white diagonals with the red ones on top
             y = round(x * (altezza - 1) / (larghezza - 1))
             for dy in (-2, -1, 0, 1, 2):
                 for yy in (y + dy, altezza - 1 - y + dy):
@@ -366,10 +368,10 @@ def bandiera(codice, master=None):
     return img
 
 
-# --- creazione di una lingua (comando "interface --create <codice>") ---------------------------------------------------
+# --- creating a language (command "interface --create <codice>") -----------------------------------------------------
 
 def _sembra_testo(s):
-    """Un testo per chi usa il programma (non un nome interno, un percorso, una regex...)."""
+    """A text for the program's user (not an internal name, a path, a regex...)."""
     nucleo = _PREFISSO.match(s).group(2).strip()
     if len(nucleo) < 2 or not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo) or "\n\n\n" in nucleo:
         return False
@@ -380,16 +382,16 @@ def _sembra_testo(s):
         return False
     if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|->|\[[^\]]*\]\?|^#|==|^if .*:$"
                  r"|(?<![\w%])_[a-z]\w*", nucleo):
-        return False  # codice (es. lo script per Godot) o espressioni regolari
+        return False  # code (e.g. the script for Godot) or regular expressions
     parole = nucleo.split()
     if len(parole) >= 12 and nucleo == nucleo.lower() and not re.search(r"[.,:;!?()'\"]", nucleo) \
             and sum(map(len, parole)) / len(parole) < 4.5:
-        return False  # elenco di parole frequenti (riconoscimento della lingua), non una frase
+        return False  # list of frequent words (language detection), not a sentence
     return " " in nucleo or nucleo.endswith(("…", ":", "?", "!")) or re.match(r"[A-ZÀ-Ý][a-zà-ÿ]+$", nucleo) is not None
 
 
 def testi_del_programma(cartella=None):
-    """I testi italiani del codice (patchsmith/*.py), senza le docstring, come vanno nel file di una lingua."""
+    """The Italian texts of the code (patchsmith/*.py), without the docstrings, as they go in a language file."""
     cartella = cartella or os.path.dirname(os.path.abspath(__file__))
     testi = set()
     for nome in sorted(os.listdir(cartella)):
@@ -414,8 +416,9 @@ def testi_del_programma(cartella=None):
 
 
 def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo=None):
-    """Crea o completa patchsmith/ui_language/<codice>.json traducendo con 'traduttore' (es. backend.Locale) i testi
-    del programma che mancano; quelli gia' nel file (anche corretti a mano) restano. Restituisce quanti ne ha aggiunti."""
+    """Creates or completes patchsmith/ui_language/<codice>.json by translating with 'traduttore' (e.g. backend.Locale)
+    the program's texts that are missing; those already in the file (also fixed by hand) stay. Returns how many it
+    added."""
     from .backend import ErroreBackend
     from .language import lingua_evidente
     from .text import leggibile
@@ -428,7 +431,7 @@ def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo
     testi = dati.setdefault("testi", {})
     mancanti = [t for t in testi_del_programma() if t not in testi]
     for t in [t for t in mancanti if lingua_evidente(t, SORGENTE)]:
-        testi[t] = t  # gia' in un'altra lingua (es. le istruzioni in inglese per il traduttore locale): resta com'e'
+        testi[t] = t  # already in another language (e.g. English instructions for the local translator): stays as is
         mancanti.remove(t)
     if massimo:
         mancanti = mancanti[:massimo]
@@ -437,7 +440,7 @@ def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo
     for i in range(0, len(mancanti), 40):
         gruppo = mancanti[i:i + 40]
         protetti = []
-        for t in gruppo:  # i segnaposto (%s, %d...) diventano {{A}}, {{B}}: il traduttore li lascia stare
+        for t in gruppo:  # placeholders (%s, %d...) become {{A}}, {{B}}: the translator leaves them alone
             segni = []
 
             def _sost(m, segni=segni):
@@ -455,11 +458,11 @@ def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo
             ordine = [ord(m) - 65 for m in re.findall(r"\{\{([A-Z])\}\}", r)]
             if any(segni[a] == segni[b] and a > b for i, a in enumerate(ordine) for b in ordine[i + 1:]
                    if a < len(segni) and b < len(segni)):
-                continue  # due segnaposto dello stesso tipo scambiati: i valori finirebbero al posto sbagliato
+                continue  # two placeholders of the same type swapped: the values would end up in the wrong place
             for j, s in enumerate(segni):
                 r = r.replace("{{%s}}" % chr(65 + j), s, 1)
             if re.search(r"\{\{[A-Z]\}\}", r) or len(_SEGNO.findall(r)) != len(segni):
-                continue  # segnaposto persi o in piu': meglio l'italiano
+                continue  # placeholders lost or extra: better the Italian
             testi[t] = r
             aggiunti += 1
         log("  %d di %d" % (min(i + 40, len(mancanti)), len(mancanti)))

@@ -1,4 +1,4 @@
-"""Scansione della cartella del gioco: trova i file che contengono testo leggibile."""
+"""Scan of the game folder: finds the files that contain readable text."""
 import json
 import os
 
@@ -6,7 +6,8 @@ from . import adapter_csv, adapter_gamemaker, adapter_webjson, interruption as i
 from .text import e_testo_leggibile
 
 CARTELLE_ESCLUSE = {"node_modules", ".git", "__pycache__", ".svn", "swiftshader",
-                    # emulatori di Steam: non sono del gioco e PatchSmith non li tocca (es. steam_settings/achievements.json)
+                    # Steam emulators: not part of the game, PatchSmith does not touch them
+                    # (e.g. steam_settings/achievements.json)
                     "steam_settings", "steamsettings", "smartsteamemu", "steamemu", "ali213"}
 MAX_DIMENSIONE_JSON = 64 * 1024 * 1024
 ALTRI_FORMATI = {
@@ -16,10 +17,10 @@ ALTRI_FORMATI = {
 }
 SOGLIA_CARATTERI = 500
 SOGLIA_STRINGHE = 10
-# un file {chiave: testo} senza la lingua nel nome e' una tabella di testi se almeno questa parte dei suoi valori e'
-# testo anche per le regole dei JSON generici (frasi, parole con le maiuscole): non un elenco di file o di colori
+# a {chiave: testo} file without the language in its name is a text table if at least this share of its values is text
+# also for the rules of generic JSON files (sentences, capitalized words): not a list of files or colors
 QUOTA_TABELLA = 0.4
-# motore rilevato -> caratteri dei font da rispettare nei profili della ricerca generica (vedi Progetto._adatta)
+# detected engine -> font characters to respect in the game profiles of the generic search (see Progetto._adatta)
 MOTORI_FONT = {"GameMaker": "gamemaker", "XNA": "xna", "FNA": "xna", "MonoGame": "xna"}
 
 
@@ -27,15 +28,15 @@ def _file_del_gioco(cartella):
     for radice, dirs, files in os.walk(cartella):
         dirs[:] = sorted(d for d in dirs if d.lower() not in CARTELLE_ESCLUSE)
         for f in sorted(files):
-            if adapter_webjson.MARCATORE in f:  # backup, info e script creati da noi
+            if adapter_webjson.MARCATORE in f:  # backups, info and scripts we created
                 continue
             yield os.path.join(radice, f)
 
 
 def _candidato_json(rel, dati):
-    """Il candidato di un file JSON: testi leggibili con le regole generiche e, se il file e' un dizionario
-    {chiave: testo} (anche a sezioni), anche con le regole dei file di localizzazione (dove una parola sola e' un
-    testo: 'wood', 'OK')."""
+    """The candidate of a JSON file: readable texts by the generic rules and, if the file is a {chiave: testo}
+    dictionary (with sections too), also by the rules of localization files (where a single word is a text: 'wood',
+    'OK')."""
     stat = adapter_webjson.statistiche_schemi(dati)
     includi, _ = adapter_webjson.proponi_schemi(stat)
     c = {"percorso": rel, "stringhe_leggibili": sum(stat[s]["leggibili"] for s in includi),
@@ -45,16 +46,16 @@ def _candidato_json(rel, dati):
         testi = [v for v in valori if adapter_gamemaker.testo_localizzazione(v)]
         c["schemi_localizzazione"] = adapter_gamemaker.schemi_json(dati)
         c["testi_localizzazione"] = [len(testi), sum(len(v) for v in testi)]
-        # una tabella di testi ha solo testi e sezioni: un elenco di oggetti e' un file di dati (es. PluginInfo.json
-        # dei suoni Wwise, con i nomi e i tipi delle librerie), dove una parola sola e' un identificativo; e non e'
-        # un salvataggio o un file di opzioni ('High', 'On' tradotti non si leggerebbero piu')
+        # a text table has only texts and sections: a list of objects is a data file (e.g. PluginInfo.json of the
+        # Wwise sounds, with the names and types of the libraries), where a single word is an identifier; and it is
+        # not a save or an options file ('High', 'On' translated could no longer be read)
         c["tabella"] = _solo_sezioni(dati) and not adapter_gamemaker._DA_SALTARE.search(rel) and \
             sum(1 for v in valori if e_testo_leggibile(v)) >= QUOTA_TABELLA * len(valori)
     return c
 
 
 def _solo_sezioni(dati, profondita=0):
-    """True se il dizionario ha solo valori semplici e sezioni {chiave: valore}, senza liste."""
+    """True if the dictionary has only simple values and {chiave: valore} sections, no lists."""
     return isinstance(dati, dict) and profondita < 20 and all(
         not isinstance(v, (dict, list)) or _solo_sezioni(v, profondita + 1) for v in dati.values())
 
@@ -68,9 +69,9 @@ def _candidato_csv(rel, f):
 
 
 def _segna_localizzazione(candidati):
-    """I file JSON {chiave: testo} che sono file di localizzazione: tabelle di testi (vedi QUOTA_TABELLA) o file della
-    stessa famiglia in almeno due lingue (lang/{L}.json, strings{L}.json). Per loro valgono le regole dei file di
-    localizzazione: si traducono anche le parole sole."""
+    """The {chiave: testo} JSON files that are localization files: text tables (see QUOTA_TABELLA) or files of the
+    same family in at least two languages (lang/{L}.json, strings{L}.json). The rules of localization files apply to
+    them: single words are translated too."""
     famiglie = {}
     for c in candidati:
         codice = adapter_gamemaker.lingua_del_percorso(c["percorso"])
@@ -86,11 +87,11 @@ def _segna_localizzazione(candidati):
 
 
 def scansiona(cartella, log=print):
-    """Restituisce (candidati, altri_formati).
+    """Returns (candidati, altri_formati).
 
-    candidati: [{"percorso": rel, "stringhe_leggibili": n, "caratteri": c, "statistiche": {...}}], piu'
-    "localizzazione" per i file {chiave: testo} e "formato": "csv" per le tabelle con una colonna per lingua.
-    I file saltati (troppo grandi, JSON non leggibili) vanno nel registro con quanti sono.
+    candidati: [{"percorso": rel, "stringhe_leggibili": n, "caratteri": c, "statistiche": {...}}], plus
+    "localizzazione" for {chiave: testo} files and "formato": "csv" for tables with one column per language.
+    The skipped files (too large, unreadable JSON) go to the log with how many they are.
     """
     candidati, altri, grandi, illeggibili = [], {}, [], []
     for percorso in _file_del_gioco(cartella):
@@ -111,7 +112,7 @@ def scansiona(cartella, log=print):
             if c["stringhe_leggibili"] or c.get("testi_localizzazione", [0])[0]:
                 candidati.append(c)
         elif estensione in adapter_csv.ESTENSIONI:
-            if os.path.exists(percorso + ".import"):  # sorgente di Godot: il gioco usa il file compilato
+            if os.path.exists(percorso + ".import"):  # Godot source: the game uses the compiled file
                 continue
             f = adapter_csv.tabella(adapter_gamemaker.leggi_originale(percorso, lambda x: x))
             if f:
@@ -133,9 +134,9 @@ def scansiona(cartella, log=print):
 
 
 def sopra_soglia(c):
-    """True se il candidato ha abbastanza testi per entrare nel profilo. Una tabella CSV con una colonna per lingua
-    entra sempre (e' di sicuro una tabella di traduzione: vedi adapter_csv.FileCSV.tabella); per i file di
-    localizzazione basta il numero di testi (le etichette di una parola sono corte)."""
+    """True if the candidate has enough texts to enter the game profile. A CSV table with one column per language
+    always enters (it is surely a translation table: see adapter_csv.FileCSV.tabella); for localization files the
+    number of texts is enough (one-word labels are short)."""
     if c.get("formato") == "csv":
         return True
     if c.get("localizzazione"):
@@ -144,16 +145,16 @@ def sopra_soglia(c):
 
 
 def crea_profilo(nome, cartella, candidati, origine, destinazione, backend, radici_web=(), motore=None, log=None):
-    """Profilo con i file sopra soglia e gli schemi proposti (modificabile a mano).
+    """Game profile with the files above the threshold and the proposed schemas (can be edited by hand).
 
-    radici_web: index.html dei giochi web (percorsi relativi): diventano voci 'web-ui' per i menu.
-    motore: il motore rilevato ('GameMaker', 'XNA'...): per GameMaker e XNA le traduzioni si adattano ai caratteri
-    dei font del gioco (profilo["motore_gioco"]; GameMaker e' anche profilo["motore"]).
-    log: per scrivere quali file con pochi testi restano fuori.
+    radici_web: index.html of web games (relative paths): they become 'web-ui' entries for the menus.
+    motore: the detected engine ('GameMaker', 'XNA'...): for GameMaker and XNA the translations adapt to the characters
+    of the game's fonts (profilo["motore_gioco"]; GameMaker is also profilo["motore"]).
+    log: to write which files with few texts are left out.
     """
     file, esclusi = [], []
     for index in radici_web:
-        if "!/" in index:  # dentro un archivio .asar: non ancora supportato
+        if "!/" in index:  # inside an .asar archive: not supported yet
             continue
         file.append({"percorso": index, "formato": "web-ui"})
     for c in candidati:

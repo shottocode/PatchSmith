@@ -1,51 +1,53 @@
-"""Nomi del gioco da non tradurre: lo studio e il titolo ("Cup Dog Games" non diventa "Giochi di cani da coppa").
+"""Names of the game not to translate: the studio and the title ("Cup Dog Games" does not become
+"Giochi di cani da coppa").
 
-Si leggono, senza modificare nulla:
-- da Unity: app.info nella cartella _Data (prima riga l'azienda, seconda il prodotto);
-- dalle informazioni sulla versione degli eseguibili del gioco (CompanyName e ProductName, come le mostra Windows
-  in Proprieta' > Dettagli): si leggono come dati, il programma non parte;
-- da Steam: il nome del gioco nel suo manifesto, se il gioco e' installato da Steam.
+They are read without changing anything:
+- from Unity: app.info in the _Data folder (first line the company, second the product);
+- from the version information of the game's executables (CompanyName and ProductName, as Windows shows them
+  in Properties > Details): they are read as data, the program is not started;
+- from Steam: the game's name in its manifest, if the game is installed from Steam.
 
-Finiscono nel profilo (profilo["non_tradurre"]) e Progetto li protegge come i codici del gioco (testo.proteggi).
+They end up in the game profile (profilo["non_tradurre"]) and Progetto protects them like the game's codes
+(testo.proteggi).
 """
 import os
 import re
 import sys
 
-# forme societarie in fondo al nome: il gioco scrive di solito il nome senza ("Cup Dog Games", non "... LLC")
+# company forms at the end of the name: the game usually writes the name without them ("Cup Dog Games", not "... LLC")
 _FORMA_SOCIETARIA = re.compile(r"[\s,]+(?:llc|l\.l\.c\.|inc\.?|ltd\.?|limited|gmbh|s\.?r\.?l\.?|s\.?p\.?a\.?|"
                                r"co\.?|corp\.?|corporation|ab|oy|kk|k\.k\.|pty\.? ltd\.?|bv|b\.v\.|sas|s\.a\.)$", re.I)
-# nomi che non dicono nulla del gioco (valori predefiniti di Unity o degli strumenti)
+# names that say nothing about the game (default values of Unity or of the tools)
 _GENERICI = {"defaultcompany", "unity", "unity technologies", "unity technologies aps", "microsoft corporation",
              "game", "gioco", "my project", "new unity project", "unknown", "none",
              "bootstrappackagedgame", "epic games", "epic games, inc.", "unreal engine", "nw.js", "nwjs", "electron",
              "github, inc.", "the nw.js community", "yoyo games ltd", "gamemaker", "mono", "monogame",
-             # programmi di servizio accanto al gioco (Epic Online Services, Xbox/Microsoft Store, Blizzard)
+             # utility programs next to the game (Epic Online Services, Xbox/Microsoft Store, Blizzard)
              "epic online services bootstrapper", "microsoft game launch helper", "blizzarderror"}
-_GENERICI = {g.rstrip(".") for g in _GENERICI}  # si confrontano senza il punto finale (come li pulisce _buono)
+_GENERICI = {g.rstrip(".") for g in _GENERICI}  # compared without the final period (as _buono cleans them)
 MAX_ESEGUIBILI = 3
 
 
 def _buono(nome):
-    """Il nome ripulito, oppure None se non serve (vuoto, generico, troppo corto o lungo, solo numeri)."""
+    """The cleaned name, or None if it is of no use (empty, generic, too short or long, only digits)."""
     if not isinstance(nome, str):
         return None
     nome = " ".join(nome.replace("\x00", " ").split()).strip(" .,;:-©®™")
     if not 2 <= len(nome) <= 60 or not re.search(r"[^\W\d_]", nome) or nome.lower() in _GENERICI:
         return None
-    if " " not in nome and len(nome) < 4:  # sigle corte ("GM", "UE"): troppo facile trovarle dentro i testi
+    if " " not in nome and len(nome) < 4:  # short acronyms ("GM", "UE"): too easy to find inside the texts
         return None
     return nome
 
 
 def _varianti(nome):
-    """Il nome e, se c'e', lo stesso senza la forma societaria ('Cup Dog Games LLC' -> anche 'Cup Dog Games')."""
+    """The name and, if any, the same without the company form ('Cup Dog Games LLC' -> also 'Cup Dog Games')."""
     nome = _buono(nome)
     if not nome:
         return []
     uscita = [nome]
     corto = nome
-    for _ in range(3):  # anche piu' forme di seguito: 'SQUARE ENIX CO., LTD.' -> 'SQUARE ENIX'
+    for _ in range(3):  # several forms in a row too: 'SQUARE ENIX CO., LTD.' -> 'SQUARE ENIX'
         tolto = _FORMA_SOCIETARIA.sub("", corto).rstrip(" .,")
         if tolto == corto:
             break
@@ -57,8 +59,8 @@ def _varianti(nome):
 
 
 def versione_exe(percorso):
-    """{'CompanyName': ..., 'ProductName': ...} dalle informazioni sulla versione di un eseguibile Windows (lette
-    come dati con le funzioni di Windows: il programma non parte). Dizionario vuoto se non ci sono."""
+    """{'CompanyName': ..., 'ProductName': ...} from the version information of a Windows executable (read
+    as data with the Windows functions: the program is not started). Empty dictionary if there is none."""
     if not sys.platform.startswith("win"):
         return {}
     try:
@@ -101,7 +103,7 @@ def versione_exe(percorso):
 
 
 def _eseguibili(cartella):
-    """Gli eseguibili del gioco nella sua cartella (non installatori, crash reporter e simili), i piu' grandi prima."""
+    """The game's executables in its folder (not installers, crash reporters and the like), largest first."""
     from .steam import _ESEGUIBILI_GENERICI
     try:
         nomi = [n for n in os.listdir(cartella) if n.lower().endswith(".exe") and not _ESEGUIBILI_GENERICI.match(n)]
@@ -118,8 +120,8 @@ def _eseguibili(cartella):
 
 
 def nomi_del_gioco(cartella, log=None):
-    """I nomi da non tradurre per il gioco nella cartella (vedi sopra), senza doppioni. Non solleva errori: un nome
-    che non si riesce a leggere si salta."""
+    """The names not to translate for the game in the folder (see above), without duplicates. Raises no errors: a
+    name that cannot be read is skipped."""
     trovati = []
     try:
         from . import language_unity as lingua_unity
@@ -136,7 +138,7 @@ def nomi_del_gioco(cartella, log=None):
         installato = steam.gioco_installato(cartella)
         if installato:
             trovati.append(installato.get("nome"))
-    except Exception:  # noqa: BLE001 - Steam assente o illeggibile: si fa senza
+    except Exception:  # noqa: BLE001 - Steam missing or unreadable: do without it
         pass
     uscita = []
     for nome in trovati:
@@ -149,8 +151,8 @@ def nomi_del_gioco(cartella, log=None):
 
 
 def parole_comuni(testi):
-    """Le parole scritte in minuscolo nei testi: un nome di una sola parola che c'e' anche cosi' ('Control', 'mine')
-    e' una parola normale del gioco, e va tradotta."""
+    """The words written in lowercase in the texts: a one-word name that also appears that way ('Control', 'mine')
+    is an ordinary word of the game, and must be translated."""
     parole = set()
     for t in testi:
         if isinstance(t, str):
@@ -159,8 +161,8 @@ def parole_comuni(testi):
 
 
 def da_proteggere(nomi, comuni):
-    """I nomi del profilo da proteggere davvero: quelli di piu' parole sempre, quelli di una parola solo se non
-    compaiono anche in minuscolo nei testi del gioco (vedi parole_comuni)."""
+    """The game profile's names that really need protecting: multi-word ones always, one-word ones only if they do
+    not also appear in lowercase in the game's texts (see parole_comuni)."""
     uscita = []
     for nome in nomi or ():
         nome = _buono(nome)

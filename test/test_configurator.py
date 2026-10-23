@@ -1,10 +1,10 @@
-"""Test del configuratore e della scheda di Kingdom Hearts HD 1.5+2.5 (lingua predefinita negli eseguibili).
+"""Test of the configurator and of the Kingdom Hearts HD 1.5+2.5 game sheet (default language in the executables).
 
-Uso: python -I test/test_configurator.py <cartella_temporanea_vuota> [<cartella del gioco vero>]
-Costruisce un'installazione finta (eseguibili PE finti, indice .hed finto) e prova: riconoscimento, consenso,
-scrittura tutto-o-niente, rifiuti, aggiornamento del gioco, ripristino identico.
-Con la cartella del gioco vero, copia SOLO i suoi eseguibili e un indice nella cartella temporanea e ripete la
-prova sulle copie: la cartella del gioco non viene mai toccata e nessun programma viene avviato.
+Usage: python -I test/test_configurator.py <empty_temp_folder> [<real game folder>]
+Builds a fake installation (fake PE executables, fake .hed index) and tests: recognition, consent,
+all-or-nothing writing, refusals, game updates, identical restore.
+With the real game's folder, it copies ONLY its executables and an index into the temporary folder and repeats the
+test on the copies: the game's folder is never touched and no program is started.
 """
 import hashlib
 import os
@@ -42,8 +42,8 @@ def impronte(cartella):
 
 
 def pe_finto(valore=1, doppio=False, senza_confronto=False, firma=b""):
-    """PE64 minimo: .text con lo schema della lingua predefinita e il confronto con "english", .rdata con la
-    tabella delle lingue."""
+    """Minimal PE64: .text with the pattern of the default language and the comparison with "english", .rdata with
+    the table of languages."""
     testo = bytearray(0x400)
     schema = (b"\xBB" + bytes([valore]) + b"\x00\x00\x00\x48\x83\x3D\x11\x22\x33\x44\x00\x75\x31\x8B\xCB\xE8"
               + b"\x00\x00\x00\x00")
@@ -96,7 +96,7 @@ def main(base, gioco_vero=None):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     automatico.CARTELLA_PROFILI = os.path.join(base, "patchsmith", "profiles")
     os.makedirs(automatico.CARTELLA_PROFILI)
     steam.cartella_steam = lambda: None
@@ -113,7 +113,7 @@ def main(base, gioco_vero=None):
     originali = impronte(gioco)
     protezione = impronta(os.path.join(gioco, "KINGDOM HEARTS HD 1.5+2.5 ReMIX.exe"))
 
-    # --- riconoscimento
+    # --- recognition
     controlla("scheda: riconosciuta dalla cartella del gioco e da quella sopra",
               kh.riconosci(gioco) == gioco and kh.riconosci(sopra) == gioco and kh.riconosci(base) is None)
     controlla("scheda: lingue dei testi installate (dall'indice .hed)", kh.lingue_presenti(gioco) == {"en", "it", "fr"})
@@ -131,7 +131,7 @@ def main(base, gioco_vero=None):
     controlla("rilevamento: italiano presente dai file del gioco (senza Steam)",
               r["presente"] is True and r["motore"]["tipo"] == "scheda")
 
-    # --- senza consenso: solo la proposta, nulla di scritto
+    # --- without consent: only the proposal, nothing written
     percorso, esito = automatico.prepara(sopra, "auto", "it", "finto", silenzio)
     controlla("senza consenso: proposta, nessun file toccato",
               percorso is None and esito.get("serve_consenso") and impronte(gioco) == originali
@@ -141,7 +141,7 @@ def main(base, gioco_vero=None):
     controlla("messaggio: se la scheda spiega il rifiuto, niente 'Non posso impostarla io' contraddittorio",
               not any("Non posso" in x for x in lingua_ufficiale.messaggio(finto, "it", ["motivo e rimedio"], False)))
 
-    # --- rifiuti: niente scritto
+    # --- refusals: nothing written
     configuratore.smart_app_control = lambda: 1
     fatto, righe = lingua_ufficiale.imposta(gioco, r, "it", silenzio, consenso=True)
     controlla("Smart App Control attivo -> rifiuto prima di chiedere il consenso, nessun file toccato",
@@ -179,7 +179,7 @@ def main(base, gioco_vero=None):
                   and not [n for n in os.listdir(gioco) if "patchsmith" in n])
     controlla("il consenso dato resta anche se la modifica non e' riuscita", configuratore.ha_consenso(gioco))
 
-    # --- con consenso
+    # --- with consent
     percorso, esito = automatico.prepara(sopra, "auto", "it", "finto", silenzio, consenso=True)
     cambi = {n: diff_byte(os.path.join(gioco, n), os.path.join(gioco, n + progetto.SUFFISSO_BACKUP))
              for n in kh.ESEGUIBILI}
@@ -201,7 +201,7 @@ def main(base, gioco_vero=None):
               esito.get("lingua_impostata") is True and impronte(gioco) == dopo
               and any("gia' attivo" in x for x in esito["lingua_ufficiale_righe"]))
 
-    # --- aggiornamento del gioco: un eseguibile torna originale ma diverso; col consenso salvato si riapplica
+    # --- game update: an executable goes back to original but different; with the saved consent it is reapplied
     nuovo = pe_finto(firma=b"versione 2")
     open(os.path.join(gioco, kh.ESEGUIBILI[1]), "wb").write(nuovo)
     percorso, esito = automatico.prepara(gioco, "auto", "it", "finto", silenzio)
@@ -211,7 +211,7 @@ def main(base, gioco_vero=None):
               and open(p1 + progetto.SUFFISSO_BACKUP, "rb").read() == nuovo
               and os.path.exists(p1 + progetto.SUFFISSO_BACKUP + ".1"))
 
-    # --- ripristino
+    # --- restore
     sistema.gioco_aperto = lambda c: True
     controlla("ripristino con il gioco aperto -> non tocca nulla", automatico.ripristina(gioco, silenzio) is False
               and kh.punto_lingua(open(p1, "rb").read())[1] == 6)
@@ -229,8 +229,8 @@ def main(base, gioco_vero=None):
     controlla("riga di comando: ripristina con la cartella", cli.main(["ripristina", gioco]) == 0
               and impronte(gioco) == attese)
 
-    # --- casi trovati dalla revisione
-    automatico.prepara(gioco, "auto", "it", "finto", silenzio)  # consenso gia' dato: attiva
+    # --- cases found by the review
+    automatico.prepara(gioco, "auto", "it", "finto", silenzio)  # consent already given: activates
     nuovo2 = pe_finto(firma=b"versione 3")
     p2 = os.path.join(gioco, kh.ESEGUIBILI[2])
     open(p2, "wb").write(nuovo2)
@@ -276,7 +276,7 @@ def main(base, gioco_vero=None):
 
     automatico.prepara(gioco, "auto", "it", "finto", silenzio)
     registro = configuratore.leggi(gioco)
-    registro["leve"]["lingua"]["stato"] = "in_corso"  # come se il processo fosse morto a meta'
+    registro["leve"]["lingua"]["stato"] = "in_corso"  # as if the process had died halfway
     configuratore._salva(gioco, registro)
     messaggi = []
     fatto, righe = lingua_ufficiale.imposta(gioco, lingua_ufficiale.rileva(gioco, "it"), "it", messaggi.append)
@@ -358,7 +358,7 @@ def main(base, gioco_vero=None):
               any("Proprieta' > Generali > Lingua" in x for x in esito.get("lingua_ufficiale_righe", []))
               and impronte(os.path.join(comune, "KH Steam")) == prima)
 
-    # --- un eseguibile di una versione sconosciuta: nessuno viene modificato
+    # --- an executable of an unknown version: none is modified
     altro = os.path.join(base, "KH2")
     crea_gioco(altro)
     open(os.path.join(altro, kh.ESEGUIBILI[2]), "wb").write(pe_finto(senza_confronto=True))
@@ -367,7 +367,7 @@ def main(base, gioco_vero=None):
     controlla("versione sconosciuta di un eseguibile -> nessun file modificato, spiegazione",
               fatto is False and impronte(altro) == prima and any("Non riconosco" in x for x in righe))
 
-    # --- prova sulle copie degli eseguibili veri (la cartella del gioco non viene toccata)
+    # --- test on copies of the real executables (the game's folder is not touched)
     if gioco_vero:
         copia = os.path.join(base, "copia del gioco")
         os.makedirs(os.path.join(copia, "Image", "dt"))

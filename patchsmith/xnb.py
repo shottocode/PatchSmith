@@ -1,11 +1,11 @@
-"""Lettura dei file .xnb di XNA/FNA/MonoGame (sola lettura, libreria standard).
+"""Reading of the .xnb files of XNA/FNA/MonoGame (read-only, standard library).
 
-Per ora serve a sapere quali caratteri sanno disegnare i font (SpriteFont): in XNA un carattere che
-manca nel font fa andare in crash il gioco (ArgumentException in DrawString/MeasureString), a meno che
-il font abbia un carattere predefinito. Quindi una traduzione deve usare solo caratteri presenti.
+For now it is used to know which characters the fonts can draw (SpriteFont): in XNA a character that
+is missing from the font makes the game crash (ArgumentException in DrawString/MeasureString), unless
+the font has a default character. So a translation must use only characters that are present.
 
-Formato (XNB versione 5, non compresso): "XNB" + piattaforma + versione + flag + dimensione totale,
-elenco dei lettori di tipo, risorse condivise, poi l'oggetto principale.
+Format (XNB version 5, uncompressed): "XNB" + platform + version + flags + total size,
+list of type readers, shared resources, then the main object.
 """
 import struct
 
@@ -33,14 +33,14 @@ def _leggi_stringa(dati, pos):
 
 
 def _leggi_char(dati, pos):
-    """BinaryReader.ReadChar: un carattere in UTF-8 (1-4 byte)."""
+    """BinaryReader.ReadChar: one UTF-8 character (1-4 bytes)."""
     b = dati[pos]
     n = 1 if b < 0x80 else 2 if b >> 5 == 6 else 3 if b >> 4 == 14 else 4
     return dati[pos:pos + n].decode("utf-8"), pos + n
 
 
 def intestazione(dati):
-    """(piattaforma, versione, flags, lettori [(nome, versione)], posizione dell'oggetto principale)."""
+    """(platform, version, flags, readers [(name, version)], position of the main object)."""
     if dati[:3] != b"XNB":
         raise ErroreXnb("non e' un file XNB")
     piattaforma, versione, flags = chr(dati[3]), dati[4], dati[5]
@@ -68,7 +68,7 @@ def _nome_breve(lettore):
 
 
 def leggi_spritefont(dati):
-    """SpriteFont -> {"caratteri": [...], "predefinito": carattere o None, "interlinea", "spaziatura"}."""
+    """SpriteFont -> {"caratteri": [...], "predefinito": character or None, "interlinea", "spaziatura"}."""
     _, _, _, lettori, pos = intestazione(dati)
 
     def oggetto(pos, atteso):
@@ -87,7 +87,7 @@ def leggi_spritefont(dati):
     for _ in range(livelli):
         n = struct.unpack_from("<I", dati, pos)[0]
         pos += 4 + n
-    for _ in range(2):  # rettangoli dei glifi e ritagli
+    for _ in range(2):  # glyph rectangles and cropping
         pos = oggetto(pos, "ListReader")
         n = struct.unpack_from("<I", dati, pos)[0]
         pos += 4 + 16 * n
@@ -115,7 +115,7 @@ def leggi_spritefont(dati):
 
 
 def tipo_principale(dati):
-    """Nome breve del lettore dell'oggetto principale (es. 'SpriteFontReader', 'Texture2DReader')."""
+    """Short name of the main object's reader (e.g. 'SpriteFontReader', 'Texture2DReader')."""
     _, _, _, lettori, pos = intestazione(dati)
     indice, _ = _leggi_7bit(dati, pos)
     return _nome_breve(lettori[indice - 1][0]) if indice else None

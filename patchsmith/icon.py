@@ -1,9 +1,9 @@
-"""Icona di PatchSmith: un martello sopra una cartella (la cartella del gioco, dove PatchSmith interviene).
+"""PatchSmith's icon: a hammer over a folder (the game's folder, where PatchSmith does its work).
 
-Disegnata qui, senza file scaricati: eseguito da solo (patchsmith/icon.py) rifa' le immagini in patchsmith/icon/
-(PNG di ogni lato e PatchSmith.ico), che la finestra carica all'avvio (applica), e PatchSmith.exe (eseguibile). Le
-forme sono descritte su un quadrato di lato 1 e ogni pixel prende il colore medio dei suoi sottopunti (bordi morbidi,
-trasparenza intorno).
+Drawn here, with no downloaded files: run on its own (patchsmith/icon.py) it remakes the images in patchsmith/icon/
+(a PNG for each size and PatchSmith.ico), which the window loads at startup (applica), and PatchSmith.exe
+(eseguibile). The shapes are described on a square of side 1 and each pixel takes the average color of its sub-points
+(soft edges, transparency around).
 """
 import math
 import os
@@ -13,16 +13,16 @@ import sys
 import zlib
 
 CARTELLA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon")
-PROGRAMMA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # la cartella con PatchSmith.pyw
+PROGRAMMA = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the folder with PatchSmith.pyw
 LATI = (16, 24, 32, 48, 64, 128, 256)
 
 CARTELLA_DAVANTI, CARTELLA_DIETRO, CARTELLA_BORDO = (0xff, 0xc8, 0x45), (0xe0, 0x9a, 0x12), (0x9a, 0x62, 0x08)
 TESTA, MANICO, CONTORNO = (0xdf, 0xe5, 0xec), (0x9b, 0x5b, 0x2a), (0x1f, 0x29, 0x37)
 
-# il martello: manico da A verso l'alto a destra (45 gradi), testa di traverso in cima
+# the hammer: handle from A towards the top right (45 degrees), head across it at the top
 _A = (0.46, 0.90)
-_D = (math.sqrt(0.5), -math.sqrt(0.5))  # lungo il manico
-_N = (-_D[1], _D[0])  # di traverso
+_D = (math.sqrt(0.5), -math.sqrt(0.5))  # along the handle
+_N = (-_D[1], _D[0])  # across
 MANICO_FINE, MEZZA_LARGHEZZA = 0.38, 0.048
 TESTA_DA, TESTA_A, MEZZA_TESTA = 0.38, 0.52, 0.15
 SPESSORE_CONTORNO = 0.035
@@ -36,8 +36,8 @@ def _arrotondato(x, y, x0, y0, x1, y1, r):
 
 
 def _cartella(x, y, margine=0.0):
-    """'davanti' (la parte bassa, piu' chiara), 'dietro' (con la linguetta in alto a sinistra) o None; con margine
-    negativo le forme si restringono (quello che resta fuori e' il bordo)."""
+    """'davanti' (the lower, lighter part), 'dietro' (with the tab at the top left) or None; with a negative margin
+    the shapes shrink (what is left outside is the border)."""
     m = margine
     if _arrotondato(x, y, 0.06 - m, 0.34 - m, 0.90 + m, 0.84 + m, 0.06 + m):
         return "davanti"
@@ -48,23 +48,23 @@ def _cartella(x, y, margine=0.0):
 
 
 def _martello(x, y, margine=0.0):
-    """'testa', 'manico' o None; con margine le forme si allargano (per il contorno)."""
+    """'testa', 'manico' or None; with a margin the shapes grow (for the outline)."""
     t = (x - _A[0]) * _D[0] + (y - _A[1]) * _D[1]
     s = (x - _A[0]) * _N[0] + (y - _A[1]) * _N[1]
     if abs(s) <= MEZZA_TESTA + margine:
-        # la testa: dall'altra parte del blocco che batte si assottiglia (la penna)
+        # the head: on the side opposite the striking face it gets thinner (the peen)
         mezzo_spessore = (TESTA_A - TESTA_DA) / 2 * (1 - 0.6 * max(0.0, -s / MEZZA_TESTA))
         if abs(t - (TESTA_DA + TESTA_A) / 2) <= mezzo_spessore + margine:
             return "testa"
     if 0 <= t <= MANICO_FINE and abs(s) <= MEZZA_LARGHEZZA + margine:
         return "manico"
-    if t < 0 and math.hypot(t, s) <= MEZZA_LARGHEZZA + margine:  # fondo del manico arrotondato
+    if t < 0 and math.hypot(t, s) <= MEZZA_LARGHEZZA + margine:  # rounded end of the handle
         return "manico"
     return None
 
 
 def _colore(x, y):
-    """(r, g, b, a) del punto (x, y) del quadrato di lato 1."""
+    """(r, g, b, a) of the point (x, y) of the square of side 1."""
     parte = _martello(x, y)
     if parte:
         return (TESTA if parte == "testa" else MANICO) + (255,)
@@ -82,8 +82,8 @@ def _colore(x, y):
 
 
 def disegna(lato):
-    """Pixel RGBA (bytes, riga per riga) dell'icona di 'lato' pixel."""
-    passi = max(4, 64 // lato)  # sottopunti per lato di un pixel: di piu' per le icone piccole
+    """RGBA pixels (bytes, row by row) of the icon of 'lato' pixels."""
+    passi = max(4, 64 // lato)  # sub-points per side of a pixel: more for small icons
     righe = []
     for py in range(lato):
         riga = bytearray()
@@ -106,7 +106,7 @@ def disegna(lato):
 
 
 def png(lato):
-    """L'icona di 'lato' pixel come file PNG (RGBA)."""
+    """The icon of 'lato' pixels as a PNG file (RGBA)."""
     def blocco(tipo, dati):
         return struct.pack(">I", len(dati)) + tipo + dati + struct.pack(">I", zlib.crc32(tipo + dati) & 0xffffffff)
     grezzo = b"".join(b"\0" + riga for riga in disegna(lato))
@@ -115,7 +115,7 @@ def png(lato):
 
 
 def ico(immagini):
-    """File .ico di Windows con le immagini PNG date ({lato: png})."""
+    """Windows .ico file with the given PNG images ({lato: png})."""
     testa = struct.pack("<HHH", 0, 1, len(immagini))
     posizione, voci, dati = 6 + 16 * len(immagini), b"", b""
     for lato, contenuto in sorted(immagini.items()):
@@ -126,7 +126,7 @@ def ico(immagini):
 
 
 def scrivi(cartella=CARTELLA):
-    """Rifa' le immagini dell'icona: <lato>.png per ogni lato e PatchSmith.ico."""
+    """Remakes the icon images: <lato>.png for each size and PatchSmith.ico."""
     os.makedirs(cartella, exist_ok=True)
     immagini = {lato: png(lato) for lato in LATI}
     for lato, contenuto in immagini.items():
@@ -138,22 +138,22 @@ def scrivi(cartella=CARTELLA):
 
 
 def applica(radice):
-    """L'icona sulla finestra e su tutte quelle che si aprono dopo (finestre di dialogo comprese). Senza le immagini
-    (cartella icona/ mancante) resta quella di Tk: non e' un errore."""
+    """Puts the icon on the window and on all those opened afterwards (dialogs included). Without the images
+    (icon/ folder missing) Tk's icon stays: it is not an error."""
     import tkinter as tk
     immagini = []
     for lato in LATI:
         percorso = os.path.join(CARTELLA, "%d.png" % lato)
-        if lato <= 128 and os.path.isfile(percorso):  # (oltre 128 pixel Windows non le usa per le finestre)
+        if lato <= 128 and os.path.isfile(percorso):  # (above 128 pixels Windows does not use them for windows)
             immagini.append(tk.PhotoImage(master=radice, file=percorso))
     if immagini:
         radice.iconphoto(True, *immagini)
-        radice._icona_patchsmith = immagini  # (le immagini di Tk vanno tenute, se no spariscono)
+        radice._icona_patchsmith = immagini  # (Tk images must be kept, otherwise they disappear)
     return bool(immagini)
 
 
 def _csc():
-    """Compilatore C# di .NET Framework 4 (c'e' in ogni Windows 10 e 11; lo usa anche adapter_unity)."""
+    """C# compiler of .NET Framework 4 (present in every Windows 10 and 11; adapter_unity uses it too)."""
     windows = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or r"C:\Windows"
     for quadro in ("Framework64", "Framework"):
         p = os.path.join(windows, "Microsoft.NET", quadro, "v4.0.30319", "csc.exe")
@@ -163,10 +163,10 @@ def _csc():
 
 
 def eseguibile(cartella=PROGRAMMA):
-    """PatchSmith.exe accanto a PatchSmith.pyw, con questa icona dentro: il programma su cui fare doppio clic (il .pyw
-    ha per forza l'icona di Python, che Windows da' a tutto il tipo di file). E' il piccolo avvio di launcher.cs, che
-    apre PatchSmith.pyw con il Python installato. Si compila (compilatore C# di Windows, niente da scaricare) solo se manca
-    o se e' piu' vecchio di launcher.cs o dell'icona. True se c'e' (gia' o adesso)."""
+    """PatchSmith.exe next to PatchSmith.pyw, with this icon inside: the program to double-click (the .pyw necessarily
+    has Python's icon, which Windows gives to the whole file type). It is the small launcher of launcher.cs, which opens
+    PatchSmith.pyw with the installed Python. It is compiled (Windows C# compiler, nothing to download) only if it is
+    missing or older than launcher.cs or the icon. True if it exists (already or now)."""
     sorgente = os.path.join(os.path.dirname(os.path.abspath(__file__)), "launcher.cs")
     icona = os.path.join(CARTELLA, "PatchSmith.ico")
     destinazione = os.path.join(cartella, "PatchSmith.exe")
@@ -180,7 +180,7 @@ def eseguibile(cartella=PROGRAMMA):
     csc = _csc()
     if not csc:
         return os.path.isfile(destinazione)
-    temporaneo = os.path.join(cartella, "PatchSmith.nuovo.exe")  # poi rinominato: mai un .exe a meta'
+    temporaneo = os.path.join(cartella, "PatchSmith.nuovo.exe")  # renamed afterwards: never a half-written .exe
     comando = [csc, "-nologo", "-target:winexe", "-optimize", "-codepage:65001", "-win32icon:" + icona,
                "-r:System.Windows.Forms.dll", "-out:" + temporaneo, sorgente]
     try:

@@ -1,24 +1,24 @@
-"""La finestra "Correggi traduzioni": le traduzioni del gioco (correzioni.carica) con la ricerca e gli elenchi dei
-problemi (rimasti in originale, troppo lunghi, non scritti nel gioco, numeri e segnaposto, un'altra lingua, sospetti,
-corretti a mano), e sotto la traduzione della riga scelta da correggere, con la lunghezza e i controlli mentre scrivi.
+"""The "Fix translations" window: the game's translations (correzioni.carica) with search and the lists of problems
+(left untranslated, too long, not written to the game, numbers and placeholders, another language, suspicious, fixed
+by hand), and below the translation of the chosen line to fix, with the length and the checks while you type.
 
-"Salva e applica al gioco" salva le correzioni in memoria (correzioni.salva: per Unity anche le righe da cambiare
-nella cache di XUnity) e chiude la finestra; poi PatchSmith le scrive nel gioco da solo con "Riapplica" (con i
-controlli prima di partire: a gioco chiuso). "Ritraduci selezionati…", "Ritraduci tutto con Qualità (12B)…" e
-"Ricomincia da zero…" diventano operazioni della finestra principale (con "Ferma" e la finestra di fine).
+"Save and apply to the game" saves the fixes in the translation memory (correzioni.salva: for Unity also the lines to
+change in XUnity's cache) and closes the window; then PatchSmith writes them to the game by itself with "Reapply"
+(with the preliminary checks: with the game closed). "Re-translate selected…", "Re-translate everything with Quality
+(12B)…" and "Start over…" become operations of the main window (with "Stop" and the end window).
 
-Tastiera: Ctrl+F cerca; Invio (o F2) dall'elenco porta alla traduzione; Ctrl+Invio conferma e passa alla riga dopo;
-Esc annulla la modifica della riga (dall'elenco chiude la finestra); Ctrl+S salva; Alt+freccia destra/sinistra (o
-Ctrl+PagGiù/PagSu) cambiano pagina. L'elenco mostra PAGINA righe alla volta: anche i giochi con decine di migliaia di
-testi restano veloci.
+Keyboard: Ctrl+F searches; Enter (or F2) from the list goes to the translation; Ctrl+Enter confirms and moves to the
+next line; Esc cancels the line's edit (from the list it closes the window); Ctrl+S saves; Alt+right/left arrow (or
+Ctrl+PgDn/PgUp) change page. The list shows PAGINA lines at a time: even games with tens of thousands of texts stay
+fast.
 """
 import tkinter as tk
 from tkinter import ttk
 
 from . import corrections as correzioni, ui_language as interfaccia, theme as tema
 
-PAGINA = 300  # righe dell'elenco mostrate insieme
-LARGHEZZA_CELLA = 160  # caratteri mostrati in una cella (il testo intero e' sotto, nella riga scelta)
+PAGINA = 300  # list lines shown together
+LARGHEZZA_CELLA = 160  # characters shown in a cell (the whole text is below, in the chosen line)
 COLONNE = (("originale", "Originale", 280), ("traduzione", "Traduzione", 280), ("limite", "Limite", 70),
            ("problema", "Problema", 230))
 
@@ -38,17 +38,17 @@ def _quante(n, una, molte):
 
 
 class Finestra:
-    """La finestra (modale) sopra quella principale. app: gui.App; elenco: correzioni.Elenco gia' caricato."""
+    """The (modal) window above the main one. app: gui.App; elenco: correzioni.Elenco already loaded."""
 
     def __init__(self, app, elenco, filtro=None):
         self.app = app
         self.c = app.colori
         self.elenco = elenco
-        self.modifiche = {}  # {testo: traduzione scritta qui}, finche' non si salva
+        self.modifiche = {}  # {text: translation written here}, until saved
         self.indice = {x.testo: i for i, x in enumerate(elenco.voci)}
         self.mostrate = []
         self.pagina = 0
-        self.attuale = None  # la riga nella traduzione qui sotto
+        self.attuale = None  # the line in the translation below
         self.chiusa = False
         self._ricerca_in_attesa = None
         self.chiavi_filtri = [k for k, _ in correzioni.FILTRI]
@@ -87,8 +87,8 @@ class Finestra:
             self.albero.heading(chiave, text=titolo, anchor="w")
             self.albero.column(chiave, width=larghezza, minwidth=50, stretch=chiave != "limite",
                                anchor="center" if chiave == "limite" else "w")
-        # "Limite" (riga piu' lunga/spazio nel gioco) solo se il gioco fa conoscere lo spazio dei suoi testi (GameMaker
-        # con gli a capo misurati): negli altri giochi sarebbe vuota in ogni riga
+        # "Limit" (longest line/space in the game) only if the game makes the space of its texts known (GameMaker
+        # with measured line breaks): in the other games it would be empty in every line
         if not any(x.spazio for x in self.elenco.voci):
             self.albero.configure(displaycolumns=[k for k, _, _ in COLONNE if k != "limite"])
         self.albero.tag_configure("modificata", foreground=self.c["accento"])
@@ -102,8 +102,8 @@ class Finestra:
         self.albero.bind("<Escape>", lambda _e: self.chiudi())
         self.albero.bind("<Control-a>", self._tutte_le_righe)
 
-        # pagine dell'elenco (PAGINA righe l'una): la riga si vede solo con piu' pagine, o per dire che non c'e'
-        # nessuna riga
+        # pages of the list (PAGINA lines each): the row is shown only with more than one page, or to say that there
+        # are no lines
         pagine = self.riga_pagine = ttk.Frame(cornice)
         pagine.grid(row=3, column=0, sticky="ew", pady=(4, 0))
         self.btn_prima = ttk.Button(pagine, text="◀ Pagina prima", command=lambda: self.cambia_pagina(-1))
@@ -136,7 +136,7 @@ class Finestra:
         self.avviso = interfaccia.TestoVar()
         self.etichetta_avviso = ttk.Label(info, textvariable=self.avviso, foreground=tema.ICONE["avviso"][1])
         self.etichetta_avviso.pack(side="left", padx=(14, 0))
-        # il problema della riga per intero (nella colonna dell'elenco si vede solo l'inizio)
+        # the line's whole problem (in the list column only the beginning is visible)
         self.problema = interfaccia.TestoVar()
         ttk.Label(editor, textvariable=self.problema, style="Stato.TLabel", wraplength=860, justify="left").grid(
             row=3, column=1, sticky="w")
@@ -180,7 +180,7 @@ class Finestra:
         else:
             self.voce_cerca.focus_set()
 
-    # --- elenco ------------------------------------------------------------------------------------------
+    # --- list --------------------------------------------------------------------------------------------
 
     def _titolo(self):
         return "Correggi traduzioni - %s%s" % (self.elenco.nome, " *" if self.modifiche else "")
@@ -199,7 +199,7 @@ class Finestra:
         self.aggiorna_elenco()
 
     def _cerca_dopo(self):
-        """La ricerca parte appena smetti di scrivere (non a ogni lettera)."""
+        """The search starts as soon as you stop typing (not at every letter)."""
         if self._ricerca_in_attesa is not None:
             self.top.after_cancel(self._ricerca_in_attesa)
         self._ricerca_in_attesa = self.top.after(250, self.aggiorna_elenco)
@@ -222,7 +222,7 @@ class Finestra:
                 self._scegli_riga(0)
 
     def _mostra_pagina(self):
-        """Le righe della pagina. La riga che stai correggendo, se c'e' ancora (es. dopo una ricerca), resta scelta."""
+        """The page's lines. The line you are fixing, if still there (e.g. after a search), stays selected."""
         attuale = self.attuale
         self.albero.delete(*self.albero.get_children())
         inizio = self.pagina * PAGINA
@@ -287,14 +287,14 @@ class Finestra:
     def _seleziona(self):
         scelte = self.righe_scelte()
         if len(scelte) == 1 and scelte[0] is self.attuale:
-            return  # la stessa riga (es. il segnale della scelta arrivato dopo): quello che stai scrivendo resta
+            return  # the same line (e.g. the selection event arriving later): what you are typing stays
         self._mostra_traduzione(scelte[0] if len(scelte) == 1 else None, len(scelte))
 
     def _tutte_le_righe(self, _evento=None):
         self.albero.selection_set(self.albero.get_children())
         return "break"
 
-    # --- traduzione della riga scelta ---------------------------------------------------------------------
+    # --- translation of the chosen line -------------------------------------------------------------------
 
     def _imposta(self, widget, testo, attivo=True):
         widget.configure(state="normal")
@@ -321,7 +321,7 @@ class Finestra:
         self._aggiorna_info()
 
     def _scritto(self):
-        """La traduzione e' cambiata (anche incollando): la modifica resta in memoria finche' non salvi."""
+        """The translation changed (also by pasting): the change is kept in memory until you save."""
         if not self.testo_traduzione.edit_modified():
             return
         self.testo_traduzione.edit_modified(False)
@@ -363,7 +363,7 @@ class Finestra:
         return "break"
 
     def _conferma_e_avanti(self, _evento=None):
-        """Ctrl+Invio: la modifica resta (si salva con le altre) e si passa alla riga dopo."""
+        """Ctrl+Enter: the change stays (it is saved with the others) and moves to the next line."""
         figli = self.albero.get_children()
         scelta = self.albero.selection()
         posizione = figli.index(scelta[0]) + 1 if scelta and scelta[0] in figli else 0
@@ -375,7 +375,7 @@ class Finestra:
         return "break"
 
     def _annulla_riga(self, _evento=None):
-        """Esc nella traduzione: torna quella di prima (salvata) e si torna all'elenco."""
+        """Esc in the translation: the previous (saved) one comes back and focus returns to the list."""
         x = self.attuale
         if x is not None and x.testo in self.modifiche:
             del self.modifiche[x.testo]
@@ -412,10 +412,10 @@ class Finestra:
             self.chiudi()
         return "break"
 
-    # --- finestre di domanda (modali sopra questa) --------------------------------------------------------
+    # --- question dialogs (modal, above this one) ---------------------------------------------------------
 
     def _riprendi(self):
-        """Dopo una finestra di domanda (che toglie la sua presa quando si chiude) questa torna l'unica attiva."""
+        """After a question dialog (which releases its grab when it closes) this one is again the only active one."""
         if self.chiusa:
             return
         try:
@@ -436,7 +436,7 @@ class Finestra:
         finally:
             self._riprendi()
 
-    # --- azioni -------------------------------------------------------------------------------------------
+    # --- actions ------------------------------------------------------------------------------------------
 
     def _chiudi_finestra(self):
         self.chiusa = True
@@ -460,7 +460,7 @@ class Finestra:
         return True
 
     def _da_salvare(self):
-        """Le correzioni pronte (None se ce n'e' una vuota o se hai scelto di tornare a correggere)."""
+        """The fixes ready to save (None if one is empty or if you chose to go back to fixing)."""
         vuote = [t for t, v in self.modifiche.items() if not v.strip()]
         if vuote:
             self._avvisa("Traduzione vuota", "La traduzione di \"%s\" è vuota: scrivila, oppure premi Esc per tenere "
@@ -482,11 +482,11 @@ class Finestra:
         return dict(self.modifiche)
 
     def _vai_a(self, testo):
-        """Mostra la riga di un testo (con tutte le righe, se il filtro o la ricerca la nascondono)."""
+        """Shows a text's line (with all the lines, if the filter or the search hide it)."""
         x = self.elenco.voci[self.indice[testo]]
         if x not in self.mostrate:
             self.cerca.set("")
-            if self._ricerca_in_attesa is not None:  # (la ricerca vuota la rifa' qui sotto, subito)
+            if self._ricerca_in_attesa is not None:  # (the empty search is redone right below, immediately)
                 self.top.after_cancel(self._ricerca_in_attesa)
             self.scelta_filtro.current(0)
             self.aggiorna_elenco()
@@ -497,7 +497,7 @@ class Finestra:
         self._vai_alla_traduzione()
 
     def _salva_modifiche(self, modifiche):
-        """Salva (correzioni.salva); False se non riesce (la finestra resta aperta, con le modifiche)."""
+        """Saves (correzioni.salva); False if it fails (the window stays open, with the changes)."""
         viste = {t: self.elenco.voci[self.indice[t]].cache for t in modifiche} if self.elenco.unity else None
         try:
             correzioni.salva(self.elenco.percorso_profilo, modifiche, viste, prova=self.elenco.prova,
@@ -510,7 +510,8 @@ class Finestra:
         return True
 
     def salva(self):
-        """"Salva e applica al gioco": le correzioni in memoria, poi (finestra chiusa) "Riapplica" da sola."""
+        """"Save and apply to the game": the fixes in the translation memory, then (window closed) "Reapply" by
+        itself."""
         if not self.modifiche:
             self._avvisa("Niente da salvare", "Non hai ancora corretto nessuna traduzione: scegli una riga, scrivi la "
                          "traduzione qui sotto e poi premi \"Salva e applica al gioco\".")
@@ -523,7 +524,7 @@ class Finestra:
         return True
 
     def _prima_salva(self):
-        """Prima di un'operazione della finestra principale: le correzioni non salvate si salvano (o si annulla)."""
+        """Before an operation of the main window: the unsaved fixes are saved (or it is cancelled)."""
         if not self.modifiche:
             return True
         scelta = self._scegli("Correzioni non salvate", "Hai %s: salvo le correzioni prima di continuare?" % _quante(

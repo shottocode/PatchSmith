@@ -1,15 +1,15 @@
-"""Rilevamento del motore di gioco.
+"""Game engine detection.
 
-Usa le regole di SteamDB (FileDetectionRuleSets, licenza MIT, file data/rules.ini) sui percorsi
-dei file, piu' controlli sui primi byte dei file e un secondo livello per i giochi web
-(Electron / NW.js / HTML5). Ogni risultato ha un punteggio e l'elenco delle evidenze.
+Uses the SteamDB rules (FileDetectionRuleSets, MIT license, file data/rules.ini) on the file
+paths, plus checks on the first bytes of the files and a second level for web games
+(Electron / NW.js / HTML5). Each result has a score and the list of evidence.
 """
 import json
 import os
 import re
 import struct
 
-try:  # albero delle regex (modulo interno di Python 3.11): serve solo al prefiltro di _indice
+try:  # regex tree (internal module of Python 3.11): only needed by the _indice prefilter
     from re import _parser as _albero_re
     from re._constants import AT, AT_END, BRANCH, LITERAL, SUBPATTERN
 except ImportError:
@@ -19,12 +19,12 @@ CARTELLA_DATI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 SEZIONI = ("Engine", "Container", "SDK", "AntiCheat", "Launcher", "Emulator", "Evidence")
 PESI = {"Engine": 3, "Container": 3, "SDK": 1, "AntiCheat": 1, "Launcher": 1, "Emulator": 3, "Evidence": 1}
 MAX_FILE = 200_000
-MAX_PUNTI_REGOLE = 15  # tetto ai punti dati dalle regole sui nomi per ogni voce
-LUNGHEZZA_CHIAVE = 12  # caratteri finali al massimo usati come chiave dal prefiltro per suffisso
-# Installer di dipendenze inclusi in alcune copie del gioco: non dicono nulla sul motore.
+MAX_PUNTI_REGOLE = 15  # cap on the points given by the name rules for each entry
+LUNGHEZZA_CHIAVE = 12  # maximum number of final characters used as a key by the suffix prefilter
+# Dependency installers included in some copies of the game: they say nothing about the engine.
 CARTELLE_IGNORATE = {"_redist", "_commonredist", "redist", "redistributables", "directx", "vcredist"}
 
-# Strada consigliata per motore (stato della Fase 0).
+# Recommended route per engine (state of Phase 0).
 CONSIGLI = {
     "Web": "Supportato ora: adapter web-json (comandi scan e translate).",
     "Electron": "Supportato ora: adapter web-json (comandi scan e translate).",
@@ -51,7 +51,7 @@ CONSIGLI = {
     "WolfRPGEditor": "Al meglio (Fase 3): UberWolf + WolfTL.",
 }
 
-# Firme nei primi byte: (regex sul percorso, firma, motore, descrizione)
+# Signatures in the first bytes: (regex on the path, signature, engine, description)
 FIRME = [
     (r"\.pck$", b"GDPC", "Godot", "archivio .pck Godot (GDPC)"),
     (r"(?:^|/)(?:data\.win|game\.unx|game\.ios)$", b"FORM", "GameMaker", "data.win GameMaker (FORM)"),
@@ -92,20 +92,20 @@ def carica_regole(percorso=None):
             try:
                 regole[sezione].append((m.group(1).strip(), re.compile(m.group(2), re.I)))
             except re.error:
-                pass  # regola PCRE non supportata da Python: la saltiamo
+                pass  # PCRE rule not supported by Python: skip it
     return regole
 
 
 def _sequenze(albero, limite=256):
-    """Sviluppa alternative e gruppi semplici: ogni sequenza e' un cammino possibile di un match."""
+    """Expands alternatives and simple groups: each sequence is a possible path of a match."""
     sequenze = [[]]
     for op, av in albero:
         if op == BRANCH:
             varianti = [s for ramo in av[1] for s in _sequenze(ramo, limite)]
-        elif op == SUBPATTERN and not av[1] and not av[2]:  # gruppo senza flag propri
+        elif op == SUBPATTERN and not av[1] and not av[2]:  # group without its own flags
             varianti = _sequenze(av[3], limite)
         else:
-            varianti = [[(op, av)]]  # elemento opaco: quantificatori, classi, ancore, lookaround...
+            varianti = [[(op, av)]]  # opaque element: quantifiers, classes, anchors, lookarounds...
         sequenze = [s + v for s in sequenze for v in varianti]
         if len(sequenze) > limite:
             raise ValueError("troppe alternative")
@@ -113,10 +113,10 @@ def _sequenze(albero, limite=256):
 
 
 def _chiavi(rx):
-    """Condizioni necessarie perche' rx.search() trovi qualcosa in un percorso ASCII senza a capo.
+    """Necessary conditions for rx.search() to find something in an ASCII path without newlines.
 
-    Insieme di coppie ("fine", s) / ("contiene", s), con s in minuscolo: se la regex trova qualcosa,
-    almeno una e' vera per il percorso in minuscolo. None se non si deducono: regex da provare sempre.
+    Set of pairs ("fine", s) / ("contiene", s), with s in lowercase: if the regex finds something,
+    at least one is true for the lowercased path. None if they cannot be deduced: a regex to always try.
     """
     if _albero_re is None or rx.flags & re.MULTILINE:
         return None
@@ -126,7 +126,7 @@ def _chiavi(rx):
         return None
     chiavi = set()
     for seq in sequenze:
-        if seq and seq[-1] == (AT, AT_END):  # finisce con $: conta il letterale subito prima
+        if seq and seq[-1] == (AT, AT_END):  # ends with $: the literal right before it counts
             coda = ""
             for op, av in reversed(seq[:-1]):
                 if op != LITERAL or av > 127:
@@ -135,19 +135,19 @@ def _chiavi(rx):
             if coda:
                 chiavi.add(("fine", coda[-LUNGHEZZA_CHIAVE:]))
                 continue
-        tratto = migliore = ""  # altrimenti il tratto letterale piu' lungo
+        tratto = migliore = ""  # otherwise the longest literal stretch
         for op, av in seq:
             tratto = tratto + chr(av).lower() if op == LITERAL and av <= 127 else ""
             migliore = max(migliore, tratto, key=len)
         if not migliore:
             return None
         chiavi.add(("contiene", migliore))
-    # Basta la condizione piu' debole: "fine x.dll" rende superflua "fine /x.dll".
+    # The weakest condition is enough: "fine x.dll" makes "fine /x.dll" redundant.
     return {a for a in chiavi if not any(b != a and _implica(a, b) for b in chiavi)}
 
 
 def _implica(a, b):
-    """Vero se ogni percorso che soddisfa la chiave a soddisfa anche la chiave b."""
+    """True if every path that satisfies key a also satisfies key b."""
     (tipo_a, testo_a), (tipo_b, testo_b) = a, b
     if tipo_b == "fine":
         return tipo_a == "fine" and testo_a.endswith(testo_b)
@@ -155,10 +155,10 @@ def _implica(a, b):
 
 
 def _indice(espressioni):
-    """Prefiltro per provare molte regex su molti percorsi senza chiamarle tutte su ognuno.
+    """Prefilter to try many regexes on many paths without calling all of them on each one.
 
-    Restituisce una funzione che, dato un percorso, elenca in ordine crescente gli indici delle regex
-    che potrebbero trovarvi qualcosa (le altre di sicuro no): vanno poi verificate con search().
+    Returns a function that, given a path, lists in ascending order the indexes of the regexes
+    that might find something in it (the others surely not): they must then be verified with search().
     """
     per_fine, per_contenuto, sempre = {}, {}, []
     for i, rx in enumerate(espressioni):
@@ -174,8 +174,8 @@ def _indice(espressioni):
     tutte = list(range(len(espressioni)))
 
     def candidate(percorso):
-        # Le chiavi valgono per maiuscole/minuscole ASCII e con $ solo a fine stringa: negli altri
-        # casi (rarissimi) si provano tutte le regex.
+        # The keys hold for ASCII upper/lower case and with $ only at the end of the string: in the
+        # other (very rare) cases all regexes are tried.
         if not percorso.isascii() or "\n" in percorso:
             return tutte
         p = percorso.lower()
@@ -192,7 +192,7 @@ def _indice(espressioni):
 
 
 def _filtra(espressioni, elenco):
-    """Per ogni regex, i percorsi di elenco (nello stesso ordine) in cui search() trova qualcosa."""
+    """For each regex, the paths of elenco (in the same order) in which search() finds something."""
     candidate = _indice(espressioni)
     trovati = [[] for _ in espressioni]
     for percorso in elenco:
@@ -203,7 +203,7 @@ def _filtra(espressioni, elenco):
 
 
 def elenca_file(cartella):
-    """Percorsi relativi con / come separatore."""
+    """Relative paths with / as separator."""
     elenco = []
     for radice, dirs, files in os.walk(cartella):
         dirs[:] = sorted(d for d in dirs if d.lower() not in CARTELLE_IGNORATE)
@@ -240,7 +240,7 @@ def _leggi_fine(percorso, n=4):
 
 
 def voci_asar(percorso):
-    """Elenco dei file contenuti in un archivio .asar di Electron (solo intestazione)."""
+    """List of the files contained in an Electron .asar archive (header only)."""
     try:
         with open(percorso, "rb") as f:
             testa = f.read(16)
@@ -262,7 +262,7 @@ def voci_asar(percorso):
 
 
 def _framework_web(cartella, elenco):
-    """Riconosce i framework web nelle cartelle che contengono index.html (anche dentro .asar)."""
+    """Recognizes the web frameworks in the folders that contain index.html (also inside .asar)."""
     trovati = {}
     radici = [p for p in elenco if p.lower().endswith("index.html") and "node_modules/" not in p]
     for asar in (p for p in elenco if p.lower().endswith(".asar")):
@@ -292,7 +292,7 @@ def _framework_web(cartella, elenco):
 
 
 def rileva(cartella):
-    """Restituisce un dizionario con risultati, framework web, radici web e consigli."""
+    """Returns a dictionary with results, web frameworks, web roots and recommendations."""
     regole = carica_regole()
     elenco, troncato = elenca_file(cartella)
     risultati = {}  # (sezione, nome) -> {"punteggio", "evidenze"}
@@ -309,7 +309,7 @@ def rileva(cartella):
     tutte = [(s, n, rx) for s in SEZIONI for n, rx in regole[s]]
     candidate = _indice([rx for _, _, rx in tutte])
     for percorso in elenco:
-        for i in candidate(percorso):  # stesso ordine (percorso, regola) del confronto con tutte
+        for i in candidate(percorso):  # same (path, rule) order as comparing with all of them
             sezione, nome, rx = tutte[i]
             if rx.search(percorso):
                 _aggiungi(sezione, nome, percorso, PESI[sezione], da_regola=True)
@@ -321,25 +321,25 @@ def rileva(cartella):
                 _aggiungi("Engine", motore, "%s: %s" % (descrizione, percorso), 10)
                 break
 
-    # Godot con il pacchetto dei dati incorporato nell'eseguibile (esportazione "embed pck"): "GDPC" in fondo
+    # Godot with the data package embedded in the executable ("embed pck" export): "GDPC" at the end
     for percorso in elenco:
         if percorso.lower().endswith(".exe") and percorso.count("/") <= 1 and                 _leggi_fine(os.path.join(cartella, percorso)) == b"GDPC":
             _aggiungi("Engine", "Godot", "%s (pacchetto dei dati incorporato)" % percorso, 10)
             break
 
-    # Unity: Mono o IL2CPP
+    # Unity: Mono or IL2CPP
     if any(p.lower().endswith("gameassembly.dll") for p in elenco):
         _aggiungi("SDK", "UnityIL2CPP", "GameAssembly.dll", 5)
     if any(p.lower().endswith("managed/assembly-csharp.dll") for p in elenco):
         _aggiungi("SDK", "UnityMono", "Managed/Assembly-CSharp.dll", 5)
 
-    # Electron anche senza LICENSE.electron.txt (spesso tolto): i file di Chromium accanto a resources/app
+    # Electron even without LICENSE.electron.txt (often removed): the Chromium files next to resources/app
     minuscoli = {p.lower() for p in elenco}
     if any(p.endswith("chrome_100_percent.pak") for p in minuscoli) and \
             any(p.endswith("v8_context_snapshot.bin") or p.endswith("snapshot_blob.bin") for p in minuscoli) and \
             any("resources/app" in p for p in minuscoli):
         _aggiungi("Container", "Electron", "file di Chromium e resources/app", 10)
-    # archivi cifrati: i testi non si leggono senza togliere una protezione degli sviluppatori (non lo facciamo)
+    # encrypted archives: the texts cannot be read without removing a developers' protection (we do not do that)
     for p in elenco:
         if p.lower().endswith("resources/app/gemshell-assets"):
             _aggiungi("Container", "GemShell", "%s (cifrato)" % p, 10)
@@ -357,7 +357,7 @@ def rileva(cartella):
     motori = [r for r in ordinati if r["sezione"] in ("Engine", "Container", "Emulator")]
     migliore = max((r["punteggio"] for r in motori), default=0)
     consigli = []
-    for r in motori:  # consigli solo per i motori con almeno meta' del punteggio migliore
+    for r in motori:  # recommendations only for engines with at least half of the best score
         if r["punteggio"] * 2 >= migliore and r["nome"] in CONSIGLI and CONSIGLI[r["nome"]] not in consigli:
             consigli.append(CONSIGLI[r["nome"]])
     return {
@@ -371,11 +371,11 @@ def rileva(cartella):
     }
 
 
-CIFRATI = ("GemShell",)  # contenitori che cifrano i file del gioco: PatchSmith non li apre
+CIFRATI = ("GemShell",)  # containers that encrypt the game's files: PatchSmith does not open them
 
 
 def contenitore_cifrato(esito):
-    """Il nome del contenitore che cifra i file del gioco (es. 'GemShell'), o None."""
+    """The name of the container that encrypts the game's files (e.g. 'GemShell'), or None."""
     return next((r["nome"] for r in esito.get("risultati", ()) if r["sezione"] == "Container"
                  and r["nome"] in CIFRATI), None)
 
@@ -394,7 +394,7 @@ def stampa(esito, log=print):
     componenti = 0
     for r in esito["risultati"]:
         if r["sezione"] == "Evidence" and ha_motore:
-            continue  # gli indizi servono solo se il motore non e' stato riconosciuto
+            continue  # the clues are only needed if the engine was not recognized
         if r["sezione"] in ("SDK", "Launcher"):
             componenti += 1
             if componenti > 8:

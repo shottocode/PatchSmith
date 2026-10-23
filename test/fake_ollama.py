@@ -1,13 +1,13 @@
-"""Ollama simulato per i test: risponde su 127.0.0.1 alla porta di OLLAMA_HOST.
+"""Simulated Ollama for the tests: answers on 127.0.0.1 at the port of OLLAMA_HOST.
 
-Uso (lo lancia ollama.Server nei test): python -I fake_ollama.py serve
-- /api/version, /api/tags, /api/ps, /api/generate, /api/chat (traduce anteponendo "IT:"), /api/pull (NDJSON);
-- con PATCHSMITH_FINTO_MUORI=1 esce subito (server che non parte);
-- scrive l'ambiente ricevuto in PATCHSMITH_FINTO_AMBIENTE (per controllare le variabili passate);
-- con PATCHSMITH_FINTO_LENTO=secondi aspetta prima di rispondere (avvio lento);
-- con PATCHSMITH_FINTO_SEMI_SBAGLIATI=42,7,11 risponde con l'originale (non tradotto) alle richieste con quei semi;
-- con PATCHSMITH_FINTO_RICHIESTE=<file> aggiunge al file una riga JSON per ogni /api/chat: {testo, seed, temperature,
-  model} (il registro delle richieste, per le prove).
+Usage (ollama.Server starts it in the tests): python -I fake_ollama.py serve
+- /api/version, /api/tags, /api/ps, /api/generate, /api/chat (translates by prepending "IT:"), /api/pull (NDJSON);
+- with PATCHSMITH_FINTO_MUORI=1 it exits at once (a server that does not start);
+- writes the environment it received to PATCHSMITH_FINTO_AMBIENTE (to check the variables passed);
+- with PATCHSMITH_FINTO_LENTO=seconds it waits before answering (slow start);
+- with PATCHSMITH_FINTO_SEMI_SBAGLIATI=42,7,11 it answers with the original (untranslated) to requests with those seeds;
+- with PATCHSMITH_FINTO_RICHIESTE=<file> it appends to the file one JSON line per /api/chat: {testo, seed,
+  temperature, model} (the log of requests, for the tests).
 """
 import json
 import os
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     if os.environ.get("PATCHSMITH_FINTO_MUORI"):
         print("errore simulato: impossibile avviare", flush=True)
         sys.exit(3)
-    if os.environ.get("PATCHSMITH_FINTO_LENTO"):  # server che ci mette un po' ad avviarsi
+    if os.environ.get("PATCHSMITH_FINTO_LENTO"):  # a server that takes a while to start
         import time
         time.sleep(float(os.environ["PATCHSMITH_FINTO_LENTO"]))
     if os.environ.get("PATCHSMITH_FINTO_AMBIENTE"):

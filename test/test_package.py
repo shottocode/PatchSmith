@@ -1,11 +1,12 @@
-"""Pacchetto da pubblicare (package.py): cartella e zip con PatchSmith.exe e il Python portatile.
+"""Package to publish (package.py): folder and zip with PatchSmith.exe and the portable Python.
 
-Uso: python -I test/test_package.py <cartella_di_prova_che_non_esiste>
-- il pacchetto con il programma, PatchSmith.exe e runtime/ (Python con Tkinter e il file ._pth), senza i dati di chi
-  usa PatchSmith, le prove e i componenti scaricati; lo zip con la sola cartella PatchSmith, senza __pycache__;
-- il Python portatile parte da solo (lo prova gia' prepara) e fa girare smith.py;
-- PatchSmith.exe sceglie il Python portatile anche con un Python installato (qui un PatchSmith.pyw di prova);
-- un pacchetto usato (con dei dati dentro) non si cancella; il pacchetto non va dentro la cartella del programma.
+Usage: python -I test/test_package.py <test_folder_that_does_not_exist>
+- the package with the program, PatchSmith.exe and runtime/ (Python with Tkinter and the ._pth file), without the data
+  of whoever uses PatchSmith, the tests and the downloaded components; the zip with only the PatchSmith folder, without
+  __pycache__;
+- the portable Python starts on its own (prepara already tests it) and runs smith.py;
+- PatchSmith.exe chooses the portable Python even with an installed Python (here a test PatchSmith.pyw);
+- a used package (with data inside) is not deleted; the package does not go inside the program's folder.
 """
 import os
 import subprocess
@@ -42,7 +43,7 @@ def main(base):
               "runtime/Lib/tkinter/__init__.py", "runtime/LICENSE.txt"]
     mancano = [a for a in attesi if not os.path.isfile(os.path.join(cartella, *a.split("/")))]
     pth = [n for n in os.listdir(runtime) if n.endswith("._pth")]
-    # la libreria di Tcl: la cartella tcl8.6 con init.tcl, o da Tcl 9 lo zip libtcl9.x.zip
+    # the Tcl library: the tcl8.6 folder with init.tcl, or from Tcl 9 the libtcl9.x.zip zip
     tcl = [n for n in os.listdir(os.path.join(runtime, "tcl")) if n.startswith("libtcl") and n.endswith(".zip")
            or os.path.isfile(os.path.join(runtime, "tcl", n, "init.tcl"))]
     if not tcl:
@@ -64,7 +65,7 @@ def main(base):
     r = subprocess.run([os.path.join(runtime, "python.exe"), "-I", os.path.join(cartella, "smith.py"), "-h"],
                        capture_output=True, timeout=60, cwd=base)
     controlla("smith.py con il Python portatile", r.returncode == 0 and b"pacchetto" in r.stdout)
-    # PatchSmith.exe: con un Python installato sceglie comunque quello del pacchetto
+    # PatchSmith.exe: with an installed Python it still chooses the package's one
     with open(os.path.join(cartella, "PatchSmith.pyw"), "w", encoding="utf-8") as f:
         f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partito.txt'), 'w')"
                 ".write(sys.executable)\n")
@@ -77,7 +78,7 @@ def main(base):
     usato = open(partito, encoding="utf-8").read() if os.path.isfile(partito) else None
     controlla("PatchSmith.exe apre PatchSmith con il Python portatile (%s)" % usato,
               usato and os.path.normcase(usato) == os.path.normcase(os.path.join(runtime, "pythonw.exe")))
-    # un pacchetto in cui qualcuno ha lavorato: i suoi dati restano
+    # a package someone has worked in: its data stays
     os.makedirs(os.path.join(cartella, "profiles"))
     try:
         pacchetto.prepara(os.path.join(base, "rilascio"), log=lambda _r: None)

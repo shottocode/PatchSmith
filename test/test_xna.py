@@ -1,7 +1,7 @@
-"""Test dell'adapter XNA/.NET con un gioco finto costruito qui (csc.exe di Windows + un font XNB finto).
+"""Test of the XNA/.NET adapter with a fake game built here (Windows' csc.exe + a fake XNB font).
 
-Uso: python -I test/test_xna.py <cartella_temporanea_vuota>
-Il "gioco" e la sonda sono programmi .NET minimi creati dal test: nessun gioco vero viene avviato.
+Usage: python -I test/test_xna.py <empty_temp_folder>
+The "game" and the probe are minimal .NET programs created by the test: no real game is started.
 """
 import hashlib
 import json
@@ -36,14 +36,14 @@ def csc(*argomenti, cwd):
 
 
 def resources(voci):
-    """.resources con sole stringhe, nel formato di ResourceWriter (scritto con l'info minima)."""
+    """.resources with only strings, in ResourceWriter's format (written with the minimal info)."""
     info = {"lettore": dotnet.LETTORE_PREDEFINITO, "insieme": dotnet.INSIEME_PREDEFINITO, "versione": 2, "tipi": [],
             "voci": [(k, dotnet.TIPO_STRINGA, v) for k, v in sorted(voci.items())]}
     return dotnet.scrivi_resources(info)
 
 
 def font_xnb(caratteri):
-    """SpriteFont XNB v5 non compresso con i caratteri dati (texture 1x1, glifi finti)."""
+    """Uncompressed XNB v5 SpriteFont with the given characters (1x1 texture, fake glyphs)."""
     def s7(n):
         b = bytearray()
         while True:
@@ -92,7 +92,7 @@ def crea_gioco(base, lavoro):
     ascii_ = [chr(c) for c in range(32, 127)]
     open(os.path.join(base, "Content", "Fonts", "Pixel.xnb"), "wb").write(font_xnb(ascii_))
     open(os.path.join(base, "Content", "Fonts", "Numeri.xnb"), "wb").write(font_xnb(list("0123456789")))
-    # sonda: usa il vero ResourceManager di .NET sulla copia del gioco
+    # probe: uses the real .NET ResourceManager on the copy of the game
     open(os.path.join(lavoro, "Sonda.cs"), "w").write(
         "using System; using System.Globalization; using System.Reflection; using System.Resources;\n"
         "class Sonda { static void Main(string[] a) {\n"
@@ -130,13 +130,13 @@ def main(base):
     crea_gioco(gioco, lavoro)
     prima = impronte(gioco)
 
-    # versione dei satelliti: [SatelliteContractVersion("1.0")] vale 1.0.0.0, come per csc
+    # satellite version: [SatelliteContractVersion("1.0")] means 1.0.0.0, as for csc
     open(os.path.join(lavoro, "Contratto.cs"), "w").write(
         "[assembly: System.Resources.SatelliteContractVersion(\"1.0\")]\nclass C {}\n")
     csc("/target:library", "/out:" + os.path.join(lavoro, "Contratto.dll"), "Contratto.cs", cwd=lavoro)
     controlla("SatelliteContractVersion \"1.0\" -> 1.0.0.0",
               dotnet.Assembly(os.path.join(lavoro, "Contratto.dll")).versione_satelliti() == "1.0.0.0")
-    # nomi con lo stesso hash: si riscrivono identici e si rileggono tutti
+    # names with the same hash: they are rewritten identical and all read back
     voci = {"K!!!": "uno", "K!>^": "due", "K\"B!": "tre", "Altro": "quattro"}
     controlla("nomi con lo stesso hash (prova valida)", len({dotnet.hash_nome(k) for k in list(voci)[:3]}) == 1)
     dati = resources(voci)
@@ -190,7 +190,7 @@ def main(base):
     adapter_xna.stato(gioco, righe.append)
     controlla("stato: satelliti presenti e integri", sum(r.strip().startswith("OK") for r in righe) == 2)
 
-    # reinstallazione (riapplica): stessi file, nessun errore
+    # reinstallation (reapply): same files, no error
     adapter_xna.installa(gioco, "en", "it", "prova", memoria, silenzio)
     controlla("riapplica: nessun file in piu'", set(impronte(gioco)) == set(dopo))
 
@@ -199,7 +199,7 @@ def main(base):
               and not os.path.exists(os.path.join(gioco, "en")))
     controlla("disinstalla: il gioco torna in inglese", sonda(lavoro, gioco).get("en-US") == "Start the adventure")
 
-    # satellite en gia' presente e non nostro: non si sovrascrive
+    # en satellite already present and not ours: it is not overwritten
     os.makedirs(os.path.join(gioco, "en"))
     open(os.path.join(gioco, "en", "Gioco.resources.dll"), "wb").write(b"di qualcun altro")
     try:
@@ -211,7 +211,7 @@ def main(base):
     os.remove(os.path.join(gioco, "en", "Gioco.resources.dll"))
     os.rmdir(os.path.join(gioco, "en"))
 
-    # manifesto alterato: nulla cancellato
+    # tampered manifest: nothing deleted
     sat_de = os.path.join(gioco, "de", "Gioco.resources.dll")
     falso = {"patchsmith": True, "file": {"de/Gioco.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
              "cartelle_create": ["de"]}
@@ -228,7 +228,7 @@ def main(base):
         controlla("manifesto con percorso fuori posto: rifiutato", os.path.exists(os.path.join(gioco, "Gioco.exe")))
     os.remove(os.path.join(gioco, adapter_xna.MANIFESTO))
 
-    # installazione interrotta prima di mettere i file al loro posto: il ripristino toglie tutto
+    # installation interrupted before moving the files into place: the restore removes everything
     vero_replace = os.replace
 
     def replace_interrotto(a, b):
@@ -246,8 +246,8 @@ def main(base):
     adapter_xna.disinstalla(gioco, silenzio)
     controlla("installazione interrotta: il ripristino toglie tutto", impronte(gioco) == prima)
 
-    # --- scenari emersi dalla revisione ---------------------------------------------------------
-    # manifesto perso ma satelliti nostri presenti: non contano come lingue del gioco, stato e ripristino li vedono
+    # --- scenarios that came up in the review ---------------------------------------------------
+    # manifest lost but our satellites present: they do not count as game languages, status and restore see them
     adapter_xna.installa(gioco, "en", "it", "prova", memoria, silenzio)
     os.remove(os.path.join(gioco, adapter_xna.MANIFESTO))
     controlla("senza manifesto: i satelliti nostri non contano come lingue del gioco",
@@ -257,7 +257,7 @@ def main(base):
     controlla("senza manifesto: lo stato li segnala", any("senza manifesto" in r for r in righe))
     controlla("senza manifesto: il ripristino li toglie", adapter_xna.disinstalla(gioco, silenzio) and impronte(gioco) == prima)
 
-    # sostituzione interrotta, poi cambio lingua, poi ripristino: niente resta indietro
+    # replacement interrupted, then language change, then restore: nothing is left behind
     adapter_xna.os.replace = replace_interrotto
     try:
         adapter_xna.installa(gioco, "en", "it", "prova", memoria, silenzio)
@@ -272,7 +272,7 @@ def main(base):
     adapter_xna.disinstalla(gioco, silenzio)
     controlla("... e il ripristino riporta tutto com'era", impronte(gioco) == prima)
 
-    # manifesto che elenca il satellite ufficiale con la sua impronta: una nuova installazione non lo tocca
+    # manifest that lists the official satellite with its fingerprint: a new installation does not touch it
     falso = {"patchsmith": True, "file": {"de/Gioco.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
              "cartelle_create": ["de"]}
     open(os.path.join(gioco, adapter_xna.MANIFESTO), "w").write(json.dumps(falso))
@@ -281,14 +281,14 @@ def main(base):
               and impronte(gioco)["de" + os.sep + "Gioco.resources.dll"] == prima["de" + os.sep + "Gioco.resources.dll"])
     adapter_xna.disinstalla(gioco, silenzio)
 
-    # lingua scritta a mano non valida: errore prima di scrivere qualsiasi cosa
+    # invalid hand-typed language: error before writing anything
     try:
         adapter_xna.installa(gioco, "English", "Italian", "prova", memoria, silenzio)
         controlla("lingua non valida: rifiutata", False)
     except adapter_xna.ErroreXna:
         controlla("lingua non valida: rifiutata senza scrivere nulla", impronte(gioco) == prima)
 
-    # errore di scrittura a meta': nessuna cartella vuota resta indietro
+    # write error halfway: no empty folder is left behind
     vero_open = open
 
     def open_rotto(percorso, modo="r", *a, **k):
@@ -307,7 +307,7 @@ def main(base):
     controlla("errore di scrittura: nessuna cartella vuota rimasta", impronte(gioco) == prima
               and not os.path.exists(os.path.join(gioco, "en")) and not os.path.exists(os.path.join(gioco, "it")))
 
-    # font: cartella con [..] nel nome, XNB compresso, elenco non ordinato, font di sole maiuscole
+    # fonts: folder with [..] in its name, compressed XNB, unsorted list, uppercase-only font
     fonts = os.path.join(base, "font [v1.0]")
     os.makedirs(os.path.join(fonts, "Content", "Fonts"))
     italiano = sorted(set(chr(c) for c in range(32, 127)) | set("àèéìòù"))
@@ -330,7 +330,7 @@ def main(base):
     controlla("font di sole maiuscole: vale anche per le minuscole, non per gli accenti",
               "a" in trovati and "A" in trovati and "è" not in trovati)
 
-    # aggiornamento del gioco: lo stato lo segnala
+    # game update: the status reports it
     adapter_xna.installa(gioco, "en", "it", "prova", memoria, silenzio)
     open(os.path.join(gioco, "Gioco.exe"), "ab").write(b"\x00")
     righe = []

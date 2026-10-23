@@ -1,18 +1,18 @@
-"""Prove dei formati dei file di lingua dei giochi nuovi (non Unity) e dei limiti dei loro motori.
+"""Tests of the language file formats of the new games (not Unity) and of the limits of their engines.
 
-Uso: python -I test/test_formats.py <cartella_temporanea_vuota>
-Giochi e file finti costruiti qui, sul modello di quelli veri visti in sola lettura (nessun testo dei giochi veri):
-- JSON con commenti // e /* */, virgole in fondo e sezioni (Another Door: localization/stringsEN.json): letto,
-  tradotto e riscritto identico byte per byte tranne i testi tradotti; codice della lingua attaccato al nome;
-- tabelle CSV con una colonna per lingua (Megaloot: translations.csv, divisa a mano sulle virgole; e una tabella con le
-  virgolette alla maniera del CSV), anche dentro un gioco GameMaker, con la traduzione ufficiale riconosciuta;
-- un gioco GameMaker senza file di lingua riconosciuti: il profilo della ricerca generica ha il motore, si traducono
-  anche le etichette di una parola e i caratteri si adattano ai font; lo stesso per XNA;
-- i font di GameMaker: quelli per un'altra scrittura e quelli di ripiego delle librerie non contano;
-- pagina web con i pulsanti PLAY e OK (test/web/index-inline.html) e stringhe del JavaScript che di sicuro si vedono;
-- Unreal senza .locres e con un pak illeggibile;
-- file saltati scritti nel registro.
-Scrive solo nella cartella temporanea (dati di PatchSmith compresi); nessuna rete (traduttore finto).
+Usage: python -I test/test_formats.py <empty_temp_folder>
+Fake games and files built here, modeled on real ones seen read-only (no texts from real games):
+- JSON with // and /* */ comments, trailing commas and sections (Another Door: localization/stringsEN.json): read,
+  translated and rewritten identical byte for byte except the translated texts; language code attached to the name;
+- CSV tables with one column per language (Megaloot: translations.csv, split by hand on commas; and a table with
+  quotes the CSV way), also inside a GameMaker game, with the official translation recognized;
+- a GameMaker game without recognized language files: the generic search's game profile has the engine, one-word
+  labels are translated too and the characters are adapted to the fonts; the same for XNA;
+- GameMaker fonts: those for another script and the libraries' fallback ones do not count;
+- web page with the PLAY and OK buttons (test/web/index-inline.html) and JavaScript strings that are surely visible;
+- Unreal without .locres and with an unreadable pak;
+- skipped files written to the log.
+Writes only in the temporary folder (PatchSmith's data included); no network (fake translator).
 """
 import hashlib
 import json
@@ -30,8 +30,8 @@ from patchsmith import (adapter_csv, adapter_gamemaker, adapter_unreal, adapter_
                         auto as automatico, backend, interruption as interruzione,
                         official_language as lingua_ufficiale, project as progetto, scan as scansione, steam)
 from patchsmith.characters import ASCII  # noqa: E402
-import test_gamemaker  # noqa: E402  (costruttore di data.win)
-import test_unreal as unreal_finto  # noqa: E402  (costruttore di pak e .locres)
+import test_gamemaker  # noqa: E402  (data.win builder)
+import test_unreal as unreal_finto  # noqa: E402  (pak and .locres builder)
 
 ESITI = []
 
@@ -61,7 +61,7 @@ def impronte(cartella):
             for r, _, fs in os.walk(cartella) for n in fs if "patchsmith" not in n}
 
 
-# --- traduttore finto ------------------------------------------------------------------------------
+# --- fake translator -------------------------------------------------------------------------------
 
 ITALIANO = {
     "Play": "Gioca", "QUIT": "ESCI", "quit": "esci", "OK": "Va bene", "return": "indietro", "English": "Italiano",
@@ -76,12 +76,12 @@ ITALIANO = {
     "Hello traveler; welcome to the shop": "Ciao viaggiatore, benvenuto nel negozio",
     "Your bag is full": "La tua borsa è piena", "wood": "legno", "stone": "pietra", "PLAY": "GIOCA",
     "Coal": "Carbone", "Everything is saved": "È tutto salvato",
-    "Open the old chest": "Apri il\nvecchio forziere",  # un a capo in piu': in una tabella non si puo' scrivere
+    "Open the old chest": "Apri il\nvecchio forziere",  # an extra line break: it cannot be written in a table
 }
 
 
 def finta(r):
-    """Traduzione finta riconoscibile: parole al contrario (nessuna parola inglese frequente, segnaposto intatti)."""
+    """Recognizable fake translation: words reversed (no common English words, placeholders intact)."""
     return re.sub(r"[A-Za-z]{2,}", lambda m: m.group(0)[::-1].lower() + "o", r)
 
 
@@ -98,7 +98,7 @@ class Traduttore(backend.Backend):
 
 
 def prepara_dati(base):
-    progetto.RADICE_DATI = os.path.join(base, "dati")  # mai i dati veri
+    progetto.RADICE_DATI = os.path.join(base, "dati")  # never the real data
     automatico.CARTELLA_PROFILI = None
     os.environ["LOCALAPPDATA"] = os.path.join(base, "appdata")
     steam.cartella_steam = lambda: None
@@ -107,12 +107,12 @@ def prepara_dati(base):
     automatico.crea_backend = lambda nome, log=print: Traduttore()
 
 
-# --- 1. JSON tollerante -----------------------------------------------------------------------------
+# --- 1. Lenient JSON --------------------------------------------------------------------------------
 
 def _porta(valori, lingua_nome):
-    """Un file di lingua alla maniera di Another Door (CRLF, tab, commenti, virgole in fondo, sezioni). 'valori':
-    {(sezione, chiave): testo}; i letterali scritti come json.dumps, tranne un identificativo scritto a mano con un
-    escape insolito (deve restare identico) e dei numeri scritti in modo particolare (1.50, 1e5)."""
+    """A language file in the style of Another Door (CRLF, tabs, comments, trailing commas, sections). 'valori':
+    {(sezione, chiave): testo}; the literals written as json.dumps, except an identifier written by hand with an
+    unusual escape (it must stay identical) and some numbers written in a particular way (1.50, 1e5)."""
     def s(sezione, chiave):
         return json.dumps(valori[(sezione, chiave)], ensure_ascii=False)
     righe = ["{", "", "\"meta\": {", "\t\"_langNameLocal\":%s," % json.dumps(lingua_nome, ensure_ascii=False), "},", "",
@@ -209,7 +209,7 @@ def prova_json_tollerante(base):
               not adapter_webjson.FileJSON(rigido).tollerante)
 
 
-# --- 2. GameMaker: file per lingua alla maniera di Another Door ----------------------------------------
+# --- 2. GameMaker: files per language in the style of Another Door -------------------------------------
 
 LATINO = set(chr(c) for c in range(32, 127)) | set("àèéìòùÀÈÉÌÒÙçâêôûœëïüöÁáíóúñ")
 GIAPPONESE = set(chr(c) for c in range(32, 127)) | set("çêñŒœ") | {chr(0x4E00 + i) for i in range(300)}
@@ -229,7 +229,7 @@ def gioco_porta(cartella, lingue=("EN", "FR", "DE")):
 
 
 def _scheletro(testo):
-    """Il testo con ogni letterale stringa sostituito da S: cio' che deve restare identico."""
+    """The text with every string literal replaced by S: what must stay identical."""
     return re.sub(rb'"(?:[^"\\]|\\.)*"', b"S", testo)
 
 
@@ -303,7 +303,7 @@ def prova_porta(base):
               dati_motore.get("trovata") is True and percorso is None and esito["esito"].codice == "UFFICIALE")
 
 
-# --- 3. tabelle CSV --------------------------------------------------------------------------------
+# --- 3. CSV tables ---------------------------------------------------------------------------------
 
 MEGALOOT = ("id,english,french,german,koreana,schinese,tchinese,italian\n"
             "\"?\"-label,\"?\",,,,,,\n"
@@ -318,7 +318,7 @@ MEGALOOT = ("id,english,french,german,koreana,schinese,tchinese,italian\n"
 
 def gioco_megaloot(cartella, italiano=False):
     testo = MEGALOOT
-    if italiano:  # colonna italiana piena: traduzione ufficiale
+    if italiano:  # full Italian column: official translation
         testo = "\n".join(r + ("Testo italiano" if i else "") for i, r in enumerate(testo.split("\n")))
     scrivi_byte(os.path.join(cartella, "translations.csv"), testo.encode("utf-8"))
     scrivi_byte(os.path.join(cartella, "content.csv"), b"Name,Value,Growth\nArmor,1,1.25\nGold,1,1\n")
@@ -386,8 +386,8 @@ def prova_csv(base):
               and adapter_csv.tabella(os.path.join(cartella, "una_lingua.csv")) is None
               and adapter_csv.tabella(os.path.join(cartella, "latino1.csv")) is None
               and sorted(adapter_csv.tabelle(cartella)) == ["rfc.csv", "translations.csv"])
-    # tabella divisa a mano in cui l'unica cella che non e' CSV valido sta nella colonna tradotta: dopo la
-    # traduzione il file sembrerebbe un CSV con le virgolette, ma si rilegge come lo legge il gioco
+    # table split by hand where the only cell that is not valid CSV is in the translated column: after the
+    # translation the file would look like a CSV with quotes, but it is read back the way the game reads it
     a_mano = adapter_csv.FileCSV(b'id,english,french\nhero,"Hero" rises,Le heros\nbye,Good bye,Au revoir\n'
                                  b'see,"Free",Gratuit\n')
     try:
@@ -398,7 +398,7 @@ def prova_csv(base):
               not a_mano.virgolette and [t for _, t in a_mano.testi(1)][0] == '"Hero" rises'
               and scritto == b"id,english,french\nhero,'L'eroe' sorge,Le heros\nbye,Arrivederci,Au revoir\n"
                              b'see,"Free",Gratuit\n')
-    # righe vuote tra i gruppi di testi (e in fondo): la colonna delle chiavi si riconosce lo stesso
+    # empty lines between groups of texts (and at the end): the key column is recognized anyway
     gruppi = adapter_csv.FileCSV(b"key,English,German\n\nmenu_play,Play,Spielen\nmenu_quit,Quit,Beenden\n\n\n"
                                  b"shop_hi,Hello there,Hallo\nshop_bye,Good bye,Tschuss\n\n")
     controlla("righe vuote tra i gruppi: chiave riconosciuta, tabella valida, riscrittura identica",
@@ -407,7 +407,7 @@ def prova_csv(base):
                                                           b"menu_quit,Esci,Beenden\n\n\nshop_hi,Hello there,Hallo\n"
                                                           b"shop_bye,Good bye,Tschuss\n\n")
 
-    # GameMaker con translations.csv
+    # GameMaker with translations.csv
     gioco = os.path.join(base, "Megaloot finto")
     gioco_megaloot(gioco)
     prima = impronte(gioco)
@@ -429,8 +429,8 @@ def prova_csv(base):
               sorted(k for k in impronte(gioco) if impronte(gioco)[k] != prima.get(k)) == ["translations.csv"]
               and automatico.ripristina(gioco, silenzio) and leggi_byte(os.path.join(gioco, "translations.csv"))
               == originale)
-    # una traduzione con un a capo in piu' resta in originale (il gioco legge una riga per testo), le altre si
-    # scrivono; la virgola diventa ';' anche qui
+    # a translation with an extra line break is left untranslated (the game reads one line per text), the others
+    # are written; the comma becomes ';' here too
     a_capo = os.path.join(base, "Tabella a capo")
     scrivi_byte(os.path.join(a_capo, "translations.csv"), (
         "id,english,french\nchest,Open the old chest,Ouvrir le vieux coffre\nbag,Your bag is full,Ton sac est plein\n"
@@ -453,12 +453,12 @@ def prova_csv(base):
               percorso is None and esito["esito"].codice == "UFFICIALE"
               and lingua_ufficiale.lingue_nei_file(con_it, "GameMaker", "it")[1]["trovata"] is True)
 
-    # ricerca generica (gioco web): la tabella diventa una voce del profilo
+    # generic search (web game): the table becomes an entry of the game profile
     web = os.path.join(base, "web con csv")
     scrivi_byte(os.path.join(web, "index.html"), b"<html><body><button>Start</button></body></html>")
     scrivi_byte(os.path.join(web, "lang", "translations.csv"), MEGALOOT.encode("utf-8"))
     scrivi_byte(os.path.join(web, "lang", "sorgente.csv"), MEGALOOT.encode("utf-8"))
-    scrivi_byte(os.path.join(web, "lang", "sorgente.csv.import"), b"[remap]\n")  # sorgente di Godot: non si tocca
+    scrivi_byte(os.path.join(web, "lang", "sorgente.csv.import"), b"[remap]\n")  # Godot source: not touched
     candidati, altri = scansione.scansiona(web, silenzio)
     profilo = scansione.crea_profilo("web-csv", web, candidati, "auto", "it", "finto")
     controlla("ricerca generica: tabella CSV come voce del profilo (il sorgente di Godot no)",
@@ -468,7 +468,7 @@ def prova_csv(base):
               and "lang/sorgente.csv" not in [p for elenco in altri.values() for p in elenco])
 
 
-# --- 4. GameMaker e XNA dalla ricerca generica ----------------------------------------------------------
+# --- 4. GameMaker and XNA from the generic search -------------------------------------------------------
 
 UI = {"btn_play": "PLAY", "btn_quit": "quit", "item_wood": "wood", "item_stone": "stone", "item_coal": "Coal",
       "msg_bag": "Your bag is full", "msg_saved": "Everything is saved", "icon": "icons/wood.png"}
@@ -478,7 +478,7 @@ UI.update({"msg_%02d" % i: "The lantern number %d is now lit" % i for i in range
 def prova_generico(base):
     gioco = os.path.join(base, "Isola GM")
     scrivi_byte(os.path.join(gioco, "texts", "ui.json"), json.dumps(UI, indent=1).encode("utf-8"))
-    senza_e = set(chr(c) for c in range(32, 127)) | set("àéìòù")  # font del gioco senza è
+    senza_e = set(chr(c) for c in range(32, 127)) | set("àéìòù")  # game font without è
     scrivi_byte(os.path.join(gioco, "data.win"), test_gamemaker.data_win([("fntMain", senza_e)]))
     scrivi_byte(os.path.join(gioco, "Isola.exe"), b"MZ")
     _, esito = automatico.prepara(gioco, "auto", "it", "dizionario", silenzio)
@@ -501,7 +501,7 @@ def prova_generico(base):
     controlla("caratteri adattati ai font del gioco (è -> e', È -> E'; à resta)",
               dati["msg_bag"] == "La tua borsa e' piena" and dati["msg_saved"] == "E' tutto salvato")
 
-    # prima del punto 8 un profilo generico non aveva il motore: alla nuova analisi lo prende
+    # before point 8 a generic game profile did not have the engine: it gets it at the next analysis
     vecchio = dict(profilo)
     vecchio.pop("motore")
     vecchio.pop("motore_gioco")
@@ -510,9 +510,9 @@ def prova_generico(base):
     controlla("profilo generico vecchio senza motore: aggiornato", json.load(open(percorso, encoding="utf-8")).get(
         "motore") == "gamemaker")
 
-    # un file di dati con un elenco di oggetti (come PluginInfo.json dei suoni Wwise: nome, tipo e libreria di ogni
-    # effetto) non e' una tabella di testi anche se molti valori sembrano parole: 'Effect' o 'Windows' tradotti
-    # romperebbero l'audio. Una tabella a sezioni ({"menu": {"_play": "Play"}}) invece si'
+    # a data file with a list of objects (like the PluginInfo.json of Wwise sounds: name, type and library of each
+    # effect) is not a text table even if many values look like words: 'Effect' or 'Windows' translated would break
+    # the audio. A table with sections ({"menu": {"_play": "Play"}}) instead is
     dati_audio = os.path.join(base, "Dati audio")
     librerie = [{"LibName": "Sound %s" % n, "LibId": str(1000 + i), "Type": "Effect", "DLL": "Snd%s" % n,
                  "StaticLib": "Snd%sFX" % n} for i, n in enumerate(("Echo", "Delay", "Chorus", "Limiter"))]
@@ -524,7 +524,7 @@ def prova_generico(base):
     scrivi_byte(os.path.join(dati_audio, "text", "menu.json"), json.dumps(
         {"menu": {"_play": "Play", "_quit": "Quit", "_ok": "OK"}, "shop": {"_k%d" % i: "Buy the item number %d" % i
                                                                            for i in range(20)}}).encode("utf-8"))
-    # una famiglia di file per lingua con un elenco di oggetti: gli identificativi ('sword') restano fuori
+    # a family of files per language with a list of objects: the identifiers ('sword') stay out
     for codice, nome in (("en", "The sharp sword with a golden handle number %d"),
                          ("fr", "L'epee tranchante avec une poignee en or numero %d")):
         scrivi_byte(os.path.join(dati_audio, "items", codice + ".json"), json.dumps(
@@ -544,7 +544,7 @@ def prova_generico(base):
               and not voci.get("items/en.json", {}).get("localizzazione")
               and voci.get("items/en.json", {}).get("includi") == ["items[].name"])
 
-    # XNA: profilo generico con il motore rilevato (i font XNB del gioco sono simulati: solo ASCII)
+    # XNA: generic game profile with the detected engine (the game's XNB fonts are simulated: ASCII only)
     xna = os.path.join(base, "Isola XNA")
     scrivi_byte(os.path.join(xna, "Content", "lang.json"), json.dumps(UI).encode("utf-8"))
     candidati, _ = scansione.scansiona(xna, silenzio)
@@ -566,7 +566,7 @@ def prova_generico(base):
               and dati["item_wood"] == "legno" and all(c in ASCII for v in dati.values() for c in v))
 
 
-# --- 5. font di GameMaker ---------------------------------------------------------------------------
+# --- 5. GameMaker fonts -----------------------------------------------------------------------------
 
 def prova_font(base):
     gioco = os.path.join(base, "Font GM")
@@ -575,14 +575,14 @@ def prova_font(base):
         [("fntMain", LATINO), ("ftFusionJP", GIAPPONESE), ("scribble_fallback_font", set(ASCII)),
          ("fntChat", set(ASCII))]))
     righe = []
-    ufficiali = "àâçèéêëîïôùûü"  # lettere delle traduzioni ufficiali (francese)
+    ufficiali = "àâçèéêëîïôùûü"  # letters of the official translations (French)
     ammessi = adapter_gamemaker.caratteri_font(gioco, righe.append, ufficiali)
     controlla("font esclusi: giapponese con ç ê ñ (un'altra scrittura), di ripiego, e quello senza nessuna lettera "
               "delle traduzioni ufficiali (chat)",
               ammessi is not None and set("àèéìòù") <= ammessi and any("fntChat" in r for r in righe)
               and any("scribble_fallback_font" in r for r in righe) and not any("ftFusionJP" in r for r in righe))
-    # come ftPixeloidSans di Another Door: ASCII, cirillico e le sole lettere accentate del file inglese (Á ç é ô).
-    # Puo' essere il font dei testi inglesi, quindi conta anche con le traduzioni ufficiali: è non ammessa
+    # like Another Door's ftPixeloidSans: ASCII, Cyrillic and only the accented letters of the English file (Á ç é ô).
+    # It may be the font of the English texts, so it counts even with the official translations: è not allowed
     scrivi_byte(os.path.join(gioco, "data.win"), test_gamemaker.data_win(
         [("fntMain", LATINO), ("fntPixel", cirillico | set("Áçô"))]))
     righe = []
@@ -599,7 +599,7 @@ def prova_font(base):
               ammessi is not None and "è" not in ammessi and "é" in ammessi)
 
 
-# --- 6. web: pulsanti di una parola ----------------------------------------------------------------
+# --- 6. web: one-word buttons ----------------------------------------------------------------------
 
 def prova_web(base):
     web = os.path.join(base, "web")
@@ -665,8 +665,8 @@ def test_unreal(base):
               and len(saltati) == 1 and "Proj-Rotto.pak" in saltati[0] and percorso and os.path.exists(percorso)
               and any("archivi non letti" in r and "Proj-Rotto.pak" in r for r in registro))
 
-    # pak piccolo montato in una cartella piu' profonda (Remnant: '../../../Remnant/Content/'), lingua nel .locmeta
-    # di un altro pak
+    # small pak mounted in a deeper folder (Remnant: '../../../Remnant/Content/'), language in the .locmeta of
+    # another pak
     montato = os.path.join(base, "Unreal montato")
     paks = os.path.join(montato, "Proj", "Content", "Paks")
     os.makedirs(os.path.join(montato, "Engine", "Binaries"))
@@ -708,7 +708,7 @@ def test_unreal(base):
 
 
 def pak_montato(mount, file):
-    """Pak v9 non compresso con un punto di montaggio a scelta (i nomi sono relativi a quello), come pak_v9 di
+    """Uncompressed pak v9 with a mount point of choice (the names are relative to it), like pak_v9 of
     test/test_unreal.py."""
     corpo, voci = b"", []
     for nome, dati in file:
@@ -724,7 +724,7 @@ def pak_montato(mount, file):
     return corpo + indice + coda
 
 
-# --- 8. registro dei file saltati nella ricerca generica ----------------------------------------------
+# --- 8. log of the files skipped by the generic search -----------------------------------------------
 
 def prova_registro(base):
     cartella = os.path.join(base, "saltati")

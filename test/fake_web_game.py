@@ -1,7 +1,7 @@
-"""Gioco web finto (una pagina index.html e un file JSON di testi in inglese) per le prove dell'interfaccia, della
-riga di comando e della sicurezza: si crea in una cartella di prova, nessun gioco vero.
+"""Fake web game (an index.html page and a JSON file of English texts) for the tests of the interface, the command
+line and safety: it is created in a test folder, no real game.
 
-Uso dalle prove: gioco_web_finto.crea(cartella) -> percorso relativo del file JSON dei testi.
+Usage from the tests: gioco_web_finto.crea(cartella) -> relative path of the JSON file of the texts.
 """
 import json
 import os

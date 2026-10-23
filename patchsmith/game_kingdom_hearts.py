@@ -1,19 +1,19 @@
-"""Scheda di gioco: KINGDOM HEARTS HD 1.5+2.5 ReMIX (PC).
+"""Game sheet: KINGDOM HEARTS HD 1.5+2.5 ReMIX (PC).
 
-Come sceglie la lingua (verificato sugli eseguibili, senza avviarli): ognuno dei programmi della raccolta (KH1,
-Re:CoM, KH2, BBS, il menu di avvio e il Theater) all'avvio chiede la lingua alla piattaforma (Steam/Epic) e la
-converte in un codice: english 1, german 3, french 4, spanish 5, italian 6; per qualsiasi altra risposta, o senza
-risposta, usa un valore predefinito: 1 (inglese). Il gioco non ha altre impostazioni della lingua (niente opzioni,
-parametri di avvio, registro o file di configurazione). I testi di tutte queste lingue sono gia' installati nei
-pacchetti (Image/<dt|en>/*.hed + *.pkg).
+How it chooses the language (verified on the executables, without starting them): each of the programs of the
+collection (KH1, Re:CoM, KH2, BBS, the launch menu and the Theater) asks the platform (Steam/Epic) for the language
+at startup and converts it into a code: english 1, german 3, french 4, spanish 5, italian 6; for any other answer,
+or with no answer, it uses a default value: 1 (English). The game has no other language settings (no options,
+launch parameters, registry or configuration files). The texts of all these languages are already installed in the
+packages (Image/<dt|en>/*.hed + *.pkg).
 
-Leva "lingua": in ogni eseguibile si cambia il valore predefinito (1 byte: `mov ebx,1` -> `mov ebx,<codice>`).
-La risposta "english" (o nessuna risposta) porta cosi' alla lingua scelta; francese, tedesco, spagnolo e italiano
-scelti dalla piattaforma restano rispettati. Il gioco funziona come con la lingua scelta da Steam: stessi testi,
-menu, font e immagini con le scritte; le voci restano quelle originali.
-Il punto si trova per schema di byte (unico, nella sezione di codice, seguito entro poco dal confronto con la
-stringa "english" della tabella delle lingue), mai per indirizzo fisso: una versione diversa del gioco viene
-rifiutata. Non si toccano il programma di avvio con la protezione (ReMIX.exe) ne' i componenti di Steam.
+Lever "lingua": in every executable the default value is changed (1 byte: `mov ebx,1` -> `mov ebx,<codice>`).
+The answer "english" (or no answer) thus leads to the chosen language; French, German, Spanish and Italian chosen
+by the platform are still respected. The game works as with the language chosen by Steam: same texts, menus, fonts
+and images with writing; the voices stay the original ones.
+The spot is found by byte pattern (unique, in the code section, followed shortly by the comparison with the string
+"english" of the language table), never by fixed address: a different version of the game is rejected. The
+launcher with the protection (ReMIX.exe) and the Steam components are not touched.
 """
 import glob
 import hashlib
@@ -29,13 +29,13 @@ NOME = "KINGDOM HEARTS HD 1.5+2.5 ReMIX"
 ESEGUIBILI = ("KINGDOM HEARTS FINAL MIX.exe", "KINGDOM HEARTS Re_Chain of Memories.exe",
               "KINGDOM HEARTS II FINAL MIX.exe", "KINGDOM HEARTS Birth by Sleep FINAL MIX.exe",
               "KINGDOM HEARTS HD 1.5+2.5 Launcher.exe", "KINGDOM HEARTS Theater.exe")
-CODICI = {"en": 1, "de": 3, "fr": 4, "es": 5, "it": 6}  # codici interni del gioco
+CODICI = {"en": 1, "de": 3, "fr": 4, "es": 5, "it": 6}  # the game's internal codes
 _CARTELLA_MSG = {"en": "us", "it": "it", "fr": "fr", "de": "gr", "es": "sp"}  # msg/<cartella>/ in KH2
 _VALORI = set(CODICI.values())
 SCHEMA = re.compile(rb"\xBB([\x00-\xFF])\x00\x00\x00\x48\x83\x3D[\x00-\xFF]{4}\x00\x75\x31\x8B\xCB\xE8")
 TABELLA = b"english\x00french\x00\x00italian\x00german\x00\x00spanish\x00"
 DISTANZA_CONFRONTO = 0x300
-SALVATAGGI = None  # None = Documenti/My Games/<NOME> dell'utente (impostabile per i test)
+SALVATAGGI = None  # None = the user's Documenti/My Games/<NOME> (can be set for the tests)
 MASSIMO_SALVATAGGI = 512 * 1024 * 1024
 
 
@@ -48,7 +48,7 @@ class ErroreLettura(ErroreScheda):
 
 
 def _documenti():
-    """La cartella Documenti dell'utente come la vede il gioco (anche se spostata o su OneDrive)."""
+    """The user's Documents folder as the game sees it (even if moved or on OneDrive)."""
     try:
         import ctypes
         buffer = ctypes.create_unicode_buffer(260)
@@ -63,7 +63,7 @@ def cartella_salvataggi():
     return SALVATAGGI or os.path.join(_documenti(), "My Games", NOME)
 
 
-# --- riconoscimento -------------------------------------------------------------------------------
+# --- recognition ----------------------------------------------------------------------------------
 
 def _e_radice(cartella):
     return bool(glob.glob(os.path.join(glob.escape(cartella), "Image", "*", "kh2_first.hed"))) and \
@@ -71,8 +71,8 @@ def _e_radice(cartella):
 
 
 def radici(cartella):
-    """Le cartelle del gioco (quelle con Image/ e gli eseguibili): la cartella stessa, oppure cercate fino a due
-    livelli sotto (piu' di una se la cartella contiene piu' copie del gioco)."""
+    """The game's folders (those with Image/ and the executables): the folder itself, or searched up to two
+    levels below (more than one if the folder contains several copies of the game)."""
     if not os.path.isdir(cartella):
         return []
     if _e_radice(cartella):
@@ -91,13 +91,13 @@ def radici(cartella):
 
 
 def riconosci(cartella):
-    """La cartella del gioco se ce n'e' una sola, altrimenti None."""
+    """The game's folder if there is only one, otherwise None."""
     trovate = radici(cartella)
     return trovate[0] if len(trovate) == 1 else None
 
 
 def lingue_presenti(radice):
-    """{codici} delle lingue dei testi installate (da una voce campione di KH2: msg/<lingua>/sys.bar); None."""
+    """{codes} of the installed text languages (from a sample entry of KH2: msg/<lingua>/sys.bar); None."""
     indici = glob.glob(os.path.join(glob.escape(radice), "Image", "*", "kh2_first.hed"))
     if not indici:
         return None
@@ -111,10 +111,10 @@ def lingue_presenti(radice):
             if hashlib.md5(("msg/%s/sys.bar" % cartella).encode()).digest() in voci}
 
 
-# --- il punto della lingua predefinita negli eseguibili --------------------------------------------
+# --- the spot of the default language in the executables ------------------------------------------
 
 def _sezioni(dati):
-    """[(nome, rva, dimensione virtuale, offset nel file, dimensione nel file, caratteristiche)] di un PE."""
+    """[(name, rva, virtual size, offset in the file, size in the file, characteristics)] of a PE."""
     try:
         if dati[:2] != b"MZ":
             raise ErroreScheda("non e' un eseguibile Windows")
@@ -143,8 +143,9 @@ def _sezione_di(sezioni, offset):
 
 
 def punto_lingua(dati):
-    """(offset nel file del byte della lingua predefinita, valore attuale). Solleva ErroreScheda se l'eseguibile
-    non e' quello previsto: lo schema deve essere unico, nel codice, e seguito dal confronto con "english"."""
+    """(offset in the file of the default language byte, current value). Raises ErroreScheda if the executable
+    is not the expected one: the pattern must be unique, in the code, and followed by the comparison with
+    "english"."""
     sezioni = _sezioni(dati)
     trovati = list(SCHEMA.finditer(dati))
     if len(trovati) != 1:
@@ -161,7 +162,7 @@ def punto_lingua(dati):
         raise ErroreScheda("tabella delle lingue fuori posto")
     rva_english = sez_tabella[1] + t - sez_tabella[3]
     for k in range(m.end(), min(m.start() + DISTANZA_CONFRONTO, len(dati) - 7)):
-        if dati[k:k + 3] == b"\x48\x8D\x15":  # lea rdx,[rip+spostamento]
+        if dati[k:k + 3] == b"\x48\x8D\x15":  # lea rdx,[rip+displacement]
             rva_k = codice[1] + k - codice[3]
             if rva_k + 7 + struct.unpack_from("<i", dati, k + 3)[0] == rva_english:
                 return m.start() + 1, dati[m.start() + 1]
@@ -169,7 +170,7 @@ def punto_lingua(dati):
 
 
 def analizza(radice):
-    """[(nome, percorso, offset, valore)] degli eseguibili presenti. Solleva ErroreScheda (con il nome del file)."""
+    """[(name, path, offset, value)] of the executables present. Raises ErroreScheda (with the file name)."""
     uscita = []
     for nome in ESEGUIBILI:
         percorso = os.path.join(radice, nome)
@@ -190,11 +191,11 @@ def analizza(radice):
     return uscita
 
 
-# --- salvataggi -----------------------------------------------------------------------------------
+# --- saves ----------------------------------------------------------------------------------------
 
 def _copia_salvataggi(radice, log):
-    """Copia di sicurezza dei salvataggi (solo letti) nella cartella di PatchSmith, la prima volta. La copia
-    compare solo se e' completa."""
+    """Backup copy of the saves (only read) in PatchSmith's folder, the first time. The copy appears only if it is
+    complete."""
     if configuratore.nota(radice, "salvataggi_copiati"):
         return
     sorgente = cartella_salvataggi()
@@ -217,11 +218,11 @@ def _copia_salvataggi(radice, log):
     log("  Copia di sicurezza dei salvataggi: %s" % destinazione)
 
 
-# --- leva della lingua ----------------------------------------------------------------------------
+# --- language lever -------------------------------------------------------------------------------
 
 def imposta_lingua(radice, destinazione, consenso=False, log=print):
-    """Attiva la lingua 'destinazione'. (True, righe) fatto o gia' attiva; (None, righe) serve il consenso
-    dell'utente (proposta); (False, righe) non si puo' (con il motivo)."""
+    """Activates the language 'destinazione'. (True, righe) done or already active; (None, righe) the user's consent
+    is needed (proposal); (False, righe) it cannot be done (with the reason)."""
     nome = lingua.etichetta(destinazione)
     nella_piattaforma = ("scegli %s nella piattaforma da cui avvii il gioco (Steam: Proprieta' > Generali > Lingua)"
                          % nome)
@@ -261,7 +262,7 @@ def imposta_lingua(radice, destinazione, consenso=False, log=print):
                       "La firma digitale di quei file non sara' piu' valida: qualche antivirus potrebbe segnalarli. "
                       "Non tocco ne' i componenti di Steam ne' il programma di avvio protetto."]
     if consenso:
-        configuratore.salva_consenso(radice)  # dato una volta: non lo richiedo anche se ora qualcosa va storto
+        configuratore.salva_consenso(radice)  # given once: I do not ask again even if something goes wrong now
     try:
         configuratore._gioco_chiuso(radice)
     except configuratore.ErroreConfiguratore as e:

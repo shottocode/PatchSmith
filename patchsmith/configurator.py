@@ -1,12 +1,12 @@
-"""Configuratore: modifiche fatte "da fuori" alle impostazioni e ai file di un gioco, sempre reversibili.
+"""Configurator: changes made "from outside" to a game's settings and files, always reversible.
 
-Ogni modifica e' una "leva" (lingua, in futuro schermo...) e ha:
-- un registro in <patchsmith>/configurations/<impronta della cartella>.json: cosa, quando, quali file, consensi;
-- per ogni file toccato il backup verificato accanto (<file>.patchsmith-originale e .patchsmith-info.json, lo stesso
-  meccanismo delle traduzioni): "Ripristina originali" funziona anche senza registro;
-- scrittura tutto-o-niente: se un file non si puo' scrivere, quelli gia' scritti tornano com'erano.
-Le modifiche agli eseguibili si fanno solo con il consenso dell'utente, chiesto una volta per gioco e salvato nel
-registro (cosi' dopo un aggiornamento del gioco si possono riapplicare da sole).
+Each change is a "lever" (language, in the future screen...) and has:
+- a record in <patchsmith>/configurations/<fingerprint of the folder>.json: what, when, which files, consents;
+- for each file touched, the verified backup next to it (<file>.patchsmith-originale and .patchsmith-info.json, the
+  same mechanism as translations): "Restore originals" works even without the record;
+- all-or-nothing writing: if a file cannot be written, the ones already written go back to how they were.
+Changes to executables are made only with the user's consent, asked once per game and saved in the record (so after a
+game update they can be reapplied on their own).
 """
 import datetime
 import hashlib
@@ -28,7 +28,7 @@ def _adesso():
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
-# --- registro -------------------------------------------------------------------------------------
+# --- record ---------------------------------------------------------------------------------------
 
 def _registro(cartella):
     chiave = hashlib.sha1(os.path.normcase(os.path.abspath(cartella)).encode("utf-8")).hexdigest()[:16]
@@ -36,7 +36,7 @@ def _registro(cartella):
 
 
 def leggi(cartella):
-    """Il registro della cartella ({} se non c'e')."""
+    """The folder's record ({} if there is none)."""
     try:
         with open(_registro(cartella), encoding="utf-8") as f:
             dati = json.load(f)
@@ -64,12 +64,12 @@ def salva_consenso(cartella, tipo="eseguibili"):
 
 
 def leva(cartella, nome):
-    """I dati della leva se e' registrata ({'stato', 'valore', 'file', ...}), altrimenti None."""
+    """The lever's data if it is recorded ({'stato', 'valore', 'file', ...}), otherwise None."""
     return leggi(cartella).get("leve", {}).get(nome)
 
 
 def segna(cartella, chiave, valore=True):
-    """Annota un fatto nel registro (es. salvataggi gia' copiati)."""
+    """Notes a fact in the record (e.g. saves already copied)."""
     dati = leggi(cartella)
     dati.setdefault("note", {})[chiave] = valore
     _salva(cartella, dati)
@@ -79,10 +79,10 @@ def nota(cartella, chiave):
     return leggi(cartella).get("note", {}).get(chiave)
 
 
-# --- controlli ------------------------------------------------------------------------------------
+# --- checks ---------------------------------------------------------------------------------------
 
 def smart_app_control():
-    """Stato di Smart App Control di Windows 11: 0 spento, 1 attivo, 2 in valutazione, None se non si sa."""
+    """State of Windows 11 Smart App Control: 0 off, 1 on, 2 in evaluation, None if unknown."""
     if not sys.platform.startswith("win"):
         return None
     try:
@@ -94,18 +94,18 @@ def smart_app_control():
 
 
 def controlli_eseguibili():
-    """Motivi per NON modificare eseguibili su questo PC (lista vuota = si puo')."""
+    """Reasons NOT to modify executables on this PC (empty list = it is allowed)."""
     if smart_app_control() in (1, 2):
         return ["Smart App Control di Windows e' attivo (o in valutazione): bloccherebbe gli eseguibili modificati, "
                 "perche' la loro firma digitale non sarebbe piu' valida. Non modifico nulla."]
     return []
 
 
-# --- applicazione tutto-o-niente ------------------------------------------------------------------
+# --- all-or-nothing apply -------------------------------------------------------------------------
 
 def _backup_pronto(percorso, dati_attuali, nome_leva, log):
-    """Backup dell'originale pronto all'uso: lo crea, lo tiene, o (se il gioco ha aggiornato il file) lo rinnova
-    conservando il precedente. Restituisce (info, True se il backup e' stato creato adesso)."""
+    """Backup of the original ready to use: creates it, keeps it, or (if the game updated the file) renews it keeping
+    the previous one. Returns (info, True if the backup was created now)."""
     backup = percorso + progetto.SUFFISSO_BACKUP
     if not os.path.exists(backup):
         return progetto.crea_backup(percorso, {"configuratore": nome_leva}), True
@@ -119,7 +119,7 @@ def _backup_pronto(percorso, dati_attuali, nome_leva, log):
     attuale = progetto._hash_byte(dati_attuali)
     if attuale == info["hash_originale"] or attuale in info.get("hash_scritti", []):
         return info, False
-    # il file e' cambiato per mano d'altri (aggiornamento): e' il nuovo originale, il vecchio resta conservato
+    # the file was changed by someone else (update): it is the new original, the old one stays kept
     n = len(info.get("precedenti", [])) + 1
     vecchio = "%s.%d" % (os.path.basename(backup), n)
     percorso_vecchio = os.path.join(os.path.dirname(backup), vecchio)
@@ -128,7 +128,7 @@ def _backup_pronto(percorso, dati_attuali, nome_leva, log):
         nuove = progetto.crea_backup(percorso, {"configuratore": nome_leva, "creati": info.get("creati", []),
                                                 "precedenti": info.get("precedenti", []) + [vecchio]})
     except BaseException:
-        os.replace(percorso_vecchio, backup)  # il vecchio backup torna al suo posto, con le sue info
+        os.replace(percorso_vecchio, backup)  # the old backup goes back in its place, with its info
         raise
     log("  %s e' cambiato (aggiornamento del gioco?): e' il nuovo originale, il precedente e' in %s"
         % (os.path.basename(percorso), vecchio))
@@ -136,7 +136,7 @@ def _backup_pronto(percorso, dati_attuali, nome_leva, log):
 
 
 def _serve_backup(percorso, dati):
-    """True se applicando bisognera' creare (o rinnovare) il backup di questo file: serve spazio."""
+    """True if applying will need to create (or renew) the backup of this file: it needs space."""
     if not os.path.exists(percorso + progetto.SUFFISSO_BACKUP):
         return True
     info = progetto.leggi_info(percorso) or {}
@@ -145,12 +145,12 @@ def _serve_backup(percorso, dati):
 
 
 def applica_byte(cartella, nome_leva, piani, log=print, valore=None, descrizione=None):
-    """Applica modifiche di byte a piu' file, tutto o niente.
+    """Applies byte changes to several files, all or nothing.
 
-    piani: [{'percorso': assoluto, 'modifiche': [(offset, byte_prima, byte_dopo)]}]. Una modifica gia' fatta
-    (ci sono gia' i byte 'dopo') si salta; byte diversi da 'prima' e da 'dopo' fermano tutto.
-    Restituisce quanti file sono stati scritti. Se qualcosa va storto (anche un'interruzione) rimette ogni file
-    com'era PRIMA di questa operazione e solleva ErroreConfiguratore."""
+    piani: [{'percorso': assoluto, 'modifiche': [(offset, byte_prima, byte_dopo)]}]. A change already made (the
+    'dopo' bytes are already there) is skipped; bytes different from both 'prima' and 'dopo' stop everything.
+    Returns how many files were written. If something goes wrong (an interruption too) it puts every file back as it
+    was BEFORE this operation and raises ErroreConfiguratore."""
     preparati = []
     for piano in piani:
         percorso = piano["percorso"]
@@ -210,7 +210,7 @@ def applica_byte(cartella, nome_leva, piani, log=print, valore=None, descrizione
         except OSError:
             pass
         if not isinstance(e, (OSError, ErroreConfiguratore, RuntimeError)):
-            raise  # interruzione (Ctrl+C...): i file sono gia' stati rimessi com'erano
+            raise  # interruption (Ctrl+C...): the files have already been put back as they were
         if rimasti:
             raise ErroreConfiguratore("Modifica non riuscita (%s). Non sono riuscito a rimettere com'erano: %s. "
                                       "Chiudi i programmi che li usano e premi 'Ripristina originali'."
@@ -221,17 +221,17 @@ def applica_byte(cartella, nome_leva, piani, log=print, valore=None, descrizione
 
 
 def _annulla(preparati, backup_nuovi, scritti, log):
-    """Rimette ogni file com'era prima dell'operazione. Restituisce i nomi dei file che non ci e' riuscito."""
+    """Puts every file back as it was before the operation. Returns the names of the files it could not restore."""
     rimasti = []
     for percorso, dati, _ in preparati:
         nome = os.path.basename(percorso)
         try:
             if percorso in backup_nuovi:
-                # backup creato adesso: il file torna all'originale (= com'era) e backup e info spariscono
+                # backup created now: the file goes back to the original (= as it was), backup and info disappear
                 if progetto.leggi_info(percorso) and not progetto.ripristina_file(percorso, lambda _m: None):
                     rimasti.append(nome)
             elif percorso in scritti:
-                # il file aveva gia' un backup (modificato prima, o aggiornato dal gioco): torna com'era prima
+                # the file already had a backup (changed before, or updated by the game): it goes back to how it was
                 if not os.path.exists(percorso) or progetto._hash_file(percorso) != progetto._hash_byte(dati):
                     adapter_webjson.scrivi_atomico(percorso, dati)
                     if progetto._hash_file(percorso) != progetto._hash_byte(dati):
@@ -243,7 +243,7 @@ def _annulla(preparati, backup_nuovi, scritti, log):
 
 
 def ripara_interrotte(cartella, log=print):
-    """Se un'operazione e' stata interrotta a meta' (registro 'in_corso'), rimette gli originali di quella leva."""
+    """If an operation was interrupted halfway (record 'in_corso'), puts back the originals of that lever."""
     for nome, dati in list(leggi(cartella).get("leve", {}).items()):
         if isinstance(dati, dict) and dati.get("stato") == "in_corso":
             log("  L'operazione precedente (%s) era stata interrotta a meta': rimetto gli originali." % nome)
@@ -279,11 +279,11 @@ def _togli_leva(cartella, nome):
         _salva(cartella, dati)
 
 
-# --- ripristino -----------------------------------------------------------------------------------
+# --- restore --------------------------------------------------------------------------------------
 
 def ripristina(cartella, nome_leva, log=print):
-    """Rimette com'erano i file della leva. None se la leva non c'e', True se fatto, False se qualcosa resta da
-    fare (il registro resta per riprovare). Il consenso dato per il gioco resta."""
+    """Puts the lever's files back as they were. None if the lever is not there, True if done, False if something is
+    left to do (the record stays to try again). The consent given for the game stays."""
     dati = leva(cartella, nome_leva)
     if not dati:
         return None
@@ -297,7 +297,7 @@ def ripristina(cartella, nome_leva, log=print):
         percorso = os.path.join(cartella, *rel.split("/"))
         info = progetto.leggi_info(percorso)
         if not info:
-            continue  # gia' rimesso (es. da "Ripristina originali") o mai toccato
+            continue  # already put back (e.g. by "Restore originals") or never touched
         try:
             if not progetto.ripristina_file(percorso, log):
                 ok = False
@@ -310,6 +310,6 @@ def ripristina(cartella, nome_leva, log=print):
 
 
 def file_del_configuratore(percorso):
-    """True se il file e' stato modificato dal configuratore (non da una traduzione)."""
+    """True if the file was modified by the configurator (not by a translation)."""
     info = progetto.leggi_info(percorso)
     return bool(info and info.get("configuratore"))

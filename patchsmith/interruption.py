@@ -1,16 +1,16 @@
-"""Richiesta di fermare il lavoro in corso (tasto "Ferma" dell'interfaccia).
+"""Request to stop the work in progress (the interface's "Stop" button).
 
-Il lavoro controlla la richiesta nei punti sicuri (prima di ogni gruppo di testi e di ogni richiesta al
-traduttore, e durante le attese tra un tentativo e l'altro). Interrotto deriva da BaseException, come
-KeyboardInterrupt: i blocchi che saltano un errore e vanno avanti ("except Exception") non lo fermano, mentre
-quelli che rimettono le cose a posto ("except BaseException" / finally) lo fanno e poi lo lasciano passare.
+The work checks the request at safe points (before each group of texts and each request to the translator, and
+during the waits between one attempt and the next). Interrotto derives from BaseException, like KeyboardInterrupt:
+blocks that skip an error and carry on ("except Exception") do not stop it, while those that put things back in
+place ("except BaseException" / finally) do so and then let it through.
 """
 import threading
 import time
 
 
 class Interrotto(BaseException):
-    """Lavoro fermato su richiesta dell'utente."""
+    """Work stopped at the user's request."""
 
 
 _richiesta = threading.Event()
@@ -34,8 +34,8 @@ def controlla():
 
 
 def attendi(secondi):
-    """Come time.sleep, ma si interrompe subito se viene chiesto di fermarsi. Aspetta a passi brevi: su Windows
-    un'attesa lunga su un Event non lascerebbe passare Ctrl+C fino alla fine."""
+    """Like time.sleep, but stops at once if a stop is requested. Waits in short steps: on Windows a long wait on
+    an Event would not let Ctrl+C through until the end."""
     fine = time.monotonic() + max(0.0, secondi)
     while True:
         resto = fine - time.monotonic()

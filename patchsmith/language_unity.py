@@ -1,14 +1,14 @@
-"""Lingua ufficiale nei giochi Unity: quali lingue ha il gioco e, se usa I2 Localization, come impostarla.
+"""Official language in Unity games: which languages the game has and, if it uses I2 Localization, how to set it.
 
-Rilevamento (sola lettura):
-- I2 Localization: le liste di lingue (nome, codice, flag) salvate negli asset (resources.assets, level*,
-  sharedassets*, anche dentro data.unity3d); una lingua con flag "disattivata" non conta;
-- Unity Localization: i "Locales" nel catalogo di Addressables (StreamingAssets/aa).
+Detection (read only):
+- I2 Localization: the language lists (name, code, flag) saved in the assets (resources.assets, level*,
+  sharedassets*, also inside data.unity3d); a language with the "disabled" flag does not count;
+- Unity Localization: the "Locales" in the Addressables catalog (StreamingAssets/aa).
 
-Impostazione: solo per I2, che salva la lingua scelta nelle PlayerPrefs (registro di Windows,
-HKCU\\Software\\<Azienda>\\<Prodotto>, valore "I2 Language_h<hash>" = nome esatto della lingua, UTF-8 + NUL).
-Si cambia solo quel valore, a gioco chiuso e solo se la chiave del gioco esiste gia' (gioco avviato almeno
-una volta), con backup del valore precedente e ripristino. Unity Localization: istruzioni.
+Setting: only for I2, which saves the chosen language in the PlayerPrefs (Windows registry,
+HKCU\\Software\\<Azienda>\\<Prodotto>, value "I2 Language_h<hash>" = exact name of the language, UTF-8 + NUL).
+Only that value is changed, with the game closed and only if the game's key already exists (game started at least
+once), with a backup of the previous value and restore. Unity Localization: instructions.
 """
 import lzma
 import mmap
@@ -19,14 +19,14 @@ import sys
 
 PREF_I2 = "I2 Language"
 _ASSET = re.compile(r"^(resources\.assets|globalgamemanagers\.assets|level\d+|sharedassets\d+\.assets)$")
-_MASSIMO = 400 * 1024 * 1024  # byte di asset letti al massimo per gioco
+_MASSIMO = 400 * 1024 * 1024  # maximum bytes of assets read per game
 
 
 class ErroreLinguaUnity(ValueError):
     pass
 
 
-# --- cartella dei dati e app.info ---------------------------------------------------------------
+# --- data folder and app.info -------------------------------------------------------------------
 
 def cartella_dati(cartella):
     for radice, dirs, files in os.walk(cartella):
@@ -134,7 +134,7 @@ def _apri_bundle(percorso):
             p += c_info
             if flags & 0x200:
                 p = (p + 15) & ~15
-        q = 16  # hash dei dati non compressi
+        q = 16  # hash of the uncompressed data
         quanti = struct.unpack_from(">i", info, q)[0]
         q += 4
         blocchi = []
@@ -171,7 +171,7 @@ def _estrai(f, inizio, blocchi, off, dim):
 
 
 def _mappa(percorso):
-    """Il file in sola lettura come mmap (la memoria non viene occupata tutta insieme); b"" se e' vuoto."""
+    """The file, read only, as an mmap (the memory is not taken all at once); b"" if it is empty."""
     with open(percorso, "rb") as f:
         if os.fstat(f.fileno()).st_size == 0:
             return b""
@@ -179,8 +179,8 @@ def _mappa(percorso):
 
 
 def _file_asset(dati):
-    """([(nome, dimensione, funzione che restituisce i byte)], funzione per chiudere) dei file serializzati del
-    gioco, il catalogo globale per primo."""
+    """([(name, size, function that returns the bytes)], function to close) of the game's serialized files, the
+    global catalog first."""
     uscita, aperti = [], []
     bundle = os.path.join(dati, "data.unity3d")
     if os.path.exists(bundle):
@@ -256,11 +256,11 @@ def _prova_lista(d, p):
 
 
 def liste_i2(d):
-    """[[(nome, codice, flag)]] delle liste di lingue di I2 trovate nei byte di un asset."""
+    """[[(nome, codice, flag)]] of the I2 language lists found in the bytes of an asset."""
     uscita, viste, fine_ultima = [], set(), -1
     for m in re.finditer(rb"\x02\x00\x00\x00en\x00\x00|\x05\x00\x00\x00en-[A-Z]{2}\x00\x00\x00", d):
         if m.start() < fine_ultima:
-            continue  # dentro una lista gia' letta
+            continue  # inside a list already read
         migliore = None
         for indietro in range(m.start() - 4, max(0, m.start() - 16000), -4):
             r = _prova_lista(d, indietro)
@@ -274,7 +274,7 @@ def liste_i2(d):
 
 
 def usa_i2(dati):
-    """True se il gioco contiene I2 Localization (dalle librerie gestite o dai metadati IL2CPP)."""
+    """True if the game contains I2 Localization (from the managed libraries or the IL2CPP metadata)."""
     gestite = os.path.join(dati, "Managed")
     if os.path.isdir(gestite):
         if any(n.lower().startswith("i2") and "locali" in n.lower() for n in os.listdir(gestite)):
@@ -293,9 +293,9 @@ def usa_i2(dati):
 
 
 def lingue_i2(dati, dopo_la_prima=2):
-    """[(nome esatto, codice)] delle lingue ATTIVE di I2, oppure None se non si trovano liste.
-    Legge al massimo _MASSIMO byte (i file che sforerebbero si saltano) e, trovata la prima lista, solo
-    'dopo_la_prima' altri file (le liste delle singole scene di solito ripetono quella principale)."""
+    """[(exact name, code)] of the ACTIVE I2 languages, or None if no lists are found.
+    Reads at most _MASSIMO bytes (files that would exceed it are skipped) and, once the first list is found, only
+    'dopo_la_prima' more files (the lists of the single scenes usually repeat the main one)."""
     attive, trovate, letti, dopo = {}, False, 0, None
     try:
         voci, chiudi = _file_asset(dati)
@@ -314,7 +314,7 @@ def lingue_i2(dati, dopo_la_prima=2):
             try:
                 byte = carica()
                 liste = liste_i2(byte)
-            except Exception:  # un file illeggibile non deve far perdere quello che si e' gia' trovato
+            except Exception:  # an unreadable file must not lose what was already found
                 continue
             finally:
                 if isinstance(byte, mmap.mmap):
@@ -334,8 +334,8 @@ def lingue_i2(dati, dopo_la_prima=2):
 
 
 def i2_personalizzato(dati):
-    """True se il gioco ha modificato I2 per salvare la lingua a modo suo (es. 'LastSelectedLanguage',
-    'last_language.txt'): allora la preferenza "I2 Language" non basta e la lingua si sceglie dal menu."""
+    """True if the game modified I2 to save the language its own way (e.g. 'LastSelectedLanguage',
+    'last_language.txt'): then the "I2 Language" preference is not enough and the language is chosen from the menu."""
     segni = [s for t in ("LastSelectedLanguage", "last_language.txt")
              for s in (t.encode("ascii"), t.encode("utf-16-le"))]
     file = []
@@ -363,7 +363,7 @@ _LOCALE_BINARIO = re.compile(
 
 
 def lingue_unity_localization(dati):
-    """{codice} dei Locales nel catalogo di Addressables, oppure None se il gioco non lo usa."""
+    """{codice} of the Locales in the Addressables catalog, or None if the game does not use it."""
     aa = os.path.join(dati, "StreamingAssets", "aa")
     if not os.path.isdir(aa):
         return None
@@ -381,8 +381,8 @@ def lingue_unity_localization(dati):
             continue
         for m in _LOCALE_TESTO.finditer(b):
             codici.add(m.group(1).decode())
-        # catalogo binario (catalog.bin): i nomi non stanno per forza sotto "Locales/"; valgono solo se il file
-        # usa Unity Localization e ogni codice ha anche la sua etichetta "Locale-<codice>"
+        # binary catalog (catalog.bin): the names are not necessarily under "Locales/"; they count only if the file
+        # uses Unity Localization and each code also has its own "Locale-<codice>" label
         if f.endswith(".bin") and (b"Localization.Locale" in b or b"Localization/Locales" in b):
             for m in _LOCALE_BINARIO.finditer(b):
                 if b"Locale-" + m.group(1) in b:
@@ -390,10 +390,10 @@ def lingue_unity_localization(dati):
     return codici or None
 
 
-# --- PlayerPrefs (registro di Windows) -------------------------------------------------------------
+# --- PlayerPrefs (Windows registry) ---------------------------------------------------------------
 
 def nome_pref(chiave):
-    """Nome del valore nel registro per una chiave PlayerPrefs: chiave + '_h' + hash djb2-xor dei byte UTF-8."""
+    """Name of the registry value for a PlayerPrefs key: key + '_h' + djb2-xor hash of the UTF-8 bytes."""
     h = 5381
     for b in chiave.encode("utf-8"):
         h = ((h * 33) ^ b) & 0xFFFFFFFF
@@ -405,7 +405,7 @@ def _chiave_registro(azienda, prodotto):
 
 
 def leggi_pref(azienda, prodotto, chiave):
-    """(tipo, byte) del valore, None se manca il valore, False se manca la chiave del gioco."""
+    """(tipo, byte) of the value, None if the value is missing, False if the game's key is missing."""
     if not sys.platform.startswith("win"):
         return False
     import winreg
@@ -425,7 +425,7 @@ def leggi_pref(azienda, prodotto, chiave):
 
 
 def scrivi_pref_stringa(azienda, prodotto, chiave, testo):
-    """Scrive una stringa PlayerPrefs (REG_BINARY UTF-8 + NUL) in una chiave del gioco GIA' esistente."""
+    """Writes a PlayerPrefs string (REG_BINARY UTF-8 + NUL) to an ALREADY existing key of the game."""
     import winreg
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _chiave_registro(azienda, prodotto), 0,
                         winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
@@ -436,7 +436,7 @@ def scrivi_pref_stringa(azienda, prodotto, chiave, testo):
 
 
 def ripristina_pref(azienda, prodotto, chiave, precedente, scritto):
-    """Rimette il valore precedente ((tipo, hex) o None = assente), solo se c'e' ancora quello scritto da noi."""
+    """Puts back the previous value ((tipo, hex) or None = absent), only if the one we wrote is still there."""
     import winreg
     attuale = leggi_pref(azienda, prodotto, chiave)
     if not attuale or attuale[1] != scritto:
@@ -452,7 +452,7 @@ def ripristina_pref(azienda, prodotto, chiave, precedente, scritto):
 
 
 def _valore_registro(tipo, byte):
-    """Il valore nella forma che winreg vuole per quel tipo (leggi_pref lo da' sempre come byte)."""
+    """The value in the form winreg wants for that type (leggi_pref always gives it as bytes)."""
     import winreg
     if tipo in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
         return byte.decode("utf-8")
@@ -462,9 +462,9 @@ def _valore_registro(tipo, byte):
 
 
 def voce_i2(voci, destinazione="it"):
-    """Il nome esatto della voce di I2 [(nome, codice)] per la lingua 'destinazione', oppure None: prima per codice
-    (stesso codice, poi la lingua senza regione, poi una variante; mai l'altra scrittura del cinese), poi, per
-    l'italiano senza codice adatto, per nome."""
+    """The exact name of the I2 entry [(nome, codice)] for the language 'destinazione', or None: first by code
+    (same code, then the language without region, then a variant; never the other Chinese script), then, for
+    Italian without a suitable code, by name."""
     from .language import migliore
     scelto = migliore([c for _, c in voci if c], destinazione)
     if scelto is not None:

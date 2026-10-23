@@ -1,11 +1,11 @@
-"""Pezzi di giochi Unity finti per le prove (nessun file di giochi veri):
-- bundle(): AssetBundle UnityFS con i file interni dati, senza compressione, LZ4 o LZMA, a blocchi;
-- file_tabelle(): file serializzato (versione 22, con gli alberi dei campi) con tabelle dei testi di Unity
-  Localization (StringTable: nome, m_LocaleId, voci m_Localized);
-- stringhe_serializzate(): byte con stringhe "lunghezza + UTF-8" come nei file degli asset;
-- catalogo(): catalog.json di Addressables con le opzioni (e il CRC) di ogni bundle;
-- dll(): DLL .NET minima con le stringhe del codice (heap #US);
-- gioco_il2cpp(): gioco Unity IL2CPP con i bundle in StreamingAssets/aa/StandaloneWindows64.
+"""Pieces of fake Unity games for the tests (no files from real games):
+- bundle(): UnityFS AssetBundle with the given internal files, uncompressed, LZ4 or LZMA, in blocks;
+- file_tabelle(): serialized file (version 22, with the type trees) with Unity Localization text tables
+  (StringTable: name, m_LocaleId, m_Localized entries);
+- stringhe_serializzate(): bytes with "length + UTF-8" strings as in asset files;
+- catalogo(): Addressables catalog.json with the options (and the CRC) of each bundle;
+- dll(): minimal .NET DLL with the code's strings (#US heap);
+- gioco_il2cpp(): Unity IL2CPP game with the bundles in StreamingAssets/aa/StandaloneWindows64.
 """
 import base64
 import json
@@ -13,7 +13,7 @@ import lzma
 import os
 import struct
 
-# albero dei campi di una StringTable (ridotto: senza metadati e riferimenti gestiti, che stanno in fondo)
+# type tree of a StringTable (reduced: without metadata and managed references, which are at the end)
 _ALBERO_TABELLA = [
     (0, "MonoBehaviour", "Base", -1, False),
     (1, "PPtr<GameObject>", "m_GameObject", 12, False),
@@ -50,7 +50,7 @@ def _stringa(testo):
 
 
 def stringhe_serializzate(testi, riempimento=b"\x07\x00\x00\x00"):
-    """Byte come in un file degli asset: ogni testo con la sua lunghezza (4 byte) e l'allineamento a 4."""
+    """Bytes as in an asset file: each text with its length (4 bytes) and 4-byte alignment."""
     return riempimento + b"".join(_stringa(t) + riempimento for t in testi)
 
 
@@ -63,7 +63,7 @@ def _dati_tabella(nome, codice, voci):
 
 
 def file_tabelle(tabelle, versione_unity="2022.3.62f2"):
-    """File serializzato con le tabelle [(nome, codice della lingua, [testi])]."""
+    """Serialized file with the tables [(name, language code, [texts])]."""
     buffer, posizioni = bytearray(), {}
 
     def posizione(s):
@@ -96,7 +96,7 @@ def file_tabelle(tabelle, versione_unity="2022.3.62f2"):
     return testa + meta + b"\x00" * (inizio_dati - 48 - len(meta)) + corpo
 
 
-# albero dei campi di un font TextMeshPro (TMP_FontAsset, ridotto: nome, modo dell'atlante, tabella dei caratteri)
+# type tree of a TextMeshPro font (TMP_FontAsset, reduced: name, atlas mode, character table)
 _ALBERO_FONT_TMP = _ALBERO_TABELLA[:12] + [
     (1, "int", "m_AtlasPopulationMode", 4, False),
     (1, "vector", "m_CharacterTable", -1, False),
@@ -108,7 +108,7 @@ _ALBERO_FONT_TMP = _ALBERO_TABELLA[:12] + [
     (4, "unsigned int", "m_GlyphIndex", 4, False),
     (4, "float", "m_Scale", 4, False),
 ]
-# albero ridotto di un font .ttf (Font: nome e i byte del file)
+# reduced tree of a .ttf font (Font: name and the file's bytes)
 _ALBERO_FONT = [
     (0, "Font", "Base", -1, False),
     (1, "string", "m_Name", -1, False),
@@ -123,8 +123,8 @@ _ALBERO_FONT = [
 
 
 def dati_font_tmp(nome, caratteri, modo=0):
-    """I byte di un font TextMeshPro: m_GameObject, m_Enabled, m_Script, m_Name, il modo dell'atlante (0 statico, 1
-    dinamico) e la tabella dei caratteri (tipo 1, codice, glifo, scala 1.0)."""
+    """The bytes of a TextMeshPro font: m_GameObject, m_Enabled, m_Script, m_Name, the atlas mode (0 static, 1
+    dynamic) and the character table (type 1, code, glyph, scale 1.0)."""
     codici = sorted({ord(c) for c in caratteri})
     b = struct.pack("<iq", 0, 0) + b"\x01\x00\x00\x00" + struct.pack("<iq", 0, 0) + _stringa(nome)
     b += struct.pack("<ii", modo, len(codici))
@@ -134,7 +134,7 @@ def dati_font_tmp(nome, caratteri, modo=0):
 
 
 def ttf(caratteri):
-    """Un font TrueType minimo: solo la tabella cmap (formato 4) con questi caratteri."""
+    """A minimal TrueType font: only the cmap table (format 4) with these characters."""
     codici = sorted({ord(c) for c in caratteri if ord(c) < 0xFFFF}) + [0xFFFF]
     n = len(codici)
     fine = b"".join(struct.pack(">H", c) for c in codici)
@@ -152,7 +152,7 @@ def dati_font(nome, byte_ttf):
 
 
 def _tipo(classe, albero, alberi):
-    """Un tipo della tabella dei tipi (versione 22): classe, (script), impronta, albero dei campi."""
+    """A type of the type table (version 22): class, (script), hash, type tree."""
     t = struct.pack("<iBh", classe, 0, 0) + b"\x00" * (32 if classe == 114 else 16)
     if not alberi:
         return t
@@ -171,8 +171,8 @@ def _tipo(classe, albero, alberi):
 
 
 def file_serializzato(oggetti, alberi=True, versione_unity="2022.3.62f2"):
-    """File serializzato (versione 22) con gli oggetti [(classe, albero, byte)]: un tipo per ogni (classe, albero);
-    alberi=False come i file di <gioco>_Data (senza gli alberi dei campi)."""
+    """Serialized file (version 22) with the objects [(classe, albero, byte)]: one type for each (classe, albero);
+    alberi=False like the files of <gioco>_Data (without the type trees)."""
     tipi, indici = [], {}
     for classe, albero, _ in oggetti:
         chiave = (classe, id(albero))
@@ -198,14 +198,14 @@ def file_serializzato(oggetti, alberi=True, versione_unity="2022.3.62f2"):
 
 
 def file_font(font_tmp=(), font_ttf=(), alberi=True):
-    """File serializzato con i font TextMeshPro [(nome, caratteri, modo)] e i font .ttf [(nome, caratteri)]."""
+    """Serialized file with the TextMeshPro fonts [(nome, caratteri, modo)] and the .ttf fonts [(nome, caratteri)]."""
     oggetti = [(114, _ALBERO_FONT_TMP, dati_font_tmp(*f)) for f in font_tmp]
     oggetti += [(128, _ALBERO_FONT, dati_font(nome, ttf(caratteri))) for nome, caratteri in font_ttf]
     return file_serializzato(oggetti, alberi)
 
 
 def _lz4_letterali(b):
-    """Un blocco LZ4 valido fatto di soli letterali."""
+    """A valid LZ4 block made only of literals."""
     n = len(b)
     if n < 15:
         return bytes([n << 4]) + b
@@ -224,7 +224,7 @@ def _lzma(b):
 
 
 def bundle(nodi, compressione=None, blocco=1 << 17, versione_unity="2022.3.62f2"):
-    """AssetBundle UnityFS (versione 7) con i file interni [(nome, byte)]; compressione None, 'lz4' o 'lzma'."""
+    """UnityFS AssetBundle (version 7) with the internal files [(nome, byte)]; compression None, 'lz4' or 'lzma'."""
     dati = b"".join(b for _, b in nodi)
     blocchi, corpo = [], b""
     for i in range(0, max(len(dati), 1), blocco):
@@ -259,13 +259,13 @@ _RUNTIME = "{UnityEngine.AddressableAssets.Addressables.RuntimePath}\\Standalone
 
 
 def catalogo(bundle_crc, utf8=False):
-    """Byte di un catalog.json di Addressables: per ogni (nome del file del bundle, crc) le sue opzioni
-    (AssetBundleRequestOptions in JSON, UTF-16 come le scrive Unity), piu' un asset senza opzioni."""
+    """Bytes of an Addressables catalog.json: for each (bundle file name, crc) its options
+    (AssetBundleRequestOptions in JSON, UTF-16 as Unity writes them), plus an asset without options."""
     ids, extra, voci = ["Assets/Localization/Locales/English (en).asset"], bytearray(), [(0, 1, -1, 0, -1, 0, 0)]
     assembly = b"Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
     classe = b"UnityEngine.ResourceManagement.ResourceProviders.AssetBundleRequestOptions"
     for k, (nome, crc) in enumerate(bundle_crc):
-        ids.append(("0#\\" if k % 2 else _RUNTIME) + nome)  # anche con il prefisso abbreviato (m_InternalIdPrefixes)
+        ids.append(("0#\\" if k % 2 else _RUNTIME) + nome)  # also with the shortened prefix (m_InternalIdPrefixes)
         testo = json.dumps({"m_Hash": "%032x" % (k + 1), "m_Crc": crc, "m_Timeout": 0, "m_ChunkedTransfer": False,
                             "m_BundleName": "%032x" % (k + 99), "m_BundleSize": 1234 + k},
                            separators=(",", ":")).encode("utf-8" if utf8 else "utf-16-le")
@@ -282,7 +282,7 @@ def catalogo(bundle_crc, utf8=False):
 
 
 def crc_nel_catalogo(byte_catalogo):
-    """{nome del file del bundle: crc} letti dal catalogo (per controllare le prove)."""
+    """{bundle file name: crc} read from the catalog (to check the tests)."""
     dati = json.loads(byte_catalogo.decode("utf-8-sig"))
     extra = base64.b64decode(dati["m_ExtraDataString"])
     voci = base64.b64decode(dati["m_EntryDataString"])
@@ -302,7 +302,7 @@ def crc_nel_catalogo(byte_catalogo):
 
 
 def dll(stringhe):
-    """Una DLL .NET minima: intestazione MZ e metadati (BSJB) con le stringhe del codice nello heap #US."""
+    """A minimal .NET DLL: MZ header and metadata (BSJB) with the code's strings in the #US heap."""
     heap = bytearray(b"\x00")
     for s in stringhe:
         b = s.encode("utf-16-le") + b"\x00"
@@ -339,9 +339,9 @@ def eseguibile_x64():
 
 
 def gioco_il2cpp(cartella, bundle_aa, catalogo_aa=None, extra=None):
-    """Gioco Unity IL2CPP finto. bundle_aa: {nome del file: byte} in StreamingAssets/aa/StandaloneWindows64;
-    catalogo_aa: (nome, byte) del catalogo in aa (catalog.json o catalog.bin); extra: {percorso relativo: byte}.
-    Restituisce la cartella del bundle."""
+    """Fake Unity IL2CPP game. bundle_aa: {file name: bytes} in StreamingAssets/aa/StandaloneWindows64;
+    catalogo_aa: (name, bytes) of the catalog in aa (catalog.json or catalog.bin); extra: {relative path: bytes}.
+    Returns the bundle folder."""
     _scrivi(os.path.join(cartella, "Gioco.exe"), eseguibile_x64())
     _scrivi(os.path.join(cartella, "UnityPlayer.dll"), b"finto")
     _scrivi(os.path.join(cartella, "GameAssembly.dll"), b"finto")

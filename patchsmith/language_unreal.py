@@ -1,17 +1,17 @@
-"""Lingua ufficiale nei giochi Unreal Engine: quali lingue ha il gioco e come impostare quella scelta.
+"""Official language in Unreal Engine games: which languages the game has and how to set the chosen one.
 
-Rilevamento: le cartelle <Progetto>/Content/Localization/<Target>/<lingua>/ nei pak (solo i testi del gioco:
-quelli del motore e dei plugin non contano), con il punto di montaggio del pak davanti ai nomi. Pak v3-9 con il
-lettore di adapter_unreal; v10/v11 (UE 4.26+, UE5) dall'indice delle cartelle, se non e' cifrato.
+Detection: the folders <Project>/Content/Localization/<Target>/<language>/ in the paks (only the game's texts: those
+of the engine and of plugins do not count), with the pak's mount point in front of the names. Paks v3-9 with the
+adapter_unreal reader; v10/v11 (UE 4.26+, UE5) from the directory index, if it is not encrypted.
 
-Impostazione: Unreal legge la lingua all'avvio dalla riga di comando, poi da GameUserSettings.ini
-(%LOCALAPPDATA%/<Progetto>/Saved/Config/<Piattaforma>/, a volte nella cartella del gioco), sezione
+Setting: Unreal reads the language at startup from the command line, then from GameUserSettings.ini
+(%LOCALAPPDATA%/<Project>/Saved/Config/<Platform>/, sometimes in the game's folder), section
 [Internationalization]. PatchSmith:
-- cambia solo le chiavi gia' presenti tra Language/Locale/Culture, oppure aggiunge Culture (la meno prioritaria,
-  cosi' una scelta successiva nel menu del gioco vince sempre);
-- non scrive se il gioco ha una sua impostazione della lingua in altre sezioni (la gestisce lui);
-- a gioco chiuso, con registro e ripristino riga per riga (solo se il valore e' ancora quello scritto), lasciando
-  ogni riga con il suo a capo.
+- changes only the keys already present among Language/Locale/Culture, or adds Culture (the lowest priority one,
+  so a later choice in the game's menu always wins);
+- does not write if the game has its own language setting in other sections (the game handles it);
+- with the game closed, with a log and line-by-line restore (only if the value is still the one written), leaving
+  each line with its own line ending.
 """
 import glob
 import os
@@ -24,9 +24,9 @@ MAGIC_PAK = 0x5A6F12E1
 CHIAVI = ("language", "locale", "culture")
 _SEZ = re.compile(r"^\s*\[(.*)\]\s*$")
 _KV = re.compile(r"^(\s*)([^=;\s][^=]*?)(\s*=\s*)(.*?)(\s*)$")
-# chiavi di lingua dei giochi stessi (es. LanguageSetting=Italian, mPrimaryLanguage): la lingua la gestisce il gioco
+# language keys of the games themselves (e.g. LanguageSetting=Italian, mPrimaryLanguage): the game handles the language
 _LINGUA_DEL_GIOCO = re.compile(r"lang|cultur|locale|locali", re.I)
-# ...ma non quelle che parlano d'altro (KeyboardCulture e' la tastiera, i filtri sono per le parolacce)
+# ...but not those about something else (KeyboardCulture is the keyboard, the filters are for profanity)
 _NON_LINGUA_TESTO = re.compile(r"^(keyboard|input|ime)|filter", re.I)
 _LOCALIZZAZIONE = re.compile(r"^([^/]+)/Content/Localization/([^/]+)/([^/]+)/\2\.locres$")
 
@@ -35,7 +35,7 @@ class ErroreLinguaUnreal(ValueError):
     pass
 
 
-# --- quali lingue ha il gioco -------------------------------------------------------------------
+# --- which languages the game has ---------------------------------------------------------------
 
 def _fstring(d, p):
     n = struct.unpack_from("<i", d, p)[0]
@@ -49,7 +49,7 @@ def _fstring(d, p):
 
 
 def _nomi_pak_v10(percorso):
-    """(punto di montaggio, nomi dei file) di un pak v10/v11 (indice delle cartelle), oppure None."""
+    """(mount point, file names) of a v10/v11 pak (directory index), or None."""
     with open(percorso, "rb") as f:
         f.seek(0, 2)
         dim = f.tell()
@@ -60,11 +60,11 @@ def _nomi_pak_v10(percorso):
             return None
         versione, off, lung = struct.unpack_from("<Iqq", coda, i + 4)
         if versione < 10 or coda[i - 1] != 0 or not 0 <= off < dim or off + lung > dim:
-            return None  # versione diversa o indice cifrato
+            return None  # different version or encrypted index
         f.seek(off)
         indice = f.read(lung)
         mount, p = _fstring(indice, 0)
-        p += 4 + 8  # numero di voci, seme dell'hash
+        p += 4 + 8  # number of entries, hash seed
         if struct.unpack_from("<I", indice, p)[0]:
             p += 4 + 8 + 8 + 20
         else:
@@ -90,7 +90,7 @@ def _nomi_pak_v10(percorso):
 
 
 def _con_mount(mount, nomi):
-    """Nomi completi: il punto di montaggio ('../../../Proj/Content/') senza '../' iniziali, piu' il nome."""
+    """Full names: the mount point ('../../../Proj/Content/') without leading '../', plus the name."""
     m = (mount or "").replace("\\", "/")
     while m.startswith("../"):
         m = m[3:]
@@ -114,7 +114,7 @@ def _nomi_pak(percorso):
 
 
 def lingue_del_gioco(cartella):
-    """({lingue}, progetto) dei testi del gioco (non del motore o dei plugin), oppure (None, progetto) se non si sa."""
+    """({lingue}, progetto) of the game's texts (not the engine's or plugins'), or (None, progetto) if unknown."""
     lingue, progetto, letti = set(), None, 0
     for percorso in adapter_unreal._paks(cartella):
         nomi = _nomi_pak(percorso)
@@ -126,7 +126,7 @@ def lingue_del_gioco(cartella):
             if m and m.group(1) not in ("Engine",):
                 lingue.add(m.group(3))
                 progetto = progetto or m.group(1)
-    # file sciolti (alcuni giochi non mettono la localizzazione nei pak)
+    # loose files (some games do not put the localization in the paks)
     for p in glob.glob(os.path.join(glob.escape(cartella), "*", "Content", "Localization", "*", "*", "*.locres")):
         rel = os.path.relpath(p, cartella).replace(os.sep, "/")
         m = _LOCALIZZAZIONE.match(rel)
@@ -150,17 +150,17 @@ def _progetto_da_cartelle(cartella):
 
 
 def tag_italiano(lingue, destinazione="it"):
-    """Il nome esatto della cartella della lingua (es. 'it' o 'it-IT'): Unreal non scende da 'it' a 'it-IT'.
-    Per il cinese conta la scrittura: a chi vuole zh-TW non si da' mai zh-Hans."""
+    """The exact name of the language folder (e.g. 'it' or 'it-IT'): Unreal does not fall back from 'it' to 'it-IT'.
+    For Chinese the script matters: whoever wants zh-TW is never given zh-Hans."""
     from .language import migliore
     return migliore(sorted(lingue), destinazione)
 
 
-# --- impostazione in GameUserSettings.ini -------------------------------------------------------
+# --- setting in GameUserSettings.ini ------------------------------------------------------------
 
 def file_impostazioni(progetto, cartella=None):
-    """Il GameUserSettings.ini del giocatore per il progetto (il piu' recente), oppure None. Cerca solo dove
-    Unreal lo mette: %LOCALAPPDATA%/<Progetto>, la cartella del gioco, Documenti/My Games/<Progetto>."""
+    """The player's GameUserSettings.ini for the project (the most recent one), or None. It looks only where
+    Unreal puts it: %LOCALAPPDATA%/<Project>, the game's folder, Documents/My Games/<Project>."""
     if not progetto:
         return None
     basi = []
@@ -210,7 +210,7 @@ def _scrivi(percorso, testo, codifica, bom):
 
 
 def _righe(testo):
-    """[[contenuto, a capo]]: ogni riga con il suo a capo ('\\r\\n', '\\n', '\\r' o '' per l'ultima)."""
+    """[[contenuto, a capo]]: each line with its line ending ('\\r\\n', '\\n', '\\r' or '' for the last one)."""
     righe, pos = [], 0
     for m in re.finditer(r"\r\n|\r|\n", testo):
         righe.append([testo[pos:m.start()], m.group()])
@@ -233,8 +233,8 @@ def _e_internazionalizzazione(sezione):
 
 
 def leggi_internazionalizzazione(percorso):
-    """({chiave minuscola: valore} di [Internationalization] (vale l'ultima), [chiavi di lingua del gioco in
-    altre sezioni del gioco: /Script/... e /Game/...])."""
+    """({lowercase key: value} of [Internationalization] (the last one wins), [the game's language keys in
+    other sections of the game: /Script/... and /Game/...])."""
     testo, _, _ = _leggi(percorso)
     valori, altre, sezione = {}, [], None
     for contenuto, _ in _righe(testo):
@@ -256,10 +256,10 @@ def leggi_internazionalizzazione(percorso):
 
 
 def imposta_cultura(percorso, tag):
-    """Imposta la lingua 'tag' in [Internationalization]. Restituisce le modifiche fatte (per il ripristino):
-    ['riga', n, chiave, valore vecchio] per ogni riga di lingua cambiata (n = posizione tra le righe di lingua
-    della sezione), ['aggiunta', 'Culture'] per la riga aggiunta, ['sezione', [righe aggiunte], a capo aggiunto]
-    se la sezione non c'era. Lista vuota se era gia' tutto a posto."""
+    """Sets the language 'tag' in [Internationalization]. Returns the changes made (for the restore):
+    ['riga', n, key, old value] for each language line changed (n = position among the section's language
+    lines), ['aggiunta', 'Culture'] for the added line, ['sezione', [added lines], line ending added]
+    if the section was not there. Empty list if everything was already in place."""
     if not os.access(percorso, os.W_OK):
         raise ErroreLinguaUnreal("il file delle impostazioni e' di sola lettura: non lo tocco")
     testo, codifica, bom = _leggi(percorso)
@@ -293,7 +293,7 @@ def imposta_cultura(percorso, tag):
             dove -= 1
         if righe[dove - 1][1]:
             righe.insert(dove, ["Culture=" + tag, a_capo])
-        else:  # ultima riga del file senza a capo: la nuova prende il suo posto in fondo
+        else:  # last line of the file without a line ending: the new one takes its place at the end
             righe[dove - 1][1] = a_capo
             righe.insert(dove, ["Culture=" + tag, ""])
         modifiche.append(["aggiunta", "Culture"])
@@ -310,7 +310,7 @@ def imposta_cultura(percorso, tag):
 
 
 def _da_registro_vecchio(modifiche):
-    """Registro della 0.8.0 ([(chiave, vecchio)], ('[sezione]', testo)) nel formato attuale."""
+    """0.8.0 log ([(chiave, vecchio)], ('[sezione]', testo)) in the current format."""
     nuove = []
     for chiave, vecchio in modifiche:
         if chiave == "[sezione]":
@@ -323,7 +323,7 @@ def _da_registro_vecchio(modifiche):
 
 
 def ripristina_cultura(percorso, modifiche, tag):
-    """Rimette com'erano le righe cambiate, solo se valgono ancora 'tag'. Restituisce quante."""
+    """Puts the changed lines back as they were, only if they are still 'tag'. Returns how many."""
     if not os.path.exists(percorso):
         return 0
     if not os.access(percorso, os.W_OK):
@@ -366,9 +366,9 @@ def ripristina_cultura(percorso, modifiche, tag):
             rifatte += 1
     for i in reversed(da_togliere):
         if righe[i][1] == "" and i > 0 and i == len(righe) - 1:
-            righe[i - 1][1] = ""  # era l'ultima riga senza a capo: torna com'era
+            righe[i - 1][1] = ""  # it was the last line without a line ending: back as it was
         del righe[i]
-    # sezione aggiunta da PatchSmith e rimasta vuota: via, come era prima
+    # section added by PatchSmith and left empty: removed, as it was before
     if da_togliere and sezione_aggiunta:
         coda = [r for r in sezione_aggiunta[1] if not r.lower().startswith("culture=")]
         if coda and [c for c, _ in righe[-len(coda):]] == coda:

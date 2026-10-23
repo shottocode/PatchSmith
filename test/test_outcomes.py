@@ -1,9 +1,9 @@
-"""Esito strutturato delle operazioni (outcome.py), finestre dell'interfaccia per ogni esito e "Crea rapporto".
+"""Structured outcome of the operations (outcome.py), interface dialogs for each outcome and "Create report".
 
-Uso: python -I test/test_outcomes.py <cartella_temporanea_vuota>
-Solo giochi finti creati qui (web, GameMaker, Unity Mono/IL2CPP/Localization) e il traduttore di prova o un blocco
-di Google scritto in uno services.json di prova: nessuna rete, nessun gioco vero. Dati di PatchSmith, cartella
-dell'utente e %TEMP% stanno tutti nella cartella della prova.
+Usage: python -I test/test_outcomes.py <empty_temp_folder>
+Only fake games created here (web, GameMaker, Unity Mono/IL2CPP/Localization) and the test translator or a Google
+block written in a test services.json: no network, no real game. PatchSmith's data, the user folder and %TEMP% are
+all in the test folder.
 """
 import base64
 import contextlib
@@ -20,8 +20,8 @@ sys.path.insert(0, os.path.dirname(QUI))
 sys.path.insert(0, QUI)
 
 import fake_web_game as gioco_web_finto  # noqa: E402
-import test_gamemaker  # noqa: E402  (gioco GameMaker finto)
-import test_unity  # noqa: E402  (gioco Unity finto e componenti finti)
+import test_gamemaker  # noqa: E402  (fake GameMaker game)
+import test_unity  # noqa: E402  (fake Unity game and fake components)
 from patchsmith import (__version__, adapter_unity, auto as automatico, backend, outcome as esito, ollama,
                         project as progetto, report as rapporto)  # noqa: E402
 from patchsmith import detection as rilevamento, system as sistema  # noqa: E402
@@ -39,7 +39,7 @@ def silenzio(_):
 
 
 def impronte(cartella):
-    """{percorso relativo: (dimensione, data)} di tutti i file: per vedere che nulla e' stato toccato."""
+    """{relative path: (size, date)} of all the files: to see that nothing was touched."""
     uscita = {}
     for radice, _, files in os.walk(cartella):
         for f in files:
@@ -49,8 +49,8 @@ def impronte(cartella):
 
 
 def gioco_unity_il2cpp(cartella, tabelle=False, crc=0):
-    """Gioco Unity IL2CPP finto; con tabelle=True anche il bundle inglese di Unity Localization e il catalogo di
-    Addressables (crc: il valore di m_Crc nelle opzioni dei bundle)."""
+    """Fake Unity IL2CPP game; with tabelle=True also the English Unity Localization bundle and the Addressables
+    catalog (crc: the value of m_Crc in the bundle options)."""
     test_unity.crea_gioco(cartella)
     os.rename(os.path.join(cartella, "Gioco_Data", "Managed"), os.path.join(cartella, "Gioco_Data", "nonusata"))
     os.makedirs(os.path.join(cartella, "Gioco_Data", "il2cpp_data", "Metadata"))
@@ -92,7 +92,7 @@ def senza_smith(testo):
 
 
 class MezzoTraduttore(backend.Finto):
-    """Traduttore di prova che non traduce i testi con 'lantern': restano in originale."""
+    """Test translator that does not translate the texts with 'lantern': they stay untranslated."""
 
     def traduci_righe(self, righe, origine, destinazione, **_):
         return ["" if "lantern" in r.lower() else "[it] " + r for r in righe]
@@ -117,7 +117,7 @@ def prova_web(base):
     controlla("riapplica: esito OK e finestra 'Traduzione riapplicata'", fatto and esito_di(d).codice == "OK"
               and esito.finestra(esito_di(d), "riapplica")["titolo"] == "Traduzione riapplicata")
 
-    # gioco aperto: ripristino rifiutato, nessun file toccato
+    # game open: restore refused, no file touched
     vero = sistema.gioco_aperto
     sistema.gioco_aperto = lambda c: True
     tradotto = impronte(gioco)
@@ -147,7 +147,8 @@ def prova_web(base):
     controlla("riapplica senza traduzioni salvate: NULLA_DA_FARE",
               not automatico.riapplica(vuota, silenzio, esito=d) and esito_di(d).codice == "NULLA_DA_FARE")
 
-    # parte dei testi non tradotta: PARZIALE con i testi rimasti da mostrare (memoria di prova da zero)
+    # some of the texts not translated: PARZIALE with the remaining texts to show (test translation memory from
+    # scratch)
     with open(automatico.trova_profilo(gioco), encoding="utf-8") as f:
         os.remove(progetto.percorso_memoria(json.load(f), prova=True))
     vero = automatico.crea_backend
@@ -170,15 +171,15 @@ def prova_web(base):
 
 
 def prova_google_bloccato(base, gioco):
-    """Google in pausa per un blocco (scritto nello stato dei traduttori di prova): nessuna richiesta, esito chiaro."""
+    """Google paused because of a block (written in the test translators' state): no requests, clear outcome."""
     stato = progetto.cartella_dati("services.json")
     adesso = time.time()
     with open(stato, "w", encoding="utf-8") as f:
         json.dump({"versione": 1, "google": {"richieste": [], "blocco": {
             "dal": adesso - 60, "fino": adesso + 86400, "livello": 1, "tipo": "a_freddo", "http": 429,
             "dettaglio": None, "disattivato": False}}}, f)
-    # la memoria del traduttore di prova (.prova.json) non vale per Google: servirebbero richieste, che la pausa
-    # impedisce prima di mandarne una
+    # the test translator's translation memory (.prova.json) does not apply to Google: requests would be needed,
+    # which the pause prevents before one is sent
     _, completato, d = automatico.analizza_e_traduci(gioco, "auto", "it", "google", silenzio)
     e = esito_di(d)
     f = esito.finestra(e, "traduci", locale_pronto=False, attuale="google")
@@ -218,7 +219,7 @@ def prova_gamemaker_aperto(base):
     controlla("GameMaker con l'italiano ufficiale: UFFICIALE (con le righe per la domanda sulla lingua ufficiale), "
               "nulla toccato", not percorso and e.codice == "UFFICIALE" and e.extra.get("lingua_ufficiale")
               and e.extra.get("righe") and impronte(italiano) == prima and "Italiano" in e.motivo)
-    # se la lingua ufficiale sfugge al primo controllo, la trova la ricerca dei file di GameMaker
+    # if the official language escapes the first check, the search of the GameMaker files finds it
     _, d = automatico._prepara_gamemaker(italiano, None, "auto", "it", rilevamento.rileva(italiano), silenzio)
     e = esito_di(d)
     f = esito.finestra(e, "traduci")
@@ -299,7 +300,7 @@ def prova_eccezioni():
     f = esito.finestra(assente, "traduci", locale_pronto=False, attuale="locale")
     controlla("traduttore locale non installato: 'Installa il traduttore locale', niente comandi",
               ("Installa il traduttore locale", "installa_locale") in f["pulsanti"] and senza_smith(f["testo"]))
-    # DeepL senza chiave con il traduttore locale gia' installato: "Installa" non farebbe nulla, si propone di usarlo
+    # DeepL without a key with the local translator already installed: "Install" would do nothing, we offer to use it
     senza_chiave = esito.da_eccezione(backend.ErroreBackend("Per usare DeepL serve la tua chiave", "TRADUTTORE_ASSENTE"))
     f = esito.finestra(senza_chiave, "traduci", locale_pronto=True, attuale="deepl")
     controlla("traduttore scelto non pronto, locale installato: 'Usa il traduttore locale' (non 'Installa')",
@@ -308,8 +309,8 @@ def prova_eccezioni():
     f = esito.finestra(assente, "traduci", locale_pronto=True, attuale="locale")
     controlla("traduttore locale scelto ma il suo modello manca: resta 'Installa il traduttore locale'",
               ("Installa il traduttore locale", "installa_locale") in f["pulsanti"])
-    # operazioni che non toccano il gioco: niente "Riprova" (ripeterebbe l'ultima operazione sul gioco) ne' consigli
-    # sul gioco aperto o sulla cartella Programmi
+    # operations that do not touch the game: no "Try again" (it would repeat the last operation on the game) nor advice
+    # about the open game or the Program Files folder
     permessi = esito.da_eccezione(PermissionError(13, "Accesso negato", "C:/Utente/Desktop/rapporto.zip"))
     f = esito.finestra(permessi, "rapporto")
     controlla("rapporto non creato: finestra sua, con il motivo, senza 'Riprova' ne' 'Crea rapporto'",
@@ -322,7 +323,7 @@ def prova_eccezioni():
 
 
 def prova_finestre():
-    """Ogni codice ha la sua finestra: titolo proprio, testo senza riga di comando, pulsanti validi."""
+    """Every code has its own dialog: its own title, text without command line, valid buttons."""
     titoli = {}
     for codice in esito.CODICI:
         e = esito.Esito(codice, "Motivo di prova.", motore="gamemaker", scritto=codice in ("OK", "PARZIALE"),
@@ -351,8 +352,8 @@ def prova_finestre():
     e = esito.Esito("PARZIALE", esempi_rimasti=["t%d" % i for i in range(50)], rimasti=50)
     controlla("al massimo 20 esempi rimasti; riassunto per il registro", len(e.esempi_rimasti) == 20
               and e.riassunto().startswith("Esito: PARZIALE"))
-    # revisione 0.16: rimaste fuori dal gioco solo traduzioni che il gioco non saprebbe mostrare (scartate quando si
-    # scrive): "Correggi traduzioni" apre "Non scritte nel gioco" e il testo nomina quell'elenco, non "Rimasti"
+    # revision 0.16: left out of the game only translations the game could not show (rejected while writing):
+    # "Fix translations" opens "Not written to the game" and the text names that list, not "Left untranslated"
     e = esito.Esito("PARZIALE", "Una traduzione non e' stata scritta perche' il gioco non la mostrerebbe bene.",
                     motore="gamemaker", scritto=True, tradotti=24, rimasti=1, esempi_rimasti=["VULTURE TOKEN"],
                     azioni=[], extra={"scartate": 1})
@@ -370,7 +371,7 @@ def prova_finestre():
 
 
 def prova_rapporto(base, mono):
-    """Crea rapporto: i file utili ci sono, chiave DeepL ed email no (neanche se finite in un registro)."""
+    """Create report: the useful files are there, DeepL key and email are not (not even if they ended up in a log)."""
     chiave, email = "chiave-segreta-1234567:fx", "giocatore.segreto@example.com"
     with open(progetto.cartella_dati("settings.json"), "w", encoding="utf-8") as f:
         json.dump({"versione": 2, "backend": "deepl", "chiave_deepl": chiave, "email_mymemory": email,
@@ -385,12 +386,12 @@ def prova_rapporto(base, mono):
         f.write("PatchSmith - Analisi e traduzione\nchiave usata per sbaglio: %s (%s)\nEsito: OK\n"
                 % (chiave, email.upper()))
     with open(automatico.trova_profilo(mono), encoding="utf-8") as f:
-        problemi_testi = progetto.percorso_problemi(json.load(f))  # i testi rimasti in originale, con il motivo
+        problemi_testi = progetto.percorso_problemi(json.load(f))  # the texts left untranslated, with the reason
     os.makedirs(os.path.dirname(problemi_testi), exist_ok=True)
     with open(problemi_testi, "w", encoding="utf-8") as f:
         json.dump({"Quit": {"motivo": "scartata dai controlli (non tradotta)", "dove": "traduzione",
                             "tentativi": 2}}, f)
-    # registri del gioco, di BepInEx e di Unity (azienda e prodotto da app.info), crash, traduttore dal vivo
+    # logs of the game, of BepInEx and of Unity (company and product from app.info), crashes, live translator
     open(os.path.join(mono, "BepInEx", "LogOutput.log"), "w", encoding="utf-8").write(
         "[Message:   BepInEx] Chainloader startup complete\n")
     open(os.path.join(mono, "Gioco_Data", "app.info"), "w", encoding="utf-8").write("Azienda Finta\nGioco Finto")
@@ -409,7 +410,7 @@ def prova_rapporto(base, mono):
     open(os.path.join(lavoro, "servizio-xunity.log"), "w", encoding="utf-8").write(
         "x" * (rapporto.MAX_BYTE + 1000) + "\n2026-10-18 ! traduzione interrotta\n")
     vero = ollama.cartella
-    ollama.cartella = lambda: lavoro  # mai i registri veri del traduttore locale
+    ollama.cartella = lambda: lavoro  # never the real logs of the local translator
     destinazione = os.path.join(base, "Desktop")
     try:
         ultimo = esito.Esito("PARZIALE", "Motivo", motore="unity", scritto=True, rimasti=1, esempi_rimasti=["Quit"])
@@ -454,8 +455,8 @@ def prova_rapporto(base, mono):
 
 
 def prova_dal_vivo(mono):
-    """Chi riceve le frasi nuove mentre si gioca (Unity): Google, il traduttore di PatchSmith (comando del plugin di
-    PatchSmith) o nessuno (XUnity senza un traduttore che risponda)."""
+    """Who receives the new lines while playing (Unity): Google, PatchSmith's translator (command of PatchSmith's
+    plugin) or nobody (XUnity without a translator that answers)."""
     config = os.path.join(mono, *adapter_unity.CONFIG_XUNITY.split("/"))
     servizio = os.path.join(mono, *adapter_unity.CONFIG_SERVIZIO.split("/"))
     plugin = os.path.join(mono, *adapter_unity.PLUGIN_SERVIZIO.split("/"))
@@ -474,7 +475,7 @@ def prova_dal_vivo(mono):
     with open(config, "w", encoding="utf-8") as f:
         f.write(originale)
     os.remove(servizio)
-    risultati.append(adapter_unity.traduttore_dal_vivo(os.path.dirname(mono)))  # cartella senza XUnity
+    risultati.append(adapter_unity.traduttore_dal_vivo(os.path.dirname(mono)))  # folder without XUnity
     e = esito.Esito("OK", motore="unity", scritto=True, tradotti=5, dal_vivo="locale")
     controlla("frasi nuove mentre giochi: Google, traduttore di PatchSmith, nessuno (e None senza XUnity)%s" % (
         "" if risultati == ["google", "servizio", "nessuno", None] else ": %s" % risultati),
@@ -491,8 +492,8 @@ def prova_dal_vivo(mono):
 
 
 def prova_riga_di_comando(base):
-    """I messaggi parlano dei pulsanti dell'interfaccia: il comando per rimediare lo scrive solo la riga di comando
-    (sotto l'errore, e in 'smith servizi' per un traduttore disattivato)."""
+    """The messages talk about the interface's buttons: only the command line writes the command to fix it
+    (under the error, and in 'smith servizi' for a disabled translator)."""
     from patchsmith import cli
     vero = automatico.analizza_e_traduci
 
@@ -529,8 +530,8 @@ def prova_riga_di_comando(base):
 
 
 def prova_profili_rovinati(base):
-    """Un file in profili/ che non e' un profilo (es. una lista) si salta come uno illeggibile: non blocca la
-    ricerca del profilo (ne' l'interfaccia, che la fa prima di ogni operazione)."""
+    """A file in profiles/ that is not a game profile (e.g. a list) is skipped like an unreadable one: it does not
+    block the search for the game profile (nor the interface, which does it before every operation)."""
     rotto = os.path.join(automatico.cartella_profili(), "rotto.json")
     with open(rotto, "w", encoding="utf-8") as f:
         json.dump(["non", "un", "profilo"], f)
@@ -546,8 +547,8 @@ def prova_profili_rovinati(base):
 
 
 def prova_testi_interfaccia():
-    """Nessun testo che arriva all'interfaccia rimanda alla riga di comando: 'smith.py' solo in cli.py, nel percorso
-    del servizio per XUnity e nei comandi riservati alla riga di comando (attributo 'comando')."""
+    """No text that reaches the interface refers to the command line: 'smith.py' only in cli.py, in the path of the
+    service for XUnity and in the commands reserved for the command line (attribute 'comando')."""
     cartella = os.path.join(os.path.dirname(QUI), "patchsmith")
     trovati = []
     for nome in sorted(os.listdir(cartella)):
@@ -581,7 +582,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    # dati di PatchSmith, cartella dell'utente e %TEMP% nella cartella della prova (anche lanciata da sola)
+    # PatchSmith's data, the user folder and %TEMP% in the test folder (even when run on its own)
     progetto.RADICE_DATI = os.path.join(base, "dati")
     automatico.CARTELLA_PROFILI = None
     for d in ("profiles", "memory"):
@@ -592,7 +593,7 @@ def main(base):
         os.makedirs(os.environ[variabile], exist_ok=True)
     for v in ("PATCHSMITH_DEEPL", "PATCHSMITH_EMAIL"):
         os.environ.pop(v, None)
-    rapporto.cartella_desktop = lambda: os.path.join(base, "Desktop")  # mai il Desktop vero
+    rapporto.cartella_desktop = lambda: os.path.join(base, "Desktop")  # never the real Desktop
     gioco = prova_web(base)
     prova_google_bloccato(base, gioco)
     prova_gamemaker_aperto(base)

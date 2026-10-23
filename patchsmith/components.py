@@ -1,7 +1,7 @@
-"""Componenti esterni (loader e plugin) scaricati dalle release ufficiali, a versioni fissate.
+"""External components (loaders and plugins) downloaded from the official releases, at pinned versions.
 
-Ogni componente ha URL, dimensione e impronta SHA-256 scritti qui: il file scaricato viene usato
-solo se l'impronta corrisponde. I file restano in components/ (cache), cosi' si scaricano una volta.
+Each component has its URL, size and SHA-256 fingerprint written here: the downloaded file is used
+only if the fingerprint matches. The files stay in components/ (cache), so they are downloaded once.
 """
 import hashlib
 import os
@@ -11,14 +11,14 @@ import zipfile
 from . import interruption as interruzione
 from .project import cartella_componenti
 
-CARTELLA = None  # None: components/ accanto al programma (progetto.cartella_componenti); le prove la cambiano
+CARTELLA = None  # None: components/ next to the program (progetto.cartella_componenti); the tests change it
 
 
 def cartella():
     return CARTELLA or cartella_componenti()
 
-# nome -> {url, file, dimensione, sha256, licenza, versione}
-# Impronte lette dall'API delle release GitHub ufficiali (campo "digest") il 2026-10-13.
+# name -> {url, file, dimensione, sha256, licenza, versione}
+# Fingerprints read from the official GitHub releases API ("digest" field) on 2026-10-13.
 CATALOGO = {
     "bepinex5_x64": {
         "url": "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x64_5.4.23.5.zip",
@@ -56,13 +56,13 @@ def percorso(nome):
 
 
 def disponibile(nome):
-    """True se il componente e' gia' in cache e integro."""
+    """True if the component is already in the cache and intact."""
     p = percorso(nome)
     return os.path.exists(p) and _sha256(p) == CATALOGO[nome]["sha256"]
 
 
 def ottieni(nome, log=print):
-    """Percorso del file del componente, scaricandolo se serve. Verifica sempre l'impronta."""
+    """Path of the component's file, downloading it if needed. Always verifies the fingerprint."""
     voce = CATALOGO[nome]
     destinazione = percorso(nome)
     if disponibile(nome):
@@ -80,7 +80,7 @@ def ottieni(nome, log=print):
                 if letti > voce["dimensione"] * 2 + 1_000_000:
                     raise ErroreComponente("%s: il file scaricato e' troppo grande, scaricamento interrotto" % nome)
                 f.write(blocco)
-    except BaseException as e:  # anche "Ferma": niente scaricamenti a meta'
+    except BaseException as e:  # "Stop" too: no half-finished downloads
         if os.path.exists(temporaneo):
             os.remove(temporaneo)
         if isinstance(e, OSError):
@@ -96,6 +96,6 @@ def ottieni(nome, log=print):
 
 
 def elenco_zip(nome):
-    """Percorsi (con /) contenuti nello zip del componente."""
+    """Paths (with /) contained in the component's zip."""
     with zipfile.ZipFile(percorso(nome)) as z:
         return [i.filename for i in z.infolist()]

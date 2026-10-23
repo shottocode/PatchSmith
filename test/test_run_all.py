@@ -1,13 +1,13 @@
-"""Controlli sul runner delle prove (test/run_all.py), senza lanciare le prove vere.
+"""Checks on the test runner (test/run_all.py), without running the real tests.
 
-Uso: python -I test/test_run_all.py <cartella_temporanea_vuota>
-Copre:
-- ogni prova ha i suoi dati (PATCHSMITH_DATI) e le sue cartelle dell'utente, dentro la sua cartella, senza le
-  variabili PATCHSMITH_* e OLLAMA_* di chi lancia le prove: una prova non vede quello che ha lasciato un'altra;
-- l'uscita va nel registro e il codice di uscita si conserva;
-- una prova troppo lunga si ferma insieme ai processi che ha avviato, e il runner non resta bloccato;
-- l'istantanea dei dati veri si accorge di un file cambiato, aggiunto o tolto;
-- i nomi delle prove (anche con .py) e l'elenco delle prove senza argomenti, che deve restare giusto.
+Usage: python -I test/test_run_all.py <empty_temp_folder>
+Covers:
+- each test has its own data (PATCHSMITH_DATI) and its own user folders, inside its folder, without the
+  PATCHSMITH_* and OLLAMA_* variables of whoever runs the tests: a test does not see what another one left behind;
+- the output goes into the log and the exit code is kept;
+- a test that runs too long is stopped together with the processes it started, and the runner does not hang;
+- the snapshot of the real data notices a changed, added or removed file;
+- the test names (also with .py) and the list of tests without arguments, which must stay correct.
 """
 import os
 import re
@@ -23,7 +23,7 @@ from patchsmith import project as progetto, xunity_service as servizio_xunity  #
 
 ESITI = []
 
-# prova finta che avvia un processo figlio (eredita l'uscita, come un server di prova) e poi non finisce
+# fake test that starts a child process (it inherits the output, like a test server) and then never ends
 APPESA = r"""
 import subprocess, sys, time
 figlio = subprocess.Popen([sys.executable, "-I", "-c", "import time; time.sleep(120)"])
@@ -138,7 +138,7 @@ def prova_nomi():
     except SystemExit:
         sconosciuta = True
     controlla("nomi: una prova sconosciuta si segnala", sconosciuta)
-    senza = set()  # le prove che non leggono argomenti dalla riga di comando
+    senza = set()  # the tests that do not read arguments from the command line
     for nome in tutte:
         with open(os.path.join(QUI, nome + ".py"), encoding="utf-8") as f:
             if not re.search(r"sys\.argv\[", f.read()):
@@ -152,7 +152,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    progetto.RADICE_DATI = os.path.join(base, "dati")  # per sicurezza: queste prove non scrivono dati
+    progetto.RADICE_DATI = os.path.join(base, "dati")  # to be safe: these tests do not write data
     prova_ambiente(base)
     prova_esegui(base)
     prova_istantanea(base)

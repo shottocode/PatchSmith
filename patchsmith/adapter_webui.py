@@ -1,15 +1,15 @@
-"""Adapter web-ui: traduce i testi dell'interfaccia dei giochi web (Electron / NW.js / HTML5).
+"""web-ui adapter: translates the interface texts of web games (Electron / NW.js / HTML5).
 
-I testi dei menu sono spesso scritti dentro il codice JavaScript (minificato). Modificare quel
-codice e' rischioso, perche' la stessa stringa puo' fare anche da identificatore. Questo adapter
-quindi NON tocca il codice del gioco:
-  1. estrae staticamente le stringhe leggibili dai file .js/.html della cartella web (anche i pulsanti di una
-     parola, PLAY, OK, quit, quando di sicuro si vedono: testo dell'HTML, el.textContent = "...", fillText...);
-  2. dopo la traduzione genera patchsmith-traduzione.js, con il dizionario {inglese: italiano};
-  3. aggiunge a index.html un solo tag <script> che, mentre il gioco gira, sostituisce i testi
-     VISUALIZZATI (nodi di testo, title/placeholder/aria-label/alt, testo disegnato su canvas)
-     che corrispondono esattamente a una voce del dizionario.
-Una stringa estratta per errore non fa danni: viene sostituita solo se appare a schermo.
+Menu texts are often written inside the (minified) JavaScript code. Changing that code is risky,
+because the same string can also act as an identifier. So this adapter does NOT touch the game's
+code:
+  1. it statically extracts the readable strings from the .js/.html files of the web folder (one-word buttons
+     too, PLAY, OK, quit, when they are certainly visible: HTML text, el.textContent = "...", fillText...);
+  2. after the translation it generates patchsmith-traduzione.js, with the dictionary {English: Italian};
+  3. it adds to index.html a single <script> tag that, while the game runs, replaces the DISPLAYED
+     texts (text nodes, title/placeholder/aria-label/alt, text drawn on canvas) that exactly
+     match a dictionary entry.
+A string extracted by mistake does no harm: it is replaced only if it appears on screen.
 """
 import collections
 import html as html_lib
@@ -22,23 +22,23 @@ import subprocess
 from .adapter_webjson import MARCATORE
 from .text import _CJK, e_testo_leggibile
 
-SUFFISSO_BACKUP = ".patchsmith-originale"  # deve coincidere con progetto.SUFFISSO_BACKUP
+SUFFISSO_BACKUP = ".patchsmith-originale"  # must match progetto.SUFFISSO_BACKUP
 
 NOME_SCRIPT = "patchsmith-traduzione.js"
 TAG = '<script src="%s" data-patchsmith="1"></script>' % NOME_SCRIPT
 CARTELLE_ESCLUSE = {"node_modules", ".git", "__pycache__"}
 MAX_DIMENSIONE = 10 * 1024 * 1024
-MAX_REGEX = 400  # oltre questa lunghezza una "regex" e' quasi certamente una divisione letta male
+MAX_REGEX = 400  # beyond this length a "regex" is almost certainly a misread division
 
 _PAROLE_PRIMA_DI_REGEX = {"return", "typeof", "case", "do", "else", "in", "of", "void", "yield", "await",
                           "throw", "delete", "instanceof", "new"}
 _PAROLE_CONDIZIONE = {"if", "while", "for", "with"}
 
 
-# --- lettura delle stringhe dal JavaScript ------------------------------------------------
+# --- reading the strings from the JavaScript ----------------------------------------------
 
 def _fine_stringa(codice, i):
-    """codice[i] e' ' o ". Indice subito dopo la chiusura (o la fine riga)."""
+    """codice[i] is ' or ". Index right after the closing quote (or the end of the line)."""
     q, j, n = codice[i], i + 1, len(codice)
     while j < n and codice[j] != q and codice[j] != "\n":
         j += 2 if codice[j] == "\\" else 1
@@ -46,7 +46,7 @@ def _fine_stringa(codice, i):
 
 
 def _leggi_template(codice, i):
-    """codice[i] e' `. Restituisce (indice dopo la chiusura, pezzi di testo fissi)."""
+    """codice[i] is `. Returns (index after the closing backtick, fixed text pieces)."""
     n, j, pezzi, pezzo = len(codice), i + 1, [], []
     while j < n:
         d = codice[j]
@@ -85,7 +85,7 @@ def _leggi_template(codice, i):
 
 
 def _fine_regex(codice, i):
-    """codice[i] e' / all'inizio di una regex. Indice dopo i flag, o None se non sembra una regex."""
+    """codice[i] is / at the start of a regex. Index after the flags, or None if it does not look like a regex."""
     j, n, classe = i + 1, len(codice), False
     limite = min(n, i + MAX_REGEX)
     while j < limite:
@@ -108,9 +108,9 @@ def _fine_regex(codice, i):
     return None
 
 
-# Contesti in cui una stringa del JavaScript e' di sicuro un testo mostrato al giocatore (vedi letterali_js):
-# assegnata a una di queste proprieta' (el.textContent = "PLAY"), argomento di una di queste funzioni
-# (ctx.fillText("OK", x, y), this.add.text(10, 20, "QUIT")) o valore di una di queste chiavi ({label: "Back"}).
+# Contexts in which a JavaScript string is certainly a text shown to the player (see letterali_js):
+# assigned to one of these properties (el.textContent = "PLAY"), argument of one of these functions
+# (ctx.fillText("OK", x, y), this.add.text(10, 20, "QUIT")) or value of one of these keys ({label: "Back"}).
 _PROPRIETA_UI = {"textContent", "innerText", "innerHTML", "nodeValue", "value", "placeholder", "title", "alt", "label",
                  "text", "caption", "tooltip"}
 _FUNZIONI_UI = {"fillText", "strokeText", "alert", "confirm", "prompt", "createTextNode", "setText", "text", "Text",
@@ -119,7 +119,7 @@ _CHIAVI_UI = {"text", "label", "title", "caption", "tooltip", "placeholder", "me
 
 
 def _contesto_ui(storia, parentesi):
-    """True se la stringa che segue i token 'storia' (gli ultimi tre: (tipo, valore)) e' un testo dell'interfaccia."""
+    """True if the string that follows the tokens 'storia' (the last three: (tipo, valore)) is an interface text."""
     ultimi = [None] * (3 - len(storia)) + list(storia)
     if ultimi[2] == ("punt", "=") and ultimi[0] == ("punt", ".") and ultimi[1] and ultimi[1][0] == "parola" \
             and ultimi[1][1] in _PROPRIETA_UI:
@@ -131,21 +131,21 @@ def _contesto_ui(storia, parentesi):
 
 
 def letterali_js(codice, contesto=False):
-    """Stringhe letterali di un sorgente JavaScript (anche minificato).
+    """String literals of a JavaScript source (minified too).
 
-    Piccolo lettore a token: distingue stringhe '..' ".." `..`, commenti ed espressioni regolari,
-    cosi' le virgolette dentro una regex o un commento non confondono l'estrazione.
-    Una "/" e' una regex solo dove puo' iniziare un'espressione (dopo operatori, '(', ',', parole
-    come return/typeof, la ')' di if/while/for), altrimenti e' una divisione.
-    contesto=True: coppie (stringa, interfaccia), con interfaccia True se la stringa e' di sicuro un testo mostrato
-    (vedi _contesto_ui).
+    Small token reader: it tells apart strings '..' ".." `..`, comments and regular expressions,
+    so quotes inside a regex or a comment do not confuse the extraction.
+    A "/" is a regex only where an expression can start (after operators, '(', ',', words
+    like return/typeof, the ')' of if/while/for), otherwise it is a division.
+    contesto=True: pairs (string, interface), with interface True if the string is certainly a shown text
+    (see _contesto_ui).
     """
     i, n = 0, len(codice)
-    puo_regex = True  # True se in questo punto puo' iniziare un'espressione
-    ultimo = ""  # ultimo carattere significativo
-    parola_prima = None  # ultima parola letta, se e' l'ultimo token
-    parentesi = []  # per ogni '(' aperta: "condizione" (if/while/for/with), "ui" (vedi _FUNZIONI_UI) o None
-    storia = collections.deque(maxlen=3)  # gli ultimi tre token: (tipo, valore)
+    puo_regex = True  # True if an expression can start at this point
+    ultimo = ""  # last significant character
+    parola_prima = None  # last word read, if it is the last token
+    parentesi = []  # for each open '(': "condizione" (if/while/for/with), "ui" (see _FUNZIONI_UI) or None
+    storia = collections.deque(maxlen=3)  # the last three tokens: (tipo, valore)
     while i < n:
         c = codice[i]
         if c.isspace():
@@ -197,7 +197,7 @@ def letterali_js(codice, contesto=False):
             i, puo_regex, ultimo, parola_prima = j, False, "0", None
             storia.append(("numero", None))
         elif c in "+-" and i + 1 < n and codice[i + 1] == c:
-            i += 2  # ++/--: dopo un valore (postfisso) resta una divisione, altrimenti nulla cambia
+            i += 2  # ++/--: after a value (postfix) a division follows, otherwise nothing changes
             ultimo, parola_prima = c, None
             storia.append(("punt", c + c))
         else:
@@ -210,12 +210,12 @@ def letterali_js(codice, contesto=False):
             elif c == "]":
                 puo_regex = False
             else:
-                puo_regex = True  # operatori, '.', ',', ';', ':', '{', '}', ...
+                puo_regex = True  # operators, '.', ',', ';', ':', '{', '}', ...
             i, ultimo, parola_prima = i + 1, c, None
             storia.append(("punt", c))
 
 
-# --- filtri sul testo -------------------------------------------------------------------------
+# --- text filters -----------------------------------------------------------------------------
 
 _ESCAPE = re.compile(r"\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|.)", re.S)
 _SEMPLICI = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "v": "\v", "0": "\0"}
@@ -224,9 +224,9 @@ _CODICE = re.compile(
     r"|\\|<[a-zA-Z]|=\"|^[),=]|[(,=]$"
     r"|\bfunction\s*[\w$]*\s*\(|\bnew [A-Z][\w$]*\(|\breturn\s*[;)}]"
 )
-# Solo i nomi di tasti che non sono mai parole d'interfaccia. Parole come Delete, Enter, Space,
-# Home restano traducibili: quando compaiono come TASTO (dentro <kbd> o un elemento con classe
-# "key") e' l'iniettore a lasciarle in originale, in base al contesto.
+# Only the key names that are never interface words. Words like Delete, Enter, Space,
+# Home stay translatable: when they appear as a KEY (inside <kbd> or an element with class
+# "key") the injector leaves them untranslated, based on the context.
 _TASTI = {
     "escape", "esc", "shift", "ctrl", "alt", "altgr", "meta", "backspace", "pageup", "pagedown",
     "arrowup", "arrowdown", "arrowleft", "arrowright", "capslock", "numlock", "printscreen",
@@ -254,7 +254,7 @@ def _decodifica(s):
         return _SEMPLICI.get(e, e)
 
     testo = _ESCAPE.sub(_sub, s)
-    # \uD83C\uDF89 -> un solo carattere (emoji); surrogati spaiati -> U+FFFD (poi scartato)
+    # \uD83C\uDF89 -> a single character (emoji); unpaired surrogates -> U+FFFD (rejected later)
     return testo.encode("utf-16", "surrogatepass").decode("utf-16", "replace")
 
 
@@ -263,7 +263,7 @@ def normalizza(s):
 
 
 def e_testo_ui(s):
-    """Stringa che sembra testo per il giocatore e non codice, CSS, nomi tecnici o errori."""
+    """String that looks like text for the player and not code, CSS, technical names or errors."""
     t = normalizza(s)
     if not e_testo_leggibile(t) or len(t) > 400 or "\ufffd" in t:
         return False
@@ -273,15 +273,15 @@ def e_testo_ui(s):
     if basso in _TASTI or basso in _FONT or _LINGUA.match(t) or _INTESTAZIONE.match(t):
         return False
     lettere = sum(c.isalpha() for c in t)
-    # in giapponese/cinese/coreano ogni carattere e' una sillaba o una parola: soglia non applicabile
+    # in Japanese/Chinese/Korean each character is a syllable or a word: threshold not applicable
     if lettere < len(t) * 0.5 and not _CJK.search(t):
         return False
     parole = t.split()
-    if len(parole) == 1 and re.search(r"[A-Z]{2,}[a-z]", t):  # nomi di classi: SVGElement, IDBIndex
+    if len(parole) == 1 and re.search(r"[A-Z]{2,}[a-z]", t):  # class names: SVGElement, IDBIndex
         return False
-    if len(parole) > 1 and _CAMEL.search(t):  # identificatori in mezzo alle parole
+    if len(parole) > 1 and _CAMEL.search(t):  # identifiers among the words
         return False
-    # classi CSS, selettori, liste di eventi: tutte minuscole con - _ : . /
+    # CSS classes, selectors, event lists: all lowercase with - _ : . /
     if all(p.islower() or not any(c.isalpha() for c in p) for p in parole) and any(
         re.search(r"[-_:./]", p) for p in parole
     ):
@@ -289,16 +289,15 @@ def e_testo_ui(s):
     return True
 
 
-# una parola sola di almeno 2 lettere (anche con apostrofo o trattino: Co-op), con un segno finale (Quit?)
+# a single word of at least 2 letters (also with an apostrophe or hyphen: Co-op), with a final mark (Quit?)
 _PAROLA_UI = re.compile(r"^[^\W\d_]{2,}(?:['\u2019\-][^\W\d_]+)*[!?.:\u2026]?$")
 
 
 def e_testo_mostrato(s):
-    """Come e_testo_ui, per i testi che il gioco di sicuro mostra (testo e attributi visibili dell'HTML, stringhe del
-    JavaScript nei contesti dell'interfaccia: vedi _contesto_ui): vale anche una parola sola di almeno 2 lettere, in
-    qualsiasi maiuscolo (PLAY, OK, quit), che per i dati JSON sarebbe troppo spesso un identificatore. Restano
-    fuori codice, CSS, camelCase, snake_case, numeri, nomi di tasti e di font. Una parola presa per sbaglio non fa
-    danni: si sostituisce solo se appare a schermo."""
+    """Like e_testo_ui, for the texts the game certainly shows (visible HTML text and attributes, JavaScript strings
+    in interface contexts: see _contesto_ui): a single word of at least 2 letters also counts, in any case (PLAY, OK,
+    quit), which in JSON data would too often be an identifier. Code, CSS, camelCase, snake_case, numbers, key names
+    and font names stay out. A word picked by mistake does no harm: it is replaced only if it appears on screen."""
     t = normalizza(s)
     if e_testo_ui(t):
         return True
@@ -308,16 +307,16 @@ def e_testo_mostrato(s):
     return basso not in _TASTI and basso not in _FONT and not _LINGUA.match(t)
 
 
-# --- estrazione -------------------------------------------------------------------------------
+# --- extraction -------------------------------------------------------------------------------
 
-# Anche 1-2 caratteri: in giapponese/cinese/coreano molte voci di menu sono cosi' (設定, はい, 시작).
-# In alfabeto latino vale una parola sola di almeno 2 lettere (OK, PLAY: vedi e_testo_mostrato).
+# Even 1-2 characters: in Japanese/Chinese/Korean many menu entries are like that (設定, はい, 시작).
+# In the Latin alphabet a single word of at least 2 letters counts (OK, PLAY: see e_testo_mostrato).
 _HTML_TESTO = re.compile(r">([^<>]{1,400})<")
 _HTML_ATTR = re.compile(r"""\b(?:title|alt|placeholder|aria-label)\s*=\s*(?:"([^"]{1,400})"|'([^']{1,400})')""", re.I)
 
 
 def decodifica_html(dati):
-    """(testo, codifica) di una pagina: UTF-8 (con o senza BOM), charset dichiarato o latin-1."""
+    """(text, encoding) of a page: UTF-8 (with or without BOM), declared charset or latin-1."""
     if dati.startswith(b"\xef\xbb\xbf"):
         return dati[3:].decode("utf-8"), ("utf-8", True)
     try:
@@ -331,7 +330,7 @@ def decodifica_html(dati):
             return dati.decode(nome), (nome, False)
         except (LookupError, UnicodeDecodeError):
             pass
-    return dati.decode("latin-1"), ("latin-1", False)  # latin-1 rilegge e riscrive qualsiasi byte
+    return dati.decode("latin-1"), ("latin-1", False)  # latin-1 reads and writes back any byte
 
 
 def codifica_html(testo, codifica):
@@ -344,17 +343,17 @@ def _file_web(radice):
     for cartella, dirs, files in os.walk(radice):
         dirs[:] = sorted(d for d in dirs if d.lower() not in CARTELLE_ESCLUSE)
         for f in sorted(files):
-            if MARCATORE in f:  # file creati da noi (backup, info, script)
+            if MARCATORE in f:  # files created by us (backup, info, script)
                 continue
-            if re.search(r"polyfill|vendor|zone\.js", f, re.I):  # librerie di terzi: niente testi di gioco
+            if re.search(r"polyfill|vendor|zone\.js", f, re.I):  # third-party libraries: no game texts
                 continue
             if f.lower().endswith((".js", ".mjs", ".html", ".htm")):
                 yield os.path.join(cartella, f)
 
 
 def estrai_testi(radice, log=None):
-    """Elenco ordinato e senza doppioni dei testi d'interfaccia trovati nei .js/.html della radice. Con 'log': i file
-    saltati perche' troppo grandi (oltre MAX_DIMENSIONE)."""
+    """Ordered list, without duplicates, of the interface texts found in the .js/.html files of the root. With 'log':
+    the files skipped because they are too large (over MAX_DIMENSIONE)."""
     trovati, grandi = {}, []
     for percorso in _file_web(radice):
         try:
@@ -364,13 +363,13 @@ def estrai_testi(radice, log=None):
                                               dimensione // (1024 * 1024)))
                 continue
             if percorso.lower().endswith((".html", ".htm")):
-                # l'html va letto dall'originale: il nostro tag non deve finire tra i testi
+                # the html must be read from the original: our tag must not end up among the texts
                 originale = percorso + SUFFISSO_BACKUP
                 with open(originale if os.path.exists(originale) else percorso, "rb") as f:
                     contenuto, _ = decodifica_html(f.read())
                 contenuto = re.sub(r"<(script|style)\b.*?</\1\s*>", " ", contenuto, flags=re.S | re.I)
                 contenuto = re.sub(r"<!--.*?-->", " ", contenuto, flags=re.S)
-                # testo e attributi visibili: anche le parole sole (PLAY, OK)
+                # visible text and attributes: single words too (PLAY, OK)
                 grezzi = [(html_lib.unescape(g), True) for g in _HTML_TESTO.findall(contenuto)]
                 grezzi += [(html_lib.unescape(a or b), True) for a, b in _HTML_ATTR.findall(contenuto)]
             else:
@@ -389,19 +388,19 @@ def estrai_testi(radice, log=None):
     return list(trovati)
 
 
-# --- scrittura ------------------------------------------------------------------------------
+# --- writing --------------------------------------------------------------------------------
 
 def genera_script(dizionario):
     modello_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "injector.js")
     with open(modello_path, encoding="utf-8") as f:
         modello = f.read()
     voci = {normalizza(k): v for k, v in dizionario.items() if v and normalizza(k) != v}
-    # ensure_ascii: il dizionario diventa un letterale JavaScript sicuro (niente U+2028 grezzi)
+    # ensure_ascii: the dictionary becomes a safe JavaScript literal (no raw U+2028)
     return modello.replace("/*__DIZIONARIO__*/{}", json.dumps(voci, ensure_ascii=True, sort_keys=True))
 
 
 def _maschera(html):
-    """Copia della pagina con commenti e contenuto di script/style coperti da spazi (stesse posizioni)."""
+    """Copy of the page with comments and script/style content covered by spaces (same positions)."""
     def _spazi(m):
         return " " * len(m.group(0))
 
@@ -412,9 +411,9 @@ def _maschera(html):
 
 
 def inserisci_tag(html):
-    """Aggiunge il tag subito dopo <head> (prima di <base> e degli altri script).
+    """Adds the tag right after <head> (before <base> and the other scripts).
 
-    Non lo mette mai dentro un commento ne' prima di <!DOCTYPE> (la pagina finirebbe in quirks mode).
+    It never puts it inside a comment or before <!DOCTYPE> (the page would end up in quirks mode).
     """
     if NOME_SCRIPT in html:
         return html
@@ -428,12 +427,12 @@ def inserisci_tag(html):
 
 
 def controlla_script(percorso):
-    """Controllo di sintassi con Node.js, se installato. None se il controllo non e' possibile."""
+    """Syntax check with Node.js, if installed. None if the check is not possible."""
     node = shutil.which("node")
     if not node:
         return None
     try:
-        r = subprocess.run([node, "--check", percorso], capture_output=True, timeout=60)  # conta solo l'esito
+        r = subprocess.run([node, "--check", percorso], capture_output=True, timeout=60)  # only the outcome counts
     except (OSError, subprocess.SubprocessError):
         return None
     return r.returncode == 0

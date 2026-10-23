@@ -1,4 +1,4 @@
-"""Euristiche sul testo: cosa e' testo leggibile, protezione dei segnaposto, gestione delle righe."""
+"""Text heuristics: what counts as readable text, placeholder protection, line handling."""
 import re
 
 _LETTERE2 = re.compile(r"[^\W\d_]{2,}")
@@ -11,7 +11,7 @@ _FILE = re.compile(
     re.I,
 )
 _SPAZI = re.compile(r"\s")
-# Righe di codice dentro i dati (es. comandi di script degli eventi RPG Maker)
+# Lines of code inside the data (e.g. script commands of RPG Maker events)
 _INIZIO = r"(?:^|[^\w$])"
 _CODICE = re.compile(
     r"=>|&&|\|\||===|!==|\$game[A-Z]|;\S"
@@ -20,31 +20,31 @@ _CODICE = re.compile(
     + r"|" + _INIZIO + r"[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*\("
 )
 
-# Segnaposto e codici da non tradurre: {x} {{x}} %s %1$d <tag> \C[3] **  [variabile]
+# Placeholders and codes not to translate: {x} {{x}} %s %1$d <tag> \C[3] **  [variable]
 _SEGNAPOSTO = re.compile(
-    r"^[+\-\u2212]\d+(?:[.,]\d+)?%?(?=\s)"  # valore con il segno all'inizio ("-1 Dash Charge", "+25% damage")
-    r"|\[\[\d+\]\]"  # un [[0]] scritto nel testo del gioco: si protegge, se no si confonde con i segnaposto interni
-    r"|\{\{[^{}]*\}\}(?:%|×|(?:ms|s|m|x)(?!\w))?"  # {{A}} di XUnity, con l'unita' attaccata ({{A}}s)
+    r"^[+\-\u2212]\d+(?:[.,]\d+)?%?(?=\s)"  # value with the sign at the start ("-1 Dash Charge", "+25% damage")
+    r"|\[\[\d+\]\]"  # a [[0]] written in the game's text: protected, otherwise mistaken for the internal placeholders
+    r"|\{\{[^{}]*\}\}(?:%|×|(?:ms|s|m|x)(?!\w))?"  # XUnity's {{A}}, with the unit attached ({{A}}s)
     r"|\{[^{}\s]{0,40}\}"
-    r"|\{[^\W\d][\w ]{0,38}\w\}"  # {game mode}, {player name}: segnaposto con parole separate da spazi
+    r"|\{[^\W\d][\w ]{0,38}\w\}"  # {game mode}, {player name}: placeholders with words separated by spaces
     r"|%(?:\d+\$)?[-+0#]*\d*(?:\.\d+)?[sdifxXc]"
     r"|<[^<>\n]{1,80}>"
-    r"|(?<!\w)(?:[A-Za-z]:|%\w+%)(?:\\[\w.\-]+){2,}"  # percorsi Windows interi (C:\dir\file.txt)
-    r"|\\[nrt](?![A-Za-z]*[\[<])"  # a capo scritto come testo (\n): da solo, senza la parola che segue
+    r"|(?<!\w)(?:[A-Za-z]:|%\w+%)(?:\\[\w.\-]+){2,}"  # whole Windows paths (C:\dir\file.txt)
+    r"|\\[nrt](?![A-Za-z]*[\[<])"  # newline written as text (\n): on its own, without the word that follows
     r"|\\[A-Za-z]+(?:\[[^\]\n]*\])?"
     r"|\\[{}$.|!><^]"
     r"|\*\*"
     r"|\[[A-Za-z_][\w.:]*\]"  # [x], [Input:12], [Button:LeftStick]
-    r"|\[[A-Za-z_]\w*(?:=[^\[\]\n]{1,60}| [\w.]+=[^\[\]\n]{1,80})\]"  # BBCode con valori: [color=40ff40], [wave amp=5]
-    r"|\[/[A-Za-z_]?[\w.:]*\]"  # chiusura dei tag di colore e font (Scribble di GameMaker: [/c], [/f], [/])
-    r"|/[A-Za-z_]{1,16}/"  # codici tra barre: /name/ (nome del giocatore), /n/ (a capo)
-    r"|[;|][^\w\s]{0,3}[;|]"  # separatori usati dai giochi per dividere il testo, es. ";-;"
-    r"|\{[^{}\n]{1,60}\}"  # altri segnaposto tra graffe ({chance variable - to be implemented})
+    r"|\[[A-Za-z_]\w*(?:=[^\[\]\n]{1,60}| [\w.]+=[^\[\]\n]{1,80})\]"  # BBCode with values: [color=40ff40], [wave amp=5]
+    r"|\[/[A-Za-z_]?[\w.:]*\]"  # closing color and font tags (GameMaker's Scribble: [/c], [/f], [/])
+    r"|/[A-Za-z_]{1,16}/"  # codes between slashes: /name/ (the player's name), /n/ (newline)
+    r"|[;|][^\w\s]{0,3}[;|]"  # separators games use to split the text, e.g. ";-;"
+    r"|\{[^{}\n]{1,60}\}"  # other placeholders in braces ({chance variable - to be implemented})
 )
 _TOKEN = re.compile(r"\[\s*\[\s*(\d+)\s*\]\s*\]")
 
-# Giapponese (kana), cinese/giapponese (ideogrammi), coreano (hangul): lingue senza spazi tra le
-# parole o con parole di 1-2 caratteri, per cui le regole "a parole" non valgono.
+# Japanese (kana), Chinese/Japanese (ideograms), Korean (hangul): languages without spaces between
+# words or with words of 1-2 characters, so the word-based rules do not apply.
 _CJK = re.compile(
     "[぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿"
     "가-힯ᄀ-ᇿ㄰-㆏ｦ-ﾟ]"
@@ -53,20 +53,20 @@ _PERCORSO = re.compile(r"^[\w\-./\\]+$")
 
 
 def _testo_cjk(t):
-    """True/False per i testi in giapponese, cinese o coreano; None se il testo non e' CJK."""
+    """True/False for texts in Japanese, Chinese or Korean; None if the text is not CJK."""
     cjk = len(_CJK.findall(t))
     if not cjk or cjk < 0.5 * sum(1 for c in t if c.isalpha()):
         return None
     if _URL.search(t) or _FILE.match(t) or _CODICE.search(t):
         return False
-    # percorsi come img/背景 (con almeno un pezzo in ASCII); はい/いいえ resta testo
+    # paths like img/背景 (with at least one ASCII part); はい/いいえ stays text
     if ("/" in t or "\\" in t) and _PERCORSO.match(t) and re.search(r"[A-Za-z]", t):
         return False
     return True
 
 
 def e_testo_leggibile(s):
-    """True se la stringa sembra testo per il giocatore (e non un id, un file, un colore...)."""
+    """True if the string looks like text for the player (and not an id, a file, a color...)."""
     t = s.strip()
     cjk = _testo_cjk(t) if t else None
     if cjk is not None:
@@ -79,25 +79,25 @@ def e_testo_leggibile(s):
         return False
     if _CODICE.search(t):
         return False
-    if not _SPAZI.search(t):  # una sola "parola": spesso e' un identificatore
+    if not _SPAZI.search(t):  # a single "word": often an identifier
         if "/" in t or "\\" in t:
             return False
         if re.search(r"[_\d]", t):  # img_12, room_3, r4c3
             return False
-        if t.islower():  # valori enum: round, cellvalue
+        if t.islower():  # enum values: round, cellvalue
             return False
-        if t.isupper():  # costanti: NONE, LEFT
+        if t.isupper():  # constants: NONE, LEFT
             return False
-        if re.search(r"[a-z][A-Z]", t):  # camelCase / PascalCase composti: UnlockFirstNewRule
+        if re.search(r"[a-z][A-Z]", t):  # compound camelCase / PascalCase: UnlockFirstNewRule
             return False
-        if len(t) > 40:  # blob codificati
+        if len(t) > 40:  # encoded blobs
             return False
     return True
 
 
 def proteggi(riga, codici=()):
-    """Sostituisce i segnaposto con token [[n]]. Restituisce (testo, lista_segnaposto). 'codici': parole del gioco
-    da non tradurre (es. le icone 'EP' e 'H' di Forager), protette come i segnaposto (maiuscole esatte)."""
+    """Replaces the placeholders with [[n]] tokens. Returns (text, placeholder_list). 'codici': game words not
+    to translate (e.g. Forager's 'EP' and 'H' icons), protected like the placeholders (exact case)."""
     trovati = []
 
     def _sub(m):
@@ -115,13 +115,14 @@ _CITAZIONE = re.compile(r"\"[^\"\n]{1,80}\"|“[^”\n]{1,80}”|«[^»\n]{1,80}
 
 
 def solo_parole(testo):
-    """Il testo senza segnaposto, tag e codici (es. <color=#FFF>, {action.Interact}) e senza le parti tra virgolette
-    (titoli e nomi lasciati in originale apposta, es. l'impresa "Favor of the Fae"): per capire in che lingua e'."""
+    """The text without placeholders, tags and codes (e.g. <color=#FFF>, {action.Interact}) and without the quoted
+    parts (titles and names left untranslated on purpose, e.g. the achievement "Favor of the Fae"): to tell which
+    language it is in."""
     return _CITAZIONE.sub(" ", _TOKEN.sub(" ", proteggi(testo)[0]))
 
 
 def ripristina_segnaposto(testo, segnaposto):
-    """Rimette i segnaposto al posto dei token. None se qualche token e' andato perso."""
+    """Puts the placeholders back in place of the tokens. None if some token was lost."""
     if not segnaposto:
         return testo
     visti = []
@@ -140,7 +141,7 @@ def ripristina_segnaposto(testo, segnaposto):
 
 
 def dividi_righe(testo):
-    """Divide in righe conservando gli spazi iniziali/finali: [(prima, nucleo, dopo), ...]."""
+    """Splits into lines keeping the leading/trailing spaces: [(prima, nucleo, dopo), ...]."""
     parti = []
     for riga in testo.split("\n"):
         nucleo = riga.strip()
@@ -154,7 +155,7 @@ def dividi_righe(testo):
 
 
 def ricomponi_righe(parti, traduzioni):
-    """Ricompone le righe usando il dizionario {nucleo: traduzione}."""
+    """Rebuilds the lines using the dictionary {nucleo: traduzione}."""
     return "\n".join(p + (traduzioni.get(n, n) if n else "") + d for p, n, d in parti)
 
 
@@ -163,12 +164,12 @@ def slug(nome):
     return s or "gioco"
 
 
-# --- righe del registro -----------------------------------------------------------------------------------------
-# Una riga che contiene DETTAGLIO e' un dettaglio tecnico (versioni, indirizzi, percorsi, elenchi di file): nella
-# finestra non si mostra, ma resta nel registro su disco (e quindi in "Crea rapporto"); la riga di comando la stampa.
+# --- log lines --------------------------------------------------------------------------------------------------
+# A line that contains DETTAGLIO is a technical detail (versions, addresses, paths, file lists): the window does not
+# show it, but it stays in the log on disk (and so in "Create report"); the command line prints it.
 DETTAGLIO = "\x1f"
 
-# parole scritte nel codice con l'apostrofo al posto dell'accento (e', gia', piu'...): nella finestra con l'accento
+# words written in the code with the apostrophe instead of the accent (e', gia', piu'...): in the window with the accent
 _ACCENTI = {"e": "è", "gia": "già", "piu": "più", "puo": "può", "perche": "perché", "cosi": "così", "pero": "però",
             "finche": "finché", "poiche": "poiché", "affinche": "affinché", "meta": "metà", "li": "lì", "la": "là",
             "cioe": "cioè", "sara": "sarà", "verra": "verrà", "partira": "partirà", "potra": "potrà",
@@ -182,5 +183,5 @@ _APOSTROFO = re.compile(r"(?<![\w'])(%s)'(?=[\s.,;:!?)\]]|$)" % "|".join(sorted(
 
 
 def leggibile(riga):
-    """La riga per la finestra: 'e'' -> 'è', 'gia'' -> 'già'... (solo le parole note, staccate dal resto)."""
+    """The line for the window: 'e'' -> 'è', 'gia'' -> 'già'... (only the known words, standing on their own)."""
     return _APOSTROFO.sub(lambda m: _ACCENTI[m.group(1)], riga)

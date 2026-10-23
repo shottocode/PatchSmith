@@ -1,13 +1,13 @@
-"""Lingua scelta nelle opzioni salvate di un gioco GameMaker (es. Forager: %LOCALAPPDATA%\\Forager\\config.txt).
+"""Language chosen in the saved options of a GameMaker game (e.g. Forager: %LOCALAPPDATA%\\Forager\\config.txt).
 
-Molti giochi GameMaker salvano le opzioni con ds_map_write / ds_list_write: un JSON con dentro, in esadecimale, una
-mappa e delle liste di valori. In Forager la lingua e' il primo valore della lista "options" ("english", "french"...
-cioe' il nome del file di lingua senza .json). PatchSmith, dopo aver aggiunto una lingua (local/italiano.json), la
-imposta li', cosi' il gioco parte gia' tradotto:
-- solo se trova UN solo valore uguale al nome di una lingua del gioco (nessun dubbio su cosa cambiare);
-- modifica solo quei byte (lunghezza e testo della stringa), il resto del file resta identico;
-- prima controlla che la decodifica sia esatta (rileggendo si ottiene lo stesso file), poi rilegge il risultato;
-- copia di sicurezza in PatchSmith (salvataggi/) e registro per il ripristino; mai con il gioco aperto.
+Many GameMaker games save their options with ds_map_write / ds_list_write: a JSON containing, in hexadecimal, a
+map and some lists of values. In Forager the language is the first value of the "options" list ("english", "french"...
+that is, the name of the language file without .json). PatchSmith, after adding a language (local/italiano.json),
+sets it there, so the game starts already translated:
+- only if it finds exactly ONE value equal to the name of one of the game's languages (no doubt about what to change);
+- it changes only those bytes (length and text of the string), the rest of the file stays identical;
+- it first checks that the decoding is exact (reading it back gives the same file), then reads back the result;
+- backup copy in PatchSmith (save-backups/) and a record for the restore; never with the game open.
 """
 import datetime
 import json
@@ -18,8 +18,8 @@ import struct
 
 from . import gamemaker
 
-_MAPPE = (0x191, 0x192, 0x193)  # intestazioni di ds_map_write (versioni)
-_LISTE = (0x12E, 0x12F)  # intestazioni di ds_list_write
+_MAPPE = (0x191, 0x192, 0x193)  # ds_map_write headers (versions)
+_LISTE = (0x12E, 0x12F)  # ds_list_write headers
 _ESADECIMALE = re.compile(r"^(?:[0-9A-F]{2})+$|^(?:[0-9a-f]{2})+$")
 _MASSIMO = 2 * 1024 * 1024
 
@@ -29,23 +29,23 @@ class ErroreFormato(ValueError):
 
 
 def _valore(b, i):
-    """(tipo, inizio, fine, valore) del valore che comincia in i."""
+    """(type, start, end, value) of the value that starts at i."""
     if i + 4 > len(b):
         raise ErroreFormato("valore oltre la fine")
     tipo = struct.unpack_from("<I", b, i)[0]
-    if tipo == 1:  # stringa
+    if tipo == 1:  # string
         n = struct.unpack_from("<I", b, i + 4)[0]
         if i + 8 + n > len(b):
             raise ErroreFormato("stringa oltre la fine")
         return tipo, i, i + 8 + n, b[i + 8:i + 8 + n].decode("utf-8")
-    dimensioni = {0: 8, 5: 0, 7: 4, 10: 8, 13: 8, 12: 0}  # reale, undefined, int32, int64, bool, null
+    dimensioni = {0: 8, 5: 0, 7: 4, 10: 8, 13: 8, 12: 0}  # real, undefined, int32, int64, bool, null
     if tipo not in dimensioni or i + 4 + dimensioni[tipo] > len(b):
         raise ErroreFormato("tipo di valore sconosciuto (%d)" % tipo)
     return tipo, i, i + 4 + dimensioni[tipo], None
 
 
 def _voci(b, mappa):
-    """Le voci di una mappa ([(chiave, valore)]) o di una lista ([valore]), con le posizioni nei byte."""
+    """The entries of a map ([(key, value)]) or of a list ([value]), with their positions in the bytes."""
     if len(b) < 8:
         raise ErroreFormato("troppo corto")
     intestazione, n = struct.unpack_from("<II", b, 0)
@@ -73,7 +73,7 @@ def _stringa(testo):
 
 
 def _sostituisci(b, valore, nuovo):
-    """I byte con la stringa 'valore' (tipo, inizio, fine, testo) sostituita da 'nuovo'."""
+    """The bytes with the string 'valore' (type, start, end, text) replaced by 'nuovo'."""
     return b[:valore[1]] + _stringa(nuovo) + b[valore[2]:]
 
 
@@ -83,9 +83,9 @@ def _esa(b, maiuscole):
 
 
 def trova(testo_json, lingue):
-    """Dove sta la lingua nel file: [(chiave JSON, chiave della mappa, indice nella lista, lingua attuale)].
-    Si cercano, nei valori esadecimali del JSON, mappe che contengono liste con un valore uguale al nome di una
-    delle 'lingue' del gioco."""
+    """Where the language is in the file: [(JSON key, map key, index in the list, current language)].
+    It looks, in the hexadecimal values of the JSON, for maps containing lists with a value equal to the name of
+    one of the game's 'lingue'."""
     try:
         dati = json.loads(testo_json)
     except ValueError:
@@ -115,8 +115,8 @@ def trova(testo_json, lingue):
 
 
 def cambia(testo_json, posto, nuovo):
-    """Il testo del file con la lingua in 'posto' (da trova) cambiata in 'nuovo'. Tocca solo quella stringa:
-    tutto il resto del file resta identico (si sostituisce il solo valore esadecimale, che e' unico nel file)."""
+    """The text of the file with the language at 'posto' (from trova) changed to 'nuovo'. Touches only that string:
+    the whole rest of the file stays identical (only the hexadecimal value is replaced, which is unique in the file)."""
     chiave_json, chiave_mappa, indice, _attuale = posto
     dati = json.loads(testo_json)
     esa = dati[chiave_json]
@@ -139,8 +139,8 @@ def cambia(testo_json, posto, nuovo):
 
 
 def cartelle_impostazioni(radice):
-    """Le cartelle in %LOCALAPPDATA% dove il gioco puo' salvare le opzioni (GameMaker usa il nome del gioco; si
-    provano i nomi scritti in data.win e quelli degli eseguibili)."""
+    """The folders in %LOCALAPPDATA% where the game may save its options (GameMaker uses the game's name; the
+    names written in data.win and those of the executables are tried)."""
     base = os.environ.get("LOCALAPPDATA")
     if not base:
         return []
@@ -161,7 +161,7 @@ def cartelle_impostazioni(radice):
 
 
 def cerca(radice, lingue):
-    """(file, posto) dell'unica lingua salvata nelle opzioni del gioco, oppure (None, motivo)."""
+    """(file, place) of the only language saved in the game's options, or (None, reason)."""
     cartelle = cartelle_impostazioni(radice)
     if not cartelle:
         return None, "il gioco non ha ancora salvato le sue opzioni (avvialo una volta)"
@@ -184,10 +184,10 @@ def cerca(radice, lingue):
 
 
 def imposta(radice, nuova, lingue, salvataggi, log=print, rispetta=None):
-    """Imposta 'nuova' come lingua del gioco nelle opzioni salvate. Restituisce (registro per il ripristino, None)
-    oppure (None, motivo). 'salvataggi': cartella dove copiare il file prima di modificarlo. 'rispetta': se la
-    lingua salvata e' diversa da questa (la scelta dell'ultima volta di PatchSmith), l'ha cambiata il giocatore e
-    non si tocca."""
+    """Sets 'nuova' as the game's language in the saved options. Returns (record for the restore, None)
+    or (None, reason). 'salvataggi': folder where the file is copied before changing it. 'rispetta': if the
+    saved language differs from this one (PatchSmith's choice from last time), the player changed it and it is
+    left alone."""
     percorso, posto = cerca(radice, set(lingue) | {nuova})
     if percorso is None:
         return None, posto
@@ -212,11 +212,11 @@ def imposta(radice, nuova, lingue, salvataggi, log=print, rispetta=None):
 
 
 def ripristina(registro):
-    """Rimette la lingua di prima se nelle opzioni c'e' ancora quella scritta da PatchSmith. True se rimessa,
-    False se nel frattempo il giocatore l'ha cambiata (si lascia la sua scelta)."""
+    """Puts back the previous language if the options still hold the one written by PatchSmith. True if put back,
+    False if the player has changed it in the meantime (their choice is kept)."""
     percorso = registro["file"]
     if not registro.get("precedente") or not os.path.isfile(percorso):
-        return False  # opzioni cancellate o rifatte dal gioco: non c'e' niente da rimettere
+        return False  # options deleted or recreated by the game: there is nothing to put back
     with open(percorso, encoding="utf-8", newline="") as f:
         testo = f.read()
     chiave_json, chiave_mappa, indice = registro["posto"]
@@ -226,7 +226,7 @@ def ripristina(registro):
     try:
         nuovo = cambia(testo, attuali[0], registro["precedente"])
     except ErroreFormato:
-        return False  # file riscritto in un modo che non riconosco: lo lascio com'e'
+        return False  # file rewritten in a way I do not recognize: leave it as it is
     from .adapter_webjson import scrivi_atomico
     scrivi_atomico(percorso, nuovo.encode("utf-8"))
     return True

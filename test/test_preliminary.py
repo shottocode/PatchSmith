@@ -1,18 +1,19 @@
-"""Prove dei controlli prima di partire e delle scelte predefinite sicure (punto 5).
+"""Tests of the checks before starting and of the safe default choices (point 5).
 
-Uso: python -I test/test_preliminary.py <cartella_temporanea_vuota>
-I dati di PatchSmith vanno in <cartella>/dati, il traduttore locale "installato" in <cartella>/ollama (vuota: non
-installato); Steam, processi aperti, spazio libero e scheda video sono simulati. Nessun gioco vero, nessuna rete,
-nessun programma avviato. Copre:
-- automatico.controlli_preliminari: gioco aperto, lingue Da/A, cartella in cui non si puo' scrivere (anche nella
-  cartella Programmi), poco spazio, traduttore in pausa (locale installato o no), traduttore locale non installato,
-  e cosa si controlla per Analizza e traduci, Riapplica e Ripristina; il file di prova non resta nella cartella;
-- lo stesso gioco in un'altra cartella: identita (Unity, Steam, eseguibili, nome), una copia riusa la memoria
-  dell'originale (anche le traduzioni corrette a mano), un gioco spostato porta con se' il suo profilo;
-- traduttore predefinito: sempre quello locale (anche non installato); Google "spesso bloccato";
-- scheda video: nvidia-smi, registro di Windows, WMI (al limite dei 4 GB non si sa) e il modello consigliato;
-- prova del traduttore locale dopo l'installazione (backend.prova_locale): scheda video, solo processore, errore;
-- messaggi del limitatore che consigliano il traduttore locale.
+Usage: python -I test/test_preliminary.py <empty_temp_folder>
+PatchSmith's data go to <cartella>/dati, the "installed" local translator to <cartella>/ollama (empty: not
+installed); Steam, open processes, free space and graphics card are simulated. No real game, no network,
+no program started. Covers:
+- automatico.controlli_preliminari: game open, From/To languages, folder that cannot be written to (also in the
+  Program Files folder), little space, translator paused (local one installed or not), local translator not
+  installed, and what is checked for Analyze and translate, Reapply and Restore; the test file does not stay in the
+  folder;
+- the same game in another folder: identity (Unity, Steam, executables, name), a copy reuses the translation memory
+  of the original (also the translations fixed by hand), a moved game takes its game profile with it;
+- default translator: always the local one (even if not installed); Google "often blocked";
+- graphics card: nvidia-smi, Windows registry, WMI (at the 4 GB limit it cannot be told) and the recommended model;
+- test of the local translator after installation (backend.prova_locale): graphics card, processor only, error;
+- limiter messages that recommend the local translator.
 """
 import contextlib
 import io
@@ -68,7 +69,7 @@ def gioco_unity(cartella, nome_exe, azienda, prodotto):
 
 
 class ServerFinto:
-    """Al posto di ollama.Server per backend.prova_locale: risposte e quota del modello nella scheda video."""
+    """In place of ollama.Server for backend.prova_locale: answers and share of the model on the graphics card."""
 
     def __init__(self, risposta="Inizia la partita", vram=100, errore=None):
         self.risposta, self.vram, self.errore = risposta, vram, errore
@@ -90,7 +91,7 @@ class ServerFinto:
         self.chiuso = True
 
 
-# --- controlli prima di partire --------------------------------------------------------------------------------
+# --- checks before starting ------------------------------------------------------------------------------------
 
 def prova_controlli(base):
     gioco = gioco_web(os.path.join(base, "giochi", "Lantern Keeper"), "Lantern Keeper.exe")
@@ -99,7 +100,7 @@ def prova_controlli(base):
     controlla("gioco pronto: nessun problema, e il file di prova della scrittura non resta (%s)" % codici(problemi),
               problemi == [] and sorted(os.listdir(gioco)) == prima)
 
-    # gioco aperto: "Riprova", per tutte le operazioni; se non si riesce a controllare decide l'operazione
+    # game open: "Try again", for all the operations; if it cannot be checked, the operation decides
     vero = sistema.gioco_aperto
     sistema.gioco_aperto = lambda _c: True
     try:
@@ -121,8 +122,8 @@ def prova_controlli(base):
         sistema.gioco_aperto = vero
     controlla("controllo dei processi non riuscito: nessun avviso qui (lo dice l'operazione stessa)", problemi == [])
 
-    # lingue
-    casi = {("Inglesse", "it"): None, ("en", "Italianoo"): None, ("xx", "it"): "continua", ("it", "it"): None,
+    # languages
+    casi ={("Inglesse", "it"): None, ("en", "Italianoo"): None, ("xx", "it"): "continua", ("it", "it"): None,
             ("en", "it"): "ok", (lingua.AUTO, "it"): "ok", ("en", "pt-BR"): "continua"}
     sbagliati = []
     for (da, a), atteso in casi.items():
@@ -136,7 +137,7 @@ def prova_controlli(base):
     controlla("lingue: si controllano solo per Analizza e traduci",
               "LINGUA" not in codici(automatico.controlli_preliminari(gioco, "finto", "riapplica", "Inglesse", "it")))
 
-    # cartella in cui non si puo' scrivere (Programmi, accesso controllato, antivirus)
+    # folder that cannot be written to (Program Files, controlled folder access, antivirus)
     vera = automatico.prova_scrittura
     automatico.prova_scrittura = lambda _c: PermissionError(13, "Accesso negato")
     vecchio_pf = os.environ.get("ProgramFiles")
@@ -163,7 +164,7 @@ def prova_controlli(base):
     controlla("prova di scrittura vera: si' in una cartella (niente resta), errore se non e' una cartella",
               vera(gioco) is None and sorted(os.listdir(gioco)) == prima and isinstance(vera(un_file), OSError))
 
-    # spazio libero
+    # free space
     vero_spazio = automatico.shutil.disk_usage
     automatico.shutil.disk_usage = lambda _p: types.SimpleNamespace(total=10 ** 12, used=0, free=50 * 1024 ** 2)
     try:
@@ -175,7 +176,7 @@ def prova_controlli(base):
               len(spazio["traduci"]) == 2 and len(spazio["riapplica"]) == 2 and not spazio["ripristina"]
               and all(p.azione == "continua" and "50 MB" in p.messaggio for p in spazio["traduci"]))
 
-    # traduttore in pausa: si propone il traduttore locale (installarlo, se manca)
+    # translator paused: the local translator is offered (installing it, if missing)
     limitatore.Limitatore("google", log=None).bloccato(429, "prova")
     vero_stato = ollama.stato
     try:
@@ -196,7 +197,7 @@ def prova_controlli(base):
               and "traduttore locale" in pausa.messaggio and pronta and pronta.azione == "usa_locale"
               and "TRADUTTORE_IN_PAUSA" not in riapplica and "TRADUTTORE_IN_PAUSA" not in deepl)
 
-    # traduttore locale scelto ma non installato
+    # local translator chosen but not installed
     assente = per_codice(automatico.controlli_preliminari(gioco, "locale", "traduci", lingua.AUTO, "it"),
                          "LOCALE_ASSENTE")
     ollama.stato = lambda: "pronto"
@@ -207,8 +208,8 @@ def prova_controlli(base):
     controlla("traduttore locale non installato: 'Installa ora' prima di partire; installato: nessun avviso",
               assente and assente.azione == "installa_locale" and "LOCALE_ASSENTE" not in pronto
               and "continui senza" in assente.messaggio)
-    # "Continua comunque" senza traduttore: il gioco si analizza, ma ci si ferma prima di modificarlo (la lingua
-    # ufficiale, se c'e', si attiva senza traduttore)
+    # "Continue anyway" without a translator: the game is analyzed, but it stops before changing it (the official
+    # language, if there is one, is activated without a translator)
     impronte = {n: open(os.path.join(r, n), "rb").read() for r, _d, f in os.walk(gioco) for n in f}
     try:
         automatico.analizza_e_traduci(gioco, "auto", "it", "locale", silenzio)
@@ -220,7 +221,7 @@ def prova_controlli(base):
               and {n: open(os.path.join(r, n), "rb").read() for r, _d, f in os.walk(gioco) for n in f} == impronte)
 
 
-# --- lo stesso gioco in un'altra cartella ------------------------------------------------------------------------
+# --- the same game in another folder -----------------------------------------------------------------------------
 
 def prova_stesso_gioco(base):
     unity_a = gioco_unity(os.path.join(base, "unity", "A", "Rubinite"), "Rubinite", "Cup Dog Games", "Rubinite")
@@ -250,7 +251,7 @@ def prova_stesso_gioco(base):
         steam.gioco_installato = vero
     controlla("identita: appid di Steam dal manifesto (non cercato con steam=False)",
               con_steam.get("steam") == "4242" and "steam" not in senza)
-    # programmi che tanti giochi hanno uguali (runtime .NET, Ren'Py, DOSBox): non dicono che e' lo stesso gioco
+    # programs that many games share (.NET runtime, Ren'Py, DOSBox): they do not mean it is the same game
     uno = gioco_web(os.path.join(base, "net", "Uno", "Gioco"), "Primo Gioco.exe")
     due = gioco_web(os.path.join(base, "net", "Due", "Gioco"), "Secondo Gioco.exe")
     for d in (uno, due):
@@ -262,7 +263,8 @@ def prova_stesso_gioco(base):
               "lo stesso gioco (%s)" % i_uno,
               i_uno.get("exe") == ["primo gioco.exe"] and not automatico.stesso_gioco(i_uno, i_due))
 
-    # una copia del gioco web gia' tradotto: si propone la sua memoria (con il traduttore di prova, quella di prova)
+    # a copy of the already translated web game: its translation memory is offered (with the test translator, the
+    # test one)
     originale = gioco_web(os.path.join(base, "web", "Originale", "Lantern Keeper"), "Lantern Keeper.exe")
     percorso, completato, _ = automatico.analizza_e_traduci(originale, "auto", "it", "finto", silenzio)
     with open(percorso, encoding="utf-8") as f:
@@ -285,7 +287,7 @@ def prova_stesso_gioco(base):
               and proposta.dati["profilo"] == percorso and proposta.dati["testi"] == len(voci)
               and not proposta.dati["spostato"] and "Riuso le sue traduzioni" in proposta.messaggio
               and online is None and altra_lingua is None)
-    # un profilo di una versione precedente (senza 'identita'): si riconosce dalla sua cartella, se c'e' ancora
+    # a game profile from a previous version (without 'identita'): recognized by its folder, if it is still there
     with open(percorso, "w", encoding="utf-8") as f:
         json.dump({k: v for k, v in profilo.items() if k != "identita"}, f, ensure_ascii=False)
     try:
@@ -310,12 +312,12 @@ def prova_stesso_gioco(base):
     controlla("copia con il suo profilo: non si chiede piu'",
               "STESSO_GIOCO" not in codici(automatico.controlli_preliminari(copia, "finto", "traduci", lingua.AUTO,
                                                                              "it")))
-    # la copia delle traduzioni non riesce (disco pieno, file in uso): si traduce da capo quello che manca, senza
-    # fermare "Analizza e traduci" e senza lasciare una memoria scritta a meta'
+    # copying the translations fails (disk full, file in use): what is missing is translated from scratch, without
+    # stopping "Analyze and translate" and without leaving a half-written translation memory
     terza = gioco_web(os.path.join(base, "web", "Terza", "Lantern Keeper"), "Lantern Keeper.exe")
     vera_salva, rotture = automatico.file_condiviso.salva_unendo, []
 
-    def salva_rotta(*a, **k):  # la prima scrittura (la copia della memoria) non riesce, le altre si'
+    def salva_rotta(*a, **k):  # the first write (the copy of the translation memory) fails, the others succeed
         if not rotture:
             rotture.append(a[0])
             raise OSError(28, "No space left on device")
@@ -335,7 +337,7 @@ def prova_stesso_gioco(base):
               and memoria3.get("Start a new game") != "VALORE CORRETTO A MANO"
               and memoria3.get("Start a new game") and any("Non sono riuscito a copiare" in r for r in righe))
 
-    # un gioco spostato: la cartella registrata non c'e' piu', il profilo passa alla cartella nuova
+    # a moved game: the recorded folder is no longer there, the game profile moves to the new folder
     spostato = os.path.join(automatico.cartella_profili(), "gioco-spostato.json")
     with open(spostato, "w", encoding="utf-8") as f:
         json.dump({"nome": "gioco-spostato", "cartella_gioco": os.path.join(base, "sparita", "Gioco").replace(
@@ -365,7 +367,7 @@ def prova_stesso_gioco(base):
                   "Start a new game") == "Nuova partita (spostato)")
 
 
-# --- scelte predefinite, scheda video, prova del traduttore locale ---------------------------------------------
+# --- default choices, graphics card, test of the local translator ---------------------------------------------
 
 def prova_predefiniti(base):
     controlla("traduttore predefinito: quello locale anche se non e' installato ('da installare', 'Installa...')",
@@ -374,7 +376,7 @@ def prova_predefiniti(base):
               "non ufficiale" in gui.TRADUTTORI["google"] and "bloccarle" in gui.AVVISO_GOOGLE
               and "più lento" in gui.MODELLI_LOCALI["12b"])
 
-    # scheda video: nvidia-smi, poi il registro, poi WMI; al limite dei 4 GB di WMI non si sa
+    # graphics card: nvidia-smi, then the registry, then WMI; at WMI's 4 GB limit it cannot be told
     veri = ollama._nvidia_smi, ollama._registro_video, ollama._wmi_video
     chiamate = []
     try:
@@ -406,7 +408,7 @@ def prova_predefiniti(base):
     ollama.subprocess.run = lambda comando, **_k: comandi.append(comando[0]) or types.SimpleNamespace(
         returncode=0, stdout=risposte["uscita"], stderr=b"")
     vero_programma = ollama._programma_nvidia_smi
-    ollama._programma_nvidia_smi = lambda: sys.executable  # un file che esiste, mai eseguito (run e' simulato)
+    ollama._programma_nvidia_smi = lambda: sys.executable  # a file that exists, never executed (run is simulated)
     try:
         risposte["uscita"] = b"8192\r\n"
         nvidia = ollama._nvidia_smi()
@@ -419,7 +421,7 @@ def prova_predefiniti(base):
     controlla("letture: nvidia-smi in MiB (8192 -> 8 GB), WMI al limite di 4 GB = non si sa, WMI 2 GB; PowerShell "
               "con il percorso intero (%s)" % comandi[1:2],
               nvidia == 8.0 and wmi_limite is None and wmi_2 == 2.0 and all(os.path.isabs(c) for c in comandi))
-    # nvidia-smi mai dalla cartella corrente (un programma con quel nome li' non deve partire): System32, NVSMI, PATH
+    # nvidia-smi never from the current folder (a program with that name there must not start): System32, NVSMI, PATH
     corrente, altrove = os.path.join(base, "nvsmi-corrente"), os.path.join(base, "nvsmi-path")
     for d in (corrente, altrove):
         os.makedirs(d)
@@ -457,8 +459,8 @@ def prova_predefiniti(base):
               and "RAM" in ollama.avviso_prestazioni(8, 6) and ollama.avviso_prestazioni(8, 16) == ""
               and ollama.avviso_prestazioni(3.9, 16) == "")
 
-    # riga di comando: "locale" senza installazione dice il modello consigliato e il comando per installarlo;
-    # "--installa" fa anche la frase di prova (codice 2 se non riesce)
+    # command line: "locale" without installation tells the recommended model and the command to install it;
+    # "--installa" also does the test sentence (code 2 if it fails)
     from patchsmith import cli
     uscita = io.StringIO()
     ollama._MEMORIA_VIDEO[:] = [8.0]
@@ -483,7 +485,7 @@ def prova_predefiniti(base):
               "prova e esce con 2 se non riesce", codice_stato == 0 and "Qualità (12B)" in testo
               and "--install 12b (oppure 4b" in testo and codice_prova == 2 and prove == ["12b"])
 
-    # prova del traduttore locale dopo l'installazione
+    # test of the local translator after installation
     server = ServerFinto()
     r = backend.prova_locale("4b", silenzio, server=server)
     controlla("prova del traduttore locale: tradotto sulla scheda video, con i tempi (%s)" % r["messaggio"],
@@ -499,7 +501,7 @@ def prova_predefiniti(base):
     controlla("prova: server che non parte -> non riuscita, con il motivo, senza eccezioni",
               not r["ok"] and "non parte" in r["messaggio"])
 
-    # il limitatore consiglia il traduttore locale
+    # the limiter recommends the local translator
     messaggio = limitatore.Limitatore("google", log=None).bloccato(429, "prova")
     limitatore.Limitatore("google", log=None).azzera()
     controlla("blocco di Google: il messaggio consiglia il traduttore locale, senza comandi",
@@ -513,9 +515,9 @@ def main(base):
     os.makedirs(base, exist_ok=True)
     progetto.RADICE_DATI = os.path.join(base, "dati")
     automatico.CARTELLA_PROFILI = None
-    ollama.cartella = lambda: os.path.join(base, "ollama")  # traduttore locale non installato
-    steam.gioco_installato = lambda cartella, steam=None: None  # niente Steam vero
-    # lo spazio libero del disco delle prove non deve contare (la prova dello spazio lo simula a parte)
+    ollama.cartella = lambda: os.path.join(base, "ollama")  # local translator not installed
+    steam.gioco_installato = lambda cartella, steam=None: None  # no real Steam
+    # the free space of the tests' disk must not count (the space test simulates it separately)
     shutil.disk_usage = lambda _p: types.SimpleNamespace(total=10 ** 13, used=0, free=10 ** 12)
     os.environ["LOCALAPPDATA"] = os.path.join(base, "appdata")
     prova_controlli(base)

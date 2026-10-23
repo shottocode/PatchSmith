@@ -1,4 +1,4 @@
-"""Backend di traduzione intercambiabili. Ogni backend traduce una lista di righe brevi."""
+"""Interchangeable translation backends. Each backend translates a list of short lines."""
 import collections
 import concurrent.futures
 import datetime
@@ -18,14 +18,14 @@ import zlib
 from . import interruption as interruzione
 from .text import DETTAGLIO
 
-MAX_BLOCCO = 4000  # caratteri per richiesta (margine sotto i circa 5.000 accettati)
+MAX_BLOCCO = 4000  # characters per request (margin below the roughly 5,000 accepted)
 
 
 class ErroreBackend(Exception):
-    """Il servizio di traduzione non e' raggiungibile o rifiuta le richieste.
+    """The translation service cannot be reached or rejects the requests.
 
-    codice: l'esito per l'interfaccia (vedi outcome.py), es. TRADUTTORE_ASSENTE; comando: cosa scrivere dalla riga di
-    comando per rimediare (lo mostra solo la riga di comando: i messaggi parlano dei pulsanti dell'interfaccia)."""
+    codice: the outcome for the interface (see outcome.py), e.g. TRADUTTORE_ASSENTE; comando: what to type on the
+    command line to fix it (only the command line shows it: the messages talk about the interface's buttons)."""
 
     def __init__(self, messaggio="", codice=None, comando=None):
         super().__init__(messaggio)
@@ -37,13 +37,13 @@ class Backend:
     nome = "base"
 
     def traduci_righe(self, righe, origine, destinazione):
-        """Traduce ogni riga (senza a capo). Restituisce una lista della stessa lunghezza."""
+        """Translates each line (without line breaks). Returns a list of the same length."""
         raise NotImplementedError
 
 
 class Finto(Backend):
-    """Backend di prova: non usa la rete, antepone [it] al testo. Le sue traduzioni finiscono in una
-    memoria separata (*.prova.json), cosi' non sporcano quella vera."""
+    """Test backend: does not use the network, puts [it] before the text. Its translations end up in a separate
+    translation memory (*.prova.json), so they do not pollute the real one."""
 
     nome = "finto"
 
@@ -52,8 +52,8 @@ class Finto(Backend):
         return ["[%s] %s" % (destinazione, r) for r in righe]
 
 
-# caratteri invisibili che Google a volte inserisce (es. "​​gli"): nei giochi possono comparire
-# come quadratini o, in XNA, far andare in crash il gioco
+# invisible characters that Google sometimes inserts (e.g."​​gli"): in games they can show up
+# as little squares or, in XNA, make the game crash
 _INVISIBILI = dict.fromkeys(map(ord, "​⁠﻿"))
 
 
@@ -62,13 +62,13 @@ def pulisci(testo):
 
 
 def _dividi_lunga(riga, massimo=MAX_BLOCCO):
-    """Divide una riga troppo lunga in pezzi per frasi (o per spazi) di al massimo `massimo` caratteri."""
+    """Splits a line that is too long into pieces by sentences (or by spaces) of at most `massimo` characters."""
     pezzi, attuale = [], ""
     for frase in re.split(r"(?<=[.!?。！？])\s+", riga):
-        if len(frase) > massimo and attuale:  # prima la frase precedente: l'ordine non deve cambiare
+        if len(frase) > massimo and attuale:  # the previous sentence first: the order must not change
             pezzi.append(attuale)
             attuale = ""
-        while len(frase) > massimo:  # frase enorme senza punteggiatura: taglio sugli spazi
+        while len(frase) > massimo:  # huge sentence without punctuation: cut on the spaces
             taglio = frase.rfind(" ", 0, massimo)
             taglio = taglio if taglio > 0 else massimo
             pezzi.append(frase[:taglio])
@@ -84,7 +84,7 @@ def _dividi_lunga(riga, massimo=MAX_BLOCCO):
 
 
 class Bloccato(ErroreBackend):
-    """Il servizio ha rifiutato le richieste (o e' in pausa per un rifiuto precedente): non si insiste."""
+    """The service rejected the requests (or is paused because of a previous rejection): we do not insist."""
 
 
 def _apri_predefinito(req, timeout):
@@ -92,7 +92,7 @@ def _apri_predefinito(req, timeout):
 
 
 def _leggi_errore(e):
-    """Corpo (breve) di una risposta di errore HTTP, chiudendola sempre."""
+    """(Short) body of an HTTP error response, always closing it."""
     try:
         return e.read(2000) or b""
     except (OSError, ValueError, http.client.HTTPException):
@@ -113,16 +113,16 @@ def _ua():
 
 
 class GoogleGratis(Backend):
-    """Endpoint web gratuito di Google Translate (non ufficiale, senza chiave).
+    """Free web endpoint of Google Translate (unofficial, without a key).
 
-    Google non pubblica limiti e puo' rifiutare del tutto gli accessi automatici: PatchSmith va piano (limitatore
-    con margini prudenti, condiviso tra interfaccia e riga di comando) e al PRIMO rifiuto si ferma e ricorda fino
-    a quando non riprovare, senza insistere e senza cercare altre strade per aggirare il blocco.
+    Google does not publish limits and can reject automated access entirely: PatchSmith goes slowly (rate limiter
+    with cautious margins, shared between the interface and the command line) and at the FIRST rejection it stops
+    and remembers until when not to retry, without insisting and without looking for other ways around the block.
     """
 
     nome = "google"
     URL = "https://translate.googleapis.com/translate_a/single"
-    max_caratteri = 3600  # un gruppo di testi = una richiesta (i segnaposto allungano un po' il testo)
+    max_caratteri = 3600  # a group of texts = one request (the placeholders make the text a bit longer)
     max_testi = 150
     ATTESE_RETE = (10, 30)
 
@@ -193,8 +193,8 @@ class GoogleGratis(Backend):
             interruzione.attendi(attesa)
 
     def _traduci_indici(self, parti, indici, tradotti, origine, destinazione, profondita=0):
-        """Traduce un blocco di righe; se Google unisce o divide righe, riprova a meta' (al massimo 3 volte), cosi'
-        non parte mai una raffica di richieste. Le righe che non si allineano restano non tradotte."""
+        """Translates a block of lines; if Google merges or splits lines, retries in halves (at most 3 times), so a
+        burst of requests never starts. The lines that do not line up stay untranslated."""
         testo = "\n".join(parti[k][1] for k in indici)
         risposta = self._richiesta(testo, origine, destinazione).split("\n")
         if len(risposta) == len(indici):
@@ -210,8 +210,8 @@ class GoogleGratis(Backend):
         self._traduci_indici(parti, indici[meta:], tradotti, origine, destinazione, profondita + 1)
 
     def traduci_righe(self, righe, origine, destinazione):
-        # Le righe troppo lunghe vengono spezzate per frasi e poi ricomposte.
-        parti = []  # (indice riga, pezzo)
+        # Lines that are too long are split by sentences and then put back together.
+        parti = []  # (line index, piece)
         for i, r in enumerate(righe):
             for pezzo in (_dividi_lunga(r) if len(r) > MAX_BLOCCO else [r]):
                 parti.append((i, pezzo))
@@ -227,14 +227,14 @@ class GoogleGratis(Backend):
             for n, indici in enumerate(blocchi, 1):
                 self.log("    blocco %d/%d (%d righe)" % (n, len(blocchi), len(indici)))
                 self._traduci_indici(parti, indici, tradotti, origine, destinazione)
-        except BaseException as e:  # blocco o "Ferma" a meta': le righe gia' tradotte restano utilizzabili
+        except BaseException as e:  # block or "Stop" halfway: the lines already translated stay usable
             e.parziali = risultati()
             raise
         return risultati()
 
 
 def _blocchi(pezzi, massimo, massimo_testi=None):
-    """Indici dei pezzi raggruppati in blocchi di al massimo 'massimo' caratteri (a capo compresi)."""
+    """Indices of the pieces grouped into blocks of at most 'massimo' characters (line breaks included)."""
     blocchi, blocco, lunghezza = [], [], 0
     for k, pezzo in enumerate(pezzi):
         if blocco and (lunghezza + len(pezzo) + 1 > massimo or (massimo_testi and len(blocco) >= massimo_testi)):
@@ -247,7 +247,7 @@ def _blocchi(pezzi, massimo, massimo_testi=None):
     return blocchi
 
 
-# --- DeepL (API ufficiale, chiave personale: gratis fino a 500.000 caratteri al mese) ---------------
+# --- DeepL (official API, personal key: free up to 500,000 characters a month) ----------------------
 
 def _lingua_deepl(codice, destinazione):
     c = (codice or "").replace("_", "-")
@@ -263,14 +263,14 @@ def _lingua_deepl(codice, destinazione):
 
 
 class DeepL(Backend):
-    """API ufficiale di DeepL con la chiave dell'utente (account gratuito: 500.000 caratteri al mese). Le chiavi
-    gratuite finiscono con ':fx' e usano api-free.deepl.com. Si mandano liste di testi: niente righe da allineare."""
+    """Official DeepL API with the user's key (free account: 500,000 characters a month). Free keys end with ':fx'
+    and use api-free.deepl.com. Lists of texts are sent: no lines to line up."""
 
     nome = "deepl"
     max_testi = 50
     max_caratteri = 30_000
     ATTESE = (5, 15, 45)
-    ATTESA_MASSIMA = 300.0  # secondi: al massimo quelli chiesti da DeepL (Retry-After) prima di riprovare
+    ATTESA_MASSIMA = 300.0  # seconds: at most those asked by DeepL (Retry-After) before retrying
 
     def __init__(self, chiave, log=print, apri=None, limitatore=None):
         from .limiter import Limitatore
@@ -296,7 +296,7 @@ class DeepL(Backend):
         return self.limitatore.stima(caratteri_per_richiesta, durata_risposta=1.0)
 
     def verifica(self):
-        """(caratteri usati, limite) di questo mese: prova che la chiave funziona (GET /v2/usage, nessun testo)."""
+        """(characters used, limit) of this month: proves that the key works (GET /v2/usage, no text)."""
         dati = self._chiama("/v2/usage")
         return int(dati.get("character_count") or 0), int(dati.get("character_limit") or 0)
 
@@ -315,7 +315,7 @@ class DeepL(Backend):
             try:
                 try:
                     risposta = self.apri(req, 60)
-                except (ValueError, UnicodeError) as e:  # richiesta non costruibile (es. chiave): mai ritentare
+                except (ValueError, UnicodeError) as e:  # request that cannot be built (e.g. the key): never retry
                     raise ErroreBackend("Non riesco a preparare la richiesta per DeepL (%s): controlla la chiave."
                                         % type(e).__name__) from None
                 with risposta:
@@ -339,7 +339,7 @@ class DeepL(Backend):
                 errore = "HTTP %d" % e.code
                 attesa_suggerita = e.headers.get("Retry-After") if e.headers else None
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-                errore, attesa_suggerita = type(e).__name__, None  # mai il testo dell'errore: puo' contenere la chiave
+                errore, attesa_suggerita = type(e).__name__, None  # never the error's text: it can contain the key
             errori += 1
             if errori > len(self.ATTESE):
                 raise ErroreBackend("DeepL non risponde (%s): riprova piu' tardi." % errore)
@@ -353,7 +353,7 @@ class DeepL(Backend):
             interruzione.attendi(attesa)
 
     def utilizzo(self):
-        """(caratteri usati, limite) del mese, oppure None."""
+        """(characters used, limit) of the month, or None."""
         try:
             dati = self._chiama("/v2/usage")
             return dati.get("character_count"), dati.get("character_limit")
@@ -375,14 +375,14 @@ class DeepL(Backend):
         return uscita
 
 
-# --- MyMemory (API pubblica, senza account: 5.000 caratteri al giorno, 50.000 con la propria email) ----------
+# --- MyMemory (public API, no account: 5,000 characters a day, 50,000 with your own email) ------------------
 
 def _dividi_byte(riga, massimo=480):
-    """Pezzi di al massimo 'massimo' byte UTF-8 (MyMemory accetta al massimo 500 byte per richiesta)."""
+    """Pieces of at most 'massimo' UTF-8 bytes (MyMemory accepts at most 500 bytes per request)."""
     pezzi = []
     for pezzo in _dividi_lunga(riga, massimo):
         while len(pezzo.encode("utf-8")) > massimo:
-            # quanti caratteri entrano davvero in 'massimo' byte (anche con testo misto, es. giapponese + inglese)
+            # how many characters really fit in 'massimo' bytes (even with mixed text, e.g. Japanese + English)
             taglio = max(1, len(pezzo.encode("utf-8")[:massimo].decode("utf-8", "ignore")))
             spazio = pezzo.rfind(" ", 0, taglio)
             taglio = spazio if spazio > 0 else taglio
@@ -394,25 +394,25 @@ def _dividi_byte(riga, massimo=480):
 
 
 class MyMemory(Backend):
-    """API pubblica di MyMemory (Translated): nessun account. Senza email 5.000 caratteri al giorno, con la propria
-    email (parametro 'de') 50.000. Una richiesta per riga (al massimo 500 byte)."""
+    """Public API of MyMemory (Translated): no account. Without email 5,000 characters a day, with your own email
+    (parameter 'de') 50,000. One request per line (at most 500 bytes)."""
 
     nome = "mymemory"
     URL = "https://api.mymemory.translated.net/get"
-    max_testi = 10  # una richiesta per riga: gruppi piccoli, cosi' un blocco a meta' perde poco
+    max_testi = 10  # one request per line: small groups, so a block halfway loses little
     max_caratteri = 800
-    QUOTA = (5_000, 50_000)  # caratteri al giorno senza / con email
+    QUOTA = (5_000, 50_000)  # characters a day without / with email
 
     def richieste(self, testi):
-        """Caratteri di ogni richiesta che partira' (una per riga, piu' pezzi per le righe lunghe)."""
+        """Characters of each request that will be sent (one per line, several pieces for long lines)."""
         return [len(p) for t in testi for p in (_dividi_byte(t) if len(t.encode("utf-8")) > 480 else [t])]
 
     def quota(self):
         return self.QUOTA[1] if self.email else self.QUOTA[0]
 
     def verifica(self):
-        """Traduce "Hello" (5 caratteri) con l'email indicata: MyMemory risponde e accetta l'email. Non c'e' un account
-        da controllare: l'email serve solo ad avere piu' caratteri al giorno."""
+        """Translates "Hello" (5 characters) with the given email: MyMemory answers and accepts the email. There is no
+        account to check: the email only serves to get more characters a day."""
         return self._richiesta("Hello", "en", "it")
 
     def __init__(self, email=None, log=print, apri=None, limitatore=None):
@@ -425,7 +425,7 @@ class MyMemory(Backend):
     def pausa(self):
         blocco = self.limitatore.blocco_attuale()
         if blocco and blocco.get("tipo") == "quota" and self.email and not blocco.get("con_email"):
-            self.limitatore.azzera()  # finita la quota senza email: con l'email si puo' continuare
+            self.limitatore.azzera()  # quota without email used up: with the email we can go on
             return None
         return self.limitatore.pausa()
 
@@ -465,7 +465,7 @@ class MyMemory(Backend):
                 if stato != "200":
                     if "LENGTH" in str(dati.get("responseDetails", "")).upper():
                         self.log("    ! MyMemory: testo troppo lungo, resta in originale")
-                        return ""  # riguarda solo questa riga: il lavoro continua
+                        return ""  # it only concerns this line: the work goes on
                     raise ErroreBackend("MyMemory rifiuta la richiesta (%s): %s" % (stato, dati.get("responseDetails")))
                 self.limitatore.ok()
                 return pulisci(html.unescape(tradotto))
@@ -491,13 +491,13 @@ class MyMemory(Backend):
                 pezzi = _dividi_byte(riga) if len(riga.encode("utf-8")) > 480 else [riga]
                 tradotti = [self._richiesta(p, origine, destinazione).strip() for p in pezzi]
                 uscita.append("" if any(not t for t in tradotti) else " ".join(tradotti))
-        except BaseException as e:  # quota finita o "Ferma" a meta': le righe gia' tradotte non si perdono
+        except BaseException as e:  # quota used up or "Stop" halfway: the lines already translated are not lost
             e.parziali = uscita + [""] * (len(righe) - len(uscita))
             raise
         return uscita
 
 
-# --- Traduttore locale (Ollama + TranslateGemma sul PC dell'utente: nessun limite, nessun blocco) ----------
+# --- Local translator (Ollama + TranslateGemma on the user's PC: no limits, no blocks) ---------------------
 
 NOMI_INGLESI = {
     "en": "English", "it": "Italian", "fr": "French", "de": "German", "es": "Spanish", "pt": "Portuguese",
@@ -507,29 +507,31 @@ NOMI_INGLESI = {
     "ro": "Romanian", "el": "Greek", "tr": "Turkish", "uk": "Ukrainian", "ar": "Arabic", "he": "Hebrew",
     "th": "Thai", "vi": "Vietnamese", "id": "Indonesian", "hi": "Hindi",
 }
-# formato ufficiale del prompt di TranslateGemma (ollama.com/library/translategemma): due righe, due righe vuote, testo
-# Il prompt ufficiale di TranslateGemma con una riga di contesto: nelle prove su Forager (ottobre 2026) ha migliorato
-# i nomi brevi ("max hp" -> "punti vita massimi", "buffs" -> "effetti positivi") e il "tu" al giocatore.
+# official format of the TranslateGemma prompt (ollama.com/library/translategemma): two lines, two empty lines, text
+# The official TranslateGemma prompt with one line of context: in the tests on Forager (October 2026) it improved
+# the short names ("max hp" -> "punti vita massimi", "buffs" -> "effetti positivi") and the informal "tu" to the
+# player.
 PROMPT_TRANSLATEGEMMA = (
     "You are a professional {sl} ({sc}) to {tl} ({tc}) translator. Your goal is to accurately convey the meaning "
     "and nuances of the original {sl} text while adhering to {tl} grammar, vocabulary, and cultural "
     "sensitivities.\nThe text is a string from a video game (item names, skills, menus or dialogue); address the "
     "player informally.\n{contesto}Produce only the {tl} translation, without any additional explanations or "
     "commentary. Please translate the following {sl} text into {tl}:\n\n\n{testo}")
-# Contesto per riga (prove su Forager, ottobre 2026: 4B dal 43% al 64% di traduzioni buone, 12B dal 73% all'80%):
-# la chiave del testo nel file (senza il numero finale) e le traduzioni ufficiali del gioco, da non copiare.
+# Context per line (tests on Forager, October 2026: 4B from 43% to 64% good translations, 12B from 73% to 80%):
+# the text's key in the file (without the final number) and the game's official translations, not to be copied.
 CONTESTO_CHIAVE = "In the game's files this text has the identifier \"%s\", a hint of where it appears.\n"
 CONTESTO_RIFERIMENTI = ("The game's official translations of this text into other languages, only to understand its "
                         "meaning (write your answer in %s, do not copy them; names of people and games stay as in "
                         "the original): %s\n")
-# secondo tentativo dopo uno scarto per i numeri (prove: '200% more' -> 'il doppio' corretto in 'il 200% in piu'')
+# second attempt after a rejection because of the numbers (tests: '200% more' -> 'il doppio' fixed into
+# 'il 200% in piu'')
 CORREZIONE_SEGNAPOSTO = ("Copy every marker like [[0]], [[1]] exactly as written, around the same words: they are "
                          "game codes.\n")
 CORREZIONE_NUMERI = ("Keep every number exactly as written in the original: digits stay digits (200% stays 200%, "
                      "1 stays 1) and numbers written in words stay words.\n")
-# testo ritradotto perche' la traduzione di prima non si poteva scrivere nel gioco (vedi Progetto.applica)
+# text re-translated because the previous translation could not be written to the game (see Progetto.applica)
 CORREZIONE_CARATTERI = "The game's font cannot draw these characters, so do not use them: %s\n"
-# etichetta corta richiesta di nuovo perche' la traduzione era troppo lunga per il suo spazio (Progetto._accorcia)
+# short label requested again because the translation was too long for its space (Progetto._accorcia)
 CONTESTO_LARGHEZZA = ("In the game this text is a short label with little space: the %s translation must be at most %d "
                       "characters long. Use a shorter word or synonym if needed, keeping the meaning.\n")
 _CONTROLLO = re.compile(r"<\s*/?\s*(?:end_of_turn|start_of_turn)\s*>|<\|[^|>]*\|>|<｜[^｜>]*｜?>")
@@ -542,8 +544,8 @@ _ALTRA_SCRITTURA = re.compile(r"[Ѐ-ӿ぀-ヿ㐀-䶿一-鿿가-힯]")
 _PAROLE_INGLESI = re.compile(r"\b(the|of|and|you|your|to|is|are|with|for|this|that)\b", re.I)
 _NUMERO = re.compile(r"\d+(?:[.,]\d+)?")
 _CHIUDE_FRASE = re.compile(r"[.!?:;\u2026\u3002\uff01\uff1f][\"')\]\u201d\u00bb\u300d\u300f\uff09]*$")
-# numeri in lettere accettati al posto delle cifre ("1 or more" -> "uno o piu'"): solo parole non ambigue (niente
-# articoli come 'un'/'a', niente 'sei' che e' anche 'tu sei')
+# numbers in words accepted in place of digits ("1 or more" -> "uno o piu'"): only unambiguous words (no articles
+# like 'un'/'a', no 'sei' which is also 'tu sei')
 _NUMERI_IN_LETTERE = {
     "it": {1: "uno|una", 2: "due", 3: "tre", 4: "quattro", 5: "cinque", 7: "sette", 8: "otto", 9: "nove", 10: "dieci"},
     "en": {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"},
@@ -559,19 +561,19 @@ _PAROLE_NUMERO = re.compile(r"\b(?:one|two|twice|double|pair|three|thrice|triple
                             r"ten)\b", re.I)
 _VALORE_PAROLA = {"one": 1, "two": 2, "twice": 2, "double": 2, "pair": 2, "three": 3, "thrice": 3, "triple": 3,
                   "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
-# lettere accentate di ogni lingua di arrivo: una lettera latina accentata che non e' di questa lingua (e non c'e'
-# nell'originale) viene da una traduzione ufficiale copiata ('crânio' dal portoghese)
+# accented letters of each target language: an accented Latin letter that does not belong to this language (and is
+# not in the original) comes from a copied official translation ('crânio' from Portuguese)
 _LETTERE_DELLA_LINGUA = {"it": set("àèéìíîòóùúÀÈÉÌÍÎÒÓÙÚ")}
 
 
 def _numeri_in_lettere(o, t, destinazione):
-    """True se la differenza di numeri tra originale e traduzione si spiega con numeri scritti in lettere:
-    - una cifra che manca nella traduzione c'e' come parola ('1 or more' -> 'uno o piu''), contando solo le parole
-      in piu' rispetto a quelle che traducono parole dell'originale ('twice' -> 'due volte' non vale per un '2');
-    - una cifra in piu' nella traduzione traduce un numero in lettere dell'originale ('restore one' -> 'ripristina
+    """True if the difference in numbers between original and translation is explained by numbers written in words:
+    - a digit missing from the translation is there as a word ('1 or more' -> 'uno o piu''), counting only the words
+      beyond those that translate words of the original ('twice' -> 'due volte' does not count for a '2');
+    - an extra digit in the translation translates a number in words of the original ('restore one' -> 'ripristina
       1')."""
     in_lettere = collections.Counter(_VALORE_PAROLA[w.lower()] for w in _PAROLE_NUMERO.findall(o))
-    articoli = len(re.findall(r"\b(?:a|an)\b", o, re.I))  # 'a'/'an' si traducono 'un'/'una'
+    articoli = len(re.findall(r"\b(?:a|an)\b", o, re.I))  # 'a'/'an' are translated 'un'/'una'
     no, nt = collections.Counter(_numeri(o)), collections.Counter(_numeri(t))
     mancanti, in_piu = no - nt, nt - no
     for numero, quanti in in_piu.items():
@@ -583,7 +585,7 @@ def _numeri_in_lettere(o, t, destinazione):
     if not parole:
         return False
     for numero, quanti in mancanti.items():
-        if not numero.isdigit():  # '2.5': niente parole per i decimali
+        if not numero.isdigit():  # '2.5': no words for decimals
             return False
         parola = parole.get(int(numero))
         gia = in_lettere.get(int(numero), 0) + (articoli if numero == "1" else 0)
@@ -597,7 +599,7 @@ _VIRGOLETTE = "\"'\u201c\u201d\u2018\u2019\u00ab\u00bb\u201e\u300c\u300e"
 _MIGLIAIA = re.compile(r"(?<=\d)[.,\u00a0\u202f ](?=\d{3}(?!\d))")
 
 
-# "50k", "1.5M", "2B": migliaia, milioni, miliardi (M e B solo maiuscole: "5m" sono metri o minuti)
+# "50k", "1.5M", "2B": thousands, millions, billions (M and B only uppercase: "5m" is meters or minutes)
 _SUFFISSO_NUMERO = re.compile(r"(\d+(?:\.\d+)?)\s?([kK]|M|B)(?![A-Za-z])")
 _PER_SUFFISSO = {"k": 1e3, "K": 1e3, "M": 1e6, "B": 1e9}
 
@@ -608,8 +610,8 @@ def _con_suffisso(m):
 
 
 def _numeri(testo):
-    """I numeri di un testo come valori confrontabili tra lingue: cifre di ogni alfabeto ("\uff11\uff10" = 10), senza
-    separatori delle migliaia ("1.000", "1,000", "1 000" = 1000), virgola decimale come punto, "50k" = 50000."""
+    """The numbers of a text as values comparable across languages: digits of every script ("\uff11\uff10" = 10),
+    without thousands separators ("1.000", "1,000", "1 000" = 1000), decimal comma as a point, "50k" = 50000."""
     t = "".join(str(unicodedata.decimal(c)) if not c.isascii() and unicodedata.decimal(c, None) is not None else c
                 for c in testo)
     t = re.sub(r"(?<=\d),(?=\d)", ".", _MIGLIAIA.sub("", t))
@@ -618,8 +620,8 @@ def _numeri(testo):
 
 
 def differenza_numeri(originale, tradotto):
-    """(mancano, in_piu): i numeri dell'originale che non ci sono nella traduzione e quelli in piu' (come valori: "50k"
-    e "50.000" sono lo stesso numero), scritti come nei testi."""
+    """(mancano, in_piu): the numbers of the original that are not in the translation and the extra ones (as values:
+    "50k" and "50.000" are the same number), written as in the texts."""
     def valori(testo):
         uscita = collections.Counter()
         for m in re.finditer(r"\d+(?:[.,\u00a0\u202f ]\d+)*(?:\s?(?:[kK]|M|B)(?![A-Za-z]))?", testo):
@@ -635,21 +637,21 @@ def differenza_numeri(originale, tradotto):
 
 
 def _peso(testo):
-    """Lunghezza 'a vista': un carattere cinese, giapponese o coreano vale circa due lettere e mezza."""
+    """Visual length: a Chinese, Japanese or Korean character is worth about two and a half letters."""
     from .text import _CJK
     return len(testo) + 1.5 * len(_CJK.findall(testo))
 _RIPETIZIONE = re.compile(r"(\b\S+\b)(?:\W+\1\b){3,}", re.I)
 
 
 def problemi_traduzione(originale, tradotto, destinazione="it"):
-    """Elenco dei motivi per scartare una traduzione del modello locale (vuoto = buona)."""
+    """List of the reasons to reject a translation of the local model (empty = good)."""
     from .text import _TOKEN
     problemi = []
     if not tradotto.strip():
         return ["vuota"]
     if "\n" in tradotto and "\n" not in originale:
         problemi.append("a capo aggiunto")
-    elif tradotto.count("\n") != originale.count("\n"):  # righe in piu' o in meno: l'etichetta esce dal suo spazio
+    elif tradotto.count("\n") != originale.count("\n"):  # more or fewer lines: the label overflows its space
         problemi.append("a capo diversi")
     if _PREAMBOLO.match(tradotto) and not _PREAMBOLO.match(originale):
         problemi.append("testo di contorno")
@@ -665,7 +667,7 @@ def problemi_traduzione(originale, tradotto, destinazione="it"):
         problemi.append("ripetizioni")
     if tradotto.strip() == originale.strip() and len(_PAROLE_INGLESI.findall(originale)) >= 2:
         problemi.append("non tradotta")
-    o, t = _TOKEN.sub(" ", originale), _TOKEN.sub(" ", tradotto)  # le cifre dei codici [[0]] non sono numeri
+    o, t = _TOKEN.sub(" ", originale), _TOKEN.sub(" ", tradotto)  # the digits of the [[0]] codes are not numbers
     if _numeri(o) != _numeri(t) and sorted(re.findall(r"\d+", o)) != sorted(re.findall(r"\d+", t)) \
             and not _numeri_in_lettere(o, t, destinazione):
         problemi.append("numeri diversi")
@@ -679,7 +681,7 @@ def problemi_traduzione(originale, tradotto, destinazione="it"):
 
 
 class _RigaLenta(Exception):
-    """Una sola riga ha superato il tempo massimo, ma il server e' vivo: quella riga resta in originale."""
+    """A single line went over the maximum time, but the server is alive: that line stays untranslated."""
 
 
 def _uguale(originale, tradotto):
@@ -689,9 +691,9 @@ def _uguale(originale, tradotto):
 
 
 def seme_per(testo, numero):
-    """Il seme del tentativo 'numero' per un testo: sempre lo stesso per la stessa coppia (anche tra un avvio e
-    l'altro: niente hash() di Python, che cambia a ogni avvio), diverso tra un tentativo e l'altro e mai uguale a quelli
-    del primo giro (Locale.TENTATIVI: 42, 7, 11)."""
+    """The seed of attempt 'numero' for a text: always the same for the same pair (even from one run to the next:
+    no Python hash(), which changes at every run), different from one attempt to the next and never equal to those
+    of the first round (Locale.TENTATIVI: 42, 7, 11)."""
     return zlib.crc32(("%d\x00%s" % (numero, testo)).encode("utf-8")) % 2_000_000_000 + 100
 
 
@@ -701,22 +703,22 @@ COMANDO_INSTALLA = "python -I smith.py local --install 12b (o 4b)"
 
 
 class Locale(Backend):
-    """Traduttore sul PC dell'utente: Ollama + TranslateGemma. Nessuna quota e nessun blocco: va al ritmo della
-    scheda video. Una richiesta per riga (il formato di TranslateGemma prevede un testo per volta), con controlli
-    su ogni risposta e un secondo tentativo con parametri diversi; le righe che non superano i controlli restano in
-    originale (Progetto le riprova subito in un altro giro: vedi 'giri' in traduci_righe). Il server si avvia alla
-    prima riga e si chiude con chiudi()."""
+    """Translator on the user's PC: Ollama + TranslateGemma. No quota and no blocks: it goes at the pace of the
+    graphics card. One request per line (the TranslateGemma format expects one text at a time), with checks on
+    every answer and a second attempt with different parameters; the lines that do not pass the checks stay
+    untranslated (Progetto retries them right away in another round: see 'giri' in traduci_righe). The server
+    starts at the first line and is closed with chiudi()."""
 
     nome = "locale"
     limitato = False
-    usa_contesto = True  # accetta per ogni riga la chiave e le traduzioni ufficiali del gioco (vedi Progetto)
-    semi_variabili = True  # accetta per ogni riga il giro (vedi traduci_righe): un testo gia' scartato cambia semi
+    usa_contesto = True  # accepts for each line the key and the game's official translations (see Progetto)
+    semi_variabili = True  # accepts for each line the round (see traduci_righe): an already rejected text changes seeds
     max_testi = 40
     max_caratteri = 8000
     NUM_CTX = 2048
-    TENTATIVI = ((0.0, 42), (0.3, 7), (0.6, 11))  # primo giro; il terzo solo per i testi scartati due volte
-    # dal secondo giro (testo gia' scartato, in questo avvio o in uno prima): semi nuovi a ogni giro (seme_per) e
-    # temperature piu' alte. A temperatura 0 il seme non conta: la stessa domanda darebbe la stessa risposta
+    TENTATIVI = ((0.0, 42), (0.3, 7), (0.6, 11))  # first round; the third only for texts rejected twice
+    # from the second round (text already rejected, in this run or an earlier one): new seeds at every round (seme_per)
+    # and higher temperatures. At temperature 0 the seed does not matter: the same question would give the same answer
     TEMPERATURE_GIRI = (0.3, 0.6, 0.9)
 
     def __init__(self, modello="4b", log=print, server=None, parallele=None):
@@ -730,14 +732,14 @@ class Locale(Backend):
         self._proprio = server is None
         self._pronto = False
         self.token, self.secondi, self.righe_fatte = 0, 0.0, 0
-        self.tempo_righe = 0.0  # secondi reali spesi a tradurre (senza l'avvio): per la stima
+        self.tempo_righe = 0.0  # real seconds spent translating (without startup): for the estimate
         self._avvisato_lento = False
-        # righe tradotte insieme: con il server di PatchSmith quante ne regge il modello nella scheda video; con un
-        # server dato da fuori (test) una alla volta, se non si dice altro
+        # lines translated together: with PatchSmith's server as many as the model on the graphics card can handle;
+        # with a server given from outside (tests) one at a time, unless told otherwise
         self.parallele = max(1, parallele or (ollama.MODELLI[modello].get("parallele", 1) if server is None else 1))
         self._lucchetto = threading.Lock()
-        # {testo: (traduzione, problemi)}: la proposta migliore dei testi scartati dai controlli. Solo se e' un
-        # dizionario (lo prepara il traduttore dal vivo, servizio_xunity, per rispondere comunque a XUnity)
+        # {testo: (traduzione, problemi)}: the best proposal for the texts rejected by the checks. Only if it is a
+        # dictionary (the live translator, servizio_xunity, prepares it to answer XUnity anyway)
         self.scarti = None
 
     def pausa(self):
@@ -747,13 +749,13 @@ class Locale(Backend):
         return [len(t) for t in testi]
 
     def stima(self, caratteri_per_richiesta):
-        """Secondi previsti: avvio (riconoscimento della scheda video e caricamento del modello) piu' i testi, al
-        ritmo misurato su questo PC dopo le prime righe (prima: quello delle prove su una RTX 3060 Ti 8 GB)."""
+        """Expected seconds: startup (detection of the graphics card and loading of the model) plus the texts, at the
+        pace measured on this PC after the first lines (before that: the one from the tests on an RTX 3060 Ti 8 GB)."""
         from . import ollama
         per_testo = ollama.MODELLI[self.chiave]["secondi_per_testo"]
         if self.righe_fatte >= 10:
             per_testo = self.tempo_righe / self.righe_fatte
-        avvio = 0 if self._pronto else ollama.MODELLI[self.chiave]["secondi_avvio"]  # scheda video + modello
+        avvio = 0 if self._pronto else ollama.MODELLI[self.chiave]["secondi_avvio"]  # graphics card + model
         return avvio + sum(per_testo * (0.5 + c / 80) for c in caratteri_per_richiesta)
 
     def _assicura_server(self):
@@ -784,7 +786,7 @@ class Locale(Backend):
         for m in caricati:
             if m.get("name") == self.modello and m.get("size"):
                 quota = m.get("size_vram", 0) / m["size"]
-                self.log((DETTAGLIO if quota > 0.95 else "") +  # pronto del tutto: dettaglio; se no l'avviso si vede
+                self.log((DETTAGLIO if quota > 0.95 else "") +  # fully ready: detail; otherwise the warning is shown
                          "    Traduttore locale pronto: %.0f%% del modello nella scheda video%s" % (
                     100 * quota, "" if quota > 0.95 else (" (il resto in memoria: piu' lento)" if quota > 0 else
                                                          " - ATTENZIONE: usa solo il processore, molto piu' lento: "
@@ -807,7 +809,7 @@ class Locale(Backend):
         return NOMI_INGLESI.get(codice, NOMI_INGLESI.get(codice.split("-")[0], codice))
 
     def _testo_contesto(self, contesto, destinazione):
-        """Le righe di contesto del prompt per una riga (vuoto se non c'e' contesto: prompt come prima)."""
+        """The prompt's context lines for one line (empty if there is no context: prompt as before)."""
         if not contesto:
             return ""
         righe = ""
@@ -823,23 +825,23 @@ class Locale(Backend):
         if non_usare:
             righe += CORREZIONE_CARATTERI % " ".join(non_usare)
         larghezza = contesto.get("larghezza")
-        if isinstance(larghezza, int) and larghezza > 0:  # (solo quando un'etichetta si chiede piu' corta)
+        if isinstance(larghezza, int) and larghezza > 0:  # (only when a label is requested shorter)
             righe += CONTESTO_LARGHEZZA % (self._nome_inglese(destinazione), larghezza)
         return righe
 
     def _tentativi(self, testo, giro):
-        """[(temperatura, seme)] dei tentativi per un testo: al primo giro (0) quelli fissi; dagli altri semi ricavati
-        dal testo e dal numero del tentativo (seme_per), cosi' ogni giro fa domande nuove anche tra un avvio e l'altro
-        (Progetto ricorda i giri fatti in memory/<gioco>.problemi.json)."""
+        """[(temperature, seed)] of the attempts for a text: at the first round (0) the fixed ones; from the others,
+        seeds derived from the text and the attempt number (seme_per), so every round asks new questions even from
+        one run to the next (Progetto remembers the rounds done in memory/<gioco>.problemi.json)."""
         if not giro:
             return list(self.TENTATIVI)
         n = len(self.TEMPERATURE_GIRI)
         return [(t, seme_per(testo, giro * n + i)) for i, t in enumerate(self.TEMPERATURE_GIRI)]
 
     def altro_modello(self):
-        """Un traduttore locale con l'altro modello (Veloce <-> Qualita'), se e' scaricato, per i testi che questo ha
-        scartato; None se non c'e'. Il modello di questo traduttore esce dalla scheda video (e, se il server e' di
-        PatchSmith, il server si chiude: il nuovo traduttore ne avvia uno con i parametri del suo modello)."""
+        """A local translator with the other model (Fast <-> Quality), if it is downloaded, for the texts this one
+        rejected; None if there is none. This translator's model leaves the graphics card (and, if the server is
+        PatchSmith's, the server closes: the new translator starts one with the parameters of its model)."""
         from . import ollama
         altro = {"4b": "12b", "12b": "4b"}.get(self.chiave)
         try:
@@ -850,7 +852,7 @@ class Locale(Backend):
         if self._proprio:
             self.chiudi()
             return Locale(altro, log=self.log)
-        if self._server is not None and self._pronto:  # server dato da fuori (le prove): resta acceso
+        if self._server is not None and self._pronto:  # server given from outside (the tests): it stays on
             try:
                 self._server.chiama("/api/generate", {"model": self.modello, "keep_alive": 0}, timeout=30)
             except (OSError, ValueError):
@@ -865,7 +867,7 @@ class Locale(Backend):
         dati = {"model": self.modello, "messages": [{"role": "user", "content": prompt}], "stream": False,
                 "keep_alive": "30m", "options": {"temperature": temperatura, "seed": seme, "num_ctx": self.NUM_CTX,
                                                  "num_predict": num_predict, "top_k": 64, "top_p": 0.95}}
-        try:  # tempo massimo in proporzione a quanto puo' scrivere (anche a 2-3 parole al secondo)
+        try:  # maximum time in proportion to how much it can write (even at 2-3 words a second)
             risposta = self._server.chiama("/api/chat", dati, timeout=120 + num_predict // 2)
         except urllib.error.HTTPError as e:
             raise ErroreBackend(self._spiega(e)) from None
@@ -888,22 +890,22 @@ class Locale(Backend):
             return False
 
     def _pulisci(self, tradotto, originale, destinazione="it"):
-        """Toglie quello che il modello aggiunge di suo: virgolette, note tra parentesi, piu' traduzioni alternative
-        per un nome, punto finale o puntini dove l'originale non li ha; minuscola iniziale come l'originale."""
+        """Removes what the model adds on its own: quotes, notes in parentheses, several alternative translations
+        for a name, final period or ellipsis where the original has none; lowercase initial like the original."""
         t = _CONTROLLO.sub("", tradotto).strip()
         o = originale.strip()
         from .text import _CJK, _TOKEN
         validi = {int(n) for n in _TOKEN.findall(o)}
         if validi:
-            # segnaposto rovinati dal modello ('[[4]Spine', '[0]Colpo', '[[2]〕'): si rimettono, se il numero e'
-            # uno di quelli dell'originale e l'originale non ha quella scrittura di suo
-            resto = _TOKEN.sub(" ", o)  # l'originale senza i segnaposto giusti
+            # placeholders damaged by the model ('[[4]Spine', '[0]Colpo', '[[2]〕'): they are restored, if the number
+            # is one of those of the original and the original does not have that spelling on its own
+            resto = _TOKEN.sub(" ", o)  # the original without the correct placeholders
 
             def ripara(m):
                 n = int(m.group(1))
                 return "[[%d]]" % n if n in validi and m.group(0).strip() not in resto else m.group(0)
             t = _TOKEN_ROVINATO.sub(ripara, t)
-        if "\n" not in o:  # a capo aggiunti dal modello (es. prima di ogni codice di un pulsante): spazi
+        if "\n" not in o:  # line breaks added by the model (e.g. before each button code): spaces
             t = re.sub(r"[ \t]*\n+[ \t]*", " ", t)
         for apre, chiude in ('""', "''", "\u201c\u201d", "\u00ab\u00bb", "\u300c\u300d", "\u300e\u300f"):
             if len(t) > 1 and t[0] == apre and t[-1] == chiude and o[:1] not in _VIRGOLETTE:
@@ -912,19 +914,19 @@ class Locale(Backend):
             t = re.sub(r"\s*[(\uff08][^()\uff08\uff09\n]{1,40}[)\uff09]", "", t).strip() or t
         if re.fullmatch(r"[^\W_]+(?: [^\W_]+){0,2}", o) and not _CJK.search(o) and "\n" not in t and \
                 (";" in t or " " not in o):
-            # un nome tradotto con piu' alternative: "edificio; costruzione", "incantare, affascinare"
+            # a name translated with several alternatives: "edificio; costruzione", "incantare, affascinare"
             parti = [x for x in re.split(r"\s*;\s*" if ";" in t else r"\s*,\s*", t.rstrip(".")) if x]
             if len(parti) > 1 and all(len(x.split()) <= 3 for x in parti):
                 t = parti[0]
         if not _CHIUDE_FRASE.search(o):
-            if re.search(r"(?:\.\.\.|\u2026)$", t):  # puntini aggiunti a una frase spezzata
+            if re.search(r"(?:\.\.\.|\u2026)$", t):  # ellipsis added to a split sentence
                 t = re.sub(r"\s*(?:\.\.\.|\u2026)$", "", t) or t
             elif re.search(r"(?<!\.)[.;,]$", t) and not re.search(r"(?:\b\w\.\w\.|\b(?:ecc|etc|ca)\.)$", t, re.I):
-                # "scarpe dorate." per "golden boots" (le sigle come "U.S.A." restano)
+                # "scarpe dorate." for "golden boots" (abbreviations like "U.S.A." stay)
                 t = t[:-1].rstrip()
         lingua = destinazione.split("-")[0]
         if lingua != "de" and o[:1].isalpha() and o[:1].islower() and t[:1].isupper() \
-                and (t[1:2].islower() or (t[1:2] == " " and lingua != "en")):  # giochi tutti in minuscolo (Forager)
+                and (t[1:2].islower() or (t[1:2] == " " and lingua != "en")):  # games all in lowercase (Forager)
             t = t[:1].lower() + t[1:]
         if originale[:1].isspace() or originale[-1:].isspace():
             t = originale[:len(originale) - len(originale.lstrip())] + t + originale[len(originale.rstrip()):]
@@ -941,7 +943,7 @@ class Locale(Backend):
         chiave = re.sub(r"[\W_]+", "", attuale.get("chiave") or "").casefold()
         riferimenti = [r for r in (attuale.get("riferimenti") or {}).values() if r and r.strip()]
         tentativi, correzione = self._tentativi(testo, giro), ""
-        proposta = None  # (traduzione, problemi) scartata con meno problemi: per self.scarti
+        proposta = None  # (translation, problems) rejected with the fewest problems: for self.scarti
         for n, (temperatura, seme) in enumerate(tentativi):
             base = self._testo_contesto(attuale, destinazione)
             num_predict = min(1024, 64 + 2 * (len(testo) // 3 + 1))
@@ -953,7 +955,7 @@ class Locale(Backend):
                     self.log("    ! Un testo richiede troppo tempo al traduttore locale: resta in originale (\"%s\")"
                              % testo[:50])
                     return ""
-                piu_spazio = min(2 * num_predict, self.NUM_CTX - 256)  # troncata: piu' spazio, entro il contesto
+                piu_spazio = min(2 * num_predict, self.NUM_CTX - 256)  # truncated: more room, within the context
                 if fine != "length" or piu_spazio <= num_predict:
                     break
                 num_predict = piu_spazio
@@ -961,11 +963,11 @@ class Locale(Backend):
             problemi = problemi_traduzione(testo, tradotto, destinazione)
             if len(chiave) >= 6 and chiave in re.sub(r"[\W_]+", "", tradotto).casefold() \
                     and chiave not in re.sub(r"[\W_]+", "", testo).casefold():
-                problemi.append("chiave copiata")  # il modello ha scritto l'indizio invece della traduzione
-                attuale["chiave"] = None  # il tentativo dopo, senza l'indizio
+                problemi.append("chiave copiata")  # the model wrote the hint instead of the translation
+                attuale["chiave"] = None  # the next attempt, without the hint
             if riferimenti and not _uguale(testo, tradotto) and any(_uguale(r, tradotto) for r in riferimenti):
-                problemi.append("riferimento copiato")  # una traduzione ufficiale di un'altra lingua, copiata
-                attuale["riferimenti"] = {}  # il tentativo dopo, senza i riferimenti (se torna uguale, e' giusta)
+                problemi.append("riferimento copiato")  # an official translation of another language, copied
+                attuale["riferimenti"] = {}  # next attempt, without the references (if the same again, it is right)
                 riferimenti = []
             correzione = ""
             if "numeri diversi" in problemi and re.search(r"\d", testo):
@@ -973,26 +975,27 @@ class Locale(Backend):
             if "segnaposto" in problemi:
                 correzione += CORREZIONE_SEGNAPOSTO
             if correzione and n == 0:
-                tentativi[1] = tentativi[0]  # la stessa domanda, con la correzione (poi resta il terzo tentativo)
+                tentativi[1] = tentativi[0]  # the same question, with the correction (then the third attempt remains)
             if not problemi:
                 if stessa_lingua or not _uguale(testo, tradotto):
                     return tradotto
-                eco, eco_viste = tradotto, eco_viste + 1  # uguale all'originale: ci si crede solo se si ripete
+                eco, eco_viste = tradotto, eco_viste + 1  # equal to the original: we believe it only if it repeats
                 if eco_viste >= 2:
-                    return tradotto  # un testo rimasto uguale due volte e' un nome o una parola che non cambia
+                    return tradotto  # a text that stayed the same twice is a name or a word that does not change
             elif problemi == ["segnaposto"] and _TOKEN.search(testo):
                 ultimo = tradotto
             if tradotto.strip() and (proposta is None or len(problemi) < len(proposta[1])):
                 proposta = (tradotto, problemi)
         if self.scarti is not None and proposta is not None:
             self.scarti[testo] = proposta
-        # con i soli segnaposto sbagliati la traduzione torna a PatchSmith, che ritraduce i pezzi tra i codici
+        # with only the placeholders wrong the translation goes back to PatchSmith, which re-translates the pieces
+        # between the codes
         return ultimo
 
     def traduci_righe(self, righe, origine, destinazione, contesti=None, giri=None):
-        """Traduce le righe, 'parallele' alla volta (la scheda video ne elabora piu' insieme); l'ordine resta quello
-        delle righe. Con 'Ferma' o un errore, quelle gia' tradotte sono in e.parziali. giri: per ogni riga quante
-        volte e' gia' stata provata (0 o assente: primo giro, vedi _tentativi)."""
+        """Translates the lines, 'parallele' at a time (the graphics card processes several together); the order stays
+        that of the lines. With 'Stop' or an error, those already translated are in e.parziali. giri: for each line
+        how many times it has already been tried (0 or missing: first round, see _tentativi)."""
         self._assicura_server()
         contesti = list(contesti or [])
         giri = list(giri or [])
@@ -1016,13 +1019,13 @@ class Locale(Backend):
                         uscita[futuri[f]] = f.result()
                         self._riga_fatta()
                 except BaseException:
-                    pool.shutdown(wait=True, cancel_futures=True)  # le richieste gia' partite finiscono
+                    pool.shutdown(wait=True, cancel_futures=True)  # the requests already sent finish
                     for f, i in futuri.items():
                         if uscita[i] is None and f.done() and not f.cancelled() and f.exception() is None:
                             uscita[i] = f.result()
                     raise
                 pool.shutdown()
-        except BaseException as e:  # "Ferma" o errore a meta': le righe gia' tradotte non si perdono
+        except BaseException as e:  # "Stop" or error halfway: the lines already translated are not lost
             e.parziali = [u if u is not None else "" for u in uscita]
             raise
         finally:
@@ -1040,7 +1043,7 @@ class Locale(Backend):
                 self.log("    ! E' lento: se il gioco e' aperto chiudilo; altrimenti prova il modello Veloce (4B).")
 
     def chiudi(self):
-        """Libera la scheda video e chiude il server (se l'ha avviato questo traduttore)."""
+        """Frees the graphics card and closes the server (if this translator started it)."""
         if self._server is not None and self._pronto:
             try:
                 self._server.chiama("/api/generate", {"model": self.modello, "keep_alive": 0}, timeout=30)
@@ -1062,7 +1065,7 @@ DESCRIZIONI = {
 
 
 def credenziali():
-    """Chiave DeepL ed email per MyMemory: dalle variabili d'ambiente o da settings.json."""
+    """DeepL key and email for MyMemory: from the environment variables or from settings.json."""
     from . import project as progetto
     dati = {}
     try:
@@ -1077,21 +1080,22 @@ def credenziali():
 
 
 def predefinito():
-    """Il traduttore proposto: sempre quello locale (nessun limite, nessun blocco), anche se non e' ancora installato.
-    Su un PC nuovo il primo passo e' installarlo ("da installare" e il pulsante "Installa..." accanto): Google
-    gratuito rifiuta spesso le richieste di PatchSmith fin dalla prima."""
+    """The proposed translator: always the local one (no limits, no blocks), even if it is not installed yet.
+    On a new PC the first step is to install it ("to install" and the "Install..." button next to it): free Google
+    often rejects PatchSmith's requests from the very first one."""
     return "locale"
 
 
 def prova_locale(modello=None, log=print, testo="Start game", a="it", server=None):
-    """Prova del traduttore locale (dopo l'installazione): avvia il server, carica il modello e traduce una frase,
-    misurando i tempi. {'ok', 'traduzione', 'avvio' (secondi per avviare il server e caricare il modello), 'secondi'
-    (per la frase), 'scheda' (quanto del modello sta nella scheda video, da 0 a 1; None se non si sa), 'messaggio' (per
-    chi gioca)}. Non solleva errori del traduttore: se la prova non riesce lo dice il messaggio. server: per le prove."""
+    """Test of the local translator (after installation): starts the server, loads the model and translates a
+    sentence, measuring the times. {'ok', 'traduzione', 'avvio' (seconds to start the server and load the model),
+    'secondi' (for the sentence), 'scheda' (how much of the model is on the graphics card, from 0 to 1; None if
+    unknown), 'messaggio' (for the player)}. Does not raise translator errors: if the test fails, the message says so.
+    server: for the tests."""
     from . import ollama
     chiave = modello if modello in ollama.MODELLI and (server is not None or ollama.modello_presente(modello)) \
         else ollama.modello_predefinito()
-    a = "it" if (a or "en").split("-")[0].lower() == "en" else a  # (in inglese la frase resterebbe uguale)
+    a = "it" if (a or "en").split("-")[0].lower() == "en" else a  # (in English the sentence would stay the same)
     traduttore = Locale(chiave, log=log, server=server)
     uscita = {"ok": False, "traduzione": None, "avvio": None, "secondi": None, "scheda": None, "modello": chiave}
     inizio = time.monotonic()
@@ -1108,7 +1112,7 @@ def prova_locale(modello=None, log=print, testo="Start game", a="it", server=Non
         prima = time.monotonic()
         risposta = traduttore.traduci_righe([testo], "en", a)[0]
         uscita["secondi"] = time.monotonic() - prima
-    except Exception as e:  # noqa: BLE001 - l'installazione e' riuscita: qui si dice solo come e' andata la prova
+    except Exception as e:  # noqa: BLE001 - the installation succeeded: here we only say how the test went
         uscita["messaggio"] = "la prova di traduzione non e' riuscita: %s" % (
             e if isinstance(e, ErroreBackend) else "%s: %s" % (type(e).__name__, e))
         return uscita
@@ -1138,7 +1142,7 @@ EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def verifica_traduttore(nome, credenziale, apri=None):
-    """(ok, messaggio) per il pulsante "Verifica": la chiave di DeepL o l'email di MyMemory funzionano davvero?"""
+    """(ok, messaggio) for the "Check" button: does the DeepL key or the MyMemory email really work?"""
     try:
         if nome == "deepl":
             usati, limite = DeepL(credenziale, log=lambda _m: None, apri=apri).verifica()
@@ -1160,7 +1164,7 @@ def verifica_traduttore(nome, credenziale, apri=None):
                           "arrivi a 50.000 (non serve un account).")
     except ErroreBackend as e:
         return False, str(e)
-    except Exception as e:  # noqa: BLE001 - rete assente o risposta strana: si spiega, niente eccezioni nella finestra
+    except Exception as e:  # noqa: BLE001 - no network or odd answer: explain it, no exceptions in the window
         return False, "Non riesco a contattare il servizio (%s). Controlla la connessione e riprova." % type(e).__name__
     return False, "Questo traduttore non ha niente da verificare."
 
@@ -1179,7 +1183,7 @@ def crea_backend(nome, log=print):
         return MyMemory(credenziali()["email_mymemory"], log=log)
     if nome == "locale":
         from . import ollama
-        if ollama.stato() != "pronto":  # subito: prima di installare o modificare qualcosa nel gioco
+        if ollama.stato() != "pronto":  # right away: before installing or changing anything in the game
             raise ErroreBackend(NON_INSTALLATO, "TRADUTTORE_ASSENTE", comando=COMANDO_INSTALLA)
         modello = credenziali()["modello_locale"]
         if modello not in ollama.MODELLI or not ollama.modello_presente(modello):

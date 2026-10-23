@@ -1,15 +1,15 @@
-"""Rete contro i ritorni di problemi gia' risolti su giochi veri, senza giochi e senza rete.
+"""Safety net against problems already solved on real games coming back, without games and without network.
 
-Uso: python -I test/test_regressions.py <cartella_temporanea_vuota>
-Copre:
-- Unity 6 (One Million Coins): BepInEx parte al primo MonoBehaviour (entrypoint_bepinex), le altre versioni non si
-  toccano, una configurazione esistente si conserva;
-- giochi Unity con l'interfaccia in IMGUI (usa_imgui) e chiavi scritte nella configurazione di XUnity (_valori_config);
-- Unity Localization: catalogo che controlla l'impronta (CRC) dei bundle (crc_controllato);
-- controllo dei numeri del traduttore locale: '2.5' non fa cadere il controllo (numeri in lettere solo per gli interi);
-- giochi web: i nomi dei tasti (<kbd>, class="key") restano in originale, le parole come Delete si traducono altrove
-  (con node.js, se c'e', anche l'iniettore vero; senza, solo il controllo del codice);
-- i registri veri in test/data/signals: presenti, con il loro segnale, anonimi.
+Usage: python -I test/test_regressions.py <empty_temp_folder>
+Covers:
+- Unity 6 (One Million Coins): BepInEx starts at the first MonoBehaviour (entrypoint_bepinex), the other versions are
+  not touched, an existing configuration is kept;
+- Unity games with the interface in IMGUI (usa_imgui) and keys written in XUnity's configuration (_valori_config);
+- Unity Localization: catalog that checks the hash (CRC) of the bundles (crc_controllato);
+- the local translator's number check: '2.5' does not make the check crash (numbers in words only for integers);
+- web games: key names (<kbd>, class="key") are left untranslated, words like Delete are translated elsewhere
+  (with node.js, if present, also the real injector; without it, only the check of the code);
+- the real logs in test/data/signals: present, with their signal, anonymous.
 """
 import base64
 import json
@@ -43,9 +43,9 @@ def scrivi(percorso, testo):
         f.write(testo)
 
 
-# --- Unity 6: punto d'ingresso di BepInEx ------------------------------------------------------------
+# --- Unity 6: BepInEx entry point -------------------------------------------------------------------
 
-# come la scrive BepInEx 5 al primo avvio (ridotta): la sezione del punto d'ingresso e' in mezzo alle altre
+# as BepInEx 5 writes it at first start (reduced): the entry point section is in the middle of the others
 CFG_BEPINEX = """[Caching]
 
 ## Enable/disable assembly metadata cache
@@ -139,10 +139,10 @@ def prova_entrypoint(base):
               and not adapter_unity.entrypoint_bepinex(vuoto, "x.y") and not os.path.exists(cfg(vuoto)))
 
 
-# --- Unity: IMGUI e configurazione di XUnity -------------------------------------------------------
+# --- Unity: IMGUI and XUnity configuration ---------------------------------------------------------
 
 def gioco_unity(cartella, codice):
-    """Gioco Unity Mono finto: Gioco.exe, Gioco_Data/Managed/Assembly-CSharp.dll con questi byte (None = senza)."""
+    """Fake Unity Mono game: Gioco.exe, Gioco_Data/Managed/Assembly-CSharp.dll with these bytes (None = without)."""
     managed = os.path.join(cartella, "Gioco_Data", "Managed")
     os.makedirs(managed)
     with open(os.path.join(cartella, "Gioco.exe"), "wb") as f:
@@ -165,7 +165,7 @@ def prova_imgui(base):
     controlla("IMGUI: senza Assembly-CSharp.dll -> no",
               not adapter_unity.usa_imgui(gioco_unity(os.path.join(base, "senza-codice"), None)))
     controlla("IMGUI: cartella che non e' un gioco Unity -> no", not adapter_unity.usa_imgui(base))
-    # l'interfaccia in un modulo del gioco (asmdef, come SunHaven.Core.dll o Mouse.dll), non in Assembly-CSharp
+    # the interface in a module of the game (asmdef, like SunHaven.Core.dll or Mouse.dll), not in Assembly-CSharp
     modulo = gioco_unity(os.path.join(base, "imgui-modulo"), b"Update\x00TextMeshProUGUI")
     with open(os.path.join(modulo, "Gioco_Data", "Managed", "Gioco.Interfaccia.dll"), "wb") as f:
         f.write(b"MZ\x00OnGUI\x00GUILayout\x00fine")
@@ -185,8 +185,8 @@ def prova_imgui(base):
     controlla("DLL del gioco: Assembly-CSharp per prime, poi i moduli del gioco; motore, .NET, terzi ed editor no",
               [os.path.basename(p) for p in adapter_unity.assembly_del_gioco(os.path.join(terzi, "Gioco_Data"))]
               == ["Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Mouse.dll", "SunHaven.Core.dll"])
-    # giochi Unity vecchi scritti in UnityScript: il loro codice e' Assembly-UnityScript (con OnGUI quasi sempre);
-    # UnityScript.Lang.dll e Boo.Lang.dll sono le librerie del linguaggio
+    # old Unity games written in UnityScript: their code is Assembly-UnityScript (almost always with OnGUI);
+    # UnityScript.Lang.dll and Boo.Lang.dll are the language's libraries
     vecchio = gioco_unity(os.path.join(base, "imgui-unityscript"), None)
     gestite = os.path.join(vecchio, "Gioco_Data", "Managed")
     for nome, byte in (("Assembly-UnityScript.dll", b"MZ\x00OnGUI\x00GUIStyle\x00fine"),
@@ -207,15 +207,15 @@ def prova_imgui(base):
               "EnableIMGUI" not in leggi(adapter_unity.configura(ugui, "en", "it")))
 
 
-# chiavi che PatchSmith impone a XUnity: {sezione: {chiave: valore}} (aggiungere qui quelle nuove)
+# keys that PatchSmith forces on XUnity: {section: {key: value}} (add new ones here)
 CHIAVI_GOOGLE = {
     "Service": {"Endpoint": "GoogleTranslateV2", "FallbackEndpoint": ""},
     "General": {"Language": "it", "FromLanguage": "en"},
     "Behaviour": {"MaxCharactersPerTranslation": "500", "EnableBatching": "False",
-                  # opzioni di prova di XUnity sempre spente (punto 2: il controllo dopo aver giocato le rimette)
+                  # XUnity's debug options always off (point 2: the after-play check turns them back on)
                   "EnableTextPathLogging": "False", "EnableTranslationHelper": "False", "CopyToClipboard": "False"},
 }
-# con il traduttore di PatchSmith (punto 3): niente controllo anti-spam di XUnity, testi fino a 2500 caratteri
+# with PatchSmith's translator (point 3): no XUnity anti-spam check, texts up to 2500 characters
 CHIAVI_CUSTOM = {"EnableShortDelay": "True", "DisableSpamChecks": "True"}
 
 
@@ -237,7 +237,7 @@ def prova_valori_config(base):
     v = adapter_unity._valori_config("en", "it", google=False)
     controlla("XUnity senza traduttore di PatchSmith e con Google in pausa: Endpoint vuoto (nessun traduttore)",
               v["Service"]["Endpoint"] == "" and "Custom" not in v)
-    # nel file: tutte le chiavi, una volta sola, nella loro sezione
+    # in the file: all the keys, only once, in their section
     gioco = os.path.join(base, "config-xunity")
     os.makedirs(gioco)
     testo = leggi(adapter_unity.configura(gioco, "en", "it", imgui=True, url=url))
@@ -247,10 +247,10 @@ def prova_valori_config(base):
         for k, val in chiavi.items()))
 
 
-# --- Unity Localization: CRC dei bundle --------------------------------------------------------------
+# --- Unity Localization: bundle CRC ------------------------------------------------------------------
 
 def _catalogo(cartella, extra):
-    """catalog.json di Addressables accanto alla cartella dei bundle; extra: byte di m_ExtraDataString."""
+    """Addressables catalog.json next to the bundle folder; extra: bytes of m_ExtraDataString."""
     scrivi(os.path.join(cartella, "catalog.json"), json.dumps({
         "m_LocatorId": "AddressablesMainContentCatalog", "m_InternalIds": [],
         "m_ExtraDataString": base64.b64encode(extra).decode("ascii")}))
@@ -285,7 +285,7 @@ def prova_crc(base):
               adapter_unity_loc.crc_controllato(base64_rotto) is None)
 
 
-# --- controllo dei numeri: '2.5' ---------------------------------------------------------------------
+# --- number check: '2.5' -----------------------------------------------------------------------------
 
 def prova_decimali():
     from patchsmith import corrections as correzioni
@@ -307,7 +307,7 @@ def prova_decimali():
         in_piu = backend._numeri_in_lettere("Wait two seconds", "Aspetta 2.5 secondi", "it")
         problemi = backend.problemi_traduzione("Wait 2.5 seconds", "Aspetta due secondi e mezzo", "it")
         errore = None
-    except ValueError as e:  # int('2.5'): One Million Coins si fermava qui
+    except ValueError as e:  # int('2.5'): One Million Coins stopped here
         mancante = in_piu = problemi = None
         errore = e
     controlla("'2.5' scritto in lettere: nessun errore, non vale come numero in lettere",
@@ -319,11 +319,11 @@ def prova_decimali():
               not backend.problemi_traduzione("You have 1 or more mods", "Hai uno o più mod", "it"))
 
 
-# --- giochi web: nomi dei tasti -----------------------------------------------------------------------
+# --- web games: key names -----------------------------------------------------------------------------
 
 def _funzione_js(sorgente, nome):
-    """Il testo di 'function nome(...) {...}' (graffe contate: nelle funzioni dell'iniettore non ce ne sono
-    dentro le stringhe)."""
+    """The text of 'function nome(...) {...}' (braces counted: in the injector's functions there are none inside
+    strings)."""
     inizio = sorgente.index("function %s(" % nome)
     livello, i = 0, sorgente.index("{", inizio)
     while True:
@@ -399,9 +399,9 @@ def prova_tasti(base):
               == ("Elimina", "Elimina", "Inizia partita"))
 
 
-# --- registri veri per il controllo dopo la partita ---------------------------------------------------
+# --- real logs for the after-play check ---------------------------------------------------------------
 
-# file -> segnali che deve contenere (espressioni regolari)
+# file -> signals it must contain (regular expressions)
 SEGNALI_ATTESI = {
     "unity-player.log": [r"Mono path\[0\] = '.+_Data/Managed'", r"Chainloader startup complete",
                          r"Loading \[Patchsmith traduttore locale", r"Initialize engine version: 6000\."],
@@ -410,19 +410,19 @@ SEGNALI_ATTESI = {
     "unity-crash-player.log": [r"^Crash!!!$", r"Application:\.cctor", r"GameObject:AddComponent",
                                r"BepInEx\.Bootstrap\.Chainloader:Start", r"Mono path\[0\]"],
     "bepinex-logoutput.log": [r"Chainloader startup complete", r"Loading \[XUnity Auto Translator"],
-    # LogOutput.log della partita finita nel crash: BepInEx partito ma mai arrivato a "startup complete"
+    # LogOutput.log of the session that ended in the crash: BepInEx started but never reached "startup complete"
     "bepinex-logoutput-crash.log": [r"Chainloader started", r"Loading \[XUnity Auto Translator",
                                     r"\A(?![\s\S]*startup complete)"],
     "servizio-xunity.log": [r"in ascolto su http://127\.0\.0\.1:\d+/translate \(gioco: ",
                             r"! traduzione interrotta", r"Il gioco si e' chiuso"],
     "unreal-dds.log": [r"Mounting pak file .*zz_Patchsmith_it_999_P\.pak",
                        r"Overriding language with game user settings language configuration option \(en\)"],
-    # caratteri che i font TextMeshPro non hanno (anche fuori dal piano base), gioco IL2CPP senza "Mono path"
+    # characters the TextMeshPro fonts lack (also outside the basic plane), IL2CPP game without "Mono path"
     "unity-tmp-caratteri-mancanti.log": [r"Unicode value \\u00D9 was not found in the \[slkscr\] font asset",
                                          r"Unicode value \\U0001F41A was not found", r"Discovering subsystems at path",
                                          r"\A(?![\s\S]*Mono path)"],
 }
-# dati personali che non devono esserci: nome dell'utente nei percorsi, nome del PC, dati dell'hardware
+# personal data that must not be there: user name in paths, PC name, hardware data
 PERSONALI = re.compile(r"Users[\\/](?!giocatore[\\/])|UserName: '(?!giocatore')|DESKTOP-|LogInit: (User|Computer):|"
                        r"VRAM:|Renderer:|7656119\d{10}", re.I)
 
@@ -440,7 +440,7 @@ def prova_segnali():
         personali = PERSONALI.findall(testo)
         controlla("%s: anonimo%s" % (nome, " (trovato: %s)" % personali[:3] if personali else ""),
                   testo and not personali)
-    # gli altri segnali veri del controllo dopo aver giocato: eventi del registro di Windows e diario del traduttore
+    # the other real signals of the after-play check: Windows event log entries and the translator's journal
     for nome in ("evento-crash-1000.xml", "evento-crash-1026.xml", "diario-richieste.jsonl"):
         try:
             with open(os.path.join(SEGNALI, nome), "rb") as f:
@@ -457,7 +457,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    progetto.RADICE_DATI = os.path.join(base, "dati")  # nessuna di queste prove deve scrivere dati, per sicurezza
+    progetto.RADICE_DATI = os.path.join(base, "dati")  # none of these tests should write data, to be safe
     prova_entrypoint(base)
     prova_imgui(base)
     prova_valori_config(base)

@@ -1,11 +1,11 @@
-"""Giochi Godot 4 con le tabelle delle traduzioni di Godot (adapter_godot).
+"""Godot 4 games with Godot's translation tables (adapter_godot).
 
-Uso: python -I test/test_godot.py <cartella_di_prova_che_non_esiste>
-- lettura: PCK incorporato nell'eseguibile (formato 2, posizioni relative), risorse binarie RSRC, OptimizedTranslation
-  (testi interi e compressi con smaz), Translation con il dizionario dei messaggi;
-- flusso: Analizza e traduci con il traduttore finto -> override.cfg con l'autoload, script e traduzioni accanto
-  all'eseguibile; Riapplica; Ripristina con la cartella identica (anche con un override.cfg del gioco);
-- tabella in italiano gia' presente: lingua ufficiale, nessun file scritto.
+Usage: python -I test/test_godot.py <test_folder_that_does_not_exist>
+- reading: PCK embedded in the executable (format 2, relative offsets), binary RSRC resources, OptimizedTranslation
+  (whole texts and texts compressed with smaz), Translation with the message dictionary;
+- flow: Analyze and translate with the fake translator -> override.cfg with the autoload, script and translations next
+  to the executable; Reapply; Restore originals with the folder identical (also with a game's own override.cfg);
+- Italian table already present: official language, no file written.
 """
 import hashlib
 import json
@@ -43,7 +43,7 @@ def _variante(v):
 
 
 def risorsa(tipo, proprieta):
-    """File .translation binario come lo scrive Godot 4 (formato 6, una risorsa interna)."""
+    """Binary .translation file as Godot 4 writes it (format 6, one internal resource)."""
     nomi = list(proprieta)
     testa = b"RSRC" + struct.pack("<5I", 0, 0, 4, 4, 6) + _s(tipo) + struct.pack("<QIQ", 0, 2, 12345) + b"\0" * 44
     testa += struct.pack("<I", len(nomi)) + b"".join(_s(n) for n in nomi) + struct.pack("<I", 0)
@@ -55,7 +55,7 @@ def risorsa(tipo, proprieta):
 
 
 def ottimizzata(testi, locale=None):
-    """OptimizedTranslation minima: un secchio con tutti i testi; il primo compresso con smaz ("the" = codice 1)."""
+    """Minimal OptimizedTranslation: one bucket with all the texts; the first compressed with smaz ("the" = code 1)."""
     stringhe, elementi = b"", []
     for i, t in enumerate(testi):
         intero = t.encode("utf-8") + b"\0"
@@ -70,7 +70,7 @@ def ottimizzata(testi, locale=None):
 
 
 def eseguibile_con_pck(file):
-    """Un .exe finto con il PCK incorporato in fondo (come l'esportazione di Godot con "embed pck")."""
+    """A fake .exe with the PCK embedded at the end (like Godot's export with "embed pck")."""
     voci, dati_file = b"", b""
     for nome, dati in file.items():
         n = nome.encode() + b"\0" * (4 - len(nome) % 4)
@@ -115,7 +115,7 @@ def main(base):
     progetto.RADICE_DATI = os.path.join(base, "dati")
     automatico.CARTELLA_PROFILI = os.path.join(progetto.RADICE_DATI, "profiles")
 
-    # lettura
+    # reading
     cartella = os.path.join(base, "Drill")
     gioco(cartella)
     pck = adapter_godot.Pck(os.path.join(cartella, "drill.exe"))
@@ -127,7 +127,7 @@ def main(base):
               and en == ("en", ["the drill is ready", "Upgrade", "Unlock [color=40ff40]overdrive[/color] mode"])
               and de[0] == "de" and sorted(de[1]) == ["Der Bohrer ist bereit", "Verbessern"])
 
-    # flusso completo con il traduttore finto
+    # full flow with the fake translator
     prima = impronte(cartella)
     righe = []
     percorso, completato, esito = automatico.analizza_e_traduci(cartella, "auto", "it", "finto", righe.append)
@@ -148,7 +148,7 @@ def main(base):
     automatico.ripristina(cartella, righe.append, esito={})
     controlla("Riapplica e poi Ripristina originali: cartella identica a prima", impronte(cartella) == prima)
 
-    # override.cfg del gioco: conservato e rimesso
+    # the game's own override.cfg: kept and put back
     altra = os.path.join(base, "DrillConOverride")
     gioco(altra, override="[display]\nwindow/size/mode=3\n")
     prima = impronte(altra)
@@ -159,7 +159,7 @@ def main(base):
     controlla("override.cfg del gioco: le sue impostazioni restano, poi rimesso identico",
               "window/size/mode=3" in unito and "PatchsmithTraduzione" in unito and impronte(altra) == prima)
 
-    # italiano gia' nel gioco
+    # Italian already in the game
     ita = os.path.join(base, "DrillItaliano")
     gioco(ita, con_italiano=True)
     prima = impronte(ita)

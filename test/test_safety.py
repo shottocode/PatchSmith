@@ -1,11 +1,11 @@
-"""Test di sicurezza dei file del gioco (backup, aggiornamenti, ripristino) su una COPIA di un gioco.
+"""Safety test of the game's files (backups, updates, restore) on a COPY of a game.
 
-Uso: python -I test/test_safety.py <cartella_copia_del_gioco> <file_json_relativo>
-oppure (consigliato) python -I test/run_all.py --sicurezza <cartella_copia_del_gioco> <file_json_relativo>
-Prerequisito: sulla copia e' gia' stato eseguito `smith auto <copia> --backend finto` con la stessa cartella dei dati
-(run_all.py lo fa da solo); se il profilo non c'e', la prova lo fa lei.
-Profilo e memoria vanno nella cartella PATCHSMITH_DATI; senza, in "dati-prova-sicurezza" accanto alla copia: mai tra i
-dati veri di PatchSmith. Non usare su un gioco vero.
+Usage: python -I test/test_safety.py <game_copy_folder> <relative_json_file>
+or (recommended) python -I test/run_all.py --sicurezza <cartella_copia_del_gioco> <file_json_relativo>
+Prerequisite: `smith auto <copia> --backend finto` has already been run on the copy with the same data folder
+(run_all.py does it by itself); if the game profile is not there, the test does it itself.
+Game profile and translation memory go in the PATCHSMITH_DATI folder; without it, in "dati-prova-sicurezza" next to
+the copy: never among PatchSmith's real data. Do not use on a real game.
 """
 import hashlib
 import json
@@ -40,22 +40,22 @@ def main(cartella, rel_json):
     backup = dati + SUFFISSO_BACKUP
     if not os.environ.get("PATCHSMITH_DATI"):
         progetto.RADICE_DATI = os.path.join(os.path.dirname(cartella), "dati-prova-sicurezza")
-    if not automatico.trova_profilo(cartella):  # prerequisito non fatto con questa cartella dei dati
+    if not automatico.trova_profilo(cartella):  # prerequisite not done with this data folder
         automatico.analizza_e_traduci(cartella, backend="finto", log=silenzio)
     originale = impronta(backup)
     profili_prima = len(list(automatico.elenco_profili()))
 
-    # 1) stessa partita scelta dalla cartella superiore: deve riusare il profilo
+    # 1) same game chosen from the parent folder: must reuse the game profile
     superiore = os.path.dirname(cartella)
     controlla("cartella superiore -> stesso profilo", automatico.trova_profilo(superiore) == automatico.trova_profilo(cartella))
     automatico.analizza_e_traduci(superiore, backend="finto", log=silenzio)
     controlla("nessun profilo duplicato", len(list(automatico.elenco_profili())) == profili_prima)
     controlla("backup invariato dopo il secondo giro", impronta(backup) == originale)
 
-    # 2) aggiornamento del gioco dopo la patch: il file nuovo diventa l'originale
+    # 2) game update after the patch: the new file becomes the original
     with open(backup, encoding="utf-8") as f:
         aggiornato = json.load(f)
-    # sempre diverso dall'originale attuale, anche se la copia e' gia' stata usata da un test precedente
+    # always different from the current original, even if the copy was already used by a previous test
     aggiornato["title"] = str(aggiornato.get("title", "")) + " (aggiornamento di prova)"
     nuovo_byte = json.dumps(aggiornato, indent=2).encode("utf-8")
     with open(dati, "wb") as f:
@@ -66,7 +66,7 @@ def main(cartella, rel_json):
     controlla("aggiornamento: vecchio originale conservato", info["precedenti"] and
               os.path.exists(os.path.join(os.path.dirname(dati), info["precedenti"][0])))
 
-    # 3) backup alterato: niente scritture, niente ripristino distruttivo
+    # 3) tampered backup: no writes, no destructive restore
     with open(backup, "rb") as f:
         buono = f.read()
     with open(backup, "wb") as f:
@@ -84,7 +84,7 @@ def main(cartella, rel_json):
     with open(backup, "wb") as f:
         f.write(buono)
 
-    # 4) ripristino completo: tutto torna originale, niente file nostri rimasti
+    # 4) full restore: everything goes back to original, none of our files left
     automatico.ripristina(cartella, silenzio)
     controlla("ripristino: file dati = originale (aggiornato)", impronta(dati) == hashlib.sha256(nuovo_byte).hexdigest())
     rimasti = [os.path.join(r, f) for r, _, fs in os.walk(cartella) for f in fs if "patchsmith-" in f]

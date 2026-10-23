@@ -1,9 +1,9 @@
-"""Test della lingua aggiunta (GameMaker, stile Forager) senza rete e senza il gioco vero.
+"""Test of the added language (GameMaker, Forager style) without network and without the real game.
 
-Uso: python -I test/test_added_language.py <cartella_temporanea_vuota>
-Costruisce un gioco finto: data.win minimo (GEN8 con il nome, STRG con la maschera 'local/*.json' e la mappa di un
-font a sprite, SPRT con lo sprite del font), local/english.json in minuscolo con le icone 'EP' e 'H', traduzioni
-ufficiali, e le opzioni salvate dal gioco (%LOCALAPPDATA%\\<nome>\\config.txt, ds_map in esadecimale).
+Usage: python -I test/test_added_language.py <empty_temp_folder>
+Builds a fake game: a minimal data.win (GEN8 with the name, STRG with the 'local/*.json' mask and the map of a sprite
+font, SPRT with the font's sprite), a lowercase local/english.json with the 'EP' and 'H' icons, official
+translations, and the options saved by the game (%LOCALAPPDATA%\\<nome>\\config.txt, ds_map in hexadecimal).
 """
 import hashlib
 import json
@@ -35,13 +35,13 @@ def impronta(p):
     return hashlib.sha256(open(p, "rb").read()).hexdigest()
 
 
-# --- data.win minimo -------------------------------------------------------------------------------------------
+# --- minimal data.win ------------------------------------------------------------------------------------------
 
 def data_win(stringhe, sprite, codice=True, nome="FintoGame"):
-    """FORM con GEN8 (nome), STRG (stringhe), SPRT (sprite: [(nome, fotogrammi)]) e, se 'codice', un CODE vuoto
-    (gioco per la macchina virtuale: le stringhe del codice stanno in STRG)."""
+    """FORM with GEN8 (name), STRG (strings), SPRT (sprites: [(nome, fotogrammi)]) and, if 'codice', an empty CODE
+    (game for the virtual machine: the code's strings are in STRG)."""
     tutte = [nome] + list(stringhe) + [n for n, _ in sprite]
-    # i pezzi si costruiscono con le posizioni assolute: prima calcolo dove stara' STRG
+    # the chunks are built with absolute positions: first compute where STRG will be
     gen8_dim, sprt_dim = 64, 4 + 4 * len(sprite) + 96 * len(sprite) + 64
     inizio_gen8 = 8 + 8
     inizio_sprt = inizio_gen8 + gen8_dim + 8
@@ -49,7 +49,7 @@ def data_win(stringhe, sprite, codice=True, nome="FintoGame"):
     inizio_strg = inizio_code + (0 if not codice else 4 + 8) + (8 if not codice else 0)
     if not codice:
         inizio_strg = inizio_sprt + sprt_dim + 8
-    # STRG: numero, puntatori (alla lunghezza), stringhe (lunghezza + testo + 0)
+    # STRG: count, pointers (to the length), strings (length + text + 0)
     corpo, puntatori, pos = b"", [], inizio_strg + 4 + 4 * len(tutte)
     testo_di = {}
     for t in tutte:
@@ -75,7 +75,7 @@ def data_win(stringhe, sprite, codice=True, nome="FintoGame"):
     return b"FORM" + struct.pack("<I", len(pezzi)) + pezzi
 
 
-# --- opzioni salvate (ds_map/ds_list in esadecimale, come Forager) -------------------------------------------
+# --- saved options (ds_map/ds_list in hexadecimal, like Forager) ---------------------------------------------
 
 def _v(x):
     if isinstance(x, str):
@@ -97,7 +97,7 @@ EN = {"wood": "wood", "itemName1": "iron*ore", "uiPlay": "play", "configVsync": 
       "skillDesc1": "U gain EP when crafting", "skillDesc2": "U gain EP when fishing",
       "boon0": "U lose 1 max H**U gain a**bunch of food", "boon1": "U lose 1 max H**U gain coins",
       "uiDelete": "Are you sure you want to delete this save?"}
-for i in range(40):  # abbastanza testi per riconoscere lo stile
+for i in range(40):  # enough texts to recognize the style
     EN["itemDescription%d" % i] = "a small item number %d*for testing" % i
 FR = dict(EN, configVsync="synchro*verticale :", uiPlay="jouer", uiExtras="extras", wood="bois")
 ES = dict(EN, configVsync="vsync:", uiPlay="juega", uiExtras="extras", wood="madera")
@@ -110,14 +110,14 @@ def main(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     for d in ("memory", "profiles", "languages"):
         os.makedirs(os.path.join(progetto.CARTELLA_PROGETTO, d))
     automatico.CARTELLA_PROFILI = os.path.join(progetto.CARTELLA_PROGETTO, "profiles")
     os.environ["LOCALAPPDATA"] = os.path.join(base, "appdata")
     sistema.gioco_aperto = lambda c: False
 
-    # --- 1. lettura di data.win: sprite, nome, stringhe, mappa del font a sprite, maschera delle lingue
+    # --- 1. reading data.win: sprites, name, strings, map of the sprite font, mask of the languages
     vm = data_win(["local/*.json", MAPPA], [("sprFont", len(MAPPA)), ("sprPlayer", 4)])
     gioco = os.path.join(base, "gioco")
     os.makedirs(os.path.join(gioco, "local"))
@@ -140,7 +140,7 @@ def main(base):
               and not gamemaker.cartella_maschera(cartella_yyc, "lang", ".json", yyc)
               and gamemaker.mappe_font_sprite(cartella_yyc, yyc) == [("sprFont", MAPPA)])
 
-    # --- 2. regole sui testi: stile, codici, minuscole, spazio delle righe
+    # --- 2. rules on the texts: style, codes, lowercase, space of the lines
     testi = list(EN.values())
     controlla("stile 'minuscolo' e codici-icona EP e H (confermati dal font); un gioco normale non lo e'",
               adapter_gamemaker.stile_maiuscole(testi) == "minuscolo"
@@ -162,7 +162,7 @@ def main(base):
               and adapter_gamemaker.ricomponi_a_capo("iron*ore", "minerale di ferro", "*", "U", 30, 2)
               == "minerale di*ferro")
 
-    # --- 3. flusso completo: la traduzione diventa una lingua nuova, l'inglese resta originale
+    # --- 3. full flow: the translation becomes a new language, English stays original
     for nome, dati in (("english", EN), ("french", FR), ("spanish", ES), ("portuguese", PT)):
         json.dump(dati, open(os.path.join(gioco, "local", nome + ".json"), "w", encoding="utf-8"))
     inglese = os.path.join(gioco, "local", "english.json")
@@ -192,7 +192,7 @@ def main(base):
               not any("italiano" in r for r in adapter_gamemaker.file_json_lingue(gioco))
               and automatico.analizza_e_traduci(gioco, "auto", "it", "finto", silenzio)[0] == percorso)
 
-    # --- 4. lingua impostata nelle opzioni salvate del gioco, e ripristino
+    # --- 4. language set in the game's saved options, and restore
     opzioni_dir = os.path.join(base, "appdata", "FintoGame")
     os.makedirs(opzioni_dir)
     config = os.path.join(opzioni_dir, "config.txt")
@@ -216,7 +216,7 @@ def main(base):
               and open(config, encoding="utf-8").read() == testo
               and not [n for n in os.listdir(os.path.join(gioco, "local")) if "patchsmith" in n])
 
-    # --- 5. da una versione precedente: english.json tradotto al suo posto e informazioni con il nome vecchio
+    # --- 5. from a previous version: english.json translated in place and information with the old name
     vecchio = os.path.join(base, "vecchio")
     shutil.copytree(gioco, vecchio)
     shutil.rmtree(os.path.join(vecchio, "local"))
@@ -238,7 +238,7 @@ def main(base):
               and os.path.exists(en_vecchio + progetto.SUFFISSO_INFO)
               and os.path.exists(os.path.join(vecchio, "local", "italiano.json")))
 
-    # --- 6. casi difficili: file di altri, correzioni a mano, opzioni senza registro, Riapplica, scelta del giocatore
+    # --- 6. hard cases: other people's files, fixes made by hand, options without a log, Reapply, player's choice
     altro = os.path.join(base, "altro")
     shutil.copytree(vecchio, altro)
     for n in os.listdir(os.path.join(altro, "local")):
@@ -261,13 +261,13 @@ def main(base):
     controlla("lingua aggiunta corretta a mano: riscritta, la versione corretta resta da parte (.patchsmith-modificato)",
               json.load(open(italiano_altro + ".patchsmith-modificato", encoding="utf-8"))["uiPlay"] == "gioca!"
               and json.load(open(italiano_altro, encoding="utf-8"))["uiPlay"] != "gioca!")
-    # opzioni su 'italiano' scelte dal giocatore (nessun registro): il ripristino le rimette prima di togliere il file
+    # options on 'italiano' chosen by the player (no log): restore puts them back before removing the file
     for n in os.listdir(os.path.join(base, "patchsmith", "languages")):
         os.remove(os.path.join(base, "patchsmith", "languages", n))
     open(config, "w", encoding="utf-8", newline="").write(testo.replace(
         json.loads(testo)["config"], ds_map([("extrasUnlocked", 10), ("options", ds_list(["italiano", 0, 1, "yes"])),
                                              ("totalFeats", 3)])))
-    os.rename(opzioni_dir, opzioni_dir + "-tmp")  # le opzioni di 'gioco', non di 'altro'
+    os.rename(opzioni_dir, opzioni_dir + "-tmp")  # the options of 'gioco', not of 'altro'
     opzioni_altro = os.path.join(base, "appdata", "FintoGame")
     os.rename(opzioni_dir + "-tmp", opzioni_altro)
     automatico.ripristina(altro, silenzio)
@@ -275,7 +275,7 @@ def main(base):
               "quello vero): le opzioni non si toccano",
               lingua_gamemaker.trova(open(config, encoding="utf-8").read(), {"italiano"})
               == [("config", "options", 0, "italiano")] and not os.path.exists(italiano_altro))
-    automatico.riapplica(altro, silenzio)  # PatchSmith imposta la lingua per 'altro' (registro)
+    automatico.riapplica(altro, silenzio)  # PatchSmith sets the language for 'altro' (log)
     open(config, "w", encoding="utf-8", newline="").write(testo.replace(
         json.loads(testo)["config"], ds_map([("extrasUnlocked", 10), ("options", ds_list(["italiano", 0, 1, "yes"])),
                                              ("totalFeats", 3)])))
@@ -283,7 +283,7 @@ def main(base):
     controlla("ripristino con il registro di questa cartella: opzioni rimesse su 'english' prima di togliere il file",
               lingua_gamemaker.trova(open(config, encoding="utf-8").read(), {"english"})
               == [("config", "options", 0, "english")] and not os.path.exists(italiano_altro))
-    # Riapplica imposta la lingua; opzioni cancellate: il ripristino si chiude senza bloccarsi
+    # Reapply sets the language; options deleted: restore finishes without getting stuck
     esito = {}
     automatico.riapplica(altro, silenzio, esito=esito)
     impostata = lingua_gamemaker.trova(open(config, encoding="utf-8").read(), {"italiano"})
@@ -291,7 +291,7 @@ def main(base):
     controlla("Riapplica imposta la lingua aggiunta; con le opzioni cancellate il ripristino si chiude lo stesso",
               esito.get("lingua_aggiunta", {}).get("impostata") and impostata
               and automatico.ripristina(altro, silenzio) and not lingua_ufficiale.impostata(altro))
-    # il giocatore sceglie un'altra lingua dopo la traduzione: un nuovo 'Analizza e traduci' la rispetta
+    # the player chooses another language after the translation: a new 'Analyze and translate' respects it
     open(config, "w", encoding="utf-8", newline="").write(testo)
     automatico.riapplica(altro, silenzio)
     scelta = lingua_gamemaker.cambia(open(config, encoding="utf-8").read(),

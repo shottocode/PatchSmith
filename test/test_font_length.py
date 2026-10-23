@@ -1,24 +1,24 @@
-"""Prove dei caratteri dei font e dello spazio delle etichette, per tutti i motori (punto 9).
+"""Tests of the fonts' characters and of the labels' space, for all engines (point 9).
 
-Uso: python -I test/test_font_length.py <cartella_temporanea_vuota>
-Giochi, font e registri finti (test/fake_unity.py, test/data/signals): nessun gioco vero, nessuna rete, nessun
-traduttore vero (traduttori finti in memoria). Copre:
-- font di Unity (font_unity): tabella cmap dei .ttf; font TextMeshPro con l'albero dei campi (bundle) e senza (file di
-  _Data, riconosciuti dalla forma); font dinamici con il loro .ttf; regola "almeno un font sa disegnarlo"; risultato
-  tenuto in memory/<gioco>.unity/font.json finche' i file del gioco non cambiano;
-- Unity Localization: una tabella scritta con è -> e' se nessun font ha è (in memoria resta è; la tabella francese non
-  si tocca); un carattere che non si puo' adattare lascia l'originale e va in problemi.json; con un font che ha è non
-  cambia nulla;
-- XUnity: BepInEx.cfg con WriteUnityLog all'installazione (e il controllo lo rimette); i caratteri mancanti letti dai
-  registri (righe vere); il controllo dopo aver giocato adatta le righe della cache scritte da PatchSmith (non quelle
-  cambiate a mano), annota i caratteri nel profilo, e da li' in poi cache e traduttore dal vivo li evitano; in sola
-  lettura non scrive nulla;
-- Unity Localization con il Player.log (gioco IL2CPP): caratteri annotati e tabella riscritta con "Riapplica";
-- Unreal: caratteri delle altre lingue latine del gioco (Latino-1 completo se le usano), nessun limite senza indizi;
-- etichette troppo lunghe: richieste piu' corte al traduttore locale (contesto 'larghezza', anche nel prompt vero),
-  tenuta la piu' corta valida, le altre in problemi.json con il testo originale e nell'elenco "Troppo lunghi" di
-  "Correggi traduzioni"; una volta sola; non le correzioni a mano; con gli altri traduttori solo annotate; lo spazio
-  delle traduzioni ufficiali; esito e messaggi.
+Usage: python -I test/test_font_length.py <empty_temp_folder>
+Fake games, fonts and logs (test/fake_unity.py, test/data/signals): no real game, no network, no real translator
+(fake in-memory translators). Covers:
+- Unity fonts (font_unity): the cmap table of .ttf files; TextMeshPro fonts with the field tree (bundles) and without
+  it (_Data files, recognized by their shape); dynamic fonts with their .ttf; the rule "at least one font can draw
+  it"; result kept in memory/<gioco>.unity/font.json until the game files change;
+- Unity Localization: a table written with è -> e' if no font has è (the translation memory keeps è; the French table
+  is not touched); a character that cannot be adapted leaves the original and goes into problemi.json; with a font
+  that has è nothing changes;
+- XUnity: BepInEx.cfg with WriteUnityLog at installation (and the check puts it back); the missing characters read
+  from the logs (real lines); the after-play check adapts the cache lines written by PatchSmith (not those changed by
+  hand), notes the characters in the game profile, and from then on the cache and the live translator avoid them; in
+  read-only mode it writes nothing;
+- Unity Localization with the Player.log (IL2CPP game): characters noted and table rewritten with "Reapply";
+- Unreal: characters of the game's other Latin languages (full Latin-1 if they use them), no limit without clues;
+- labels too long: shorter requests to the local translator (context 'larghezza', also in the real prompt), the
+  shortest valid one kept, the others in problemi.json with the original text and in the "Too long" list of
+  "Fix translations"; only once; not the fixes made by hand; with the other translators only noted; the space of the
+  official translations; outcome and messages.
 """
 import hashlib
 import json
@@ -92,7 +92,7 @@ TABELLA_EN = "localization-string-tables-english(en)_assets_all.bundle"
 TABELLA_FR = "localization-string-tables-french(fr)_assets_all.bundle"
 
 
-# --- font di Unity -----------------------------------------------------------------------------------------------
+# --- Unity fonts -------------------------------------------------------------------------------------------------
 
 def prova_font(base):
     controlla("font .ttf: caratteri della tabella cmap (formato 4)",
@@ -102,7 +102,7 @@ def prova_font(base):
     controlla("font TextMeshPro senza albero dei campi: tabella dei caratteri riconosciuta dalla forma",
               {chr(c) for c in font_unity.tabella_tmp(b"\x07" * 37 + dati)} == set(ASCII + "é")
               and font_unity._nome_oggetto(dati) == "Pixel SDF" and font_unity.tabella_tmp(b"\x01\x00" * 99) is None)
-    # gioco con un font nel bundle (con l'albero) e uno in resources.assets (senza), uno dinamico con il suo .ttf
+    # game with a font in the bundle (with the tree) and one in resources.assets (without), a dynamic one with its .ttf
     gioco = os.path.join(base, "font")
     finto.gioco_il2cpp(gioco, {"ui_assets_all.bundle": finto.bundle([("CAB-f", finto.file_font(
         [("Titoli SDF", ASCII + "ü", 0)]))], compressione="lz4", blocco=4096)}, extra={
@@ -115,7 +115,7 @@ def prova_font(base):
     ammessi, motivo = font_unity.caratteri_ammessi(dati_gioco)
     controlla("regola: un carattere va bene se almeno un font lo ha (à da uno, ü dall'altro), è no",
               ammessi is not None and {"à", "ü"} <= ammessi and "è" not in ammessi and "2 font" in motivo)
-    # font dinamico: conta il suo .ttf
+    # dynamic font: its .ttf counts
     dinamico = os.path.join(base, "dinamico")
     finto.gioco_il2cpp(dinamico, {"fonts_assets_all.bundle": finto.bundle([("CAB-d", finto.file_font(
         [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)], [("Corpo", ASCII + "àèéìòù")]))])})
@@ -130,7 +130,7 @@ def prova_font(base):
     controlla("non si sa (nessun limite): font dinamici senza .ttf, nessun font TextMeshPro",
               font_unity.caratteri_ammessi(os.path.join(senza_ttf, "Gioco_Data"))[0] is None
               and font_unity.caratteri_ammessi(os.path.join(vuoto, "Gioco_Data"))[0] is None)
-    # il risultato resta nel file della cache finche' i file del gioco non cambiano
+    # the result stays in the cache file until the game files change
     cache = os.path.join(base, "cache", "font.json")
     primo = font_unity.caratteri_ammessi(dati_gioco, cache=cache)
     vero = font_unity.font_del_gioco
@@ -143,7 +143,7 @@ def prova_font(base):
     finally:
         font_unity.font_del_gioco = vero
     bundle = os.path.join(dati_gioco, "StreamingAssets", "aa", "StandaloneWindows64", "ui_assets_all.bundle")
-    with open(bundle, "wb") as f:  # un aggiornamento del gioco: il font ora ha anche è
+    with open(bundle, "wb") as f:  # a game update: the font now also has è
         f.write(finto.bundle([("CAB-f", finto.file_font([("Titoli SDF", ASCII + "üè", 0)]))]))
     terzo = font_unity.caratteri_ammessi(dati_gioco, cache=cache)
     controlla("cache: la seconda volta non rilegge i font; dopo un aggiornamento del gioco si, e ora è va bene",
@@ -186,7 +186,7 @@ def prova_unity_localization(base):
               testi[4] == EN[4] and problemi.get(EN[4], {}).get("dove") == "gioco"
               and "→" in problemi[EN[4]].get("non_usare", "") and d["esito"].extra.get("adattate_font") == 1
               and "è diventa e'" in "\n".join(esito._testo_tentativi(d["esito"])))
-    # caratteri che il gioco ha detto di non saper disegnare (registro di Unity): valgono anche se il font li ha
+    # characters the game said it cannot draw (Unity's log): they count even if the font has them
     p = leggi_json(profilo)
     p["caratteri_mancanti"] = "é"
     scansione.salva_json(profilo, p)
@@ -194,7 +194,7 @@ def prova_unity_localization(base):
     testi = [t for _, t in adapter_unity_loc.FileTabelle(os.path.join(cartella, TABELLA_EN)).testi()]
     controlla("caratteri mancanti nel profilo: adattati anche se un font li ha (perché -> perche')",
               testi[3] == "La porta e' chiusa. Trova prima la chiave, perche' serve.")
-    # con un font che ha tutte le lettere: nessun cambiamento
+    # with a font that has all the letters: no change
     buono = os.path.join(base, "loc-buono")
     cartella_b = finto.gioco_il2cpp(buono, {TABELLA_EN: finto.bundle_tabelle([("UI_en", "en", EN)]),
                                             "fonts_assets_all.bundle": finto.bundle([("CAB-f", finto.file_font(
@@ -208,7 +208,7 @@ def prova_unity_localization(base):
     controlla("font con tutte le lettere italiane: la traduzione resta com'e'",
               [t for _, t in adapter_unity_loc.FileTabelle(os.path.join(cartella_b, TABELLA_EN)).testi()][3]
               == dati[EN[3]])
-    # un errore imprevisto nella lettura dei font non ferma la scrittura: nessun limite, come prima
+    # an unexpected error while reading the fonts does not stop the writing: no limit, as before
     vero = font_unity.caratteri_ammessi
     font_unity.caratteri_ammessi = lambda *_a, **_k: (_ for _ in ()).throw(KeyError("bundle strano"))
     d = {}
@@ -223,7 +223,7 @@ def prova_unity_localization(base):
                   os.path.join(cartella_b, TABELLA_EN)).testi()][3] == dati[EN[3]])
 
 
-# --- XUnity: registro di BepInEx e controllo dopo aver giocato ------------------------------------------------------
+# --- XUnity: BepInEx log and after-play check ---------------------------------------------------------------------
 
 def _gioco_unity_mono(cartella, nome_exe, azienda, prodotto):
     import struct
@@ -298,7 +298,7 @@ def prova_registro(base):
     dopo = time.time() - 120
     for rel in (adapter_unity.MANIFESTO,):
         os.utime(os.path.join(gioco, *rel.split("/")), (prima, prima))
-    # il primo avvio: BepInEx completa la sua configurazione (tiene il valore scritto da PatchSmith)
+    # the first start: BepInEx completes its configuration (it keeps the value written by PatchSmith)
     scrivi(cfg, "[Logging.Disk]\n\n## Include unity log messages in log file output.\nWriteUnityLog = true\n\n"
                 "AppendLog = false\n", prima)
     memoria = progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"})
@@ -328,7 +328,7 @@ def prova_registro(base):
               and leggi_json(memoria)["The door is locked"] == "La porta è chiusa")
     problemi = controllo.controlla(percorso, applica=True, log=silenzio)
     controlla("secondo controllo: nulla da rifare", not any(p.codice == "FONT_MANCANTI" for p in problemi))
-    # da adesso: le righe nuove della cache e le risposte del traduttore dal vivo evitano è
+    # from now on: the new cache lines and the live translator's answers avoid è
     adapter_unity.scrivi_cache_xunity(gioco, "it", {"New line": "Novità è qui"}, silenzio,
                                       esclusi=leggi_json(percorso)["caratteri_mancanti"])
     s = servizio_xunity.Servizio(percorso, porta=1, log=silenzio, backend=backend.Finto())
@@ -338,8 +338,8 @@ def prova_registro(base):
               "New line=Novità e' qui" in open(cache, encoding="utf-8").read()
               and s.adatta("Perché è così", "it") == "Perché e' così"
               and "La porta e' chiusa" in nostre_ora["The door is locked"])
-    # una correzione fatta in "Correggi traduzioni" con una lettera che i font non hanno: con "Riapplica" va nella
-    # cache adattata, e conta come scritta (non "lasciata com'era")
+    # a fix made in "Fix translations" with a letter the fonts do not have: with "Reapply" it goes into the cache
+    # adapted, and counts as written (not "lasciata com'era")
     dati = leggi_json(memoria)
     dati["Quit"] = "Esci è"
     scrivi_json(memoria, dati)
@@ -350,7 +350,7 @@ def prova_registro(base):
               "scritta", "Quit=Esci e'" in open(cache, encoding="utf-8").read()
               and d["esito"].extra.get("correzioni_scritte") == 1
               and not any("lasciate com'erano" in r for r in righe_log))
-    # un errore imprevisto nel controllo dei font non nasconde gli altri problemi del gioco
+    # an unexpected error in the font check does not hide the game's other problems
     vero = adapter_unity.voci_cache_xunity
     adapter_unity.voci_cache_xunity = lambda *_a, **_k: (_ for _ in ()).throw(KeyError("cache strana"))
     scrivi(log, "[Info   :   BepInEx] Chainloader startup complete\n[Warning: Unity Log] The character with Unicode "
@@ -367,13 +367,14 @@ def prova_registro(base):
     controlla("errore imprevisto nel controllo delle lettere: solo una riga nel registro, gli altri problemi restano",
               ok and any(p.codice == "CONFIGURAZIONE" for p in problemi)
               and any("lettere dei font non riuscito" in r for r in righe_log))
-    # una configurazione di prima (WriteUnityLog spento): il controllo la rimette
+    # an earlier configuration (WriteUnityLog off): the check puts it back
     scrivi(cfg, "[Logging.Disk]\nWriteUnityLog = false\n")
     problemi = controllo.controlla(percorso, applica=False, log=silenzio)
     conf = next((p for p in problemi if p.codice == "CONFIGURAZIONE"), None)
     controlla("installazione di prima con WriteUnityLog spento: il controllo lo riaccende (CONFIGURAZIONE)",
               conf is not None and "WriteUnityLog" in conf.dettaglio and "lettere mancanti" in conf.messaggio)
-    # BepInEx.cfg con byte non UTF-8 (un commento scritto a mano): si accende lo stesso, il resto resta uguale
+    # BepInEx.cfg with non-UTF-8 bytes (a comment written by hand): it is switched on all the same, the rest stays
+    # the same
     with open(cfg, "wb") as f:
         f.write(b"[General]\n# commento \xe8 a mano\n\n[Logging.Disk]\nWriteUnityLog = false\n")
     cambiato = adapter_unity.attiva_registro_unity(gioco)
@@ -385,12 +386,12 @@ def prova_registro(base):
 
 
 def prova_registro_localizzazione(base):
-    """Unity Localization (IL2CPP, senza BepInEx): le lettere mancanti dal Player.log, poi Riapplica."""
+    """Unity Localization (IL2CPP, without BepInEx): the missing letters from the Player.log, then Reapply."""
     gioco = os.path.join(base, "loc-registro")
     cartella = finto.gioco_il2cpp(gioco, {TABELLA_EN: finto.bundle_tabelle([("UI_en", "en", EN)])})
     profilo, _c, _e = automatico.analizza_e_traduci(gioco, "en", "it", backend="finto", log=silenzio)
     p = leggi_json(profilo)
-    memoria = progetto.percorso_memoria(p)  # la memoria vera (di prova: nella cartella dei dati di prova)
+    memoria = progetto.percorso_memoria(p)  # the real translation memory (a test one: in the test data folder)
     scrivi_json(memoria, {EN[0]: "Nuova partita", EN[1]: "Può continuare", EN[2]: "Opzioni"})
     automatico.riapplica(gioco, silenzio, esito={})
     vecchio = time.time() - 600
@@ -451,7 +452,7 @@ def test_unreal(base):
               and adapter_unreal._adatta("Novità ★", set(), None, "it") == "Novità ★")
 
 
-# --- etichette troppo lunghe -----------------------------------------------------------------------------------
+# --- labels too long ---------------------------------------------------------------------------------------------
 
 LUNGHE = {"Credits": "Riconoscimenti", "Main Menu": "Menu principale del gioco", "Settings": "Impostazioni",
           "Open the chest to find the gold": "Apri il forziere per trovare tutto l'oro", "Back": "Indietro",
@@ -460,8 +461,8 @@ CORTE = {"Credits": "Crediti", "Main Menu": "Menu principale gioco", "Quest Log"
 
 
 class Etichette(backend.Backend):
-    """Traduttore finto che sa di uno spazio massimo (come quello locale): lungo la prima volta, corto se lo chiede
-    il contesto 'larghezza'."""
+    """Fake translator that knows about a maximum space (like the local one): long the first time, short if the
+    'larghezza' context asks for it."""
     nome = "prova-etichette"
     usa_contesto = True
     max_testi = 40
@@ -497,7 +498,7 @@ def _profilo(base, nome):
 
 
 def _senza_comune():
-    """Come un PC nuovo: senza la memoria comune (le prove prima ci hanno messo 'Credits' -> 'Crediti')."""
+    """Like a new PC: without the shared translation memory (the earlier tests put 'Credits' -> 'Crediti' in it)."""
     for p in (progetto.percorso_comune("en", "it"), progetto.percorso_origine_comune("en", "it")):
         if os.path.exists(p):
             os.remove(p)
@@ -540,7 +541,7 @@ def prova_lunghezza(base):
     controlla("una volta sola: la volta dopo nessuna richiesta (la troppo lunga resta annotata, e l'esito non la "
               "ridice a ogni traduzione)", b2.richieste == [] and "troppo_lunghe" not in automatico._extra_tentativi(p2)
               and Progetto(percorso, silenzio).problemi()["Main Menu"]["dove"] == "lunghezza")
-    # scritta nel gioco resta annotata finche' la traduzione e' quella
+    # written to the game, it stays noted as long as the translation is that one
     p = Progetto(percorso, silenzio)
     p._respinte, p._applicati = {}, {"Main Menu", "Credits"}
     p._registra_applica()
@@ -551,13 +552,13 @@ def prova_lunghezza(base):
     controlla("'Correggi traduzioni': nell'elenco 'Troppo lunghi' con il testo originale",
               "lunghi" in voce.problemi and "troppo lunga" in voce.problemi["lunghi"]
               and voce in elenco.filtra("lunghi"))
-    # corretta a mano: non si chiede di nuovo
+    # fixed by hand: not asked again
     p = Progetto(percorso, silenzio)
     p.correggi({"Back": "Torna indietro alla schermata"})
     b3 = Etichette()
     Progetto(percorso, silenzio).traduci_testi(testi, b3, "en", "it")
     controlla("una correzione a mano lunga non si chiede di nuovo al traduttore", b3.richieste == [])
-    # traduttori che non sanno di uno spazio massimo: solo annotate, nessuna richiesta in piu'
+    # translators that do not know about a maximum space: only noted, no extra requests
     _senza_comune()
     percorso2 = _profilo(base, "etichette-online")
     online = SenzaContesto()
@@ -565,19 +566,19 @@ def prova_lunghezza(base):
     p2.traduci_testi(testi, online, "en", "it")
     controlla("con un traduttore online: nessuna richiesta in piu', le etichette lunghe annotate per 'Troppo lunghi'",
               sorted(online.richieste) == sorted(testi) and p2.problemi().get("Credits", {}).get("dove") == "lunghezza")
-    # traduzioni ufficiali piu' lunghe: lo spazio c'e'
+    # longer official translations: there is room
     percorso3 = _profilo(base, "etichette-ufficiali")
     b4 = Etichette()
     Progetto(percorso3, silenzio).traduci_testi(["Credits"], b4, "en", "it", contesti={
         "Credits": {"chiave": "menu_credits", "riferimenti": {"de": "Mitwirkende Personen"}}})
     controlla("con una traduzione ufficiale piu' lunga ('Mitwirkende Personen') 'Riconoscimenti' ci sta",
               [n for _, n in b4.richieste if n] == [])
-    # il prompt vero del traduttore locale
+    # the local translator's real prompt
     loc = backend.Locale("4b", log=silenzio, server=object())
     controlla("traduttore locale: il numero massimo di caratteri nel prompt solo quando lo si chiede",
               "at most 12 characters" in loc._testo_contesto({"larghezza": 12}, "it")
               and "at most" not in loc._testo_contesto({"chiave": "menu", "spazio": 12}, "it"))
-    # l'esito
+    # the outcome
     e = esito.Esito(codice="OK", extra={"accorciate": 2, "troppo_lunghe": 1})
     testo = "\n".join(esito._testo_tentativi(e))
     controlla("esito: etichette accorciate e quella ancora lunga, con 'Correggi traduzioni' > 'Troppo lunghi'",
@@ -589,7 +590,7 @@ def prova_lunghezza(base):
               "Un'etichetta era troppo lunga per lo spazio che ha nel gioco: l'ho chiesta più corta." in uno)
     controlla("'Correggi traduzioni': il motivo si legge bene (caratteri e spazio)",
               "troppo lunga: 21 caratteri, di solito ce ne stanno circa 17" in voce.problemi["lunghi"])
-    # annotate con un traduttore online, poi con quello locale: chieste piu' corte una volta
+    # noted with an online translator, then with the local one: asked shorter once
     _senza_comune()
     percorso4 = _profilo(base, "etichette-poi-locale")
     Progetto(percorso4, silenzio).traduci_testi(testi, SenzaContesto(), "en", "it")
@@ -602,18 +603,18 @@ def prova_lunghezza(base):
               sorted(t for t, n in b5.richieste if n) == ["Credits", "Main Menu", "Quest Log"]
               and p5.memoria["Credits"] == "Crediti" and b6.richieste == []
               and Progetto(percorso4, silenzio).problemi()["Main Menu"].get("chiesta") is True)
-    # "Ritraduci" di un'etichetta dell'elenco "Troppo lunghi": chiesta con il suo spazio
+    # "Re-translate" of a label in the "Too long" list: asked with its space
     b7 = Etichette()
     p7 = Progetto(percorso4, silenzio)
     p7.ritraduci(["Main Menu"], b7, "en", "it", giro=3)
     controlla("'Ritraduci' di un'etichetta troppo lunga: chiesta con il suo spazio (17 caratteri)",
               b7.richieste == [("Main Menu", 17)])
-    # un errore imprevisto mentre si accorciano le etichette non ferma la traduzione (e' un di piu')
+    # an unexpected error while shortening the labels does not stop the translation (it is an extra)
 
     class Rotto(Etichette):
         def traduci_righe(self, righe, origine, destinazione, contesti=None, giri=None):
             if any((c or {}).get("larghezza") for c in contesti or []):
-                return [object()] * len(righe)  # risposte senza senso: errore nel ricomporle
+                return [object()] * len(righe)  # meaningless answers: error when putting them back together
             return super().traduci_righe(righe, origine, destinazione, contesti, giri)
     _senza_comune()
     righe_log = []
@@ -625,7 +626,7 @@ def prova_lunghezza(base):
 
 
 class ServerPrompt:
-    """Al posto di ollama.Server: risponde in base al prompt (lungo, o corto se chiede 'at most N characters')."""
+    """Instead of ollama.Server: answers based on the prompt (long, or short if it asks 'at most N characters')."""
 
     def __init__(self):
         self.prompt = []
@@ -677,7 +678,7 @@ def main(base):
     automatico.CARTELLA_PROFILI = None
     adapter_unity.in_esecuzione = lambda *_: False
     from patchsmith import ollama
-    ollama.cartella = lambda: os.path.join(base, "ollama")  # registro del traduttore dal vivo di prova
+    ollama.cartella = lambda: os.path.join(base, "ollama")  # log of the test live translator
     _componenti_finti(os.path.join(base, "componenti"))
     for nome, prova in (("font", prova_font), ("loc", prova_unity_localization), ("registro", prova_registro),
                         ("registro-loc", prova_registro_localizzazione), ("unreal", test_unreal),
@@ -686,7 +687,7 @@ def main(base):
         os.makedirs(cartella)
         try:
             prova(cartella)
-        except Exception as e:  # noqa: BLE001 - una prova rotta non ferma le altre
+        except Exception as e:  # noqa: BLE001 - a broken test does not stop the others
             import traceback
             traceback.print_exc()
             controlla("%s: errore imprevisto (%s: %s)" % (nome, type(e).__name__, e), False)

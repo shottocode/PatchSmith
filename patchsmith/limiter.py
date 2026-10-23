@@ -1,14 +1,14 @@
-"""Limitatore delle richieste ai traduttori online, con memoria su disco dei blocchi.
+"""Rate limiter for the requests to the online translators, with the blocks remembered on disk.
 
-Google non pubblica i limiti del traduttore gratuito (e oggi rifiuta del tutto alcuni accessi automatici): i
-valori qui sotto sono margini prudenti scelti a priori, non limiti misurati. La regola che conta di piu':
-al primo blocco ci si ferma subito e si ricorda fino a quando non riprovare, perche' insistere durante un
-blocco puo' allungarlo.
+Google does not publish the limits of the free translator (and today it rejects some automated access entirely):
+the values below are cautious margins chosen in advance, not measured limits. The rule that matters most:
+at the first block we stop at once and remember until when not to retry, because insisting during a block can
+make it longer.
 
-Lo stato sta in services.json tra i dati dell'utente (progetto.cartella_dati: di norma accanto al programma;
-scrittura atomica, con un lucchetto cosi' interfaccia, riga di comando e traduttore avviato dai giochi Unity
-(servizio_xunity) contano le stesse richieste e rispettano le stesse pause):
-{"versione": 1, "google": {"richieste": [[ora, caratteri], ...], "ultimo_ok": ora, "ok_totali": n,
+The state is in services.json among the user's data (progetto.cartella_dati: normally next to the program;
+atomic write, with a lock so that the interface, the command line and the translator started by Unity games
+(servizio_xunity) count the same requests and respect the same pauses):
+{"versione": 1, "google": {"richieste": [[time, characters], ...], "ultimo_ok": time, "ok_totali": n,
                            "blocco": {"dal", "fino", "livello", "tipo", "http", "disattivato"}}}
 """
 import datetime
@@ -21,8 +21,8 @@ from . import interruption as interruzione
 
 MINUTO, ORA, GIORNO = 60, 3600, 86400
 
-# per servizio: pausa minima tra l'inizio di due richieste (+ variazione casuale) e finestre
-# (durata in secondi, richieste al massimo, caratteri al massimo)
+# per service: minimum pause between the start of two requests (+ random variation) and windows
+# (duration in seconds, maximum requests, maximum characters)
 REGOLE = {
     "google": {"pausa": 4.0, "variazione": 2.0,
                "finestre": ((MINUTO, 8, 32_000), (10 * MINUTO, 30, 120_000), (ORA, 60, 240_000),
@@ -30,11 +30,11 @@ REGOLE = {
     "deepl": {"pausa": 0.5, "variazione": 0.0, "finestre": ()},
     "mymemory": {"pausa": 1.0, "variazione": 0.5, "finestre": ((MINUTO, 50, None),)},
 }
-# attese dopo un blocco: "a freddo" = rifiutata gia' la prima richiesta (non e' un limite superato, l'accesso e'
-# rifiutato: inutile riprovare presto); "dopo traffico" = dopo richieste andate a buon fine (un limite di ritmo)
+# waits after a block: "a freddo" (cold) = the very first request was rejected (not a limit exceeded, access is
+# refused: no point retrying soon); "dopo traffico" (after traffic) = after successful requests (a rate limit)
 ATTESE = {"a_freddo": (GIORNO, 3 * GIORNO, 7 * GIORNO), "dopo_traffico": (ORA, 6 * ORA, GIORNO, 3 * GIORNO)}
-MASSIMO_FUTURO = 8 * GIORNO  # un "fino" piu' lontano (orologio sbagliato, file rovinato) viene ridotto
-DIMENTICA_DOPO = 7 * GIORNO  # una settimana senza blocchi: si riparte dal primo livello
+MASSIMO_FUTURO = 8 * GIORNO  # a farther "fino" (wrong clock, damaged file) is reduced
+DIMENTICA_DOPO = 7 * GIORNO  # a week without blocks: start again from the first level
 OK_PER_AZZERARE = 10
 NOMI = {"google": "Google", "deepl": "DeepL", "mymemory": "MyMemory"}
 CONSIGLIO_LOCALE = ("Per continuare subito usa il traduttore locale (consigliato: nessun limite e nessun blocco) o un "
@@ -42,7 +42,7 @@ CONSIGLIO_LOCALE = ("Per continuare subito usa il traduttore locale (consigliato
 
 
 class InPausa(Exception):
-    """Il servizio e' in pausa per un blocco precedente: nessuna richiesta finche' non passa."""
+    """The service is paused because of a previous block: no requests until it is over."""
 
 
 def percorso_stato():
@@ -51,7 +51,7 @@ def percorso_stato():
 
 
 def quando(istante):
-    """'alle 18:30 di domani', 'alle 18:30 del 22/10': per i messaggi."""
+    """'alle 18:30 di domani', 'alle 18:30 del 22/10' (for the messages)."""
     momento = datetime.datetime.fromtimestamp(istante)
     oggi = datetime.date.today()
     if momento.date() == oggi:
@@ -62,7 +62,7 @@ def quando(istante):
 
 
 class _Lucchetto:
-    """Lucchetto su file (os.O_EXCL): uno abbandonato da piu' di 60 s si considera libero."""
+    """File lock (os.O_EXCL): one abandoned for more than 60 s is considered free."""
 
     def __init__(self, percorso):
         self.percorso = percorso + ".lock"
@@ -84,10 +84,10 @@ class _Lucchetto:
                 except OSError:
                     pass
                 if time.monotonic() > limite:
-                    return self  # meglio procedere senza lucchetto che bloccarsi
+                    return self  # better to go on without a lock than to get stuck
                 time.sleep(0.05)
             except OSError:
-                return self  # cartella non scrivibile: si lavora senza lucchetto
+                return self  # folder not writable: work without a lock
 
     def __exit__(self, *_):
         if self.preso:
@@ -108,10 +108,10 @@ class Limitatore:
         self.dormi = dormi or interruzione.attendi
         self.caso = caso
         self.ok_sessione = 0
-        self._in_memoria = None  # stato tenuto in memoria se il file non si puo' scrivere
+        self._in_memoria = None  # state kept in memory if the file cannot be written
         self._avvisato = False
 
-    # --- file di stato ----------------------------------------------------------------------------
+    # --- state file -------------------------------------------------------------------------------
 
     def _leggi(self):
         if self._in_memoria is not None:
@@ -140,7 +140,7 @@ class Limitatore:
                 os.replace(temporaneo, self.percorso)
                 return
             except OSError:
-                time.sleep(0.1)  # antivirus o indicizzatore che tiene il file: si riprova
+                time.sleep(0.1)  # antivirus or indexer holding the file: retry
         self._avviso("  ! Non riesco a salvare lo stato dei traduttori (%s): lo tengo solo in memoria." % self.percorso)
         self._in_memoria = dati
 
@@ -158,21 +158,21 @@ class Limitatore:
         blocco = s.get("blocco")
         if isinstance(blocco, dict):
             if blocco.get("dal", adesso) > adesso or (blocco.get("fino") and blocco["fino"] - adesso > MASSIMO_FUTURO):
-                # registrato con l'orologio avanti (o file rovinato): si riparte da adesso, una volta sola
+                # recorded with the clock ahead (or damaged file): restart from now, only once
                 durata = max(0, blocco.get("fino", adesso) - blocco.get("dal", adesso))
                 blocco["dal"] = adesso
                 blocco["fino"] = adesso + min(durata, MASSIMO_FUTURO)
                 self._corretto = True
             if not blocco.get("disattivato") and adesso - blocco.get("fino", adesso) > DIMENTICA_DOPO:
-                s.pop("blocco")  # una settimana senza blocchi dopo la fine dell'ultimo: si riparte da capo
+                s.pop("blocco")  # a week without blocks after the end of the last one: start over
         else:
             s.pop("blocco", None)
         return s
 
-    # --- domande ----------------------------------------------------------------------------------
+    # --- queries ----------------------------------------------------------------------------------
 
     def _stato_corretto(self):
-        """Lo stato del servizio; se c'erano date da correggere le salva subito (cosi' la correzione vale una volta)."""
+        """The service's state; if there were dates to correct, saves them at once (so the correction applies once)."""
         self._corretto = False
         dati = self._leggi()
         adesso = self.ora()
@@ -188,7 +188,7 @@ class Limitatore:
         return blocco if blocco and (blocco.get("disattivato") or adesso < blocco.get("fino", 0)) else None
 
     def pausa(self):
-        """None se il servizio si puo' usare, altrimenti il messaggio con fino a quando e' in pausa."""
+        """None if the service can be used, otherwise the message saying until when it is paused."""
         s, adesso = self._stato_corretto()
         blocco = s.get("blocco")
         if not blocco:
@@ -208,7 +208,7 @@ class Limitatore:
         return None
 
     def stato_breve(self):
-        """'in pausa fino alle 05:58 di domani', 'disattivato' oppure '' (per l'interfaccia)."""
+        """'in pausa fino alle 05:58 di domani', 'disattivato' or '' (for the interface)."""
         try:
             s, adesso = self._stato_corretto()
             blocco = s.get("blocco")
@@ -234,11 +234,11 @@ class Limitatore:
                 attesa = max(attesa, dentro.pop(0)[0] + durata - adesso)
         return max(0.0, attesa)
 
-    # --- azioni -----------------------------------------------------------------------------------
+    # --- actions ----------------------------------------------------------------------------------
 
     def prima_di(self, caratteri):
-        """Aspetta il tempo necessario e registra la richiesta (prima di mandarla). Solleva InPausa se il
-        servizio e' in pausa per un blocco."""
+        """Waits the time needed and records the request (before sending it). Raises InPausa if the
+        service is paused because of a block."""
         while True:
             messaggio = self.pausa()
             if messaggio:
@@ -267,13 +267,13 @@ class Limitatore:
             s["ultimo_ok"] = adesso
             s["ok_totali"] = s.get("ok_totali", 0) + 1
             if s["ok_totali"] >= OK_PER_AZZERARE and s.get("blocco") and adesso >= s["blocco"].get("fino", 0):
-                s.pop("blocco")  # tornato affidabile: i prossimi blocchi ripartono dal primo livello
+                s.pop("blocco")  # reliable again: the next blocks start again from the first level
             self.ok_sessione += 1
             self._scrivi(dati)
 
     def bloccato(self, http=None, dettaglio=None, adesso=None, fino=None, extra=None):
-        """Registra un blocco e restituisce il messaggio per l'utente. 'fino': pausa fino a quell'ora precisa (es.
-        quota giornaliera finita), senza livelli."""
+        """Records a block and returns the message for the user. 'fino': pause until that exact time (e.g.
+        daily quota used up), without levels."""
         with _Lucchetto(self.percorso):
             dati = self._leggi()
             adesso = self.ora() if adesso is None else adesso
@@ -322,7 +322,7 @@ class Limitatore:
             self._scrivi(dati)
 
     def stima(self, caratteri_per_richiesta, durata_risposta=1.5):
-        """Secondi stimati per mandare queste richieste rispettando le regole (a partire dallo stato attuale)."""
+        """Estimated seconds to send these requests while respecting the rules (starting from the current state)."""
         dati = self._leggi()
         orologio = [self.ora()]
         s = self._mio(json.loads(json.dumps(dati)), orologio[0])

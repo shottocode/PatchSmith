@@ -1,10 +1,10 @@
-"""Traduzione dal vivo dei giochi Electron con i file cifrati (adapter_web_vivo + injector_live.js).
+"""Live translation of Electron games with encrypted files (adapter_web_vivo + injector_live.js).
 
-Uso: python -I test/test_web_live.py <cartella_di_prova_che_non_esiste>
-- gioco Electron finto con GemShell: profilo "web-vivo", script in preload.js con backup, dizionario e comando del
-  traduttore; Riapplica con le traduzioni salvate; Ripristina con i file identici all'originale;
-- se c'e' Node.js: lo script vero in una pagina finta, con un traduttore finto su 127.0.0.1 (testi tradotti, numeri
-  rimessi, tasti e numeri lasciati come sono, preload rimesso dal gioco -> il controllo dopo aver giocato lo rimette).
+Usage: python -I test/test_web_live.py <test_folder_that_does_not_exist>
+- fake Electron game with GemShell: game profile "web-vivo", script in preload.js with a backup, dictionary and the
+  translator's command; Reapply with the saved translations; Restore originals with the files identical to the original;
+- if Node.js is there: the real script in a fake page, with a fake translator on 127.0.0.1 (texts translated, numbers
+  put back, keys and numbers left as they are, preload put back by the game -> the after-play check puts it back).
 """
 import hashlib
 import json
@@ -98,7 +98,7 @@ def prova_script(base, preload, porta):
     if not node:
         print("(Node.js non c'e': lo script nella pagina non e' stato provato)")
         return
-    # lo script come lo scrive PatchSmith, con la porta del traduttore finto e senza il comando di Python
+    # the script as PatchSmith writes it, with the fake translator's port and without the Python command
     with open(preload, encoding="utf-8") as f:
         script = f.read().split(adapter_web_vivo.SEGNO, 1)[1]
     config = {"dizionario": adapter_web_vivo.NOME_DIZIONARIO, "porta": porta, "da": "en", "a": "it", "comando": None}
@@ -144,7 +144,7 @@ def main(base):
               and os.path.exists(preload + progetto.SUFFISSO_BACKUP)
               and os.path.exists(os.path.join(os.path.dirname(preload), adapter_web_vivo.NOME_CONFIG))
               and "servizio-xunity" in scritto and "gemshell-assets" not in [r for r in righe])
-    # traduzioni arrivate mentre si giocava (memoria del gioco): Riapplica le mette nel dizionario
+    # translations that arrived while playing (the game's translation memory): Reapply puts them in the dictionary
     memoria = progetto.percorso_memoria(profilo, prova=True)
     scrivi(memoria, json.dumps({"Click or press Z to attack the dragon!": "Clicca o premi Z per attaccare il drago!",
                                 "{{A}} minutes": "{{A}} minuti"}))
@@ -157,7 +157,7 @@ def main(base):
     controlla("Riapplica: dizionario con le traduzioni salvate, script una volta sola",
               dizionario.get("{{A}} minutes") == "{{A}} minuti" and riscritto.count(adapter_web_vivo.SEGNO) == 1)
     prova_script(base, preload, 47999)
-    # "No" alla fine di Analizza e traduci: nel preload niente traduttore, solo il dizionario; "Si'": di nuovo acceso
+    # "No" at the end of Analyze and translate: no translator in the preload, only the dictionary; "Yes": on again
     automatico.imposta_dal_vivo(gioco, False, righe.append)
     with open(preload, encoding="utf-8") as f:
         spento = f.read()
@@ -169,7 +169,7 @@ def main(base):
               '"porta": 0' in spento and '"comando": null' in spento and profilo_spento["dal_vivo"] == "nessuno"
               and '"porta": 0' not in acceso and "servizio-xunity" in acceso
               and automatico.traduzione_dal_vivo(gioco)[1] is True and acceso.count(adapter_web_vivo.SEGNO) == 1)
-    # il gioco rimette il suo preload.js: il controllo dopo aver giocato se ne accorge
+    # the game puts back its own preload.js: the after-play check notices it
     scrivi(preload, PRELOAD)
     problemi = controllo.controlla(percorso, applica=False, log=lambda _m: None, ritraduci=False)
     controlla("preload.js rimesso dal gioco: il controllo dopo aver giocato propone di rimettere la traduzione",

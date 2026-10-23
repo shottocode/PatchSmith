@@ -1,18 +1,18 @@
-"""Adapter Godot 4: giochi che usano le traduzioni di Godot (tabelle .translation importate da CSV o PO).
+"""Godot 4 adapter: games that use Godot's translations (.translation tables imported from CSV or PO).
 
-Il gioco non si tocca: il pacchetto dei dati (PCK, anche incorporato nell'eseguibile) si legge soltanto. PatchSmith
-legge la tabella della lingua di partenza (OptimizedTranslation: chiavi sotto forma di impronte, testi compressi con
-smaz; oppure Translation con il dizionario dei messaggi), traduce i testi e mette accanto all'eseguibile:
-- override.cfg: le impostazioni del progetto che Godot legge all'avvio dalla cartella dell'eseguibile (il modo
-  previsto da Godot per cambiarle senza toccare il gioco), con un autoload di PatchSmith;
-- patchsmith-traduzione.gd: lo script dell'autoload, che all'avvio sostituisce la tabella della lingua di partenza
-  con un "ponte" (prima il testo originale dalla tabella del gioco, poi la sua traduzione): con la lingua di
-  partenza scelta nel gioco (di solito English) i testi compaiono tradotti; aggiunge anche la lingua di arrivo;
-- patchsmith-traduzione.json: le traduzioni (testo originale -> tradotto).
-Tutto e' elencato con le impronte in patchsmith-godot.json; "Ripristina originali" toglie i file (e rimette un
-override.cfg del gioco, se c'era).
+The game is not touched: the data package (PCK, also embedded in the executable) is only read. PatchSmith
+reads the table of the source language (OptimizedTranslation: keys in the form of hashes, texts compressed with
+smaz; or Translation with the message dictionary), translates the texts and puts next to the executable:
+- override.cfg: the project settings that Godot reads at startup from the executable's folder (the way
+  Godot provides to change them without touching the game), with a PatchSmith autoload;
+- patchsmith-traduzione.gd: the autoload script, which at startup replaces the table of the source language
+  with a "bridge" (first the original text from the game's table, then its translation): with the source
+  language chosen in the game (usually English) the texts appear translated; it also adds the target language;
+- patchsmith-traduzione.json: the translations (original text -> translated).
+Everything is listed with its fingerprint in patchsmith-godot.json; "Restore originals" removes the files (and puts
+back an override.cfg of the game, if there was one).
 
-PCK cifrato (chiave nel motore del gioco): protezione degli sviluppatori, non si apre.
+Encrypted PCK (key in the game's engine): developers' protection, it is not opened.
 """
 import base64
 import datetime
@@ -36,16 +36,16 @@ class ErroreGodot(Exception):
     pass
 
 
-# --- pacchetto dei dati (PCK) ---------------------------------------------------------------------------------------
+# --- data package (PCK) ---------------------------------------------------------------------------------------------
 
 class Pck:
-    """Il PCK di Godot 4 (file .pck o incorporato in fondo all'eseguibile): elenco dei file e lettura."""
+    """The Godot 4 PCK (.pck file or embedded at the end of the executable): list of files and reading."""
 
     def __init__(self, percorso):
         self.percorso = percorso
         with open(percorso, "rb") as f:
             inizio = 0
-            if f.read(4) != b"GDPC":  # incorporato: in fondo all'eseguibile [dimensione u64]["GDPC"]
+            if f.read(4) != b"GDPC":  # embedded: at the end of the executable [size u64]["GDPC"]
                 f.seek(0, 2)
                 fine = f.tell()
                 if fine < 16:
@@ -92,7 +92,7 @@ class Pck:
 
 
 def trova_pck(cartella):
-    """(percorso del PCK, cartella dell'eseguibile) del gioco: incorporato in un .exe o in un .pck accanto; o None."""
+    """(path of the PCK, folder of the executable) of the game: embedded in an .exe or in a .pck next to it; or None."""
     try:
         nomi = sorted(os.listdir(cartella))
     except OSError:
@@ -107,7 +107,7 @@ def trova_pck(cartella):
     return None
 
 
-# --- tabelle delle traduzioni -------------------------------------------------------------------------------------
+# --- translation tables -------------------------------------------------------------------------------------------
 
 _SMAZ = [" ", "the", "e", "t", "a", "of", "o", "and", "i", "n", "s", "e ", "r", " th", " t", "in", "he", "th", "h",
          "he ", "to", "\r\n", "l", "s ", "d", " a", "an", "er", "c", " o", "d ", "on", " of", "re", "of ", "t ", ", ",
@@ -124,7 +124,7 @@ _SMAZ = [" ", "the", "e", "t", "a", "of", "o", "and", "i", "n", "s", "e ", "r", 
          " on", "tha", "-", " l", "ati", "en ", "pe", " re", "there", "ass", "si", " fo", "wa", "ec", "our", "who",
          "its", "z", "fo", "rs", ">", "ot", "un", "<", "im", "th ", "nc", "ate", "><", "ver", "ad", " we", "ly", "ee",
          " n", "id", " cl", "ac", "il", "</", "rt", " wi", "div", "e, ", " it", "whi", " ma", "ge", "x", "e c", "men",
-         ".com"]  # il dizionario di smaz (thirdparty/misc/smaz.c in Godot)
+         ".com"]  # the smaz dictionary (thirdparty/misc/smaz.c in Godot)
 
 
 def _smaz(dati):
@@ -165,8 +165,8 @@ class _Lettore:
         return s
 
     def variante(self):
-        """Solo i tipi che servono per le tabelle delle traduzioni; None per gli altri (ValueError se non si sa
-        quanto sono lunghi)."""
+        """Only the types needed for the translation tables; None for the others (ValueError if their length is
+        unknown)."""
         tipo = self.u32()
         if tipo == 1:  # nil
             return None
@@ -184,7 +184,7 @@ class _Lettore:
         if tipo == 30:  # Array
             n = self.u32() & 0x7FFFFFFF
             return [self.variante() for _ in range(n)]
-        if tipo == 31:  # PackedByteArray (allineato a 4)
+        if tipo == 31:  # PackedByteArray (aligned to 4)
             n = self.u32()
             v = self.d[self.o:self.o + n]
             self.o += n + (4 - n % 4) % 4
@@ -200,7 +200,7 @@ class _Lettore:
 
 
 def leggi_risorsa(dati):
-    """(tipo, {proprieta': valore}) dell'ultima risorsa interna di un file .translation binario di Godot 4."""
+    """(type, {property: value}) of the last internal resource of a binary Godot 4 .translation file."""
     if dati[:4] != b"RSRC":
         raise ErroreGodot("non e' una risorsa binaria di Godot")
     r = _Lettore(dati, 4)
@@ -209,16 +209,16 @@ def leggi_risorsa(dati):
     r.u32()  # real64
     major = r.u32()
     r.u32()  # minor
-    r.u32()  # formato
-    r.stringa()  # tipo principale
+    r.u32()  # format
+    r.stringa()  # main type
     r.u64()  # importmd
     flags = r.u32()
     r.u64()  # uid
     if flags & 4:  # FORMAT_FLAG_HAS_SCRIPT_CLASS
         r.stringa()
-    r.o += 4 * 11  # campi riservati
+    r.o += 4 * 11  # reserved fields
     nomi = [r.stringa() for _ in range(r.u32())]
-    for _ in range(r.u32()):  # risorse esterne
+    for _ in range(r.u32()):  # external resources
         r.stringa()
         r.stringa()
         if major >= 4:
@@ -236,9 +236,9 @@ def leggi_risorsa(dati):
 
 
 def testi_tabella(dati):
-    """(lingua, [testi]) di una tabella delle traduzioni (OptimizedTranslation o Translation)."""
+    """(language, [texts]) of a translation table (OptimizedTranslation or Translation)."""
     tipo, p = leggi_risorsa(dati)
-    lingua = p.get("locale") or "en"  # (en e' il valore predefinito: Godot non lo scrive)
+    lingua = p.get("locale") or "en"  # (en is the default value: Godot does not write it)
     if tipo == "OptimizedTranslation":
         ht, bt, st = p.get("hash_table") or [], p.get("bucket_table") or [], p.get("strings") or b""
         testi = []
@@ -258,7 +258,7 @@ def testi_tabella(dati):
 
 
 def tabelle(pck):
-    """{lingua: percorso nel PCK} delle tabelle delle traduzioni (dal nome, es. translations.en.translation)."""
+    """{language: path in the PCK} of the translation tables (from the name, e.g. translations.en.translation)."""
     uscita = {}
     for nome in pck.file:
         m = _LINGUA_NEL_NOME.search(nome)
@@ -267,7 +267,7 @@ def tabelle(pck):
     return uscita
 
 
-# --- installazione ---------------------------------------------------------------------------------------------------
+# --- installation ----------------------------------------------------------------------------------------------------
 
 SCRIPT_GD = '''extends Node
 ## Patchsmith: traduzione di questo gioco (aggiunta da Patchsmith: "Ripristina originali" in Patchsmith la toglie).
@@ -346,14 +346,14 @@ def manifesto_presente(cartella):
 
 
 def _originale(manifesto):
-    """Il testo dell'override.cfg del gioco (se c'era), o None."""
+    """The text of the game's override.cfg (if there was one), or None."""
     if manifesto.get("override_originale") is None:
         return None
     return base64.b64decode(manifesto["override_originale"]).decode("utf-8", "replace")
 
 
 def _testo_override(precedente, autoload):
-    """override.cfg con l'autoload di PatchSmith (aggiunto a quello del gioco, se c'era)."""
+    """override.cfg with PatchSmith's autoload (added to the game's one, if there was one)."""
     riga = '%s="*res://%s"' % (AUTOLOAD, autoload)
     righe = (precedente or "").replace("\r\n", "\n").split("\n") if precedente else []
     righe = [r for r in righe if not r.strip().startswith(AUTOLOAD + "=")]
@@ -366,11 +366,11 @@ def _testo_override(precedente, autoload):
 
 
 def installa(cartella, lingua_tabella, traduzioni, destinazione, log=print):
-    """Scrive (o aggiorna) override.cfg, lo script e le traduzioni accanto all'eseguibile, con il manifesto."""
+    """Writes (or updates) override.cfg, the script and the translations next to the executable, with the manifest."""
     manifesto = leggi_manifesto(cartella) or {"patchsmith": True, "versione": 1, "file": {}}
     override = os.path.join(cartella, OVERRIDE)
-    if os.path.exists(override) and OVERRIDE not in manifesto["file"]:  # override.cfg del gioco: si conserva
-        with open(override, "rb") as f:  # (i byte esatti: si rimette identico)
+    if os.path.exists(override) and OVERRIDE not in manifesto["file"]:  # the game's override.cfg: it is kept
+        with open(override, "rb") as f:  # (the exact bytes: it is put back identical)
             manifesto["override_originale"] = base64.b64encode(f.read()).decode("ascii")
         log("  override.cfg del gioco: conservato, aggiungo solo la riga di PatchSmith")
     dizionario = {k: v for k, v in traduzioni.items() if isinstance(v, str) and v and v != k}
@@ -393,7 +393,7 @@ def installa(cartella, lingua_tabella, traduzioni, destinazione, log=print):
 
 
 def disinstalla(cartella, log=print):
-    """Toglie i file di PatchSmith (quelli cambiati a mano restano) e rimette l'override.cfg del gioco."""
+    """Removes PatchSmith's files (those changed by hand stay) and puts back the game's override.cfg."""
     manifesto = leggi_manifesto(cartella)
     if manifesto is None:
         return False

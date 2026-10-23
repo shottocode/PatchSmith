@@ -1,14 +1,15 @@
-"""Cartella dei dati dell'utente (PATCHSMITH_DATI) separata dal programma.
+"""User data folder (PATCHSMITH_DATI) separate from the program.
 
-Uso: python -I test/test_user_data.py <cartella_temporanea_vuota>
-Copre:
-- con PATCHSMITH_DATI profili, memoria, impostazioni, stato dei traduttori, registri delle lingue e del configuratore,
-  salvataggi vanno li'; componenti, plugin, regole e smith.py restano accanto al programma;
-- senza la variabile tutto resta come prima (accanto al programma), anche per chi cambia CARTELLA_PROGETTO;
-- riga di comando: `smith auto`, `stato` e `ripristina` su un gioco web finto con i dati nella cartella di prova;
-- il comando del traduttore per XUnity scritto nel gioco usa sempre smith.py e la cartella del programma;
-- le impostazioni dell'interfaccia si salvano anche se la cartella dei dati non esiste ancora.
-I processi figli calcolano solo percorsi, tranne la riga di comando, che parte solo se la variabile e' rispettata.
+Usage: python -I test/test_user_data.py <empty_temp_folder>
+Covers:
+- with PATCHSMITH_DATI, game profiles, translation memory, settings, translator status, language and configurator
+  logs, and saves go there; downloaded components, plugin, rules and smith.py stay next to the program;
+- without the variable everything stays as before (next to the program), also for whoever changes
+  CARTELLA_PROGETTO;
+- command line: `smith auto`, `stato` and `ripristina` on a fake web game with the data in the test folder;
+- the translator command for XUnity written into the game always uses smith.py and the program's folder;
+- the interface settings are saved even if the data folder does not exist yet.
+The child processes only compute paths, except the command line, which runs only if the variable is honored.
 """
 import hashlib
 import json
@@ -27,7 +28,7 @@ from patchsmith import adapter_unity, gui, project as progetto  # noqa: E402
 ESITI = []
 SMITH = os.path.join(progetto.CARTELLA_PROGETTO, "smith.py")
 
-# stampa i percorsi che PatchSmith userebbe (nessuna scrittura)
+# prints the paths PatchSmith would use (no writing)
 PERCORSI = r"""
 import json, sys
 sys.path.insert(0, sys.argv[1])
@@ -71,7 +72,7 @@ def dentro(percorso, cartella):
 
 
 def ambiente(base, dati=None):
-    """Ambiente dei processi figli: cartelle dell'utente di prova, PATCHSMITH_DATI solo se indicata."""
+    """Environment of the child processes: test user folders, PATCHSMITH_DATI only if given."""
     amb = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PATCHSMITH_", "OLLAMA_"))}
     for variabile, rel in (("LOCALAPPDATA", "Local"), ("APPDATA", "Roaming"), ("TEMP", "Temp"), ("TMP", "Temp"),
                            ("USERPROFILE", "utente")):
@@ -125,7 +126,7 @@ def test_paths(base):
               senza and all(dentro(p, progetto.CARTELLA_PROGETTO) for p in senza["dati"].values())
               and os.path.dirname(senza["dati"]["profili"]) == progetto.CARTELLA_PROGETTO)
 
-    # chi sposta CARTELLA_PROGETTO (vecchi script di prova) sposta anche i dati, se la variabile non c'e'
+    # whoever moves CARTELLA_PROGETTO (old test scripts) also moves the data, if the variable is not set
     salvati = progetto.CARTELLA_PROGETTO, progetto.RADICE_DATI
     try:
         progetto.CARTELLA_PROGETTO, progetto.RADICE_DATI = os.path.join(base, "altrove"), None
@@ -157,14 +158,14 @@ def prova_riga_di_comando(base):
 
 
 def test_xunity_service(base):
-    """Il comando scritto nel gioco: smith.py e cartella del programma, anche con i dati altrove."""
+    """The command written into the game: smith.py and the program's folder, even with the data elsewhere."""
     gioco = os.path.join(base, "unity")
     os.makedirs(os.path.join(gioco, "BepInEx", "config"))
     profilo = os.path.join(base, "dati-servizio", "profiles", "gioco.json")
     compila = adapter_unity._compila_plugin
     salvata = progetto.RADICE_DATI
     try:
-        adapter_unity._compila_plugin = lambda *_: None  # nessun compilatore: qui conta solo il comando
+        adapter_unity._compila_plugin = lambda *_: None  # no compiler: only the command matters here
         progetto.RADICE_DATI = os.path.join(base, "dati-servizio")
         adapter_unity.attiva_servizio(gioco, {"dati": gioco}, profilo, "gioco")
     finally:
@@ -178,7 +179,7 @@ def test_xunity_service(base):
 
 
 def prova_impostazioni_gui(base):
-    """_salva_impostazioni con la cartella dei dati che non esiste ancora (prima volta con PATCHSMITH_DATI)."""
+    """_salva_impostazioni with a data folder that does not exist yet (first time with PATCHSMITH_DATI)."""
     salvata = progetto.RADICE_DATI
     progetto.RADICE_DATI = os.path.join(base, "dati-gui", "nuova")
     try:
@@ -198,15 +199,15 @@ def prova_impostazioni_gui(base):
 
 
 def prova_nomi_inglesi(base):
-    """I dati con i nomi italiani di prima della 0.1.0 passano a quelli inglesi (spostati, mai copiati ne' cancellati);
-    finche' una cartella non e' spostata si usa quella vecchia; un gioco che chiede il profilo con il percorso vecchio
-    lo ritrova."""
+    """Data with the Italian names from before 0.1.0 switches to the English ones (moved, never copied or deleted);
+    until a folder is moved the old one is used; a game that asks for the game profile with the old path finds it
+    again."""
     from patchsmith import cli
     radice = os.path.join(base, "nomi-di-prima")
     vecchi = {"profili/gioco.json": "{}", "memoria/gioco.it.json": '{"a": "b"}', "memoria/copie/vecchia/x.json": "{}",
               "registri/op.log": "log", "impostazioni.json": '{"tema": "scuro"}', "stato_servizi.json": "{}",
               "componenti/ollama/ollama.exe": "exe", "componenti/plugin/Patchsmith.UIToolkit.dll": "dll",
-              "components/plugin/PatchsmithServizio.cs": "cs"}  # (components/plugin c'e' gia': i sorgenti nuovi)
+              "components/plugin/PatchsmithServizio.cs": "cs"}  # (components/plugin is already there: the new sources)
     for rel, testo in vecchi.items():
         p = os.path.join(radice, *rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -215,7 +216,7 @@ def prova_nomi_inglesi(base):
     salvati = progetto.CARTELLA_PROGETTO, progetto.RADICE_DATI
     progetto.CARTELLA_PROGETTO, progetto.RADICE_DATI = radice, None
     try:
-        prima = progetto.cartella_dati("profiles", "gioco.json")  # non ancora spostata: quella vecchia
+        prima = progetto.cartella_dati("profiles", "gioco.json")  # not moved yet: the old one
         spostati = progetto.migra_dati()
 
         def leggi(rel):
@@ -244,10 +245,10 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base, exist_ok=True)
-    progetto.RADICE_DATI = os.path.join(base, "dati")  # anche questo processo: mai i dati veri
+    progetto.RADICE_DATI = os.path.join(base, "dati")  # this process too: never the real data
     if test_paths(base):
         prova_riga_di_comando(base)
-    else:  # se la variabile non fosse rispettata, la riga di comando scriverebbe tra i dati veri
+    else:  # if the variable were not honored, the command line would write among the real data
         controlla("riga di comando non provata: PATCHSMITH_DATI non rispettata", False)
     test_xunity_service(base)
     prova_impostazioni_gui(base)

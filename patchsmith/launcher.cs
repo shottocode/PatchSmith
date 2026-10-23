@@ -1,8 +1,8 @@
-// PatchSmith.exe: apre PatchSmith.pyw (accanto a questo .exe) con il Python installato, come un programma qualsiasi.
-// Lo compila PatchSmith (icona.eseguibile) con il compilatore C# di Windows, con l'icona di patchsmith/icon dentro.
-// Python: quello portatile del pacchetto (runtime\pythonw.exe, vedi package.py) se c'e', poi il piu' recente dal
-// 3.10 in su registrato in Windows (PEP 514: utente, poi computer), poi pythonw.exe nel PATH. Se non c'e', una finestra
-// spiega cosa installare (in italiano o in inglese, come Windows).
+// PatchSmith.exe: opens PatchSmith.pyw (next to this .exe) with the installed Python, like any other program.
+// PatchSmith compiles it (icon.eseguibile) with the Windows C# compiler, with the icon of patchsmith/icon inside.
+// Python: the package's portable one (runtime\pythonw.exe, see package.py) if present, then the most recent from
+// 3.10 up registered in Windows (PEP 514: user, then machine), then pythonw.exe in the PATH. If there is none, a
+// dialog explains what to install (in Italian or English, like Windows).
 using System;
 using System.Diagnostics;
 using System.Globalization;
@@ -41,7 +41,8 @@ static class Avvio
         }
     }
 
-    // pythonw.exe del Python piu' recente dal 3.10 in su, dalle chiavi Software\Python\PythonCore\<versione>\InstallPath
+    // pythonw.exe of the most recent Python from 3.10 up, from the keys
+    // Software\Python\PythonCore\<version>\InstallPath
     static string DalRegistro()
     {
         string scelto = null;
@@ -80,7 +81,7 @@ static class Avvio
                 }
                 catch (Exception)
                 {
-                    // chiave non leggibile: si guarda la prossima
+                    // unreadable key: try the next one
                 }
             }
         return scelto;
@@ -98,7 +99,7 @@ static class Avvio
             }
             catch (ArgumentException)
             {
-                // cartella con caratteri non validi nel PATH
+                // folder with invalid characters in the PATH
             }
         }
         return null;

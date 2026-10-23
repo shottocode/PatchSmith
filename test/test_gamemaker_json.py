@@ -1,9 +1,9 @@
-"""Test dei file di localizzazione JSON di GameMaker (es. Forager) e del tasto "Ferma".
+"""Tests of GameMaker's JSON localization files (e.g. Forager) and of the "Stop" button.
 
-Uso: python -I test/test_gamemaker_json.py <cartella_temporanea_vuota>
-Gioco finto: local/english.json + traduzioni ufficiali, con le convenzioni di Forager ('*' = a capo, "U " =
-simbolo a inizio paragrafo), data.win con un font latino accentato e font solo ASCII (chat, numeri).
-Scrive solo nella cartella temporanea; nessuna rete (traduttore finto, richieste HTTP simulate).
+Usage: python -I test/test_gamemaker_json.py <empty_temp_folder>
+Fake game: local/english.json + official translations, with Forager's conventions ('*' = line break, "U " =
+symbol at the start of a paragraph), data.win with an accented Latin font and ASCII-only fonts (chat, numbers).
+Writes only to the temporary folder; no network (fake translator, simulated HTTP requests).
 """
 import hashlib
 import json
@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from patchsmith import (adapter_gamemaker, auto as automatico, backend, interruption as interruzione,
                         official_language as lingua_ufficiale, project as progetto, steam)
-import test_gamemaker  # noqa: E402  (costruttore di data.win)
+import test_gamemaker  # noqa: E402  (data.win builder)
 
 ESITI = []
 
@@ -54,7 +54,7 @@ FR = {"itemName0": "bois", "itemName1": "minerai*de fer", "itemName2": "luciole*
       "playing": "Joue à {game mode}", "warning": "ATTENTION :\nVoulez-vous continuer ?"}
 FR.update({"extra%d" % i: "texte simple numéro %d" % i for i in range(20)})
 ES = {k: v.replace("débloque", "desbloquea").replace("é", "é") for k, v in FR.items()}
-DE = {k: v.replace("U débloque", "Schaltet").replace("*", " ") for k, v in FR.items()}  # tedesco: senza '*' ne' U
+DE = {k: v.replace("U débloque", "Schaltet").replace("*", " ") for k, v in FR.items()}  # German: without '*' or U
 
 ITALIANO = {"wood": "legno", "iron ore": "minerale di ferro", "bottled torchbug": "lucciola in bottiglia",
             "demon horn": "corno di demone", "royal steel": "acciaio reale", "golden egg": "uovo d'oro",
@@ -68,7 +68,7 @@ ITALIANO = {"wood": "legno", "iron ore": "minerale di ferro", "bottled torchbug"
 
 
 class Traduttore(backend.Backend):
-    """Traduttore finto: un piccolo dizionario, il resto "[it] ..."."""
+    """Fake translator: a small dictionary, the rest "[it] ..."."""
     nome = "dizionario"
 
     def __init__(self, ferma_dopo=None):
@@ -79,7 +79,7 @@ class Traduttore(backend.Backend):
         interruzione.controlla()
         self.chiamate += 1
         if self.ferma_dopo and self.chiamate >= self.ferma_dopo:
-            interruzione.richiedi()  # come il tasto "Ferma" premuto mentre si traduce
+            interruzione.richiedi()  # like the "Stop" button pressed while translating
         return [ITALIANO.get(r, "[it] " + r) for r in righe]
 
 
@@ -89,7 +89,7 @@ def main(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
     progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # anche i dati dell'utente qui
+    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
     automatico.CARTELLA_PROFILI = os.path.join(base, "patchsmith", "profiles")
     os.makedirs(automatico.CARTELLA_PROFILI)
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
@@ -108,7 +108,7 @@ def main(base):
     open(os.path.join(gioco, "Forager.exe"), "wb").write(b"MZ")
     prima = impronte(local)
 
-    # --- riconoscimento
+    # --- recognition
     trovati = adapter_gamemaker.file_json_lingue(gioco)
     controlla("file JSON per lingua riconosciuti", sorted(trovati.values()) == ["de", "en", "es", "fr"])
     controlla("lingua dal nome: cinese tradizionale e thai",
@@ -160,7 +160,7 @@ def main(base):
               font is not None and "ò" in font and "ì" in font
               and adapter_gamemaker.caratteri_font(gioco) == ascii_)
 
-    # --- traduzione completa (solo english.json, con backup) e ripristino
+    # --- full translation (only english.json, with backup) and restore
     automatico.crea_backend = lambda nome, log=print: Traduttore()
     percorso, completato, esito = automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
     profilo = json.load(open(percorso, encoding="utf-8"))
@@ -185,7 +185,7 @@ def main(base):
     automatico.ripristina(gioco, silenzio)
     controlla("ripristino identico", impronte(local) == prima)
 
-    # --- ricerca generica: tra file per lingua (stessa famiglia) si tiene solo la lingua originale
+    # --- generic search: among per-language files (same family) only the original language is kept
     web = os.path.join(base, "gioco web")
     testi = {"english": ["The castle is dark and the door is closed", "You have found a key in the room"],
              "french": ["Le château est sombre et la porte est fermée", "Vous avez trouvé une clé dans la salle"],
@@ -197,7 +197,7 @@ def main(base):
         for n in nomi:
             lingua_testi = "french" if cartella_rel == "lang/fr" else n if n in testi else "english"
             if cartella_rel == "nazioni":
-                lingua_testi = "english"  # nomi di lingua nel file, ma i testi sono tutti inglesi
+                lingua_testi = "english"  # language names in the file name, but the texts are all English
             with open(os.path.join(web, cartella_rel, n + ".json"), "w", encoding="utf-8") as f:
                 json.dump({"t%d" % i: t for i, t in enumerate(testi[lingua_testi] * 5)}, f, ensure_ascii=False)
 
@@ -228,14 +228,14 @@ def main(base):
               == "*gli attacchi bruciano!"
               and adapter_gamemaker.ricomponi_a_capo("your time: ", "il tuo tempo:", "*", "U") == "il tuo tempo: ")
 
-    # --- lingua ufficiale nei file JSON
+    # --- official language in the JSON files
     with open(os.path.join(local, "italian.json"), "w", encoding="utf-8") as f:
         json.dump({k: "it " + v for k, v in EN.items()}, f)
     r = lingua_ufficiale.rileva(gioco, "it", "GameMaker")
     controlla("italian.json presente -> lingua ufficiale", r["presente"] is True)
     os.remove(os.path.join(local, "italian.json"))
 
-    # --- tasto Ferma durante la traduzione: niente scritto nel gioco, traduzioni fatte salvate
+    # --- Stop button during the translation: nothing written to the game, translations made so far saved
     progetto.TESTI_PER_GRUPPO = 5
     memoria = os.path.join(base, "patchsmith", "memory")
     for f in os.listdir(memoria):
@@ -255,7 +255,7 @@ def main(base):
     automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
     controlla("dopo Ferma si riparte da dove ci si era fermati e si completa",
               json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))["itemName0"] == "legno")
-    # Ferma premuto quando la memoria e' gia' completa: non si scrive comunque nel gioco
+    # Stop pressed when the translation memory is already complete: nothing is written to the game anyway
     automatico.ripristina(gioco, silenzio)
     interruzione.richiedi()
     try:
@@ -267,7 +267,7 @@ def main(base):
     controlla("Ferma con le traduzioni gia' tutte in memoria: si ferma prima di scrivere", fermato
               and impronte(local) == prima)
 
-    # file corretto a mano dopo la traduzione (con lettere adattate ai font): non e' un aggiornamento del gioco
+    # file fixed by hand after the translation (with letters adapted to the fonts): it is not a game update
     automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
     tradotto = json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))
     tradotto["itemName6"] = "carbone fossile"
@@ -280,7 +280,8 @@ def main(base):
     automatico.ripristina(gioco, silenzio)
     controlla("... e il ripristino rimette l'inglese originale", impronte(local) == prima)
 
-    # profilo sperimentale vecchio che aveva tradotto anche french.json: sostituito, french.json torna originale
+    # old experimental game profile that had also translated french.json: replaced, french.json goes back to the
+    # original
     import shutil
     francese = os.path.join(local, "french.json")
     shutil.copyfile(francese, francese + ".orig-test")
@@ -305,7 +306,7 @@ def main(base):
     os.remove(francese + ".orig-test")
     automatico.ripristina(gioco, silenzio)
 
-    # (il comportamento di Google sul 429 e le attese interrompibili sono in test/test_limiter.py)
+    # (Google's behavior on 429 and the interruptible waits are in test/test_limiter.py)
 
     falliti = [n for n, ok in ESITI if not ok]
     print("\nRISULTATO: %d/%d controlli superati" % (len(ESITI) - len(falliti), len(ESITI)))
