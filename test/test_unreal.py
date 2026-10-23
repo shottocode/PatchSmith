@@ -12,16 +12,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from patchsmith import adapter_unreal  # noqa: E402
 
-ESITI = []
+OUTCOMES = []
 MAGIC_LOCRES = bytes.fromhex("0e147475674a03fc4a15909dc3377f1b")
 
 
-def controlla(nome, condizione):
-    ESITI.append((nome, bool(condizione)))
-    print(("OK    " if condizione else "ERRORE") + "  " + nome)
+def check(name, condition):
+    OUTCOMES.append((name, bool(condition)))
+    print(("OK    " if condition else "ERRORE") + "  " + name)
 
 
-def silenzio(_):
+def silent(_):
     pass
 
 
@@ -36,54 +36,56 @@ def fs(s):  # FString, written here independently
         return struct.pack("<i", -(len(b) // 2 + 1)) + b + b"\0\0"
 
 
-def locres_v2(voci):
+def locres_v2(entries):
     """voci: [(namespace, chiave, testo)] -> .locres version 2 with deduplicated strings."""
-    stringhe, indice = [], {}
-    per_ns = {}
-    for ns, k, t in voci:
-        if t not in indice:
-            indice[t] = len(stringhe)
-            stringhe.append([t, 0])
-        stringhe[indice[t]][1] += 1
-        per_ns.setdefault(ns, []).append((k, t))
-    corpo = struct.pack("<I", len(voci)) + struct.pack("<I", len(per_ns))
-    for ns, chiavi in per_ns.items():
-        corpo += struct.pack("<I", 0x1234) + fs(ns) + struct.pack("<I", len(chiavi))
-        for k, t in chiavi:
-            corpo += struct.pack("<I", 0x5678) + fs(k) + struct.pack("<Ii", 0x9ABC, indice[t])
-    offset = 16 + 1 + 8 + len(corpo)
-    testa = MAGIC_LOCRES + b"\x02" + struct.pack("<q", offset) + corpo
-    coda = struct.pack("<i", len(stringhe)) + b"".join(fs(t) + struct.pack("<i", rc) for t, rc in stringhe)
-    return testa + coda
+    strings, idx = [], {}
+    by_ns = {}
+    for ns, k, t in entries:
+        if t not in idx:
+            idx[t] = len(strings)
+            strings.append([t, 0])
+        strings[idx[t]][1] += 1
+        by_ns.setdefault(ns, []).append((k, t))
+    body = struct.pack("<I", len(entries)) + struct.pack("<I", len(by_ns))
+    for ns, keys in by_ns.items():
+        body += struct.pack("<I", 0x1234) + fs(ns) + struct.pack("<I", len(keys))
+        for k, t in keys:
+            body += struct.pack("<I", 0x5678) + fs(k) + struct.pack("<Ii", 0x9ABC, idx[t])
+    offset = 16 + 1 + 8 + len(body)
+    head = MAGIC_LOCRES + b"\x02" + struct.pack("<q", offset) + body
+    tail = struct.pack("<i", len(strings)) + b"".join(fs(t) + struct.pack("<i", rc) for t, rc in strings)
+    return head + tail
 
 
-def locmeta(cultura):
-    return bytes.fromhex("4fee4ca1684855836c4c46bd70da507c") + b"\x00" + fs(cultura) + fs(cultura + "/Game.locres")
+def locmeta(culture):
+    return bytes.fromhex("4fee4ca1684855836c4c46bd70da507c") + b"\x00" + fs(culture) + fs(culture + "/Game.locres")
 
 
 def pak_v9(file):
     """Uncompressed pak v9, built independently of the adapter."""
-    corpo, voci = b"", []
-    for nome, dati in file:
-        h = hashlib.sha1(dati).digest()
-        voce = lambda off, d=dati, h=h: struct.pack("<qqqI", off, len(d), len(d), 0) + h + b"\x00" + struct.pack("<I", 0)
-        voci.append((nome, len(corpo), voce))
-        corpo += voce(0) + dati
-    indice = fs("../../../") + struct.pack("<i", len(voci)) + b"".join(fs(n) + v(o) for n, o, v in voci)
-    coda = (b"\x00" * 16 + b"\x00" + struct.pack("<IIqq", 0x5A6F12E1, 9, len(corpo), len(indice))
-            + hashlib.sha1(indice).digest() + b"\x00" + b"\x00" * 160)
-    return corpo + indice + coda
+    body, entries = b"", []
+    for name, data in file:
+        h = hashlib.sha1(data).digest()
+        entry = lambda off, d=data, h=h: (struct.pack("<qqqI", off, len(d), len(d), 0) + h + b"\x00"
+                                          + struct.pack("<I", 0))
+        entries.append((name, len(body), entry))
+        body += entry(0) + data
+    idx = fs("../../../") + struct.pack("<i", len(entries)) + b"".join(fs(n) + v(o) for n, o, v in entries)
+    tail = (b"\x00" * 16 + b"\x00" + struct.pack("<IIqq", 0x5A6F12E1, 9, len(body), len(idx))
+            + hashlib.sha1(idx).digest() + b"\x00" + b"\x00" * 160)
+    return body + idx + tail
 
 
-def crea_gioco(base):
+def create_game(base):
     paks = os.path.join(base, "Proj", "Content", "Paks")
     os.makedirs(paks)
     os.makedirs(os.path.join(base, "Engine", "Binaries"))
-    voci_en = [("UI", "Start", "Start Game"), ("UI", "Quit", "Quit"), ("ST_Help", "Tip1", "Press {key} to <Bold>jump</>"),
-               ("ST_Help", "Tip2", "Can be interrupted;-;Knocks back enemies"), ("", "Num", "100"),
-               ("UI", "Start2", "Start Game")]
+    entries_en = [("UI", "Start", "Start Game"), ("UI", "Quit", "Quit"),
+                  ("ST_Help", "Tip1", "Press {key} to <Bold>jump</>"),
+                  ("ST_Help", "Tip2", "Can be interrupted;-;Knocks back enemies"), ("", "Num", "100"),
+                  ("UI", "Start2", "Start Game")]
     file = [("Proj/Content/Localization/Game/Game.locmeta", locmeta("en")),
-            ("Proj/Content/Localization/Game/en/Game.locres", locres_v2(voci_en)),
+            ("Proj/Content/Localization/Game/en/Game.locres", locres_v2(entries_en)),
             ("Proj/Content/Localization/Game/de/Game.locres", locres_v2([("UI", "Start", "Spiel starten")])),
             ("Proj/Content/Maps/Level.umap", b"mappa" * 100)]
     open(os.path.join(paks, "Proj-WindowsNoEditor.pak"), "wb").write(pak_v9(file))
@@ -94,125 +96,131 @@ def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
-    adapter_unreal.gioco_aperto = lambda c: False
-    gioco = os.path.join(base, "gioco")
-    paks = crea_gioco(gioco)
-    prima = sorted(os.listdir(paks)) + sorted(os.listdir(gioco))
+    adapter_unreal.game_open = lambda c: False
+    game = os.path.join(base, "gioco")
+    paks = create_game(game)
+    before = sorted(os.listdir(paks)) + sorted(os.listdir(game))
 
-    info = adapter_unreal.analizza(gioco)
-    controlla("analisi: un pak v9, nessun problema", info["versioni"] == [9] and not info["problemi"])
-    sorgenti = adapter_unreal.trova_locres(gioco)
-    controlla("trova solo il .locres della lingua originale (en)", [s[1] for s in sorgenti]
+    info = adapter_unreal.analyze(game)
+    check("analisi: un pak v9, nessun problema", info["versioni"] == [9] and not info["problemi"])
+    sources = adapter_unreal.find_locres(game)
+    check("trova solo il .locres della lingua originale (en)", [s[1] for s in sources]
               == ["Proj/Content/Localization/Game/en/Game.locres"])
-    _, testi, cultura = adapter_unreal.testi_da_tradurre(gioco, silenzio)
-    controlla("testi da tradurre e lingua dal .locmeta", cultura == "en" and "Start Game" in testi and "100" not in testi)
+    _, texts, culture = adapter_unreal.texts_to_translate(game, silent)
+    check("testi da tradurre e lingua dal .locmeta", culture == "en" and "Start Game" in texts and "100" not in texts)
 
-    originale = sorgenti[0][0].leggi(sorgenti[0][1])
-    info_locres = adapter_unreal.leggi_locres(originale)
-    controlla("round-trip .locres identico", adapter_unreal.scrivi_locres(info_locres, [s for s, _ in info_locres["stringhe"]]) == originale)
+    original = sources[0][0].read_file(sources[0][1])
+    locres_info = adapter_unreal.read_locres(original)
+    check("round-trip .locres identico",
+          adapter_unreal.write_locres(locres_info, [s for s, _ in locres_info["stringhe"]]) == original)
 
-    memoria = {"Start Game": "Inizia partita", "Quit": "Esci", "Press {key} to <Bold>jump</>": "Premi {key} per <Bold>saltare</>",
-               "Can be interrupted;-;Knocks back enemies": "Può essere interrotto;-;Respinge i nemici"}
-    n = adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
-    nuovo_pak = os.path.join(paks, adapter_unreal.nome_pak("it"))
-    controlla("pak di patch scritto (4 frasi tradotte)", n == 4 and os.path.exists(nuovo_pak))
-    letto = adapter_unreal.Pak(nuovo_pak)
-    tradotto = adapter_unreal.leggi_locres(letto.leggi("Proj/Content/Localization/Game/en/Game.locres"))
-    testi_trad = [s for s, _ in tradotto["stringhe"]]
-    controlla("locres tradotto: chiavi e intestazione identiche", tradotto["chiavi"] == info_locres["chiavi"]
-              and tradotto["testa"] == info_locres["testa"])
-    controlla("locres tradotto: testi, segnaposto e accenti", "Inizia partita" in testi_trad and "100" in testi_trad
-              and "Premi {key} per <Bold>saltare</>" in testi_trad and "Può essere interrotto;-;Respinge i nemici" in testi_trad)
-    controlla("pak originale non toccato", sorted(os.listdir(paks)) == sorted(prima[:1] + [adapter_unreal.nome_pak("it")]))
+    memory = {"Start Game": "Inizia partita", "Quit": "Esci",
+              "Press {key} to <Bold>jump</>": "Premi {key} per <Bold>saltare</>",
+              "Can be interrupted;-;Knocks back enemies": "Può essere interrotto;-;Respinge i nemici"}
+    n = adapter_unreal.install(game, "it", "prova", memory, silent)
+    new_pak = os.path.join(paks, adapter_unreal.pak_name("it"))
+    check("pak di patch scritto (4 frasi tradotte)", n == 4 and os.path.exists(new_pak))
+    was_read = adapter_unreal.Pak(new_pak)
+    translated = adapter_unreal.read_locres(was_read.read_file("Proj/Content/Localization/Game/en/Game.locres"))
+    translated_texts = [s for s, _ in translated["stringhe"]]
+    check("locres tradotto: chiavi e intestazione identiche", translated["chiavi"] == locres_info["chiavi"]
+              and translated["testa"] == locres_info["testa"])
+    check("locres tradotto: testi, segnaposto e accenti", "Inizia partita" in translated_texts
+              and "100" in translated_texts and "Premi {key} per <Bold>saltare</>" in translated_texts
+              and "Può essere interrotto;-;Respinge i nemici" in translated_texts)
+    check("pak originale non toccato", sorted(os.listdir(paks)) == sorted(before[:1] + [adapter_unreal.pak_name("it")]))
 
-    righe = []
-    adapter_unreal.stato(gioco, righe.append)
-    controlla("stato: pak presente e integro", any(r.strip().startswith("OK") for r in righe))
-    controlla("punteggiatura tipografica nuova -> ASCII, caratteri che troncano -> scartata",
-              adapter_unreal._adatta("L’arma…", set()) == "L'arma..."
-              and adapter_unreal._adatta("L’arma", {"’"}) == "L’arma"
-              and adapter_unreal._adatta("a\x00b", set()) is None and adapter_unreal._adatta("a￿b", set()) is None)
+    lines = []
+    adapter_unreal.state(game, lines.append)
+    check("stato: pak presente e integro", any(r.strip().startswith("OK") for r in lines))
+    check("punteggiatura tipografica nuova -> ASCII, caratteri che troncano -> scartata",
+              adapter_unreal._adapt("L’arma…", set()) == "L'arma..."
+              and adapter_unreal._adapt("L’arma", {"’"}) == "L’arma"
+              and adapter_unreal._adapt("a\x00b", set()) is None and adapter_unreal._adapt("a￿b", set()) is None)
 
     # language change: the old pak is replaced
-    adapter_unreal.installa(gioco, "es", "prova", {"Start Game": "Iniciar"}, silenzio)
-    controlla("cambio lingua: pak it tolto, pak es scritto", os.path.exists(os.path.join(paks, adapter_unreal.nome_pak("es")))
-              and not os.path.exists(nuovo_pak))
+    adapter_unreal.install(game, "es", "prova", {"Start Game": "Iniciar"}, silent)
+    check("cambio lingua: pak it tolto, pak es scritto",
+          os.path.exists(os.path.join(paks, adapter_unreal.pak_name("es"))) and not os.path.exists(new_pak))
 
     # uninstall: everything as before
-    adapter_unreal.disinstalla(gioco, silenzio)
-    controlla("disinstalla: cartelle identiche a prima", sorted(os.listdir(paks)) + sorted(os.listdir(gioco)) == prima)
+    adapter_unreal.uninstall(game, silent)
+    check("disinstalla: cartelle identiche a prima", sorted(os.listdir(paks)) + sorted(os.listdir(game)) == before)
 
     # pak with the same name not created by us: not overwritten
-    open(nuovo_pak, "wb").write(b"di qualcun altro")
+    open(new_pak, "wb").write(b"di qualcun altro")
     try:
-        adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
-        controlla("pak altrui: non sovrascritto", False)
-    except adapter_unreal.ErroreUnreal:
-        controlla("pak altrui: non sovrascritto", open(nuovo_pak, "rb").read() == b"di qualcun altro")
-    os.remove(nuovo_pak)
+        adapter_unreal.install(game, "it", "prova", memory, silent)
+        check("pak altrui: non sovrascritto", False)
+    except adapter_unreal.UnrealError:
+        check("pak altrui: non sovrascritto", open(new_pak, "rb").read() == b"di qualcun altro")
+    os.remove(new_pak)
 
     # pak changed by others after the install: left in place
-    adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
+    adapter_unreal.install(game, "it", "prova", memory, silent)
     from patchsmith import __version__
-    controlla("manifesto con la versione di PatchSmith (per il controllo dopo aver giocato)",
-              adapter_unreal.leggi_manifesto(gioco).get("patchsmith_versione") == __version__)
-    open(nuovo_pak, "ab").write(b"x")
-    adapter_unreal.disinstalla(gioco, silenzio)
-    controlla("pak modificato da altri: lasciato", os.path.exists(nuovo_pak))
-    os.remove(nuovo_pak)
+    check("manifesto con la versione di PatchSmith (per il controllo dopo aver giocato)",
+              adapter_unreal.read_manifest(game).get("patchsmith_versione") == __version__)
+    open(new_pak, "ab").write(b"x")
+    adapter_unreal.uninstall(game, silent)
+    check("pak modificato da altri: lasciato", os.path.exists(new_pak))
+    os.remove(new_pak)
 
     # tampered manifest: nothing deleted
-    falso = {"patchsmith": True, "file": {"Proj/Content/Paks/Proj-WindowsNoEditor.pak": "0" * 64}}
-    open(os.path.join(gioco, adapter_unreal.MANIFESTO), "w").write(json.dumps(falso))
+    forged = {"patchsmith": True, "file": {"Proj/Content/Paks/Proj-WindowsNoEditor.pak": "0" * 64}}
+    open(os.path.join(game, adapter_unreal.MANIFEST), "w").write(json.dumps(forged))
     try:
-        adapter_unreal.disinstalla(gioco, silenzio)
-        controlla("manifesto alterato: rifiutato", False)
-    except adapter_unreal.ErroreUnreal:
-        controlla("manifesto alterato: pak originale intatto", os.path.exists(os.path.join(paks, "Proj-WindowsNoEditor.pak")))
-    os.remove(os.path.join(gioco, adapter_unreal.MANIFESTO))
+        adapter_unreal.uninstall(game, silent)
+        check("manifesto alterato: rifiutato", False)
+    except adapter_unreal.UnrealError:
+        check("manifesto alterato: pak originale intatto",
+              os.path.exists(os.path.join(paks, "Proj-WindowsNoEditor.pak")))
+    os.remove(os.path.join(game, adapter_unreal.MANIFEST))
 
     # install interrupted after the manifest and before putting the pak in place: everything is restored
-    adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
-    vero_replace = os.replace
+    adapter_unreal.install(game, "it", "prova", memory, silent)
+    real_replace = os.replace
 
-    def replace_interrotto(a, b):
+    def replace_interrupted(a, b):
         if b.endswith(".pak"):
             raise KeyboardInterrupt
-        return vero_replace(a, b)
+        return real_replace(a, b)
 
-    adapter_unreal.os.replace = replace_interrotto
+    adapter_unreal.os.replace = replace_interrupted
     try:
-        adapter_unreal.installa(gioco, "it", "prova", dict(memoria, Quit="Abbandona"), silenzio)
+        adapter_unreal.install(game, "it", "prova", dict(memory, Quit="Abbandona"), silent)
     except KeyboardInterrupt:
         pass
     finally:
-        adapter_unreal.os.replace = vero_replace
-    adapter_unreal.disinstalla(gioco, silenzio)
-    controlla("installazione interrotta: il ripristino toglie tutto", sorted(os.listdir(paks)) + sorted(os.listdir(gioco)) == prima)
+        adapter_unreal.os.replace = real_replace
+    adapter_unreal.uninstall(game, silent)
+    check("installazione interrotta: il ripristino toglie tutto",
+          sorted(os.listdir(paks)) + sorted(os.listdir(game)) == before)
 
     # signed paks (.sig): refused
     sig = os.path.join(paks, "Proj-WindowsNoEditor.sig")
     open(sig, "wb").write(b"firma")
     try:
-        adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
-        controlla("pak firmati: rifiutato", False)
-    except adapter_unreal.ErroreUnreal:
-        controlla("pak firmati: rifiutato", not os.path.exists(nuovo_pak))
+        adapter_unreal.install(game, "it", "prova", memory, silent)
+        check("pak firmati: rifiutato", False)
+    except adapter_unreal.UnrealError:
+        check("pak firmati: rifiutato", not os.path.exists(new_pak))
     os.remove(sig)
 
     # game update: the status reports it
-    adapter_unreal.installa(gioco, "it", "prova", memoria, silenzio)
+    adapter_unreal.install(game, "it", "prova", memory, silent)
     open(os.path.join(paks, "Proj-WindowsNoEditor.pak"), "wb").write(pak_v9([
         ("Proj/Content/Localization/Game/Game.locmeta", locmeta("en")),
-        ("Proj/Content/Localization/Game/en/Game.locres", locres_v2([("UI", "Start", "Start Game"), ("UI", "New", "New Quest")]))]))
-    righe = []
-    adapter_unreal.stato(gioco, righe.append)
-    controlla("gioco aggiornato: segnalato", any("aggiornato" in r for r in righe))
-    adapter_unreal.disinstalla(gioco, silenzio)
+        ("Proj/Content/Localization/Game/en/Game.locres",
+         locres_v2([("UI", "Start", "Start Game"), ("UI", "New", "New Quest")]))]))
+    lines = []
+    adapter_unreal.state(game, lines.append)
+    check("gioco aggiornato: segnalato", any("aggiornato" in r for r in lines))
+    adapter_unreal.uninstall(game, silent)
 
-    falliti = [n for n, ok in ESITI if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(ESITI) - len(falliti), len(ESITI)))
-    return not falliti
+    failed = [n for n, ok in OUTCOMES if not ok]
+    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    return not failed
 
 
 if __name__ == "__main__":

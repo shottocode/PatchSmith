@@ -9,23 +9,23 @@ import os
 import re
 import struct
 
-try:  # regex tree (internal module of Python 3.11): only needed by the _indice prefilter
-    from re import _parser as _albero_re
+try:  # regex tree (internal module of Python 3.11): only needed by the _index prefilter
+    from re import _parser as _re_parser
     from re._constants import AT, AT_END, BRANCH, LITERAL, SUBPATTERN
 except ImportError:
-    _albero_re = None
+    _re_parser = None
 
-CARTELLA_DATI = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-SEZIONI = ("Engine", "Container", "SDK", "AntiCheat", "Launcher", "Emulator", "Evidence")
-PESI = {"Engine": 3, "Container": 3, "SDK": 1, "AntiCheat": 1, "Launcher": 1, "Emulator": 3, "Evidence": 1}
+DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+SECTIONS = ("Engine", "Container", "SDK", "AntiCheat", "Launcher", "Emulator", "Evidence")
+WEIGHTS = {"Engine": 3, "Container": 3, "SDK": 1, "AntiCheat": 1, "Launcher": 1, "Emulator": 3, "Evidence": 1}
 MAX_FILE = 200_000
-MAX_PUNTI_REGOLE = 15  # cap on the points given by the name rules for each entry
-LUNGHEZZA_CHIAVE = 12  # maximum number of final characters used as a key by the suffix prefilter
+MAX_RULE_POINTS = 15  # cap on the points given by the name rules for each entry
+KEY_LENGTH = 12  # maximum number of final characters used as a key by the suffix prefilter
 # Dependency installers included in some copies of the game: they say nothing about the engine.
-CARTELLE_IGNORATE = {"_redist", "_commonredist", "redist", "redistributables", "directx", "vcredist"}
+IGNORED_FOLDERS = {"_redist", "_commonredist", "redist", "redistributables", "directx", "vcredist"}
 
 # Recommended route per engine (state of Phase 0).
-CONSIGLI = {
+ADVICE = {
     "Web": "Supportato ora: adapter web-json (comandi scan e translate).",
     "Electron": "Supportato ora: adapter web-json (comandi scan e translate).",
     "GemShell": "Testi e codice in un archivio cifrato (GemShell): PatchSmith non forza le protezioni degli sviluppatori, "
@@ -52,7 +52,7 @@ CONSIGLI = {
 }
 
 # Signatures in the first bytes: (regex on the path, signature, engine, description)
-FIRME = [
+SIGNATURES = [
     (r"\.pck$", b"GDPC", "Godot", "archivio .pck Godot (GDPC)"),
     (r"(?:^|/)(?:data\.win|game\.unx|game\.ios)$", b"FORM", "GameMaker", "data.win GameMaker (FORM)"),
     (r"\.xp3$", b"XP3\r\n", "KiriKiri", "archivio .xp3 KiriKiri"),
@@ -61,7 +61,7 @@ FIRME = [
     (r"\.utoc$", b"-==--==--==--==-", "Unreal", "IoStore .utoc Unreal"),
 ]
 
-FRAMEWORK_WEB = [
+WEB_FRAMEWORKS = [
     ("Angular", re.compile(r"(?:^|/)polyfills[-.][\w-]*\.js$|(?:^|/)main[-.][A-Z0-9]{6,}\.js$"), b"ng-version|\xc9\xb5\xc9\xb5|@angular"),
     ("React", None, b"react-dom|__REACT_DEVTOOLS"),
     ("Vue", None, b"__VUE__|vue.runtime"),
@@ -73,340 +73,342 @@ FRAMEWORK_WEB = [
 ]
 
 
-def carica_regole(percorso=None):
-    percorso = percorso or os.path.join(CARTELLA_DATI, "rules.ini")
-    regole = {s: [] for s in SEZIONI}
-    sezione = None
-    riga_re = re.compile(r"^([^=\[;]+?)(?:\[\])?\s*=\s*(.+?)(?:\s+;.*)?$")
-    with open(percorso, encoding="utf-8") as f:
-        for riga in f:
-            riga = riga.strip()
-            if not riga or riga.startswith(";"):
+def load_rules(path=None):
+    path = path or os.path.join(DATA_FOLDER, "rules.ini")
+    rules = {s: [] for s in SECTIONS}
+    section = None
+    line_re = re.compile(r"^([^=\[;]+?)(?:\[\])?\s*=\s*(.+?)(?:\s+;.*)?$")
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith(";"):
                 continue
-            if riga.startswith("[") and riga.endswith("]"):
-                sezione = riga[1:-1]
+            if line.startswith("[") and line.endswith("]"):
+                section = line[1:-1]
                 continue
-            m = riga_re.match(riga)
-            if not m or sezione not in regole:
+            m = line_re.match(line)
+            if not m or section not in rules:
                 continue
             try:
-                regole[sezione].append((m.group(1).strip(), re.compile(m.group(2), re.I)))
+                rules[section].append((m.group(1).strip(), re.compile(m.group(2), re.I)))
             except re.error:
                 pass  # PCRE rule not supported by Python: skip it
-    return regole
+    return rules
 
 
-def _sequenze(albero, limite=256):
+def _sequences(tree, limit=256):
     """Expands alternatives and simple groups: each sequence is a possible path of a match."""
-    sequenze = [[]]
-    for op, av in albero:
+    sequences = [[]]
+    for op, av in tree:
         if op == BRANCH:
-            varianti = [s for ramo in av[1] for s in _sequenze(ramo, limite)]
+            variants = [s for branch in av[1] for s in _sequences(branch, limit)]
         elif op == SUBPATTERN and not av[1] and not av[2]:  # group without its own flags
-            varianti = _sequenze(av[3], limite)
+            variants = _sequences(av[3], limit)
         else:
-            varianti = [[(op, av)]]  # opaque element: quantifiers, classes, anchors, lookarounds...
-        sequenze = [s + v for s in sequenze for v in varianti]
-        if len(sequenze) > limite:
+            variants = [[(op, av)]]  # opaque element: quantifiers, classes, anchors, lookarounds...
+        sequences = [s + v for s in sequences for v in variants]
+        if len(sequences) > limit:
             raise ValueError("troppe alternative")
-    return sequenze
+    return sequences
 
 
-def _chiavi(rx):
+def _keys(rx):
     """Necessary conditions for rx.search() to find something in an ASCII path without newlines.
 
     Set of pairs ("fine", s) / ("contiene", s), with s in lowercase: if the regex finds something,
     at least one is true for the lowercased path. None if they cannot be deduced: a regex to always try.
     """
-    if _albero_re is None or rx.flags & re.MULTILINE:
+    if _re_parser is None or rx.flags & re.MULTILINE:
         return None
     try:
-        sequenze = _sequenze(_albero_re.parse(rx.pattern, rx.flags))
+        sequences = _sequences(_re_parser.parse(rx.pattern, rx.flags))
     except (re.error, ValueError, RecursionError):
         return None
-    chiavi = set()
-    for seq in sequenze:
+    keys = set()
+    for seq in sequences:
         if seq and seq[-1] == (AT, AT_END):  # ends with $: the literal right before it counts
-            coda = ""
+            tail = ""
             for op, av in reversed(seq[:-1]):
                 if op != LITERAL or av > 127:
                     break
-                coda = chr(av).lower() + coda
-            if coda:
-                chiavi.add(("fine", coda[-LUNGHEZZA_CHIAVE:]))
+                tail = chr(av).lower() + tail
+            if tail:
+                keys.add(("fine", tail[-KEY_LENGTH:]))
                 continue
-        tratto = migliore = ""  # otherwise the longest literal stretch
+        stretch = best = ""  # otherwise the longest literal stretch
         for op, av in seq:
-            tratto = tratto + chr(av).lower() if op == LITERAL and av <= 127 else ""
-            migliore = max(migliore, tratto, key=len)
-        if not migliore:
+            stretch = stretch + chr(av).lower() if op == LITERAL and av <= 127 else ""
+            best = max(best, stretch, key=len)
+        if not best:
             return None
-        chiavi.add(("contiene", migliore))
+        keys.add(("contiene", best))
     # The weakest condition is enough: "fine x.dll" makes "fine /x.dll" redundant.
-    return {a for a in chiavi if not any(b != a and _implica(a, b) for b in chiavi)}
+    return {a for a in keys if not any(b != a and _implies(a, b) for b in keys)}
 
 
-def _implica(a, b):
+def _implies(a, b):
     """True if every path that satisfies key a also satisfies key b."""
-    (tipo_a, testo_a), (tipo_b, testo_b) = a, b
-    if tipo_b == "fine":
-        return tipo_a == "fine" and testo_a.endswith(testo_b)
-    return testo_b in testo_a
+    (kind_a, text_a), (kind_b, text_b) = a, b
+    if kind_b == "fine":
+        return kind_a == "fine" and text_a.endswith(text_b)
+    return text_b in text_a
 
 
-def _indice(espressioni):
+def _index(expressions):
     """Prefilter to try many regexes on many paths without calling all of them on each one.
 
     Returns a function that, given a path, lists in ascending order the indexes of the regexes
     that might find something in it (the others surely not): they must then be verified with search().
     """
-    per_fine, per_contenuto, sempre = {}, {}, []
-    for i, rx in enumerate(espressioni):
-        chiavi = _chiavi(rx)
-        if chiavi is None:
-            sempre.append(i)
+    by_ending, by_content, always = {}, {}, []
+    for i, rx in enumerate(expressions):
+        keys = _keys(rx)
+        if keys is None:
+            always.append(i)
             continue
-        for tipo, testo in chiavi:
-            (per_fine if tipo == "fine" else per_contenuto).setdefault(testo, []).append(i)
-    lunghezze = sorted({len(t) for t in per_fine})
-    contenuti = list(per_contenuto.items())
-    filtro = re.compile("|".join(map(re.escape, per_contenuto))) if per_contenuto else None
-    tutte = list(range(len(espressioni)))
+        for kind, text in keys:
+            (by_ending if kind == "fine" else by_content).setdefault(text, []).append(i)
+    lengths = sorted({len(t) for t in by_ending})
+    contents = list(by_content.items())
+    filter_ = re.compile("|".join(map(re.escape, by_content))) if by_content else None
+    all_items = list(range(len(expressions)))
 
-    def candidate(percorso):
+    def candidates_for(path):
         # The keys hold for ASCII upper/lower case and with $ only at the end of the string: in the
         # other (very rare) cases all regexes are tried.
-        if not percorso.isascii() or "\n" in percorso:
-            return tutte
-        p = percorso.lower()
-        trovate = list(sempre)
-        for n in lunghezze:
-            trovate += per_fine.get(p[-n:], ())
-        if filtro and filtro.search(p):
-            for testo, indici in contenuti:
-                if testo in p:
-                    trovate += indici
-        return sorted(set(trovate))
+        if not path.isascii() or "\n" in path:
+            return all_items
+        p = path.lower()
+        matches = list(always)
+        for n in lengths:
+            matches += by_ending.get(p[-n:], ())
+        if filter_ and filter_.search(p):
+            for text, indices in contents:
+                if text in p:
+                    matches += indices
+        return sorted(set(matches))
 
-    return candidate
+    return candidates_for
 
 
-def _filtra(espressioni, elenco):
+def _filter(expressions, items):
     """For each regex, the paths of elenco (in the same order) in which search() finds something."""
-    candidate = _indice(espressioni)
-    trovati = [[] for _ in espressioni]
-    for percorso in elenco:
-        for i in candidate(percorso):
-            if espressioni[i].search(percorso):
-                trovati[i].append(percorso)
-    return trovati
+    candidates_for = _index(expressions)
+    found = [[] for _ in expressions]
+    for path in items:
+        for i in candidates_for(path):
+            if expressions[i].search(path):
+                found[i].append(path)
+    return found
 
 
-def elenca_file(cartella):
+def list_files(folder):
     """Relative paths with / as separator."""
-    elenco = []
-    for radice, dirs, files in os.walk(cartella):
-        dirs[:] = sorted(d for d in dirs if d.lower() not in CARTELLE_IGNORATE)
-        rel = os.path.relpath(radice, cartella).replace(os.sep, "/")
-        prefisso = "" if rel == "." else rel + "/"
+    items = []
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = sorted(d for d in dirs if d.lower() not in IGNORED_FOLDERS)
+        rel = os.path.relpath(root, folder).replace(os.sep, "/")
+        prefix = "" if rel == "." else rel + "/"
         for d in dirs:
-            elenco.append(prefisso + d + "/")
+            items.append(prefix + d + "/")
         for f in files:
-            elenco.append(prefisso + f)
-            if len(elenco) >= MAX_FILE:
-                return elenco, True
-    return elenco, False
+            items.append(prefix + f)
+            if len(items) >= MAX_FILE:
+                return items, True
+    return items, False
 
 
-def _leggi_inizio(percorso, n=16):
+def _read_start(path, n=16):
     try:
-        with open(percorso, "rb") as f:
+        with open(path, "rb") as f:
             return f.read(n)
     except OSError:
         return b""
 
 
-def _leggi_fine(percorso, n=4):
+def _read_end(path, n=4):
     try:
-        with open(percorso, "rb") as f:
+        with open(path, "rb") as f:
             f.seek(0, 2)
-            dimensione = f.tell()
-            if dimensione < n:
+            size = f.tell()
+            if size < n:
                 return b""
-            f.seek(dimensione - n)
+            f.seek(size - n)
             return f.read(n)
     except OSError:
         return b""
 
 
-def voci_asar(percorso):
+def asar_entries(path):
     """List of the files contained in an Electron .asar archive (header only)."""
     try:
-        with open(percorso, "rb") as f:
-            testa = f.read(16)
-            dimensione = struct.unpack("<I", testa[12:16])[0]
-            intestazione = json.loads(f.read(dimensione).decode("utf-8"))
+        with open(path, "rb") as f:
+            head = f.read(16)
+            size = struct.unpack("<I", head[12:16])[0]
+            header = json.loads(f.read(size).decode("utf-8"))
     except (OSError, ValueError, struct.error, UnicodeDecodeError):
         return []
-    voci = []
+    entries = []
 
-    def _visita(nodo, prefisso):
-        for nome, figlio in nodo.get("files", {}).items():
-            if "files" in figlio:
-                _visita(figlio, prefisso + nome + "/")
+    def _visit(tree_node, prefix):
+        for name, child in tree_node.get("files", {}).items():
+            if "files" in child:
+                _visit(child, prefix + name + "/")
             else:
-                voci.append(prefisso + nome)
+                entries.append(prefix + name)
 
-    _visita(intestazione, "")
-    return voci
+    _visit(header, "")
+    return entries
 
 
-def _framework_web(cartella, elenco):
+def _web_framework(folder, items):
     """Recognizes the web frameworks in the folders that contain index.html (also inside .asar)."""
-    trovati = {}
-    radici = [p for p in elenco if p.lower().endswith("index.html") and "node_modules/" not in p]
-    for asar in (p for p in elenco if p.lower().endswith(".asar")):
-        for v in voci_asar(os.path.join(cartella, asar)):
+    found = {}
+    roots = [p for p in items if p.lower().endswith("index.html") and "node_modules/" not in p]
+    for asar in (p for p in items if p.lower().endswith(".asar")):
+        for v in asar_entries(os.path.join(folder, asar)):
             if v.lower().endswith("index.html") and "node_modules/" not in v:
-                radici.append(asar + "!/" + v)
-    per_file = iter(_filtra([re_file for _, re_file, _ in FRAMEWORK_WEB if re_file], elenco))
-    for nome, re_file, firma_contenuto in FRAMEWORK_WEB:
-        prove = [p for p in next(per_file) if "node_modules/" not in p] if re_file else []
-        if not prove and firma_contenuto:
-            firma = re.compile(firma_contenuto)
-            for p in elenco:
+                roots.append(asar + "!/" + v)
+    by_file = iter(_filter([file_re for _, file_re, _ in WEB_FRAMEWORKS if file_re], items))
+    for name, file_re, content_signature in WEB_FRAMEWORKS:
+        evidence = [p for p in next(by_file) if "node_modules/" not in p] if file_re else []
+        if not evidence and content_signature:
+            signature = re.compile(content_signature)
+            for p in items:
                 if not p.lower().endswith(".js") or "node_modules/" in p:
                     continue
                 try:
-                    if os.path.getsize(os.path.join(cartella, p)) > 8_000_000:
+                    if os.path.getsize(os.path.join(folder, p)) > 8_000_000:
                         continue
-                    with open(os.path.join(cartella, p), "rb") as f:
-                        if firma.search(f.read()):
-                            prove.append(p)
+                    with open(os.path.join(folder, p), "rb") as f:
+                        if signature.search(f.read()):
+                            evidence.append(p)
                             break
                 except OSError:
                     continue
-        if prove:
-            trovati[nome] = prove[:3]
-    return radici, trovati
+        if evidence:
+            found[name] = evidence[:3]
+    return roots, found
 
 
-def rileva(cartella):
+def detect(folder):
     """Returns a dictionary with results, web frameworks, web roots and recommendations."""
-    regole = carica_regole()
-    elenco, troncato = elenca_file(cartella)
-    risultati = {}  # (sezione, nome) -> {"punteggio", "evidenze"}
+    rules = load_rules()
+    items, truncated = list_files(folder)
+    results = {}  # (sezione, nome) -> {"punteggio", "evidenze"}
 
-    def _aggiungi(sezione, nome, evidenza, peso, da_regola=False):
-        r = risultati.setdefault((sezione, nome), {"punteggio": 0, "evidenze": [], "da_regole": 0})
-        if da_regola:
-            peso = max(0, min(peso, MAX_PUNTI_REGOLE - r["da_regole"]))
-            r["da_regole"] += peso
-        r["punteggio"] += peso
-        if len(r["evidenze"]) < 4 and evidenza not in r["evidenze"]:
-            r["evidenze"].append(evidenza)
+    def _add(section, name, evidence, weight, from_rule=False):
+        r = results.setdefault((section, name), {"punteggio": 0, "evidenze": [], "da_regole": 0})
+        if from_rule:
+            weight = max(0, min(weight, MAX_RULE_POINTS - r["da_regole"]))
+            r["da_regole"] += weight
+        r["punteggio"] += weight
+        if len(r["evidenze"]) < 4 and evidence not in r["evidenze"]:
+            r["evidenze"].append(evidence)
 
-    tutte = [(s, n, rx) for s in SEZIONI for n, rx in regole[s]]
-    candidate = _indice([rx for _, _, rx in tutte])
-    for percorso in elenco:
-        for i in candidate(percorso):  # same (path, rule) order as comparing with all of them
-            sezione, nome, rx = tutte[i]
-            if rx.search(percorso):
-                _aggiungi(sezione, nome, percorso, PESI[sezione], da_regola=True)
+    all_items = [(s, n, rx) for s in SECTIONS for n, rx in rules[s]]
+    candidates_for = _index([rx for _, _, rx in all_items])
+    for path in items:
+        for i in candidates_for(path):  # same (path, rule) order as comparing with all of them
+            section, name, rx = all_items[i]
+            if rx.search(path):
+                _add(section, name, path, WEIGHTS[section], from_rule=True)
 
-    per_firma = _filtra([re.compile(re_percorso, re.I) for re_percorso, _, _, _ in FIRME], elenco)
-    for (_, firma, motore, descrizione), percorsi in zip(FIRME, per_firma):
-        for percorso in percorsi:
-            if _leggi_inizio(os.path.join(cartella, percorso)).startswith(firma):
-                _aggiungi("Engine", motore, "%s: %s" % (descrizione, percorso), 10)
+    by_signature = _filter([re.compile(path_re, re.I) for path_re, _, _, _ in SIGNATURES], items)
+    for (_, signature, engine, description), paths in zip(SIGNATURES, by_signature):
+        for path in paths:
+            if _read_start(os.path.join(folder, path)).startswith(signature):
+                _add("Engine", engine, "%s: %s" % (description, path), 10)
                 break
 
     # Godot with the data package embedded in the executable ("embed pck" export): "GDPC" at the end
-    for percorso in elenco:
-        if percorso.lower().endswith(".exe") and percorso.count("/") <= 1 and                 _leggi_fine(os.path.join(cartella, percorso)) == b"GDPC":
-            _aggiungi("Engine", "Godot", "%s (pacchetto dei dati incorporato)" % percorso, 10)
+    for path in items:
+        if (path.lower().endswith(".exe") and path.count("/") <= 1
+                and _read_end(os.path.join(folder, path)) == b"GDPC"):
+            _add("Engine", "Godot", "%s (pacchetto dei dati incorporato)" % path, 10)
             break
 
     # Unity: Mono or IL2CPP
-    if any(p.lower().endswith("gameassembly.dll") for p in elenco):
-        _aggiungi("SDK", "UnityIL2CPP", "GameAssembly.dll", 5)
-    if any(p.lower().endswith("managed/assembly-csharp.dll") for p in elenco):
-        _aggiungi("SDK", "UnityMono", "Managed/Assembly-CSharp.dll", 5)
+    if any(p.lower().endswith("gameassembly.dll") for p in items):
+        _add("SDK", "UnityIL2CPP", "GameAssembly.dll", 5)
+    if any(p.lower().endswith("managed/assembly-csharp.dll") for p in items):
+        _add("SDK", "UnityMono", "Managed/Assembly-CSharp.dll", 5)
 
     # Electron even without LICENSE.electron.txt (often removed): the Chromium files next to resources/app
-    minuscoli = {p.lower() for p in elenco}
-    if any(p.endswith("chrome_100_percent.pak") for p in minuscoli) and \
-            any(p.endswith("v8_context_snapshot.bin") or p.endswith("snapshot_blob.bin") for p in minuscoli) and \
-            any("resources/app" in p for p in minuscoli):
-        _aggiungi("Container", "Electron", "file di Chromium e resources/app", 10)
+    lowercase = {p.lower() for p in items}
+    if any(p.endswith("chrome_100_percent.pak") for p in lowercase) and \
+            any(p.endswith("v8_context_snapshot.bin") or p.endswith("snapshot_blob.bin") for p in lowercase) and \
+            any("resources/app" in p for p in lowercase):
+        _add("Container", "Electron", "file di Chromium e resources/app", 10)
     # encrypted archives: the texts cannot be read without removing a developers' protection (we do not do that)
-    for p in elenco:
+    for p in items:
         if p.lower().endswith("resources/app/gemshell-assets"):
-            _aggiungi("Container", "GemShell", "%s (cifrato)" % p, 10)
+            _add("Container", "GemShell", "%s (cifrato)" % p, 10)
 
-    radici_web, framework = _framework_web(cartella, elenco)
-    if radici_web:
-        _aggiungi("Engine", "Web", "index.html: %s" % radici_web[0], 4 + len(framework))
+    web_roots, framework = _web_framework(folder, items)
+    if web_roots:
+        _add("Engine", "Web", "index.html: %s" % web_roots[0], 4 + len(framework))
 
-    ordine_sezioni = {s: i for i, s in enumerate(("Engine", "Container", "Emulator", "AntiCheat", "SDK", "Launcher", "Evidence"))}
-    ordinati = sorted(
+    section_order = {s: i for i, s in enumerate(("Engine", "Container", "Emulator", "AntiCheat", "SDK", "Launcher",
+                                                 "Evidence"))}
+    ordered = sorted(
         ({"sezione": s, "nome": n, "punteggio": v["punteggio"], "evidenze": v["evidenze"]}
-         for (s, n), v in risultati.items()),
-        key=lambda r: (ordine_sezioni.get(r["sezione"], 9), -r["punteggio"], r["nome"]),
+         for (s, n), v in results.items()),
+        key=lambda r: (section_order.get(r["sezione"], 9), -r["punteggio"], r["nome"]),
     )
-    motori = [r for r in ordinati if r["sezione"] in ("Engine", "Container", "Emulator")]
-    migliore = max((r["punteggio"] for r in motori), default=0)
-    consigli = []
-    for r in motori:  # recommendations only for engines with at least half of the best score
-        if r["punteggio"] * 2 >= migliore and r["nome"] in CONSIGLI and CONSIGLI[r["nome"]] not in consigli:
-            consigli.append(CONSIGLI[r["nome"]])
+    engines = [r for r in ordered if r["sezione"] in ("Engine", "Container", "Emulator")]
+    best = max((r["punteggio"] for r in engines), default=0)
+    advice = []
+    for r in engines:  # recommendations only for engines with at least half of the best score
+        if r["punteggio"] * 2 >= best and r["nome"] in ADVICE and ADVICE[r["nome"]] not in advice:
+            advice.append(ADVICE[r["nome"]])
     return {
-        "motore_principale": motori[0]["nome"] if motori else None,
-        "file_esaminati": len(elenco),
-        "troncato": troncato,
-        "risultati": ordinati,
-        "radici_web": radici_web,
+        "motore_principale": engines[0]["nome"] if engines else None,
+        "file_esaminati": len(items),
+        "troncato": truncated,
+        "risultati": ordered,
+        "radici_web": web_roots,
         "framework_web": framework,
-        "consigli": consigli,
+        "consigli": advice,
     }
 
 
-CIFRATI = ("GemShell",)  # containers that encrypt the game's files: PatchSmith does not open them
+ENCRYPTED = ("GemShell",)  # containers that encrypt the game's files: PatchSmith does not open them
 
 
-def contenitore_cifrato(esito):
+def encrypted_container(outcome):
     """The name of the container that encrypts the game's files (e.g. 'GemShell'), or None."""
-    return next((r["nome"] for r in esito.get("risultati", ()) if r["sezione"] == "Container"
-                 and r["nome"] in CIFRATI), None)
+    return next((r["nome"] for r in outcome.get("risultati", ()) if r["sezione"] == "Container"
+                 and r["nome"] in ENCRYPTED), None)
 
 
-def stampa(esito, log=print):
-    log("File esaminati: %d%s" % (esito["file_esaminati"], " (elenco troncato)" if esito["troncato"] else ""))
-    if not esito["risultati"]:
+def print_summary(outcome, log=print):
+    log("File esaminati: %d%s" % (outcome["file_esaminati"], " (elenco troncato)" if outcome["troncato"] else ""))
+    if not outcome["risultati"]:
         log("Nessun motore riconosciuto.")
-    etichette = {"Engine": "Motore", "Container": "Contenitore", "SDK": "Componente", "AntiCheat": "ANTI-CHEAT",
+    labels = {"Engine": "Motore", "Container": "Contenitore", "SDK": "Componente", "AntiCheat": "ANTI-CHEAT",
                  "Launcher": "Launcher", "Emulator": "Emulatore", "Evidence": "Indizio"}
-    if esito["motore_principale"]:
-        log("Motore principale: %s" % esito["motore_principale"])
-    elif esito["risultati"]:
+    if outcome["motore_principale"]:
+        log("Motore principale: %s" % outcome["motore_principale"])
+    elif outcome["risultati"]:
         log("Motore non riconosciuto (probabilmente proprietario o non in elenco).")
-    ha_motore = bool(esito["motore_principale"])
-    componenti = 0
-    for r in esito["risultati"]:
-        if r["sezione"] == "Evidence" and ha_motore:
+    has_engine = bool(outcome["motore_principale"])
+    components = 0
+    for r in outcome["risultati"]:
+        if r["sezione"] == "Evidence" and has_engine:
             continue  # the clues are only needed if the engine was not recognized
         if r["sezione"] in ("SDK", "Launcher"):
-            componenti += 1
-            if componenti > 8:
+            components += 1
+            if components > 8:
                 continue
-        log("  [%3d] %-12s %s" % (r["punteggio"], etichette.get(r["sezione"], r["sezione"]), r["nome"]))
+        log("  [%3d] %-12s %s" % (r["punteggio"], labels.get(r["sezione"], r["sezione"]), r["nome"]))
         for e in r["evidenze"][:2]:
             log("          - %s" % e)
-    if esito["framework_web"]:
-        log("Framework web: " + ", ".join(esito["framework_web"]))
-    if any(r["sezione"] == "AntiCheat" for r in esito["risultati"]):
+    if outcome["framework_web"]:
+        log("Framework web: " + ", ".join(outcome["framework_web"]))
+    if any(r["sezione"] == "AntiCheat" for r in outcome["risultati"]):
         log("ATTENZIONE: anti-cheat rilevato. Non usare strumenti a iniezione su questo gioco.")
-    if esito["consigli"]:
+    if outcome["consigli"]:
         log("Strada consigliata:")
-        for c in esito["consigli"]:
+        for c in outcome["consigli"]:
             log("  * " + c)

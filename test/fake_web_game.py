@@ -1,14 +1,14 @@
 """Fake web game (an index.html page and a JSON file of English texts) for the tests of the interface, the command
 line and safety: it is created in a test folder, no real game.
 
-Usage from the tests: gioco_web_finto.crea(cartella) -> relative path of the JSON file of the texts.
+Usage from the tests: fake_web_game.create(cartella) -> relative path of the JSON file of the texts.
 """
 import json
 import os
 
-FILE_TESTI = "data/testi.json"
+TEXTS_FILE = "data/testi.json"
 
-TESTI = {
+TEXTS = {
     "title": "Lantern Keeper",
     "menu": {
         "start": "Start a new game",
@@ -32,7 +32,7 @@ TESTI = {
     ],
 }
 
-PAGINA = """<!doctype html>
+PAGE = """<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -48,16 +48,16 @@ PAGINA = """<!doctype html>
 </html>
 """
 
-CODICE = """document.title = "Lantern Keeper";
+CODE = """document.title = "Lantern Keeper";
 """
 
 
-def crea(cartella):
-    os.makedirs(os.path.join(cartella, "data"), exist_ok=True)
-    with open(os.path.join(cartella, "index.html"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(PAGINA)
-    with open(os.path.join(cartella, "gioco.js"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(CODICE)
-    with open(os.path.join(cartella, *FILE_TESTI.split("/")), "w", encoding="utf-8", newline="\n") as f:
-        json.dump(TESTI, f, ensure_ascii=False, indent=2)
-    return FILE_TESTI
+def create(folder):
+    os.makedirs(os.path.join(folder, "data"), exist_ok=True)
+    with open(os.path.join(folder, "index.html"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(PAGE)
+    with open(os.path.join(folder, "gioco.js"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(CODE)
+    with open(os.path.join(folder, *TEXTS_FILE.split("/")), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(TEXTS, f, ensure_ascii=False, indent=2)
+    return TEXTS_FILE

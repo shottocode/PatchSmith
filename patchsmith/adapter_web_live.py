@@ -3,10 +3,10 @@ in clear text: the texts are translated while the game runs, in its page, as XUn
 
 PatchSmith neither opens nor changes the encrypted file: it appends to preload.js (with a verified backup, which
 "Restore originals" puts back) the injector_live.js script, which
-- translates the page's texts with patchsmith-dizionario.json (the translations already made, from the game's
+- translates the page's texts with patchsmith-dictionary.json (the translations already made, from the game's
   translation memory);
-- asks PatchSmith's translator for new sentences (servizio_xunity: the same service as for Unity games, on
-  127.0.0.1, started by preload.js with the command in patchsmith-vivo.json and closed with the game), which saves
+- asks PatchSmith's translator for new sentences (xunity_service: the same service as for Unity games, on
+  127.0.0.1, started by preload.js with the command in patchsmith-alive.json and closed with the game), which saves
   them to the translation memory.
 
 It needs a preload.js that runs in the page with Node: in Electron's main.js contextIsolation:false and
@@ -18,100 +18,100 @@ import os
 import re
 import sys
 
-from .adapter_webjson import scrivi_atomico
+from .adapter_webjson import write_atomic
 
 # marker of our script inside the game's preload.js (first comment of injector_live.js): never change it, or the
 # games translated before would no longer be recognized
-SEGNO = "Patchsmith - traduzione dal vivo"
-NOME_DIZIONARIO = "patchsmith-dizionario.json"
-NOME_CONFIG = "patchsmith-vivo.json"
-_ISOLATO = re.compile(r"contextIsolation\s*:\s*false")
+MARKER = "Patchsmith - traduzione dal vivo"
+DICTIONARY_NAME = "patchsmith-dizionario.json"
+CONFIG_NAME = "patchsmith-vivo.json"
+_NO_ISOLATION = re.compile(r"contextIsolation\s*:\s*false")
 _SANDBOX = re.compile(r"sandbox\s*:\s*false")
 
 
-def trova_preload(cartella, profondita=4):
+def find_preload(folder, depth=4):
     """The game's resources/app/preload.js (also in a subfolder, e.g. game/), or None."""
-    cartella = os.path.abspath(cartella)
-    for radice, dirs, files in os.walk(cartella):
-        if os.path.relpath(radice, cartella).count(os.sep) >= profondita:
+    folder = os.path.abspath(folder)
+    for root, dirs, files in os.walk(folder):
+        if os.path.relpath(root, folder).count(os.sep) >= depth:
             dirs[:] = []
             continue
         dirs[:] = [d for d in dirs if d.lower() not in ("node_modules", "locales", "steam_settings")]
-        if os.path.basename(radice).lower() == "app" and os.path.basename(os.path.dirname(radice)).lower() == "resources" \
+        if os.path.basename(root).lower() == "app" and os.path.basename(os.path.dirname(root)).lower() == "resources" \
                 and "preload.js" in files and "main.js" in files:
-            return os.path.join(radice, "preload.js")
+            return os.path.join(root, "preload.js")
     return None
 
 
-def adatto(cartella):
+def suitable(folder):
     """preload.js if the game can be translated live (the preload runs in the page and has Node), otherwise None."""
-    preload = trova_preload(cartella)
+    preload = find_preload(folder)
     if not preload:
         return None
     try:
         with open(os.path.join(os.path.dirname(preload), "main.js"), encoding="utf-8", errors="replace") as f:
-            principale = f.read()
+            main_src = f.read()
     except OSError:
         return None
-    return preload if _ISOLATO.search(principale) and _SANDBOX.search(principale) else None
+    return preload if _NO_ISOLATION.search(main_src) and _SANDBOX.search(main_src) else None
 
 
-def installato(cartella):
-    preload = trova_preload(cartella)
+def installed(folder):
+    preload = find_preload(folder)
     if not preload:
         return False
     with open(preload, "rb") as f:
-        return SEGNO.encode("utf-8") in f.read()
+        return MARKER.encode("utf-8") in f.read()
 
 
-def _comando(percorso_profilo, nome_profilo):
-    from . import adapter_unity, xunity_service as servizio_xunity
-    from .project import CARTELLA_PROGETTO
-    porta = servizio_xunity.porta_per(nome_profilo)
-    return porta, {"programma": adapter_unity._python_senza_finestra(), "cartella": CARTELLA_PROGETTO,
-                   "argomenti": ["-I", os.path.join(CARTELLA_PROGETTO, "smith.py"), "servizio-xunity", "--profilo",
-                                 os.path.abspath(percorso_profilo), "--porta", str(porta)]}
+def _command(profile_path, profile_name):
+    from . import adapter_unity, xunity_service
+    from .project import PROJECT_FOLDER
+    port = xunity_service.port_for(profile_name)
+    return port, {"programma": adapter_unity._windowless_python(), "cartella": PROJECT_FOLDER,
+                   "argomenti": ["-I", os.path.join(PROJECT_FOLDER, "smith.py"), "servizio-xunity", "--profilo",
+                                 os.path.abspath(profile_path), "--porta", str(port)]}
 
 
-def installa(cartella, percorso_profilo, nome_profilo, da, a, traduzioni, log=print, attivo=True):
+def install(folder, profile_path, profile_name, src_lang, a, translations, log=print, active=True):
     """Adds (or updates) the script in preload.js and writes the dictionary and the translator's command.
     attivo=False: no translator while playing (only the dictionary's translations). Returns the number of
     translations."""
-    from . import project as progetto
-    preload = adatto(cartella)
+    from . import project
+    preload = suitable(folder)
     if not preload:
         raise ValueError("questo gioco non permette la traduzione dal vivo (preload.js isolato o assente)")
     app = os.path.dirname(preload)
     with open(preload, "rb") as f:
-        attuale = f.read()
-    info = progetto.leggi_info(preload)
-    backup = preload + progetto.SUFFISSO_BACKUP
-    if SEGNO.encode("utf-8") in attuale and info and os.path.exists(backup):
+        current = f.read()
+    info = project.read_info(preload)
+    backup = preload + project.BACKUP_SUFFIX
+    if MARKER.encode("utf-8") in current and info and os.path.exists(backup):
         with open(backup, "rb") as f:  # already ours: start again from the saved original
-            originale = f.read()
+            original = f.read()
     else:  # first time, or the game put back its own preload.js (an update): the backup is of this one
-        progetto.crea_backup(preload, extra={"creati": [NOME_DIZIONARIO, NOME_CONFIG], "web_vivo": True})
-        originale = attuale
-    porta, comando = _comando(percorso_profilo, nome_profilo)
-    config = {"dizionario": NOME_DIZIONARIO, "porta": porta if attivo else 0, "da": da, "a": a,
-              "comando": comando if attivo else None}
+        project.create_backup(preload, extra={"creati": [DICTIONARY_NAME, CONFIG_NAME], "web_vivo": True})
+        original = current
+    port, command = _command(profile_path, profile_name)
+    config = {"dizionario": DICTIONARY_NAME, "porta": port if active else 0, "da": src_lang, "a": a,
+              "comando": command if active else None}
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "injector_live.js"), encoding="utf-8") as f:
         script = f.read().replace("/*__CONFIG__*/{}", json.dumps(config, ensure_ascii=True))
-    dizionario = {k: v for k, v in traduzioni.items() if isinstance(k, str) and isinstance(v, str) and v and v != k}
-    scrivi_atomico(os.path.join(app, NOME_DIZIONARIO),
-                   json.dumps(dizionario, ensure_ascii=False, indent=0, sort_keys=True).encode("utf-8"))
-    scrivi_atomico(os.path.join(app, NOME_CONFIG), json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8"))
-    nuovo = originale.rstrip(b"\r\n") + b"\n" + script.encode("utf-8")
-    if nuovo != attuale:
-        scrivi_atomico(preload, nuovo)
-    info = progetto.leggi_info(preload) or {}
-    impronta = hashlib.sha256(nuovo).hexdigest()
-    if impronta not in info.get("hash_scritti", []):
-        info["hash_scritti"] = (info.get("hash_scritti") or [])[-(progetto.MAX_IMPRONTE - 1):] + [impronta]
-        progetto.salva_info(preload, info)
+    dictionary = {k: v for k, v in translations.items() if isinstance(k, str) and isinstance(v, str) and v and v != k}
+    write_atomic(os.path.join(app, DICTIONARY_NAME),
+                   json.dumps(dictionary, ensure_ascii=False, indent=0, sort_keys=True).encode("utf-8"))
+    write_atomic(os.path.join(app, CONFIG_NAME), json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8"))
+    new = original.rstrip(b"\r\n") + b"\n" + script.encode("utf-8")
+    if new != current:
+        write_atomic(preload, new)
+    info = project.read_info(preload) or {}
+    fingerprint = hashlib.sha256(new).hexdigest()
+    if fingerprint not in info.get("hash_scritti", []):
+        info["hash_scritti"] = (info.get("hash_scritti") or [])[-(project.MAX_FINGERPRINTS - 1):] + [fingerprint]
+        project.save_info(preload, info)
     log("  Traduzione dal vivo installata in %s (con backup): %d traduzioni gia' pronte%s" % (
-        os.path.relpath(preload, cartella), len(dizionario), ", le altre arrivano mentre giochi" if attivo else
+        os.path.relpath(preload, folder), len(dictionary), ", le altre arrivano mentre giochi" if active else
         " (traduttore mentre giochi spento)"))
-    if not os.path.exists(comando["programma"]) and sys.platform.startswith("win"):
-        log("  ! Non trovo Python (%s): le frasi nuove resteranno in originale" % comando["programma"])
-    return len(dizionario)
+    if not os.path.exists(command["programma"]) and sys.platform.startswith("win"):
+        log("  ! Non trovo Python (%s): le frasi nuove resteranno in originale" % command["programma"])
+    return len(dictionary)

@@ -5,10 +5,10 @@ reads the table of the source language (OptimizedTranslation: keys in the form o
 smaz; or Translation with the message dictionary), translates the texts and puts next to the executable:
 - override.cfg: the project settings that Godot reads at startup from the executable's folder (the way
   Godot provides to change them without touching the game), with a PatchSmith autoload;
-- patchsmith-traduzione.gd: the autoload script, which at startup replaces the table of the source language
+- patchsmith-translation.gd: the autoload script, which at startup replaces the table of the source language
   with a "bridge" (first the original text from the game's table, then its translation): with the source
   language chosen in the game (usually English) the texts appear translated; it also adds the target language;
-- patchsmith-traduzione.json: the translations (original text -> translated).
+- patchsmith-translation.json: the translations (original text -> translated).
 Everything is listed with its fingerprint in patchsmith-godot.json; "Restore originals" removes the files (and puts
 back an override.cfg of the game, if there was one).
 
@@ -22,17 +22,17 @@ import os
 import re
 import struct
 
-from .adapter_webjson import scrivi_atomico
+from .adapter_webjson import write_atomic
 
-MANIFESTO = "patchsmith-godot.json"
+MANIFEST = "patchsmith-godot.json"
 OVERRIDE = "override.cfg"
 SCRIPT = "patchsmith-traduzione.gd"
-DIZIONARIO = "patchsmith-traduzione.json"
+DICTIONARY = "patchsmith-traduzione.json"
 AUTOLOAD = "PatchsmithTraduzione"
-_LINGUA_NEL_NOME = re.compile(r"\.([A-Za-z]{2,3}(?:_[A-Za-z0-9]{2,4})?)\.translation$")
+_LANGUAGE_IN_NAME = re.compile(r"\.([A-Za-z]{2,3}(?:_[A-Za-z0-9]{2,4})?)\.translation$")
 
 
-class ErroreGodot(Exception):
+class GodotError(Exception):
     pass
 
 
@@ -41,69 +41,69 @@ class ErroreGodot(Exception):
 class Pck:
     """The Godot 4 PCK (.pck file or embedded at the end of the executable): list of files and reading."""
 
-    def __init__(self, percorso):
-        self.percorso = percorso
-        with open(percorso, "rb") as f:
-            inizio = 0
+    def __init__(self, path):
+        self.path = path
+        with open(path, "rb") as f:
+            start = 0
             if f.read(4) != b"GDPC":  # embedded: at the end of the executable [size u64]["GDPC"]
                 f.seek(0, 2)
-                fine = f.tell()
-                if fine < 16:
-                    raise ErroreGodot("non e' un pacchetto di Godot")
-                f.seek(fine - 12)
-                dimensione = struct.unpack("<Q", f.read(8))[0]
-                if f.read(4) != b"GDPC" or dimensione + 12 > fine:
-                    raise ErroreGodot("nessun pacchetto di Godot nell'eseguibile")
-                inizio = fine - 12 - dimensione
-                f.seek(inizio)
+                end = f.tell()
+                if end < 16:
+                    raise GodotError("non e' un pacchetto di Godot")
+                f.seek(end - 12)
+                size = struct.unpack("<Q", f.read(8))[0]
+                if f.read(4) != b"GDPC" or size + 12 > end:
+                    raise GodotError("nessun pacchetto di Godot nell'eseguibile")
+                start = end - 12 - size
+                f.seek(start)
                 if f.read(4) != b"GDPC":
-                    raise ErroreGodot("pacchetto di Godot non valido")
-            self.formato, self.major, self.minor, self.patch = struct.unpack("<4I", f.read(16))
-            if self.formato < 2:
-                raise ErroreGodot("pacchetto di Godot %d (formato %d): per ora PatchSmith legge solo Godot 4"
-                                  % (self.major, self.formato))
+                    raise GodotError("pacchetto di Godot non valido")
+            self.fmt, self.major, self.minor, self.patch = struct.unpack("<4I", f.read(16))
+            if self.fmt < 2:
+                raise GodotError("pacchetto di Godot %d (formato %d): per ora PatchSmith legge solo Godot 4"
+                                  % (self.major, self.fmt))
             flags, base = struct.unpack("<IQ", f.read(12))
-            self.cifrato = bool(flags & 1)
-            if self.cifrato:
-                raise ErroreGodot("l'elenco dei file del gioco e' cifrato")
-            relativo = bool(flags & 2)
+            self.encrypted = bool(flags & 1)
+            if self.encrypted:
+                raise GodotError("l'elenco dei file del gioco e' cifrato")
+            relative = bool(flags & 2)
             f.read(64)
             self.file = {}
             for _ in range(struct.unpack("<I", f.read(4))[0]):
-                lunghezza = struct.unpack("<I", f.read(4))[0]
-                nome = f.read(lunghezza).rstrip(b"\0").decode("utf-8", "replace")
-                posizione, dimensione = struct.unpack("<QQ", f.read(16))
+                length = struct.unpack("<I", f.read(4))[0]
+                name = f.read(length).rstrip(b"\0").decode("utf-8", "replace")
+                position, size = struct.unpack("<QQ", f.read(16))
                 f.read(16)  # md5
                 fl = struct.unpack("<I", f.read(4))[0]
-                if nome.startswith("res://"):
-                    nome = nome[6:]
-                self.file[nome] = ((inizio + base if relativo else inizio) + posizione, dimensione, fl)
+                if name.startswith("res://"):
+                    name = name[6:]
+                self.file[name] = ((start + base if relative else start) + position, size, fl)
 
-    def versione(self):
+    def version(self):
         return "%d.%d.%d" % (self.major, self.minor, self.patch)
 
-    def leggi(self, nome):
-        posizione, dimensione, fl = self.file[nome]
+    def read_file(self, name):
+        position, size, fl = self.file[name]
         if fl & 1:
-            raise ErroreGodot("%s e' cifrato" % nome)
-        with open(self.percorso, "rb") as f:
-            f.seek(posizione)
-            return f.read(dimensione)
+            raise GodotError("%s e' cifrato" % name)
+        with open(self.path, "rb") as f:
+            f.seek(position)
+            return f.read(size)
 
 
-def trova_pck(cartella):
+def find_pck(folder):
     """(path of the PCK, folder of the executable) of the game: embedded in an .exe or in a .pck next to it; or None."""
     try:
-        nomi = sorted(os.listdir(cartella))
+        names = sorted(os.listdir(folder))
     except OSError:
         return None
-    for nome in [n for n in nomi if n.lower().endswith(".pck")] + [n for n in nomi if n.lower().endswith(".exe")]:
-        p = os.path.join(cartella, nome)
+    for name in [n for n in names if n.lower().endswith(".pck")] + [n for n in names if n.lower().endswith(".exe")]:
+        p = os.path.join(folder, name)
         try:
             Pck(p)
-        except (ErroreGodot, OSError, struct.error):
+        except (GodotError, OSError, struct.error):
             continue
-        return p, cartella
+        return p, folder
     return None
 
 
@@ -127,26 +127,26 @@ _SMAZ = [" ", "the", "e", "t", "a", "of", "o", "and", "i", "n", "s", "e ", "r", 
          ".com"]  # the smaz dictionary (thirdparty/misc/smaz.c in Godot)
 
 
-def _smaz(dati):
-    uscita, i = bytearray(), 0
-    while i < len(dati):
-        c = dati[i]
+def _smaz(data):
+    output, i = bytearray(), 0
+    while i < len(data):
+        c = data[i]
         if c == 254:
-            uscita.append(dati[i + 1])
+            output.append(data[i + 1])
             i += 2
         elif c == 255:
-            n = dati[i + 1] + 1
-            uscita += dati[i + 2:i + 2 + n]
+            n = data[i + 1] + 1
+            output += data[i + 2:i + 2 + n]
             i += 2 + n
         else:
-            uscita += _SMAZ[c].encode("latin-1")
+            output += _SMAZ[c].encode("latin-1")
             i += 1
-    return bytes(uscita)
+    return bytes(output)
 
 
-class _Lettore:
-    def __init__(self, dati, o=0):
-        self.d, self.o = dati, o
+class _Reader:
+    def __init__(self, data, o=0):
+        self.d, self.o = data, o
 
     def u32(self):
         v = struct.unpack_from("<I", self.d, self.o)[0]
@@ -158,113 +158,113 @@ class _Lettore:
         self.o += 8
         return v
 
-    def stringa(self):
+    def read_string(self):
         n = self.u32() & 0x7FFFFFFF
         s = self.d[self.o:self.o + n].rstrip(b"\0").decode("utf-8", "replace")
         self.o += n
         return s
 
-    def variante(self):
+    def variant(self):
         """Only the types needed for the translation tables; None for the others (ValueError if their length is
         unknown)."""
-        tipo = self.u32()
-        if tipo == 1:  # nil
+        kind = self.u32()
+        if kind == 1:  # nil
             return None
-        if tipo == 2:  # bool
+        if kind == 2:  # bool
             return bool(self.u32())
-        if tipo == 3:  # int
+        if kind == 3:  # int
             return struct.unpack("<i", struct.pack("<I", self.u32()))[0]
-        if tipo == 40:  # int64
+        if kind == 40:  # int64
             return self.u64()
-        if tipo in (5, 44):  # String, StringName
-            return self.stringa()
-        if tipo == 26:  # Dictionary
+        if kind in (5, 44):  # String, StringName
+            return self.read_string()
+        if kind == 26:  # Dictionary
             n = self.u32() & 0x7FFFFFFF
-            return {self.variante(): self.variante() for _ in range(n)}
-        if tipo == 30:  # Array
+            return {self.variant(): self.variant() for _ in range(n)}
+        if kind == 30:  # Array
             n = self.u32() & 0x7FFFFFFF
-            return [self.variante() for _ in range(n)]
-        if tipo == 31:  # PackedByteArray (aligned to 4)
+            return [self.variant() for _ in range(n)]
+        if kind == 31:  # PackedByteArray (aligned to 4)
             n = self.u32()
             v = self.d[self.o:self.o + n]
             self.o += n + (4 - n % 4) % 4
             return v
-        if tipo == 32:  # PackedInt32Array
+        if kind == 32:  # PackedInt32Array
             n = self.u32()
             v = list(struct.unpack_from("<%di" % n, self.d, self.o))
             self.o += 4 * n
             return v
-        if tipo == 34:  # PackedStringArray
-            return [self.stringa() for _ in range(self.u32())]
-        raise ValueError("tipo %d non previsto" % tipo)
+        if kind == 34:  # PackedStringArray
+            return [self.read_string() for _ in range(self.u32())]
+        raise ValueError("tipo %d non previsto" % kind)
 
 
-def leggi_risorsa(dati):
+def read_resource(data):
     """(type, {property: value}) of the last internal resource of a binary Godot 4 .translation file."""
-    if dati[:4] != b"RSRC":
-        raise ErroreGodot("non e' una risorsa binaria di Godot")
-    r = _Lettore(dati, 4)
+    if data[:4] != b"RSRC":
+        raise GodotError("non e' una risorsa binaria di Godot")
+    r = _Reader(data, 4)
     if r.u32():
-        raise ErroreGodot("risorsa big-endian: non prevista")
+        raise GodotError("risorsa big-endian: non prevista")
     r.u32()  # real64
     major = r.u32()
     r.u32()  # minor
     r.u32()  # format
-    r.stringa()  # main type
+    r.read_string()  # main type
     r.u64()  # importmd
     flags = r.u32()
     r.u64()  # uid
     if flags & 4:  # FORMAT_FLAG_HAS_SCRIPT_CLASS
-        r.stringa()
+        r.read_string()
     r.o += 4 * 11  # reserved fields
-    nomi = [r.stringa() for _ in range(r.u32())]
+    names = [r.read_string() for _ in range(r.u32())]
     for _ in range(r.u32()):  # external resources
-        r.stringa()
-        r.stringa()
+        r.read_string()
+        r.read_string()
         if major >= 4:
-            r.stringa()  # uid
-    interne = [(r.stringa(), r.u64()) for _ in range(r.u32())]
-    if not interne:
-        raise ErroreGodot("nessuna risorsa nel file")
-    r.o = interne[-1][1]
-    tipo = r.stringa()
-    proprieta = {}
+            r.read_string()  # uid
+    internal_res = [(r.read_string(), r.u64()) for _ in range(r.u32())]
+    if not internal_res:
+        raise GodotError("nessuna risorsa nel file")
+    r.o = internal_res[-1][1]
+    kind = r.read_string()
+    properties = {}
     for _ in range(r.u32()):
-        nome = nomi[r.u32() & 0x7FFFFFFF]
-        proprieta[nome] = r.variante()
-    return tipo, proprieta
+        name = names[r.u32() & 0x7FFFFFFF]
+        properties[name] = r.variant()
+    return kind, properties
 
 
-def testi_tabella(dati):
+def table_texts(data):
     """(language, [texts]) of a translation table (OptimizedTranslation or Translation)."""
-    tipo, p = leggi_risorsa(dati)
-    lingua = p.get("locale") or "en"  # (en is the default value: Godot does not write it)
-    if tipo == "OptimizedTranslation":
+    kind, p = read_resource(data)
+    language = p.get("locale") or "en"  # (en is the default value: Godot does not write it)
+    if kind == "OptimizedTranslation":
         ht, bt, st = p.get("hash_table") or [], p.get("bucket_table") or [], p.get("strings") or b""
-        testi = []
+        texts = []
         for b in ht:
             if b < 0 or b >= len(bt):
                 continue
             for j in range(bt[b]):
-                _chiave, inizio, compresso, intero = bt[b + 2 + 4 * j:b + 6 + 4 * j]
-                grezzo = st[inizio:inizio + compresso]
-                testo = grezzo if compresso == intero else _smaz(grezzo)
-                testi.append(testo.split(b"\0", 1)[0].decode("utf-8", "replace"))
-        return lingua, testi
-    if tipo == "Translation":
-        messaggi = p.get("messages") or {}
-        return lingua, [v for v in messaggi.values() if isinstance(v, str)]
-    raise ErroreGodot("tabella di tipo %s non prevista" % tipo)
+                _key, start, compressed, whole = bt[b + 2 + 4 * j:b + 6 + 4 * j]
+                raw = st[start:start + compressed]
+                text = raw if compressed == whole else _smaz(raw)
+                texts.append(text.split(b"\0", 1)[0].decode("utf-8", "replace"))
+        return language, texts
+    if kind == "Translation":
+        messages = p.get("messages") or {}
+        return language, [v for v in messages.values() if isinstance(v, str)]
+    raise GodotError("tabella di tipo %s non prevista" % kind)
 
 
-def tabelle(pck):
+def tables(pck):
     """{language: path in the PCK} of the translation tables (from the name, e.g. translations.en.translation)."""
-    uscita = {}
-    for nome in pck.file:
-        m = _LINGUA_NEL_NOME.search(nome)
-        if m and not nome.startswith(".godot/"):
-            uscita.setdefault(m.group(1).replace("_", "-"), nome)
-    return uscita
+    output = {}
+    for name in pck.file:
+        m = _LANGUAGE_IN_NAME.search(name)
+        if m and not name.startswith(".godot/"):
+            output.setdefault(m.group(1).replace("_", "-"), name)
+    return output
 
 
 # --- installation ----------------------------------------------------------------------------------------------------
@@ -327,86 +327,86 @@ func _sostituisci() -> void:
 '''
 
 
-def _sha256(percorso):
-    with open(percorso, "rb") as f:
+def _sha256(path):
+    with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def leggi_manifesto(cartella):
+def read_manifest(folder):
     try:
-        with open(os.path.join(cartella, MANIFESTO), encoding="utf-8") as f:
+        with open(os.path.join(folder, MANIFEST), encoding="utf-8") as f:
             m = json.load(f)
     except (OSError, ValueError):
         return None
     return m if isinstance(m, dict) and m.get("patchsmith") else None
 
 
-def manifesto_presente(cartella):
-    return os.path.exists(os.path.join(cartella, MANIFESTO))
+def manifest_present(folder):
+    return os.path.exists(os.path.join(folder, MANIFEST))
 
 
-def _originale(manifesto):
+def _original(manifest):
     """The text of the game's override.cfg (if there was one), or None."""
-    if manifesto.get("override_originale") is None:
+    if manifest.get("override_originale") is None:
         return None
-    return base64.b64decode(manifesto["override_originale"]).decode("utf-8", "replace")
+    return base64.b64decode(manifest["override_originale"]).decode("utf-8", "replace")
 
 
-def _testo_override(precedente, autoload):
+def _override_text(previous, autoload):
     """override.cfg with PatchSmith's autoload (added to the game's one, if there was one)."""
-    riga = '%s="*res://%s"' % (AUTOLOAD, autoload)
-    righe = (precedente or "").replace("\r\n", "\n").split("\n") if precedente else []
-    righe = [r for r in righe if not r.strip().startswith(AUTOLOAD + "=")]
-    if "[autoload]" in [r.strip() for r in righe]:
-        i = [r.strip() for r in righe].index("[autoload]")
-        righe.insert(i + 1, riga)
+    line = '%s="*res://%s"' % (AUTOLOAD, autoload)
+    lines = (previous or "").replace("\r\n", "\n").split("\n") if previous else []
+    lines = [r for r in lines if not r.strip().startswith(AUTOLOAD + "=")]
+    if "[autoload]" in [r.strip() for r in lines]:
+        i = [r.strip() for r in lines].index("[autoload]")
+        lines.insert(i + 1, line)
     else:
-        righe += (["", "[autoload]"] if righe and righe[-1].strip() else ["[autoload]"]) + [riga]
-    return "\n".join(righe).strip("\n") + "\n"
+        lines += (["", "[autoload]"] if lines and lines[-1].strip() else ["[autoload]"]) + [line]
+    return "\n".join(lines).strip("\n") + "\n"
 
 
-def installa(cartella, lingua_tabella, traduzioni, destinazione, log=print):
+def install(folder, table_language, translations, dest_lang, log=print):
     """Writes (or updates) override.cfg, the script and the translations next to the executable, with the manifest."""
-    manifesto = leggi_manifesto(cartella) or {"patchsmith": True, "versione": 1, "file": {}}
-    override = os.path.join(cartella, OVERRIDE)
-    if os.path.exists(override) and OVERRIDE not in manifesto["file"]:  # the game's override.cfg: it is kept
+    manifest = read_manifest(folder) or {"patchsmith": True, "versione": 1, "file": {}}
+    override = os.path.join(folder, OVERRIDE)
+    if os.path.exists(override) and OVERRIDE not in manifest["file"]:  # the game's override.cfg: it is kept
         with open(override, "rb") as f:  # (the exact bytes: it is put back identical)
-            manifesto["override_originale"] = base64.b64encode(f.read()).decode("ascii")
+            manifest["override_originale"] = base64.b64encode(f.read()).decode("ascii")
         log("  override.cfg del gioco: conservato, aggiungo solo la riga di PatchSmith")
-    dizionario = {k: v for k, v in traduzioni.items() if isinstance(v, str) and v and v != k}
-    contenuti = {
-        OVERRIDE: _testo_override(_originale(manifesto), SCRIPT).encode("utf-8"),
+    dictionary = {k: v for k, v in translations.items() if isinstance(v, str) and v and v != k}
+    contents = {
+        OVERRIDE: _override_text(_original(manifest), SCRIPT).encode("utf-8"),
         SCRIPT: SCRIPT_GD.encode("utf-8"),
-        DIZIONARIO: json.dumps({"lingua": lingua_tabella.replace("-", "_"),
-                                "aggiunte": [destinazione.replace("-", "_")],
-                                "testi": dizionario}, ensure_ascii=False, indent=0, sort_keys=True).encode("utf-8"),
+        DICTIONARY: json.dumps({"lingua": table_language.replace("-", "_"),
+                                "aggiunte": [dest_lang.replace("-", "_")],
+                                "testi": dictionary}, ensure_ascii=False, indent=0, sort_keys=True).encode("utf-8"),
     }
-    manifesto["data"] = datetime.datetime.now().isoformat(timespec="seconds")
-    scrivi_atomico(os.path.join(cartella, MANIFESTO), json.dumps(dict(manifesto, in_corso=True), indent=2).encode())
-    for nome, dati in contenuti.items():
-        scrivi_atomico(os.path.join(cartella, nome), dati)
-        manifesto["file"][nome] = hashlib.sha256(dati).hexdigest()
-    scrivi_atomico(os.path.join(cartella, MANIFESTO), json.dumps(manifesto, indent=2).encode())
+    manifest["data"] = datetime.datetime.now().isoformat(timespec="seconds")
+    write_atomic(os.path.join(folder, MANIFEST), json.dumps(dict(manifest, in_corso=True), indent=2).encode())
+    for name, data in contents.items():
+        write_atomic(os.path.join(folder, name), data)
+        manifest["file"][name] = hashlib.sha256(data).hexdigest()
+    write_atomic(os.path.join(folder, MANIFEST), json.dumps(manifest, indent=2).encode())
     log("  Traduzione per Godot accanto all'eseguibile: %d testi (override.cfg, %s, %s)" % (
-        len(dizionario), SCRIPT, DIZIONARIO))
-    return len(dizionario)
+        len(dictionary), SCRIPT, DICTIONARY))
+    return len(dictionary)
 
 
-def disinstalla(cartella, log=print):
+def uninstall(folder, log=print):
     """Removes PatchSmith's files (those changed by hand stay) and puts back the game's override.cfg."""
-    manifesto = leggi_manifesto(cartella)
-    if manifesto is None:
+    manifest = read_manifest(folder)
+    if manifest is None:
         return False
-    for nome, impronta in manifesto.get("file", {}).items():
-        p = os.path.join(cartella, nome)
+    for name, fingerprint in manifest.get("file", {}).items():
+        p = os.path.join(folder, name)
         if os.path.exists(p):
-            if _sha256(p) == impronta:
+            if _sha256(p) == fingerprint:
                 os.remove(p)
             else:
-                log("  ! %s e' stato cambiato dopo la traduzione: lo lascio" % nome)
-    if manifesto.get("override_originale") is not None:
-        scrivi_atomico(os.path.join(cartella, OVERRIDE), base64.b64decode(manifesto["override_originale"]))
+                log("  ! %s e' stato cambiato dopo la traduzione: lo lascio" % name)
+    if manifest.get("override_originale") is not None:
+        write_atomic(os.path.join(folder, OVERRIDE), base64.b64decode(manifest["override_originale"]))
         log("  override.cfg del gioco rimesso com'era")
-    os.remove(os.path.join(cartella, MANIFESTO))
+    os.remove(os.path.join(folder, MANIFEST))
     log("  Traduzione per Godot tolta dalla cartella del gioco")
     return True

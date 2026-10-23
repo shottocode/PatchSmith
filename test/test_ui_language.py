@@ -20,21 +20,21 @@ import tkinter as tk
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from patchsmith import (gui, icon as icona, ui_language as interfaccia, language as lingua,  # noqa: E402
-                        project as progetto)
+from patchsmith import (gui, icon, ui_language as ui, language,  # noqa: E402
+                        project)
 
-ESITI = []
-
-
-def controlla(nome, condizione):
-    ESITI.append((nome, bool(condizione)))
-    print(("OK    " if condizione else "ERRORE") + "  " + nome)
+OUTCOMES = []
 
 
-def prova_traduzione():
-    interfaccia.imposta("en")
-    t = interfaccia.traduci
-    controlla("testi uguali, con valori dentro, pezzi dentro, prefissi del registro, ripieghi e righe non nel file",
+def check(name, condition):
+    OUTCOMES.append((name, bool(condition)))
+    print(("OK    " if condition else "ERRORE") + "  " + name)
+
+
+def test_translation():
+    ui.set_("en")
+    t = ui.translate
+    check("testi uguali, con valori dentro, pezzi dentro, prefissi del registro, ripieghi e righe non nel file",
               t("Crea rapporto") == "Create report"
               and t("Tradotti 400 di 1654 (24%)...") == "Translated 400 of 1654 (24%)..."
               and t("  ! Il gioco e' aperto: chiudilo e riprova.") == "  ! The game is open: close it and try again."
@@ -44,352 +44,357 @@ def prova_traduzione():
               and t("Crea rapporto\nCrea rapporto") == "Create report\nCreate report")
     # a message made of several entries of the file one after the other (also an entry of two sentences): in groups
     # of sentences
-    voci = interfaccia._stato["testi"]
-    prova = {"Mancano %s. Le metto io.": "%s are missing. I'll add them.", "%d frasi sono rimaste.": "%d sentences are left."}
-    voci.update(prova)
-    interfaccia._stato["modelli"] = None
+    entries = ui._state["testi"]
+    test = {"Mancano %s. Le metto io.": "%s are missing. I'll add them.",
+            "%d frasi sono rimaste.": "%d sentences are left."}
+    entries.update(test)
+    ui._state["modelli"] = None
     try:
-        controlla("messaggio di piu' frasi: tradotto a gruppi di frasi, quelle che non ci sono restano",
+        check("messaggio di piu' frasi: tradotto a gruppi di frasi, quelle che non ci sono restano",
                   t("Mancano à, è. Le metto io. 3 frasi sono rimaste.") == "à, è are missing. I'll add them. 3 sentences are left."
                   and t("Il gioco e' aperto: chiudilo e riprova. Frase nuova.")
                   == "The game is open: close it and try again. Frase nuova.")
     finally:
-        for k in prova:
-            del voci[k]
-        interfaccia._stato["modelli"] = None
-    interfaccia.imposta("it")
-    controlla("in italiano nessuna traduzione", interfaccia.traduci("Crea rapporto") == "Crea rapporto")
-    lingue = interfaccia.lingue()
-    controlla("lingue disponibili: italiano (dal codice) e inglese (dal file)",
-              lingue["it"]["nome"] == "Italiano" and lingue["en"]["nome"] == "English")
+        for k in test:
+            del entries[k]
+        ui._state["modelli"] = None
+    ui.set_("it")
+    check("in italiano nessuna traduzione", ui.translate("Crea rapporto") == "Crea rapporto")
+    languages = ui.languages()
+    check("lingue disponibili: italiano (dal codice) e inglese (dal file)",
+              languages["it"]["nome"] == "Italiano" and languages["en"]["nome"] == "English")
 
 
-def prova_file():
-    with open(os.path.join(interfaccia.CARTELLA, "en.json"), encoding="utf-8") as f:
-        testi = json.load(f)["testi"]
-    diversi = [k for k, v in testi.items() if collections.Counter(interfaccia._SEGNO.findall(k))
-               != collections.Counter(interfaccia._SEGNO.findall(v))]
-    controlla("file inglese: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(testi), diversi[:3]),
-              len(testi) > 1000 and not diversi)
+def test_file():
+    with open(os.path.join(ui.FOLDER, "en.json"), encoding="utf-8") as f:
+        texts = json.load(f)["testi"]
+    mismatched = [k for k, v in texts.items() if collections.Counter(ui._MARKER.findall(k))
+               != collections.Counter(ui._MARKER.findall(v))]
+    check("file inglese: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(texts), mismatched[:3]),
+              len(texts) > 1000 and not mismatched)
     # the code's texts that are not Italian (instructions for the local translator, words to recognize the languages)
     # stay as they are, and the code (e.g. the script for Godot) is not among the texts to translate
-    cambiati = [k for k, v in testi.items() if lingua.lingua_evidente(k, "it") and v != k]
-    codice = [k for k in testi if k.startswith("if ") or "==" in k or k.startswith("the and of ")]
-    controlla("file inglese: testi in altre lingue lasciati com'erano (%s), niente codice (%s)" % (cambiati[:2], codice[:2]),
-              not cambiati and not codice)
-    mancanti = [k for k in interfaccia.testi_del_programma() if k not in testi]
-    controlla("file inglese: c'e' ogni testo del programma (%d mancanti: %s)" % (len(mancanti), mancanti[:2]), not mancanti)
-    controlla("testi del programma: niente codice ne' elenchi di parole",
-              not interfaccia._sembra_testo("if not _fatto:") and not interfaccia._sembra_testo("if f == null:")
-              and not interfaccia._sembra_testo(" ".join(sorted(lingua._PAROLE["it"])))
-              and interfaccia._sembra_testo("Il gioco e' aperto: chiudilo e riprova.")
-              and interfaccia._sembra_testo("Testi del gioco: %d, gia' tradotti: %d%s, da tradurre: %d"))
+    changed_files = [k for k, v in texts.items() if language.obvious_language(k, "it") and v != k]
+    code = [k for k in texts if k.startswith("if ") or "==" in k or k.startswith("the and of ")]
+    check("file inglese: testi in altre lingue lasciati com'erano (%s), niente codice (%s)"
+          % (changed_files[:2], code[:2]), not changed_files and not code)
+    missing = [k for k in ui.program_texts() if k not in texts]
+    check("file inglese: c'e' ogni testo del programma (%d mancanti: %s)" % (len(missing), missing[:2]), not missing)
+    check("testi del programma: niente codice ne' elenchi di parole",
+              not ui._looks_like_text("if not _fatto:") and not ui._looks_like_text("if f == null:")
+              and not ui._looks_like_text(" ".join(sorted(language._WORDS["it"])))
+              and ui._looks_like_text("Il gioco e' aperto: chiudilo e riprova.")
+              and ui._looks_like_text("Testi del gioco: %d, gia' tradotti: %d%s, da tradurre: %d"))
 
 
-def _pixel_png(percorso):
-    """The RGBA pixel rows of a PNG written by icona.png (without filters), to compare the pixels and not the
+def _pixel_png(path):
+    """The RGBA pixel rows of a PNG written by icon.png (without filters), to compare the pixels and not the
     compressed bytes: zlib and zlib-ng (Python 3.14+) compress differently."""
     import struct
     import zlib
-    with open(percorso, "rb") as f:
-        dati = f.read()
-    lato, posizione, compresso = struct.unpack(">I", dati[16:20])[0], 8, b""
-    while posizione < len(dati):
-        lunghezza, tipo = struct.unpack(">I4s", dati[posizione:posizione + 8])
-        if tipo == b"IDAT":
-            compresso += dati[posizione + 8:posizione + 8 + lunghezza]
-        posizione += 12 + lunghezza
-    grezzo = zlib.decompress(compresso)
-    riga = 1 + 4 * lato
-    return [grezzo[i * riga + 1:(i + 1) * riga] for i in range(lato)]
+    with open(path, "rb") as f:
+        data = f.read()
+    side, position, compressed = struct.unpack(">I", data[16:20])[0], 8, b""
+    while position < len(data):
+        length, kind = struct.unpack(">I4s", data[position:position + 8])
+        if kind == b"IDAT":
+            compressed += data[position + 8:position + 8 + length]
+        position += 12 + length
+    raw = zlib.decompress(compressed)
+    line = 1 + 4 * side
+    return [raw[i * line + 1:(i + 1) * line] for i in range(side)]
 
 
-def prova_suoni(app, radice):
+def test_sounds(app, root):
     """Sounds: off by default, the button turns them on (and remembers it); at the end of an operation the first dialog
-    plays the sound of its type only once; the check at startup does not; all of them suoni.DURATA seconds long."""
+    plays the sound of its type only once; the check at startup does not; all of them sounds.DURATION seconds long."""
     import wave
     import io
-    from patchsmith import sounds as suoni, theme as tema
-    sentiti, vero = [], suoni.suona
-    suoni.suona = sentiti.append
+    from patchsmith import sounds, theme
+    heard, real = [], sounds.play
+    sounds.play = heard.append
     try:
-        spenti = not app.suoni_accesi
-        app._cambia_suoni()
-        with open(gui._impostazioni(), encoding="utf-8") as f:
-            ricordati = json.load(f).get("suoni")
-        acceso = sentiti == ["clic"]
-        del sentiti[:]
+        sounds_off = not app.sounds_on
+        app._change_sounds()
+        with open(gui._settings(), encoding="utf-8") as f:
+            saved_sounds = json.load(f).get("suoni")
+        is_on = heard == ["clic"]
+        del heard[:]
 
-        def finta_operazione(*_a):  # like _fine_operazione: two dialogs one after the other
-            tema.AL_MOSTRARE("errore")
-            tema.AL_MOSTRARE("info")
-        reale = app._fine_operazione
-        app._fine_operazione = finta_operazione
-        app._fine("Analisi e traduzione", None, None)
-        dopo_errore = list(sentiti)
-        app._fine_operazione = lambda *_a: tema.AL_MOSTRARE("domanda")
-        app._fine("Analisi e traduzione", None, None)
-        app._fine_operazione = lambda *_a: tema.AL_MOSTRARE("avviso")  # a warning: like a question
-        app._fine("Analisi e traduzione", None, None)
+        def fake_operation(*_a):  # like _finish_operation: two dialogs one after the other
+            theme.ON_SHOW("errore")
+            theme.ON_SHOW("info")
+        real_finish = app._finish_operation
+        app._finish_operation = fake_operation
+        app._finish("Analisi e traduzione", None, None)
+        after_error = list(heard)
+        app._finish_operation = lambda *_a: theme.ON_SHOW("domanda")
+        app._finish("Analisi e traduzione", None, None)
+        app._finish_operation = lambda *_a: theme.ON_SHOW("avviso")  # a warning: like a question
+        app._finish("Analisi e traduzione", None, None)
 
-        def in_parte(*_a):  # partly translated (warning), as in _mostra_finestra: "fatto"
-            app._suono_forzato = "fatto"
-            tema.AL_MOSTRARE("avviso")
-        app._fine_operazione = in_parte
-        app._fine("Analisi e traduzione", None, None)
-        app._operazione, app._controllo_automatico = "controlla", True
-        app._fine("Controllo", None, None)  # at startup no "fatto" (even partly translated): the warning plays
-        app._operazione, app._controllo_automatico = None, False
-        app._fine_operazione = reale
-        tema.AL_MOSTRARE("info")  # outside the end of an operation every dialog plays: information and warnings
-        tema.AL_MOSTRARE("avviso")  # like questions (e.g. the Google warning when you choose it), errors as errors
-        tema.AL_MOSTRARE("errore")
-        radice.after(150, lambda: [w.destroy() for w in radice.winfo_children() if isinstance(w, tk.Toplevel)])
-        app._suono_atteso = True
-        tema.informa(radice, app.colori, "Prova", "Una finestra vera: chiama AL_MOSTRARE")
+        def partly(*_a):  # partly translated (warning), as in _show_window: "fatto"
+            app._forced_sound = "fatto"
+            theme.ON_SHOW("avviso")
+        app._finish_operation = partly
+        app._finish("Analisi e traduzione", None, None)
+        app._operation, app._auto_check = "controlla", True
+        app._finish("Controllo", None, None)  # at startup no "fatto" (even partly translated): the warning plays
+        app._operation, app._auto_check = None, False
+        app._finish_operation = real_finish
+        theme.ON_SHOW("info")  # outside the end of an operation every dialog plays: information and warnings
+        theme.ON_SHOW("avviso")  # like questions (e.g. the Google warning when you choose it), errors as errors
+        theme.ON_SHOW("errore")
+        root.after(150, lambda: [w.destroy() for w in root.winfo_children() if isinstance(w, tk.Toplevel)])
+        app._sound_pending = True
+        theme.inform(root, app.colors, "Prova", "Una finestra vera: chiama AL_MOSTRARE")
         # the buttons' click: a pressed one plays, a disabled one does not (also in another window)
-        eventi = list(sentiti)
-        del sentiti[:]
-        altra = tk.Toplevel(radice)
-        pulsante, spento = gui.ttk.Button(altra, text="Prova"), gui.ttk.Button(altra, text="Spento")
-        pulsante.pack()
-        spento.pack()
-        spento.state(["disabled"])
-        radice.update()
-        pulsante.event_generate("<ButtonPress-1>", x=5, y=5)
-        spento.event_generate("<ButtonPress-1>", x=5, y=5)
-        clic_pulsanti = list(sentiti)
-        altra.destroy()
-        app._cambia_suoni()  # off again
-        pulsante_muto = gui.ttk.Button(radice, text="Muto")
-        pulsante_muto.place(x=0, y=0)
-        radice.update()
-        del sentiti[:]
-        pulsante_muto.event_generate("<ButtonPress-1>", x=5, y=5)  # sounds off: nothing
-        clic_pulsanti.append(list(sentiti))
-        pulsante_muto.destroy()
-        with open(gui._impostazioni(), encoding="utf-8") as f:
-            spenti_dopo = json.load(f).get("suoni") is False and not app.suoni_accesi
+        events = list(heard)
+        del heard[:]
+        another = tk.Toplevel(root)
+        button, off_button = gui.ttk.Button(another, text="Prova"), gui.ttk.Button(another, text="Spento")
+        button.pack()
+        off_button.pack()
+        off_button.state(["disabled"])
+        root.update()
+        button.event_generate("<ButtonPress-1>", x=5, y=5)
+        off_button.event_generate("<ButtonPress-1>", x=5, y=5)
+        button_clicks = list(heard)
+        another.destroy()
+        app._change_sounds()  # off again
+        mute_button = gui.ttk.Button(root, text="Muto")
+        mute_button.place(x=0, y=0)
+        root.update()
+        del heard[:]
+        mute_button.event_generate("<ButtonPress-1>", x=5, y=5)  # sounds off: nothing
+        button_clicks.append(list(heard))
+        mute_button.destroy()
+        with open(gui._settings(), encoding="utf-8") as f:
+            sounds_off_after = json.load(f).get("suoni") is False and not app.sounds_on
     finally:
-        suoni.suona = vero
-    durate = [wave.open(io.BytesIO(suoni.SUONI[n]())).getnframes() / suoni.FREQUENZA for n in ("fatto", "errore",
-                                                                                                    "domanda")]
-    clic = wave.open(io.BytesIO(suoni.clic())).getnframes() / suoni.FREQUENZA
-    controlla("suoni: spenti di default, accesi (con il clic) e ricordati dal pulsante; alla fine di un'operazione "
+        sounds.play = real
+    durations = [wave.open(io.BytesIO(sounds.SOUNDS[n]())).getnframes() / sounds.SAMPLE_RATE
+                 for n in ("fatto", "errore", "domanda")]
+    click = wave.open(io.BytesIO(sounds.click())).getnframes() / sounds.SAMPLE_RATE
+    check("suoni: spenti di default, accesi (con il clic) e ricordati dal pulsante; alla fine di un'operazione "
               "la prima finestra suona \"fatto\" se e' un'informazione o un tradotto in parte (non al controllo "
               "all'apertura); ogni altra finestra sempre, errori come errori e il resto come domande (%s); durata %s"
-              % (eventi, durate),
-              spenti and ricordati is True and acceso and dopo_errore == ["errore", "domanda"]
-              and eventi == ["errore", "domanda", "domanda", "domanda", "fatto", "domanda", "domanda", "domanda",
+              % (events, durations),
+              sounds_off and saved_sounds is True and is_on and after_error == ["errore", "domanda"]
+              and events == ["errore", "domanda", "domanda", "domanda", "fatto", "domanda", "domanda", "domanda",
                               "errore", "fatto"]
-              and spenti_dopo
-              and all(abs(d - suoni.DURATA) < 0.001 for d in durate) and clic < 0.1)
-    controlla("clic dei pulsanti (anche in un'altra finestra), non per quelli disattivati ne' a suoni spenti (%s)"
-              % clic_pulsanti, clic_pulsanti == ["clic", []])
+              and sounds_off_after
+              and all(abs(d - sounds.DURATION) < 0.001 for d in durations) and click < 0.1)
+    check("clic dei pulsanti (anche in un'altra finestra), non per quelli disattivati ne' a suoni spenti (%s)"
+              % button_clicks, button_clicks == ["clic", []])
 
 
-def prova_musica(app):
+def test_music(app):
     """Background music: off by default, the button with the note turns it on and off (and remembers it); Windows does
     the loop without gaps (tested with silence); "Miniera" with exactly 16 bars."""
     import inspect
     import re
     import time
-    from patchsmith import music as musica
-    chiamate, veri = [], (musica.avvia, musica.ferma)
-    musica.avvia, musica.ferma = (lambda *_a: chiamate.append("avvia")), (lambda: chiamate.append("ferma"))
+    from patchsmith import music
+    calls, actual = [], (music.launch, music.stop)
+    music.launch, music.stop = (lambda *_a: calls.append("avvia")), (lambda: calls.append("ferma"))
     try:
-        spenta = not app.musica_accesa
-        app._cambia_musica()
-        with open(gui._impostazioni(), encoding="utf-8") as f:
-            ricordata = json.load(f).get("musica")
-        app._cambia_musica()
-        with open(gui._impostazioni(), encoding="utf-8") as f:
-            spenta_dopo = json.load(f).get("musica") is False
+        music_off = not app.music_on
+        app._change_music()
+        with open(gui._settings(), encoding="utf-8") as f:
+            saved_music = json.load(f).get("musica")
+        app._change_music()
+        with open(gui._settings(), encoding="utf-8") as f:
+            music_off_after = json.load(f).get("musica") is False
     finally:
-        musica.avvia, musica.ferma = veri
-    silenzio = b"\0\0" * int(0.2 * musica.FREQUENZA)  # 0.2 seconds of silence, repeated by the Windows loop
-    aperta = musica._apri(silenzio)
+        music.launch, music.stop = actual
+    silent = b"\0\0" * int(0.2 * music.SAMPLE_RATE)  # 0.2 seconds of silence, repeated by the Windows loop
+    modal_open = music._open(silent)
     time.sleep(0.7)
-    suonati = musica._suonati()
-    musica._chiudi()
+    played = music._played()
+    music._close()
     # ready in advance: the first time generated and written to a file (here in a temporary test folder), then read
     # from the file in an instant
     import tempfile
-    vecchia, tempfile.tempdir = tempfile.tempdir, tempfile.mkdtemp()
+    old_folder, tempfile.tempdir = tempfile.tempdir, tempfile.mkdtemp()
     try:
-        musica._PRONTI.clear()
-        generata = musica.prepara()
-        scritta = os.path.isfile(musica._file_pronto("miniera"))
-        musica._PRONTI.clear()
-        inizio = time.time()
-        letta = musica.prepara()
-        secondi = time.time() - inizio
+        music._READY.clear()
+        generated = music.prepare()
+        written_lang = os.path.isfile(music._ready_file("miniera"))
+        music._READY.clear()
+        start = time.time()
+        loaded = music.prepare()
+        seconds = time.time() - start
     finally:
-        tempfile.tempdir = vecchia
-    melodia = re.search(r'melodia = """(.*?)"""', inspect.getsource(musica.miniera), re.S).group(1)
-    battute = [sum(p for _n, p in musica._leggi(b)) for b in re.split(r"\s{3,}", melodia.strip())]
-    controlla("musica: spenta di default, accesa e spenta dal pulsante con la nota e ricordata (%s); loop senza stacchi "
-              "(%s byte suonati da un blocco di %d); Miniera di %d battute da 8 ottavi" % (chiamate, suonati,
-                                                                                         len(silenzio), len(battute)),
-              spenta and ricordata is True and spenta_dopo and chiamate == ["avvia", "ferma"]
-              and (not aperta or suonati and suonati > 2 * len(silenzio)) and musica._stato["uscita"] is None
-              and battute == [8] * 16)
-    controlla("musica pronta in anticipo: generata e salvata la prima volta, poi letta dal file (%.3f s)" % secondi,
-              generata and scritta and letta == generata and secondi < 0.5)
+        tempfile.tempdir = old_folder
+    melody = re.search(r'melody = """(.*?)"""', inspect.getsource(music.mine), re.S).group(1)
+    measures = [sum(p for _n, p in music._read(b)) for b in re.split(r"\s{3,}", melody.strip())]
+    check("musica: spenta di default, accesa e spenta dal pulsante con la nota e ricordata (%s); loop senza stacchi "
+              "(%s byte suonati da un blocco di %d); Miniera di %d battute da 8 ottavi" % (calls, played,
+                                                                                         len(silent), len(measures)),
+              music_off and saved_music is True and music_off_after and calls == ["avvia", "ferma"]
+              and (not modal_open or played and played > 2 * len(silent)) and music._state["uscita"] is None
+              and measures == [8] * 16)
+    check("musica pronta in anticipo: generata e salvata la prima volta, poi letta dal file (%.3f s)" % seconds,
+              generated and written_lang and loaded == generated and seconds < 0.5)
 
 
-def prova_finestra(base):
-    progetto.RADICE_DATI = os.path.join(base, "dati")
-    gui.IMPOSTAZIONI = None
-    os.makedirs(progetto.RADICE_DATI, exist_ok=True)
-    with open(gui._impostazioni(), "w", encoding="utf-8") as f:
+def test_window(base):
+    project.DATA_ROOT = os.path.join(base, "dati")
+    gui.SETTINGS = None
+    os.makedirs(project.DATA_ROOT, exist_ok=True)
+    with open(gui._settings(), "w", encoding="utf-8") as f:
         json.dump({"interfaccia": "en", "da": "auto", "a": "it", "backend": "google"}, f)
-    radice = tk.Tk()
+    root = tk.Tk()
     try:
-        app = gui.App(radice)
-        pulsanti = [str(w.cget("text")) for w in app.pulsanti if isinstance(w, gui.ttk.Button)]
-        controlla("finestra in inglese: pulsanti (%s), traduttore, lingue Da/A e ritorno al codice" % pulsanti[:4],
-                  "Analyze and translate" in pulsanti and "Create report" in pulsanti
-                  and app.traduttore.get() == "Free Google (unofficial)" and app._scelto == "google"
-                  and app.da.get() == "Detect automatically" and app._codice_lingua(app.da.get()) == lingua.AUTO
-                  and app._codice_lingua("English (en)") == "en" and app._lingua_a() == "it")
-        radice.update()
-        altezze = (app.btn_sfoglia.winfo_height(), app.voce_cartella.winfo_height())
-        posizioni = (app.btn_sfoglia.winfo_rooty(), app.voce_cartella.winfo_rooty())
-        controlla("'Browse…' alto quanto il campo della cartella e alla stessa altezza (%s, %s)" % (altezze, posizioni),
-                  altezze[0] == altezze[1] and posizioni[0] == posizioni[1])
-        uguali = all(_pixel_png(os.path.join(icona.CARTELLA, "%d.png" % lato)) == icona.disegna(lato)
-                     for lato in (16, 32))
-        controlla("icona (martello e cartella) sulla finestra e per quelle che si aprono dopo; le immagini sono quelle che "
-                  "disegna icon.py", len(getattr(radice, "_icona_patchsmith", ())) == 6 and uguali)
-        app._menu_lingue()
-        voci = [str(v.cget("text")).strip() for _c, v in app._voci_lingue]
-        aperta = app._tendina_lingue is not None
-        app._menu_lingue()  # again: it closes
-        controlla("bandierina con la tendina delle lingue (%s), nomi nella loro lingua; si apre e si chiude" % voci,
-                  "Italiano (it)" in voci and "English (en)" in voci and app.btn_lingua.cget("image") and aperta
-                  and app._tendina_lingue is None)
-        prima = app.colori["nome"]
-        simbolo_prima = str(app.btn_tema.cget("text"))
-        app._cambia_tema()
-        dopo, simbolo_dopo = app.colori["nome"], str(app.btn_tema.cget("text"))
-        with open(gui._impostazioni(), encoding="utf-8") as f:
-            tema_salvato = json.load(f).get("tema")
-        app._cambia_tema()
-        controlla("pulsante sole/luna: tema scuro <-> chiaro subito (anche il registro), simbolo giusto, ricordato",
-                  {prima, dopo} == {"scuro", "chiaro"} and tema_salvato == dopo and app.colori["nome"] == prima
-                  and simbolo_prima == ("☾" if prima == "scuro" else "☀") and simbolo_dopo != simbolo_prima
-                  and str(app.testo.cget("background")) == app.colori["campo"])
-        prova_suoni(app, radice)
-        prova_musica(app)
+        app = gui.App(root)
+        buttons = [str(w.cget("text")) for w in app.buttons if isinstance(w, gui.ttk.Button)]
+        check("finestra in inglese: pulsanti (%s), traduttore, lingue Da/A e ritorno al codice" % buttons[:4],
+                  "Analyze and translate" in buttons and "Create report" in buttons
+                  and app.translator.get() == "Free Google (unofficial)" and app._chosen == "google"
+                  and app.src_lang.get() == "Detect automatically"
+                  and app._language_code(app.src_lang.get()) == language.AUTO
+                  and app._language_code("English (en)") == "en" and app._target_lang() == "it")
+        root.update()
+        heights = (app.btn_browse.winfo_height(), app.folder_entry.winfo_height())
+        positions = (app.btn_browse.winfo_rooty(), app.folder_entry.winfo_rooty())
+        check("'Browse…' alto quanto il campo della cartella e alla stessa altezza (%s, %s)" % (heights, positions),
+                  heights[0] == heights[1] and positions[0] == positions[1])
+        equal_count = all(_pixel_png(os.path.join(icon.FOLDER, "%d.png" % side)) == icon.draw(side)
+                     for side in (16, 32))
+        check("icona (martello e cartella) sulla finestra e per quelle che si aprono dopo; le immagini sono quelle che "
+                  "disegna icon.py", len(getattr(root, "_patchsmith_icon", ())) == 6 and equal_count)
+        app._languages_menu()
+        entries = [str(v.cget("text")).strip() for _c, v in app._language_entries]
+        modal_open = app._language_dropdown is not None
+        app._languages_menu()  # again: it closes
+        check("bandierina con la tendina delle lingue (%s), nomi nella loro lingua; si apre e si chiude" % entries,
+                  "Italiano (it)" in entries and "English (en)" in entries and app.btn_language.cget("image")
+                  and modal_open and app._language_dropdown is None)
+        before = app.colors["nome"]
+        symbol_before = str(app.btn_theme.cget("text"))
+        app._change_theme()
+        after, symbol_after = app.colors["nome"], str(app.btn_theme.cget("text"))
+        with open(gui._settings(), encoding="utf-8") as f:
+            saved_theme = json.load(f).get("tema")
+        app._change_theme()
+        check("pulsante sole/luna: tema scuro <-> chiaro subito (anche il registro), simbolo giusto, ricordato",
+                  {before, after} == {"scuro", "chiaro"} and saved_theme == after and app.colors["nome"] == before
+                  and symbol_before == ("☾" if before == "scuro" else "☀") and symbol_after != symbol_before
+                  and str(app.text.cget("background")) == app.colors["campo"])
+        test_sounds(app, root)
+        test_music(app)
         app._log("Analisi e traduzione: D:\\giochi\\x")
-        app.stato.set("Tradotti 400 di 1654 (24%)...")
-        app._svuota_coda()
-        registro_en = app.testo.get("1.0", "end").strip()
-        partiti = []
-        vero = gui.subprocess.Popen
-        gui.subprocess.Popen = lambda *a, **k: partiti.append(a[0])
+        app.state.set("Tradotti 400 di 1654 (24%)...")
+        app._drain_queue()
+        log_en = app.text.get("1.0", "end").strip()
+        started = []
+        real = gui.subprocess.Popen
+        gui.subprocess.Popen = lambda *a, **k: started.append(a[0])
         try:
-            app._cambia_interfaccia("it")
-            radice.update()
-            pulsanti = [str(w.cget("text")) for w in app.pulsanti if isinstance(w, gui.ttk.Button)]
-            with open(gui._impostazioni(), encoding="utf-8") as f:
-                salvata = json.load(f).get("interfaccia")
-            controlla("scelta l'italiano: tutta la finestra subito in italiano, senza riaprire PatchSmith (pulsanti %s, "
-                      "traduttore, Da/A con le stesse scelte, registro, riga di stato) e ricordato" % pulsanti[:2],
-                      not partiti and radice.winfo_exists() and salvata == "it"
-                      and "Analizza e traduci" in pulsanti and "Crea rapporto" in pulsanti
-                      and app.traduttore.get() == "Google gratuito (non ufficiale)" and app._scelto == "google"
-                      and "Google gratuito (non ufficiale)" in app.scelta_traduttore.cget("values")
-                      and app.da.get() == "Rileva automaticamente" and app._codice_lingua(app.da.get()) == lingua.AUTO
-                      and app._lingua_a() == "it" and app.a.get() == "Italiano (it)"
-                      and registro_en == "Analysis and translation: D:\\giochi\\x"
-                      and app.testo.get("1.0", "end").strip() == "Analisi e traduzione: D:\\giochi\\x"
-                      and app.stato.get() == "Tradotti 400 di 1654 (24%)...")
-            app._cambia_interfaccia("en")
-            radice.update()
-            pulsanti = [str(w.cget("text")) for w in app.pulsanti if isinstance(w, gui.ttk.Button)]
-            controlla("e di nuovo l'inglese: pulsanti e registro rifatti",
-                      not partiti and "Analyze and translate" in pulsanti and app.da.get() == "Detect automatically"
-                      and app.testo.get("1.0", "end").strip() == registro_en
-                      and app.stato.get() == "Translated 400 of 1654 (24%)...")
+            app._change_ui("it")
+            root.update()
+            buttons = [str(w.cget("text")) for w in app.buttons if isinstance(w, gui.ttk.Button)]
+            with open(gui._settings(), encoding="utf-8") as f:
+                saved = json.load(f).get("interfaccia")
+            check("scelta l'italiano: tutta la finestra subito in italiano, senza riaprire PatchSmith (pulsanti %s, "
+                      "traduttore, Da/A con le stesse scelte, registro, riga di stato) e ricordato" % buttons[:2],
+                      not started and root.winfo_exists() and saved == "it"
+                      and "Analizza e traduci" in buttons and "Crea rapporto" in buttons
+                      and app.translator.get() == "Google gratuito (non ufficiale)" and app._chosen == "google"
+                      and "Google gratuito (non ufficiale)" in app.translator_choice.cget("values")
+                      and app.src_lang.get() == "Rileva automaticamente"
+                      and app._language_code(app.src_lang.get()) == language.AUTO
+                      and app._target_lang() == "it" and app.a.get() == "Italiano (it)"
+                      and log_en == "Analysis and translation: D:\\giochi\\x"
+                      and app.text.get("1.0", "end").strip() == "Analisi e traduzione: D:\\giochi\\x"
+                      and app.state.get() == "Tradotti 400 di 1654 (24%)...")
+            app._change_ui("en")
+            root.update()
+            buttons = [str(w.cget("text")) for w in app.buttons if isinstance(w, gui.ttk.Button)]
+            check("e di nuovo l'inglese: pulsanti e registro rifatti",
+                      not started and "Analyze and translate" in buttons
+                      and app.src_lang.get() == "Detect automatically"
+                      and app.text.get("1.0", "end").strip() == log_en
+                      and app.state.get() == "Translated 400 of 1654 (24%)...")
         finally:
-            gui.subprocess.Popen = vero
+            gui.subprocess.Popen = real
     finally:
         try:
-            radice.destroy()
+            root.destroy()
         except tk.TclError:
             pass
-        interfaccia.imposta("it")
-        gui._traduci_costanti()
+        ui.set_("it")
+        gui._translate_constants()
 
 
-def prova_eseguibile(base):
+def test_executable(base):
     """PatchSmith.exe with the icon next to a test PatchSmith.pyw: compiled, not rebuilt if already up to date, and on
     double click it opens the .pyw with the installed Python (here the test .pyw only writes a file)."""
     if not sys.platform.startswith("win"):
         return
-    cartella = os.path.join(base, "programma con spazi")
-    os.makedirs(cartella)
-    with open(os.path.join(cartella, "PatchSmith.pyw"), "w", encoding="utf-8") as f:
+    folder = os.path.join(base, "programma con spazi")
+    os.makedirs(folder)
+    with open(os.path.join(folder, "PatchSmith.pyw"), "w", encoding="utf-8") as f:
         f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partito.txt'), 'w')"
                 ".write(sys.version)\n")
-    creato = icona.eseguibile(cartella)
-    chiamate, vero = [], icona.subprocess.run
-    icona.subprocess.run = lambda *a, **k: chiamate.append(a)
+    created_one = icon.executable(folder)
+    calls, real = [], icon.subprocess.run
+    icon.subprocess.run = lambda *a, **k: calls.append(a)
     try:
-        di_nuovo = icona.eseguibile(cartella)
+        again = icon.executable(folder)
     finally:
-        icona.subprocess.run = vero
-    exe = os.path.join(cartella, "PatchSmith.exe")
+        icon.subprocess.run = real
+    exe = os.path.join(folder, "PatchSmith.exe")
     with open(exe, "rb") as f:
-        dati = f.read()
-    partito = os.path.join(cartella, "partito.txt")
-    if creato:
+        data = f.read()
+    started_file = os.path.join(folder, "partito.txt")
+    if created_one:
         subprocess.run([exe], timeout=30)
         for _ in range(40):
-            if os.path.isfile(partito):
+            if os.path.isfile(started_file):
                 break
             time.sleep(0.25)
-    controlla("PatchSmith.exe con l'icona dentro accanto al .pyw (%d byte); non ricompilato se aggiornato; apre il .pyw "
-              "con Python" % len(dati), creato and di_nuovo and not chiamate and dati[:2] == b"MZ"
-              and b"\x89PNG" in dati and os.path.isfile(partito))
+    check("PatchSmith.exe con l'icona dentro accanto al .pyw (%d byte); non ricompilato se aggiornato; apre il .pyw "
+              "con Python" % len(data), created_one and again and not calls and data[:2] == b"MZ"
+              and b"\x89PNG" in data and os.path.isfile(started_file))
 
 
-def prova_riga_di_comando(base):
+def test_command_line(base):
     """Commands and options in English, the former Italian names as aliases; the help in the interface language."""
-    smith = os.path.join(progetto.CARTELLA_PROGETTO, "smith.py")
-    gioco = os.path.join(base, "gioco vuoto")
-    os.makedirs(gioco)
+    smith = os.path.join(project.PROJECT_FOLDER, "smith.py")
+    game = os.path.join(base, "gioco vuoto")
+    os.makedirs(game)
 
-    def esegui(argomenti, lingua_finestra):
-        amb = dict(os.environ, PATCHSMITH_DATI=os.path.join(base, "dati-cli"), PATCHSMITH_INTERFACCIA=lingua_finestra)
-        r = subprocess.run([sys.executable, "-I", smith] + argomenti, capture_output=True, encoding="utf-8",
-                           errors="replace", env=amb, timeout=120)
+    def run_command(arguments, window_language):
+        test_env = dict(os.environ, PATCHSMITH_DATI=os.path.join(base, "dati-cli"),
+                        PATCHSMITH_INTERFACCIA=window_language)
+        r = subprocess.run([sys.executable, "-I", smith] + arguments, capture_output=True, encoding="utf-8",
+                           errors="replace", env=test_env, timeout=120)
         return r.returncode, r.stdout
-    inglese, alias = esegui(["detect", gioco], "it"), esegui(["rileva", gioco], "it")
-    controlla("riga di comando: 'detect' e il nome di prima 'rileva' fanno lo stesso",
-              inglese[0] == 0 and inglese == alias)
-    codice, aiuto = esegui(["-h"], "en")
-    _, aiuto_auto = esegui(["auto", "-h"], "en")
-    _, aiuto_it = esegui(["-h"], "it")
-    controlla("aiuto in inglese: comandi inglesi con gli alias, spiegazioni tradotte; in italiano resta italiano",
-              codice == 0 and "restore (ripristina)" in aiuto and "restores the original game files" in aiuto
-              and "--force, --forza" in aiuto_auto and "--from LANG" in aiuto_auto
-              and "rimette i file originali del gioco" in aiuto_it)
+    english, alias = run_command(["detect", game], "it"), run_command(["rileva", game], "it")
+    check("riga di comando: 'detect' e il nome di prima 'rileva' fanno lo stesso",
+              english[0] == 0 and english == alias)
+    code, help_text = run_command(["-h"], "en")
+    _, auto_help = run_command(["auto", "-h"], "en")
+    _, help_it = run_command(["-h"], "it")
+    check("aiuto in inglese: comandi inglesi con gli alias, spiegazioni tradotte; in italiano resta italiano",
+              code == 0 and "restore (ripristina)" in help_text and "restores the original game files" in help_text
+              and "--force, --forza" in auto_help and "--from LANG" in auto_help
+              and "rimette i file originali del gioco" in help_it)
 
 
 def main(base):
     base = os.path.abspath(base)
     os.makedirs(base)
-    prova_traduzione()
-    prova_file()
-    prova_riga_di_comando(base)
-    prova_finestra(base)
-    prova_eseguibile(base)
-    falliti = [n for n, ok in ESITI if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(ESITI) - len(falliti), len(ESITI)))
-    return 1 if falliti else 0
+    test_translation()
+    test_file()
+    test_command_line(base)
+    test_window(base)
+    test_executable(base)
+    failed = [n for n, ok in OUTCOMES if not ok]
+    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

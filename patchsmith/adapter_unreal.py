@@ -20,52 +20,52 @@ import struct
 import unicodedata
 import zlib
 
-from . import __version__, language as lingua, detection as rilevamento
-from .adapter_webjson import SUFFISSO_TMP, scrivi_atomico
-from .system import gioco_aperto
+from . import __version__, language, detection
+from .adapter_webjson import TMP_SUFFIX, write_atomic
+from .system import game_open
 
 MAGIC_PAK = 0x5A6F12E1
 MAGIC_LOCRES = bytes.fromhex("0e147475674a03fc4a15909dc3377f1b")
 MAGIC_LOCMETA = bytes.fromhex("4fee4ca1684855836c4c46bd70da507c")
-MANIFESTO = "patchsmith-unreal.json"
-PREFISSO_PAK = "zz_Patchsmith_"
+MANIFEST = "patchsmith-unreal.json"
+PAK_PREFIX = "zz_Patchsmith_"
 
 
-def nome_pak(lingua_dest):
-    return "%s%s_999_P.pak" % (PREFISSO_PAK, lingua_dest)
+def pak_name(target_lang):
+    return "%s%s_999_P.pak" % (PAK_PREFIX, target_lang)
 
 
-class ErroreUnreal(Exception):
-    def __init__(self, messaggio="", codice=None):
-        super().__init__(messaggio)
-        self.codice = codice  # outcome for the interface (see outcome.py), e.g. GIOCO_APERTO
+class UnrealError(Exception):
+    def __init__(self, message="", code=None):
+        super().__init__(message)
+        self.code = code  # outcome for the interface (see outcome.py), e.g. GIOCO_APERTO
 
 
 # --- FString ------------------------------------------------------------------------------------
 
-def _leggi_fstring(dati, pos):
-    n = struct.unpack_from("<i", dati, pos)[0]
+def _read_fstring(data, pos):
+    n = struct.unpack_from("<i", data, pos)[0]
     pos += 4
     if n == 0:
         return "", pos
     if n > 0:
-        return dati[pos:pos + n - 1].decode("latin-1"), pos + n
+        return data[pos:pos + n - 1].decode("latin-1"), pos + n
     n = -n
-    return dati[pos:pos + 2 * n - 2].decode("utf-16-le", "surrogatepass"), pos + 2 * n
+    return data[pos:pos + 2 * n - 2].decode("utf-16-le", "surrogatepass"), pos + 2 * n
 
 
-def _scrivi_fstring(s):
+def _write_fstring(s):
     if not s:
         return struct.pack("<i", 0)
     if all(ord(c) < 128 for c in s):
         return struct.pack("<i", len(s) + 1) + s.encode("ascii") + b"\x00"
-    codificato = s.encode("utf-16-le", "surrogatepass")
-    return struct.pack("<i", -(len(codificato) // 2 + 1)) + codificato + b"\x00\x00"
+    encoded = s.encode("utf-16-le", "surrogatepass")
+    return struct.pack("<i", -(len(encoded) // 2 + 1)) + encoded + b"\x00\x00"
 
 
 # --- .pak archives ------------------------------------------------------------------------------
 
-def nome_pieno(mount, nome):
+def full_name(mount, name):
     """The full name of a file in the pak: the mount point without the leading '../', plus the name. UnrealPak uses
     as mount point the folder shared by all the files of the pak: '../../../' for the main paks (the names are
     already complete, 'Proj/Content/...'), a deeper folder for small paks (Remnant: '../../../Remnant/
@@ -76,297 +76,298 @@ def nome_pieno(mount, nome):
     m = m.lstrip("/")
     if m and not m.endswith("/"):
         m += "/"
-    return m + nome.lstrip("/")
+    return m + name.lstrip("/")
 
 
-class VocePak:
-    def __init__(self, nome, offset, dimensione, dimensione_orig, metodo, blocchi, flags, dim_blocco, sha1, serie):
-        self.nome, self.offset, self.dimensione, self.dimensione_orig = nome, offset, dimensione, dimensione_orig
-        self.metodo, self.blocchi, self.flags, self.dim_blocco, self.sha1 = metodo, blocchi, flags, dim_blocco, sha1
-        self.lunghezza_intestazione = len(serie)
+class PakEntry:
+    def __init__(self, name, offset, size, orig_size, method, blocks, flags, block_size, sha1, entry_bytes):
+        self.name, self.offset, self.size, self.orig_size = name, offset, size, orig_size
+        self.method, self.blocks, self.flags, self.block_size, self.sha1 = method, blocks, flags, block_size, sha1
+        self.header_length = len(entry_bytes)
 
 
 class Pak:
     """Reader of UE4 paks version 3-9 ('legacy' index)."""
 
-    def __init__(self, percorso):
-        self.percorso = percorso
-        dimensione = os.path.getsize(percorso)
-        with open(percorso, "rb") as f:
-            f.seek(max(0, dimensione - 1024))
-            coda = f.read()
-        i = coda.rfind(struct.pack("<I", MAGIC_PAK))
+    def __init__(self, path):
+        self.path = path
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            f.seek(max(0, size - 1024))
+            tail = f.read()
+        i = tail.rfind(struct.pack("<I", MAGIC_PAK))
         if i < 0:
-            raise ErroreUnreal("%s non e' un pak Unreal valido" % os.path.basename(percorso))
-        self.versione, self.indice_offset, self.indice_dim = struct.unpack_from("<Iqq", coda, i + 4)
-        if not 3 <= self.versione <= 9:
-            raise ErroreUnreal("Pak versione %d: non ancora supportata (supportate 3-9, Unreal 4.x)" % self.versione)
-        self.indice_cifrato = self.versione >= 4 and coda[i - 1] != 0
-        self.guid_chiave = coda[i - 17:i - 1] if self.versione >= 7 else b"\x00" * 16
-        if self.indice_cifrato:
-            raise ErroreUnreal("L'indice del pak e' cifrato (serve la chiave AES del gioco): non supportato")
-        resto = coda[i + 4 + 4 + 8 + 8 + 20:]
-        self.congelato = resto[0] if self.versione >= 9 else None
-        nomi = resto[1:] if self.versione >= 9 else resto
-        self.posti_compressione = len(nomi) // 32 if self.versione >= 8 else 0
-        self.metodi = [nomi[k * 32:(k + 1) * 32].split(b"\x00")[0].decode("ascii", "replace")
-                       for k in range(self.posti_compressione)]
-        with open(percorso, "rb") as f:
-            f.seek(self.indice_offset)
-            indice = f.read(self.indice_dim)
-        for larghezza in ((4, 1) if self.versione == 8 else (4,)):  # 4.22 used 1 byte for the method
+            raise UnrealError("%s non e' un pak Unreal valido" % os.path.basename(path))
+        self.version, self.index_offset, self.index_size = struct.unpack_from("<Iqq", tail, i + 4)
+        if not 3 <= self.version <= 9:
+            raise UnrealError("Pak versione %d: non ancora supportata (supportate 3-9, Unreal 4.x)" % self.version)
+        self.index_encrypted = self.version >= 4 and tail[i - 1] != 0
+        self.key_guid = tail[i - 17:i - 1] if self.version >= 7 else b"\x00" * 16
+        if self.index_encrypted:
+            raise UnrealError("L'indice del pak e' cifrato (serve la chiave AES del gioco): non supportato")
+        rest = tail[i + 4 + 4 + 8 + 8 + 20:]
+        self.frozen = rest[0] if self.version >= 9 else None
+        names = rest[1:] if self.version >= 9 else rest
+        self.compression_slots = len(names) // 32 if self.version >= 8 else 0
+        self.methods = [names[k * 32:(k + 1) * 32].split(b"\x00")[0].decode("ascii", "replace")
+                       for k in range(self.compression_slots)]
+        with open(path, "rb") as f:
+            f.seek(self.index_offset)
+            idx = f.read(self.index_size)
+        for width in ((4, 1) if self.version == 8 else (4,)):  # 4.22 used 1 byte for the method
             try:
-                self.mount, self.voci = self._leggi_indice(indice, larghezza)
-                self.larghezza_metodo = larghezza
+                self.mount, self.entries = self._read_index(idx, width)
+                self.method_width = width
                 break
-            except (struct.error, ErroreUnreal, UnicodeDecodeError):
+            except (struct.error, UnrealError, UnicodeDecodeError):
                 continue
         else:
-            raise ErroreUnreal("Indice del pak non leggibile")
-        self.prefisso = nome_pieno(self.mount, "")
+            raise UnrealError("Indice del pak non leggibile")
+        self.prefix = full_name(self.mount, "")
 
-    def _leggi_indice(self, indice, larghezza):
-        mount, pos = _leggi_fstring(indice, 0)
-        n = struct.unpack_from("<i", indice, pos)[0]
+    def _read_index(self, idx, width):
+        mount, pos = _read_fstring(idx, 0)
+        n = struct.unpack_from("<i", idx, pos)[0]
         pos += 4
-        voci = {}
+        entries = {}
         for _ in range(n):
-            nome, pos = _leggi_fstring(indice, pos)
-            inizio = pos
-            offset, dim, dim_orig = struct.unpack_from("<qqq", indice, pos)
+            name, pos = _read_fstring(idx, pos)
+            start = pos
+            offset, dim, dim_orig = struct.unpack_from("<qqq", idx, pos)
             pos += 24
-            metodo = struct.unpack_from("<I" if larghezza == 4 else "<B", indice, pos)[0]
-            pos += larghezza
-            sha1 = indice[pos:pos + 20]
+            method = struct.unpack_from("<I" if width == 4 else "<B", idx, pos)[0]
+            pos += width
+            sha1 = idx[pos:pos + 20]
             pos += 20
-            blocchi = []
-            if metodo:
-                nb = struct.unpack_from("<i", indice, pos)[0]
+            blocks = []
+            if method:
+                nb = struct.unpack_from("<i", idx, pos)[0]
                 pos += 4
                 for _ in range(nb):
-                    blocchi.append(struct.unpack_from("<qq", indice, pos))
+                    blocks.append(struct.unpack_from("<qq", idx, pos))
                     pos += 16
-            flags = indice[pos]
-            dim_blocco = struct.unpack_from("<I", indice, pos + 1)[0]
+            flags = idx[pos]
+            block_size = struct.unpack_from("<I", idx, pos + 1)[0]
             pos += 5
-            voci[nome] = VocePak(nome, offset, dim, dim_orig, metodo, blocchi, flags, dim_blocco, sha1, indice[inizio:pos])
-        if pos != len(indice):
-            raise ErroreUnreal("indice non coerente")
-        return mount, voci
+            entries[name] = PakEntry(name, offset, dim, dim_orig, method, blocks, flags, block_size, sha1,
+                                     idx[start:pos])
+        if pos != len(idx):
+            raise UnrealError("indice non coerente")
+        return mount, entries
 
-    def nome_metodo(self, voce):
-        if not voce.metodo:
+    def method_name(self, entry):
+        if not entry.method:
             return None
-        if self.versione >= 8:
-            return self.metodi[voce.metodo - 1] if voce.metodo - 1 < len(self.metodi) else "?"
-        return {1: "Zlib", 2: "Gzip"}.get(voce.metodo, "Custom")
+        if self.version >= 8:
+            return self.methods[entry.method - 1] if entry.method - 1 < len(self.methods) else "?"
+        return {1: "Zlib", 2: "Gzip"}.get(entry.method, "Custom")
 
-    def leggi(self, nome):
+    def read_file(self, name):
         """The data of a file in the pak, from its name in the pak or its full name (see nome_pieno)."""
-        voce = self.voci.get(nome)
-        if voce is None and self.prefisso and nome.startswith(self.prefisso):
-            voce = self.voci.get(nome[len(self.prefisso):])
-        if voce is None:
-            raise KeyError(nome)
-        if voce.flags & 1:
-            raise ErroreUnreal("%s e' cifrato: non supportato" % nome)
-        with open(self.percorso, "rb") as f:
-            if not voce.metodo:
-                f.seek(voce.offset + voce.lunghezza_intestazione)
-                dati = f.read(voce.dimensione)
+        entry = self.entries.get(name)
+        if entry is None and self.prefix and name.startswith(self.prefix):
+            entry = self.entries.get(name[len(self.prefix):])
+        if entry is None:
+            raise KeyError(name)
+        if entry.flags & 1:
+            raise UnrealError("%s e' cifrato: non supportato" % name)
+        with open(self.path, "rb") as f:
+            if not entry.method:
+                f.seek(entry.offset + entry.header_length)
+                data = f.read(entry.size)
             else:
-                if self.nome_metodo(voce).lower() != "zlib":
-                    raise ErroreUnreal("%s e' compresso con %s: non supportato" % (nome, self.nome_metodo(voce)))
-                base = voce.offset if self.versione >= 5 else 0  # relative blocks from version 5
-                parti = []
-                for inizio, fine in voce.blocchi:
-                    f.seek(base + inizio)
-                    parti.append(zlib.decompress(f.read(fine - inizio)))
-                dati = b"".join(parti)
-        if not voce.metodo and hashlib.sha1(dati).digest() != voce.sha1:
-            raise ErroreUnreal("%s: impronta diversa da quella dell'indice" % nome)
-        return dati
+                if self.method_name(entry).lower() != "zlib":
+                    raise UnrealError("%s e' compresso con %s: non supportato" % (name, self.method_name(entry)))
+                base = entry.offset if self.version >= 5 else 0  # relative blocks from version 5
+                parts = []
+                for start, end in entry.blocks:
+                    f.seek(base + start)
+                    parts.append(zlib.decompress(f.read(end - start)))
+                data = b"".join(parts)
+        if not entry.method and hashlib.sha1(data).digest() != entry.sha1:
+            raise UnrealError("%s: impronta diversa da quella dell'indice" % name)
+        return data
 
 
-def _serie_voce(versione, offset, dati, larghezza_metodo=4):
+def _serialize_entry(version, offset, data, method_width=4):
     """FPakEntry of an uncompressed file (version 3-9)."""
-    parti = struct.pack("<qqq", offset, len(dati), len(dati))
-    parti += struct.pack("<B", 0) if larghezza_metodo == 1 else struct.pack("<i", 0)
-    parti += hashlib.sha1(dati).digest()
-    parti += struct.pack("<BI", 0, 0)  # flags (not encrypted), block size
-    return parti
+    parts = struct.pack("<qqq", offset, len(data), len(data))
+    parts += struct.pack("<B", 0) if method_width == 1 else struct.pack("<i", 0)
+    parts += hashlib.sha1(data).digest()
+    parts += struct.pack("<BI", 0, 0)  # flags (not encrypted), block size
+    return parts
 
 
-def scrivi_pak(percorso, modello, file, mount=None):
+def write_pak(path, model, file, mount=None):
     """Writes an uncompressed pak with the same format as the 'modello' pak. file: [(nome, dati)]. mount: the mount
     point (usually the model's; '../../../' with full names)."""
-    v, larghezza = modello.versione, getattr(modello, "larghezza_metodo", 4)
-    mount = modello.mount if mount is None else mount
-    corpo = bytearray()
-    voci = []
-    for nome, dati in file:
-        offset = len(corpo)
-        corpo += _serie_voce(v, 0, dati, larghezza)  # the header in front of the data has offset 0 (like UnrealPak)
-        corpo += dati
-        voci.append((nome, offset, dati))
-    indice = _scrivi_fstring(mount) + struct.pack("<i", len(voci))
-    for nome, offset, dati in voci:
-        indice += _scrivi_fstring(nome) + _serie_voce(v, offset, dati, larghezza)
-    coda = b""
+    v, width = model.version, getattr(model, "method_width", 4)
+    mount = model.mount if mount is None else mount
+    body = bytearray()
+    entries = []
+    for name, data in file:
+        offset = len(body)
+        body += _serialize_entry(v, 0, data, width)  # the header in front of the data has offset 0 (like UnrealPak)
+        body += data
+        entries.append((name, offset, data))
+    idx = _write_fstring(mount) + struct.pack("<i", len(entries))
+    for name, offset, data in entries:
+        idx += _write_fstring(name) + _serialize_entry(v, offset, data, width)
+    tail = b""
     if v >= 7:
-        coda += b"\x00" * 16  # no encryption key
+        tail += b"\x00" * 16  # no encryption key
     if v >= 4:
-        coda += b"\x00"  # index not encrypted
-    coda += struct.pack("<IIqq", MAGIC_PAK, v, len(corpo), len(indice)) + hashlib.sha1(indice).digest()
+        tail += b"\x00"  # index not encrypted
+    tail += struct.pack("<IIqq", MAGIC_PAK, v, len(body), len(idx)) + hashlib.sha1(idx).digest()
     if v >= 9:
-        coda += b"\x00"  # index not frozen
+        tail += b"\x00"  # index not frozen
     if v >= 8:
-        coda += b"\x00" * 32 * modello.posti_compressione
-    with open(percorso, "wb") as f:
-        f.write(bytes(corpo) + indice + coda)
+        tail += b"\x00" * 32 * model.compression_slots
+    with open(path, "wb") as f:
+        f.write(bytes(body) + idx + tail)
 
 
 # --- .locres / .locmeta -------------------------------------------------------------------------
 
-def leggi_locres(dati):
+def read_locres(data):
     """Structure of a .locres (versions 1-3). The translated strings are at the end of the file."""
-    if dati[:16] != MAGIC_LOCRES:
-        raise ErroreUnreal("Formato .locres 'legacy' (senza intestazione): non ancora supportato")
-    versione = dati[16]
-    if not 1 <= versione <= 3:
-        raise ErroreUnreal("Versione .locres %d non supportata" % versione)
+    if data[:16] != MAGIC_LOCRES:
+        raise UnrealError("Formato .locres 'legacy' (senza intestazione): non ancora supportato")
+    version = data[16]
+    if not 1 <= version <= 3:
+        raise UnrealError("Versione .locres %d non supportata" % version)
     pos = 17
-    offset_stringhe = struct.unpack_from("<q", dati, pos)[0]
+    strings_offset = struct.unpack_from("<q", data, pos)[0]
     pos += 8
-    if versione >= 2:
+    if version >= 2:
         pos += 4  # number of entries
-    nns = struct.unpack_from("<I", dati, pos)[0]
+    nns = struct.unpack_from("<I", data, pos)[0]
     pos += 4
-    chiavi = []
+    keys = []
     for _ in range(nns):
-        if versione >= 2:
+        if version >= 2:
             pos += 4
-        ns, pos = _leggi_fstring(dati, pos)
-        nk = struct.unpack_from("<I", dati, pos)[0]
+        ns, pos = _read_fstring(data, pos)
+        nk = struct.unpack_from("<I", data, pos)[0]
         pos += 4
         for _ in range(nk):
-            if versione >= 2:
+            if version >= 2:
                 pos += 4
-            chiave, pos = _leggi_fstring(dati, pos)
+            key, pos = _read_fstring(data, pos)
             pos += 4  # hash of the source text
-            indice = struct.unpack_from("<i", dati, pos)[0]
+            idx = struct.unpack_from("<i", data, pos)[0]
             pos += 4
-            chiavi.append((ns, chiave, indice))
-    if pos != offset_stringhe:
-        raise ErroreUnreal(".locres non coerente (sezione chiavi)")
-    n = struct.unpack_from("<i", dati, pos)[0]
+            keys.append((ns, key, idx))
+    if pos != strings_offset:
+        raise UnrealError(".locres non coerente (sezione chiavi)")
+    n = struct.unpack_from("<i", data, pos)[0]
     pos += 4
-    stringhe = []
+    strings = []
     for _ in range(n):
-        s, pos = _leggi_fstring(dati, pos)
-        rif = None
-        if versione >= 2:
-            rif = struct.unpack_from("<i", dati, pos)[0]
+        s, pos = _read_fstring(data, pos)
+        ref = None
+        if version >= 2:
+            ref = struct.unpack_from("<i", data, pos)[0]
             pos += 4
-        stringhe.append((s, rif))
-    if pos != len(dati):
-        raise ErroreUnreal(".locres non coerente (stringhe)")
-    if any(not 0 <= i < n for _, _, i in chiavi):
-        raise ErroreUnreal(".locres non coerente (indici delle stringhe)")
-    return {"versione": versione, "testa": dati[:offset_stringhe], "chiavi": chiavi, "stringhe": stringhe}
+        strings.append((s, ref))
+    if pos != len(data):
+        raise UnrealError(".locres non coerente (stringhe)")
+    if any(not 0 <= i < n for _, _, i in keys):
+        raise UnrealError(".locres non coerente (indici delle stringhe)")
+    return {"versione": version, "testa": data[:strings_offset], "chiavi": keys, "stringhe": strings}
 
 
-def scrivi_locres(info, nuove):
+def write_locres(info, new_lines):
     """Same .locres with the strings replaced (everything else identical byte for byte)."""
-    uscita = bytearray(info["testa"]) + struct.pack("<i", len(nuove))
-    for s, (_, rif) in zip(nuove, info["stringhe"]):
-        uscita += _scrivi_fstring(unicodedata.normalize("NFC", s))  # accents the way Unreal expects them
+    output = bytearray(info["testa"]) + struct.pack("<i", len(new_lines))
+    for s, (_, ref) in zip(new_lines, info["stringhe"]):
+        output += _write_fstring(unicodedata.normalize("NFC", s))  # accents the way Unreal expects them
         if info["versione"] >= 2:
-            uscita += struct.pack("<i", rif)
-    return bytes(uscita)
+            output += struct.pack("<i", ref)
+    return bytes(output)
 
 
-def cultura_nativa(dati_locmeta):
+def native_culture(locmeta_data):
     """Original language written in the .locmeta (e.g. 'en')."""
     try:
-        cultura, _ = _leggi_fstring(dati_locmeta, 17 if dati_locmeta[:16] == MAGIC_LOCMETA else 0)
-        return cultura or None
+        culture, _ = _read_fstring(locmeta_data, 17 if locmeta_data[:16] == MAGIC_LOCMETA else 0)
+        return culture or None
     except (struct.error, UnicodeDecodeError):
         return None
 
 
 # --- game analysis ------------------------------------------------------------------------------
 
-def _paks(cartella):
+def _paks(folder):
     """Paks of the projects (not those of Engine/Programs), ours excluded."""
-    trovati = []
-    for radice, dirs, files in os.walk(cartella):
-        rel = os.path.relpath(radice, cartella).replace(os.sep, "/")
+    found = []
+    for root, dirs, files in os.walk(folder):
+        rel = os.path.relpath(root, folder).replace(os.sep, "/")
         if rel.split("/")[0] == "Engine":
             dirs[:] = []
             continue
         for f in files:
-            if f.lower().endswith(".pak") and not f.startswith(PREFISSO_PAK):
-                trovati.append(os.path.join(radice, f))
+            if f.lower().endswith(".pak") and not f.startswith(PAK_PREFIX):
+                found.append(os.path.join(root, f))
     # like Unreal: patch paks (_P) have a higher priority, then alphabetical order
-    return sorted(trovati, key=lambda p: (os.path.basename(p).lower().endswith("_p.pak"), os.path.basename(p).lower()))
+    return sorted(found, key=lambda p: (os.path.basename(p).lower().endswith("_p.pak"), os.path.basename(p).lower()))
 
 
-def culture_presenti(cartella):
+def present_cultures(folder):
     """Languages the game is localized in ({'en', 'fr', 'es-419'...}), from the .locres files in the paks (read
     only)."""
-    culture = set()
-    for percorso in _paks(cartella):
+    cultures = set()
+    for path in _paks(folder):
         try:
-            pak = Pak(percorso)
-        except (ErroreUnreal, OSError, struct.error):
+            pak = Pak(path)
+        except (UnrealError, OSError, struct.error):
             continue
-        for nome in pak.voci:
-            pieno = nome_pieno(pak.mount, nome)
-            m = re.match(r"^(.*/Localization/([^/]+))/([^/]+)/\2\.locres$", pieno)
-            if m and not pieno.startswith("Engine/"):
-                culture.add(m.group(3))
-    return culture
+        for name in pak.entries:
+            full = full_name(pak.mount, name)
+            m = re.match(r"^(.*/Localization/([^/]+))/([^/]+)/\2\.locres$", full)
+            if m and not full.startswith("Engine/"):
+                cultures.add(m.group(3))
+    return cultures
 
 
-def trova_locres(cartella, saltati=None):
+def find_locres(folder, skipped=None):
     """[(pak, nome completo, target, cultura)] of the .locres files of the original language (highest-priority
-    version), with full names also from paks with a deeper mount point (see nome_pieno: Pak.leggi accepts them).
+    version), with full names also from paks with a deeper mount point (see full_name: Pak.read_file accepts them).
     A pak that cannot be read (newer format, encrypted, corrupted) is skipped, without stopping the others: 'saltati'
     (a list) receives 'nome: motivo'."""
-    letti = []
-    for percorso in _paks(cartella):
+    read_items = []
+    for path in _paks(folder):
         try:
-            pak = Pak(percorso)
-        except (ErroreUnreal, OSError, struct.error, ValueError) as e:
-            if saltati is not None:
-                saltati.append("%s: %s" % (os.path.basename(percorso), e))
+            pak = Pak(path)
+        except (UnrealError, OSError, struct.error, ValueError) as e:
+            if skipped is not None:
+                skipped.append("%s: %s" % (os.path.basename(path), e))
             continue
-        letti.append((pak, [nome_pieno(pak.mount, nome) for nome in pak.voci]))
-    nativa = {}  # the original language of each target, from its .locmeta (even in another pak)
-    for pak, nomi in letti:
-        for nome in nomi:
-            m = re.match(r"^(.*/Localization/([^/]+))/\2\.locmeta$", nome)
-            if m and not nome.startswith("Engine/"):
+        read_items.append((pak, [full_name(pak.mount, name) for name in pak.entries]))
+    native_lang = {}  # the original language of each target, from its .locmeta (even in another pak)
+    for pak, names in read_items:
+        for name in names:
+            m = re.match(r"^(.*/Localization/([^/]+))/\2\.locmeta$", name)
+            if m and not name.startswith("Engine/"):
                 try:
-                    nativa[m.group(1)] = cultura_nativa(pak.leggi(nome))
-                except (ErroreUnreal, OSError, struct.error, ValueError) as e:
-                    if saltati is not None:
-                        saltati.append("%s (%s): %s" % (os.path.basename(pak.percorso), nome, e))
-    sorgenti = {}
-    for pak, nomi in letti:
-        for nome in nomi:
-            m = re.match(r"^(.*/Localization/([^/]+))/([^/]+)/\2\.locres$", nome)
-            if not m or nome.startswith("Engine/"):
+                    native_lang[m.group(1)] = native_culture(pak.read_file(name))
+                except (UnrealError, OSError, struct.error, ValueError) as e:
+                    if skipped is not None:
+                        skipped.append("%s (%s): %s" % (os.path.basename(pak.path), name, e))
+    sources = {}
+    for pak, names in read_items:
+        for name in names:
+            m = re.match(r"^(.*/Localization/([^/]+))/([^/]+)/\2\.locres$", name)
+            if not m or name.startswith("Engine/"):
                 continue
-            radice_target, target, cultura = m.group(1), m.group(2), m.group(3)
-            if cultura == (nativa.get(radice_target) or "en"):
-                sorgenti[nome] = (pak, nome, target, cultura)  # later paks overwrite (priority)
-    return list(sorgenti.values())
+            target_root, target, culture = m.group(1), m.group(2), m.group(3)
+            if culture == (native_lang.get(target_root) or "en"):
+                sources[name] = (pak, name, target, culture)  # later paks overwrite (priority)
+    return list(sources.values())
 
 
-def analizza(cartella):
-    paks = _paks(cartella)
+def analyze(folder):
+    paks = _paks(folder)
     info = {"paks": paks, "versioni": [], "iostore": False, "firmati": False, "problemi": []}
     for p in paks:
         if os.path.exists(p[:-4] + ".utoc"):
@@ -374,8 +375,8 @@ def analizza(cartella):
         if os.path.exists(p[:-4] + ".sig"):
             info["firmati"] = True
         try:
-            info["versioni"].append(Pak(p).versione)
-        except ErroreUnreal as e:
+            info["versioni"].append(Pak(p).version)
+        except UnrealError as e:
             info["problemi"].append("%s: %s" % (os.path.basename(p), e))
     if info["firmati"]:
         info["problemi"].append("i pak del gioco sono firmati (.sig): un pak aggiunto verrebbe rifiutato")
@@ -384,271 +385,271 @@ def analizza(cartella):
 
 # --- manifest -----------------------------------------------------------------------------------
 
-def leggi_manifesto(cartella):
+def read_manifest(folder):
     try:
-        with open(os.path.join(cartella, MANIFESTO), encoding="utf-8") as f:
+        with open(os.path.join(folder, MANIFEST), encoding="utf-8") as f:
             m = json.load(f)
     except (OSError, ValueError):
         return None
-    def nostri(voci):
-        return isinstance(voci, dict) and all(
+    def ours(entries):
+        return isinstance(entries, dict) and all(
             isinstance(r, str) and r.endswith(".pak") and ".." not in r.split("/") and not os.path.isabs(r)
-            and ":" not in r and os.path.basename(r).startswith(PREFISSO_PAK) and isinstance(h, str)
-            for r, h in voci.items())
-    valido = (isinstance(m, dict) and m.get("patchsmith") is True and nostri(m.get("file"))
-              and nostri(m.get("precedenti", {})) and set(m.get("precedenti", {})) <= set(m["file"]))
-    return m if valido else None
+            and ":" not in r and os.path.basename(r).startswith(PAK_PREFIX) and isinstance(h, str)
+            for r, h in entries.items())
+    valid = (isinstance(m, dict) and m.get("patchsmith") is True and ours(m.get("file"))
+              and ours(m.get("precedenti", {})) and set(m.get("precedenti", {})) <= set(m["file"]))
+    return m if valid else None
 
 
-def manifesto_presente(cartella):
-    return os.path.exists(os.path.join(cartella, MANIFESTO))
+def manifest_present(folder):
+    return os.path.exists(os.path.join(folder, MANIFEST))
 
 
-def _sha256(percorso):
+def _sha256(path):
     h = hashlib.sha256()
-    with open(percorso, "rb") as f:
-        for blocco in iter(lambda: f.read(1 << 20), b""):
-            h.update(blocco)
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
     return h.hexdigest()
 
 
 # --- installation -------------------------------------------------------------------------------
 
-def _controlli(cartella):
-    if gioco_aperto(cartella):
-        raise ErroreUnreal("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
-    if analizza(cartella)["firmati"]:
-        raise ErroreUnreal("I pak del gioco sono firmati (file .sig): il gioco rifiuterebbe un pak aggiunto.",
+def _checks(folder):
+    if game_open(folder):
+        raise UnrealError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+    if analyze(folder)["firmati"]:
+        raise UnrealError("I pak del gioco sono firmati (file .sig): il gioco rifiuterebbe un pak aggiunto.",
                            "NON_SUPPORTATO")
-    esito = rilevamento.rileva(cartella)
-    nomi = [r["nome"] for r in esito["risultati"] if r["sezione"] == "AntiCheat"]
-    if nomi:
-        raise ErroreUnreal("Questo gioco ha un anti-cheat (%s): non aggiungo pak modificati (rischio di ban)."
-                           % ", ".join(nomi), "ANTICHEAT")
+    outcome = detection.detect(folder)
+    names = [r["nome"] for r in outcome["risultati"] if r["sezione"] == "AntiCheat"]
+    if names:
+        raise UnrealError("Questo gioco ha un anti-cheat (%s): non aggiungo pak modificati (rischio di ban)."
+                           % ", ".join(names), "ANTICHEAT")
 
 
-def testi_da_tradurre(cartella, log=print):
+def texts_to_translate(folder, log=print):
     """(sources, unique texts to translate, original language)."""
-    sorgenti = trova_locres(cartella)
-    if not sorgenti:
-        raise ErroreUnreal("Non ho trovato file di localizzazione (.locres) nei pak del gioco.", "NON_SUPPORTATO")
-    testi, culture = {}, set()
-    for pak, nome, target, cultura in sorgenti:
-        info = leggi_locres(pak.leggi(nome))
-        log("  %s (%s): %d frasi" % (nome, cultura, len(info["stringhe"])))
-        culture.add(cultura)
+    sources = find_locres(folder)
+    if not sources:
+        raise UnrealError("Non ho trovato file di localizzazione (.locres) nei pak del gioco.", "NON_SUPPORTATO")
+    texts, cultures = {}, set()
+    for pak, name, target, culture in sources:
+        info = read_locres(pak.read_file(name))
+        log("  %s (%s): %d frasi" % (name, culture, len(info["stringhe"])))
+        cultures.add(culture)
         for s, _ in info["stringhe"]:
             if any(c.isalpha() for c in s):
-                testi.setdefault(s, None)
-    return sorgenti, list(testi), sorted(culture)[0]
+                texts.setdefault(s, None)
+    return sources, list(texts), sorted(cultures)[0]
 
 
 # typographic punctuation that Google may introduce: if the game does not already use it, its font
 # may not have it (little boxes would appear), so it becomes ASCII
-SOSTITUTI = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2026": "...",
+SUBSTITUTES = {"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u2026": "...",
              "\u00ab": '"', "\u00bb": '"', "\u00a0": " "}
 # languages with a non-Latin script: their texts say nothing about the accented letters of Latin fonts
-_NON_LATINE = {"ja", "zh", "ko", "ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "el", "ar", "he", "fa", "ur",
-               "th", "hi", "bn", "ta", "te", "ka", "hy", "km", "lo", "my"}
-_LATINO_1 = {chr(c) for c in range(0xA0, 0x100)}
+_NON_LATIN_LANGS = {"ja", "zh", "ko", "ru", "uk", "be", "bg", "mk", "sr", "kk", "ky", "mn", "el", "ar", "he", "fa",
+                    "ur", "th", "hi", "bn", "ta", "te", "ka", "hy", "km", "lo", "my"}
+_LATIN_1 = {chr(c) for c in range(0xA0, 0x100)}
 
 
-def caratteri_culture(cartella, escluse=()):
+def culture_chars(folder, excluded_cultures=()):
     """(characters of the texts of the game's other languages written in Latin script, [those languages]) from the
     .locres files in the paks (read only): a letter the game uses in its official translations, its fonts can draw."""
-    caratteri, culture = set(), set()
-    escluse = {c.lower() for c in escluse}
-    for percorso in _paks(cartella):
+    chars, cultures = set(), set()
+    excluded_cultures = {c.lower() for c in excluded_cultures}
+    for path in _paks(folder):
         try:
-            pak = Pak(percorso)
-        except (ErroreUnreal, OSError, struct.error, ValueError):
+            pak = Pak(path)
+        except (UnrealError, OSError, struct.error, ValueError):
             continue
-        for nome in pak.voci:
-            pieno = nome_pieno(pak.mount, nome)
-            m = re.match(r"^(.*/Localization/([^/]+))/([^/]+)/\2\.locres$", pieno)
-            if not m or pieno.startswith("Engine/"):
+        for name in pak.entries:
+            full = full_name(pak.mount, name)
+            m = re.match(r"^(.*/Localization/([^/]+))/([^/]+)/\2\.locres$", full)
+            if not m or full.startswith("Engine/"):
                 continue
-            cultura = m.group(3)
-            if cultura.lower() in escluse or cultura.split("-")[0].lower() in _NON_LATINE:
+            culture = m.group(3)
+            if culture.lower() in excluded_cultures or culture.split("-")[0].lower() in _NON_LATIN_LANGS:
                 continue
             try:
-                info = leggi_locres(pak.leggi(nome))
-            except (ErroreUnreal, OSError, struct.error, ValueError, UnicodeDecodeError):
+                info = read_locres(pak.read_file(name))
+            except (UnrealError, OSError, struct.error, ValueError, UnicodeDecodeError):
                 continue
-            culture.add(cultura)
+            cultures.add(culture)
             for s, _ in info["stringhe"]:
-                caratteri.update(s)
-    return caratteri, sorted(culture)
+                chars.update(s)
+    return chars, sorted(cultures)
 
 
-def caratteri_ammessi(cartella, presenti, native=()):
+def allowed_chars(folder, present, native=()):
     """The characters that can be written in the translated .locres files, or None if unknown (no limit): ASCII,
     those of the original texts ('presenti') and those of the official translations in Latin-script languages.
     Unreal's fonts are .ttf/.otf files: if the official translations use accented Latin-1 letters
     (\u00e9, \u00fc, \u00f1...), the font has the whole block (including \u00ec and \u00f2, which French or Spanish do
     not use). Without official translations in Latin-script languages, or if they use no accented letter, there is no
     clue: no limit."""
-    altre, culture = caratteri_culture(cartella, native)
-    if not culture or not any(c.isalpha() and not c.isascii() for c in altre):
+    other_ones, cultures = culture_chars(folder, native)
+    if not cultures or not any(c.isalpha() and not c.isascii() for c in other_ones):
         return None
     from .characters import ASCII
-    ammessi = set(ASCII) | set(presenti) | altre
-    if any(c in _LATINO_1 and c.isalpha() for c in altre):
-        ammessi |= _LATINO_1
-    return ammessi
+    allowed = set(ASCII) | set(present) | other_ones
+    if any(c in _LATIN_1 and c.isalpha() for c in other_ones):
+        allowed |= _LATIN_1
+    return allowed
 
 
-def _adatta(traduzione, presenti, ammessi=None, lingua_dest="it"):
+def _adapt(translation, present, allowed=None, target_lang="it"):
     """Translation ready for the .locres, or None if it must be rejected (U+0000 and U+FFFF truncate the text; a
-    character the game's fonts cannot draw and that cannot be replaced: see caratteri_ammessi)."""
-    if "\x00" in traduzione or "\uffff" in traduzione:
+    character the game's fonts cannot draw and that cannot be replaced: see allowed_chars)."""
+    if "\x00" in translation or "\uffff" in translation:
         return None
-    pronta = "".join(SOSTITUTI[c] if c in SOSTITUTI and c not in presenti else c for c in traduzione)
-    if ammessi is not None:
-        from .characters import adatta_caratteri
-        pronta = adatta_caratteri(pronta, ammessi, lingua_dest)
-    return pronta
+    ready_text = "".join(SUBSTITUTES[c] if c in SUBSTITUTES and c not in present else c for c in translation)
+    if allowed is not None:
+        from .characters import adapt_chars
+        ready_text = adapt_chars(ready_text, allowed, target_lang)
+    return ready_text
 
 
-def installa(cartella, a, nome_profilo, memoria, log=print, respinte=None):
+def install(folder, a, profile_name, memory, log=print, refused=None):
     """Writes the patch pak with the translated .locres files using the translations in 'memoria' {originale:
     tradotto}. Returns the number of translated lines inserted. Characters the game's fonts probably lack are
-    adapted (see caratteri_ammessi: è -> e'); a translation that cannot be adapted stays in the original and goes into
-    'respinte' (if given), {originale: caratteri}, for problemi.json."""
-    cartella = os.path.abspath(cartella)
-    _controlli(cartella)
-    sorgenti = trova_locres(cartella)
-    if not sorgenti:
-        raise ErroreUnreal("Non ho trovato file di localizzazione (.locres) nei pak del gioco.", "NON_SUPPORTATO")
-    manifesto = leggi_manifesto(cartella) if manifesto_presente(cartella) else None
-    if manifesto_presente(cartella) and manifesto is None:
-        raise ErroreUnreal("Il file %s non e' valido: non lo uso. Controlla la cartella a mano." % MANIFESTO)
+    adapted (see allowed_chars: è -> e'); a translation that cannot be adapted stays in the original and goes into
+    'respinte' (if given), {originale: caratteri}, for problems.json."""
+    folder = os.path.abspath(folder)
+    _checks(folder)
+    sources = find_locres(folder)
+    if not sources:
+        raise UnrealError("Non ho trovato file di localizzazione (.locres) nei pak del gioco.", "NON_SUPPORTATO")
+    manifest = read_manifest(folder) if manifest_present(folder) else None
+    if manifest_present(folder) and manifest is None:
+        raise UnrealError("Il file %s non e' valido: non lo uso. Controlla la cartella a mano." % MANIFEST)
 
-    letti = [(pak, nome, pak.leggi(nome)) for pak, nome, _, _ in sorgenti]
-    letti = [(pak, nome, originale, leggi_locres(originale)) for pak, nome, originale in letti]
-    presenti = {c for _, _, _, info in letti for s, _ in info["stringhe"] for c in s}
-    ammessi = caratteri_ammessi(cartella, presenti, {cultura for _, _, _, cultura in sorgenti})
-    per_pak, tradotte, totale, adattate, scartate = {}, 0, 0, 0, {}
-    for pak, nome, originale, info in letti:
-        nuove = []
+    read_items = [(pak, name, pak.read_file(name)) for pak, name, _, _ in sources]
+    read_items = [(pak, name, original, read_locres(original)) for pak, name, original in read_items]
+    present = {c for _, _, _, info in read_items for s, _ in info["stringhe"] for c in s}
+    allowed = allowed_chars(folder, present, {culture for _, _, _, culture in sources})
+    by_pak, translated_count, total, adapted, rejected = {}, 0, 0, 0, {}
+    for pak, name, original, info in read_items:
+        new_lines = []
         for s, _ in info["stringhe"]:
-            grezza = memoria.get(s)
-            t = _adatta(grezza, presenti, ammessi, a) if grezza else None
-            if grezza and t is None and ammessi is not None and _adatta(grezza, presenti) is not None:
-                from .characters import Filtro, non_disegnabili
-                scartate[s] = non_disegnabili(grezza, Filtro(ammessi, aggiunti=s), a)
-            elif t and _adatta(grezza, presenti) != t:
-                adattate += 1
-            nuove.append(t if t else s)
-            tradotte += bool(t) and t != s
-            totale += 1
-        nuovo = scrivi_locres(info, nuove)
-        controllo = leggi_locres(nuovo)  # it must read back with the same structure
-        if controllo["chiavi"] != info["chiavi"] or controllo["testa"] != info["testa"]:
-            raise ErroreUnreal("Controllo del .locres tradotto fallito per %s: non scrivo nulla" % nome)
-        per_pak.setdefault(os.path.dirname(pak.percorso), (pak, []))[1].append((nome, nuovo, originale))
-    if adattate:
+            raw_translation = memory.get(s)
+            t = _adapt(raw_translation, present, allowed, a) if raw_translation else None
+            if raw_translation and t is None and allowed is not None and _adapt(raw_translation, present) is not None:
+                from .characters import Filter, undrawable
+                rejected[s] = undrawable(raw_translation, Filter(allowed, added=s), a)
+            elif t and _adapt(raw_translation, present) != t:
+                adapted += 1
+            new_lines.append(t if t else s)
+            translated_count += bool(t) and t != s
+            total += 1
+        new = write_locres(info, new_lines)
+        checks = read_locres(new)  # it must read back with the same structure
+        if checks["chiavi"] != info["chiavi"] or checks["testa"] != info["testa"]:
+            raise UnrealError("Controllo del .locres tradotto fallito per %s: non scrivo nulla" % name)
+        by_pak.setdefault(os.path.dirname(pak.path), (pak, []))[1].append((name, new, original))
+    if adapted:
         log("  %d frasi adattate ai caratteri dei font del gioco (lettere che le sue lingue non usano, es. e')"
-            % adattate)
-    if scartate:
+            % adapted)
+    if rejected:
         log("  ! %d traduzioni hanno caratteri che i font del gioco probabilmente non hanno e restano in originale, "
             "es. %r (quelle scritte da PatchSmith le rifaccio senza quei caratteri)" % (
-                len(scartate), next(iter(scartate))[:60]))
-        if respinte is not None:
-            respinte.update(scartate)
+                len(rejected), next(iter(rejected))[:60]))
+        if refused is not None:
+            refused.update(rejected)
 
     # 1) each new pak is written alongside with a temporary name (Unreal only loads .pak files) and verified
-    pronti, vecchi = {}, (manifesto or {}).get("file", {})
+    ready, old_files = {}, (manifest or {}).get("file", {})
     try:
-        for cartella_paks, (modello, file) in per_pak.items():
-            destinazione = os.path.join(cartella_paks, nome_pak(a))
-            rel = os.path.relpath(destinazione, cartella).replace(os.sep, "/")
-            if os.path.exists(destinazione) and rel not in vecchi:
-                raise ErroreUnreal("Esiste gia' %s non creato da PatchSmith: non lo sovrascrivo." % rel)
-            temporaneo = destinazione + SUFFISSO_TMP
+        for paks_folder, (model, file) in by_pak.items():
+            dest_lang = os.path.join(paks_folder, pak_name(a))
+            rel = os.path.relpath(dest_lang, folder).replace(os.sep, "/")
+            if os.path.exists(dest_lang) and rel not in old_files:
+                raise UnrealError("Esiste gia' %s non creato da PatchSmith: non lo sovrascrivo." % rel)
+            temp_file = dest_lang + TMP_SUFFIX
             # full names with the root mount point: this also works for the .locres files of a pak mounted in a
             # deeper folder (for the main paks it is the same mount point, '../../../')
-            scrivi_pak(temporaneo, modello, [(n, d) for n, d, _ in file], mount="../../../")
-            letto = Pak(temporaneo)  # verification: the written pak must read back with the same files
-            if any(letto.leggi(n) != d for n, d, _ in file) or set(letto.voci) != {n for n, _, _ in file}:
-                raise ErroreUnreal("Verifica del pak scritto fallita: non installo nulla")
-            pronti[rel] = (temporaneo, destinazione, _sha256(temporaneo))
+            write_pak(temp_file, model, [(n, d) for n, d, _ in file], mount="../../../")
+            was_read = Pak(temp_file)  # verification: the written pak must read back with the same files
+            if any(was_read.read_file(n) != d for n, d, _ in file) or set(was_read.entries) != {n for n, _, _ in file}:
+                raise UnrealError("Verifica del pak scritto fallita: non installo nulla")
+            ready[rel] = (temp_file, dest_lang, _sha256(temp_file))
     except BaseException:
-        for temporaneo, _, _ in pronti.values():
-            if os.path.exists(temporaneo):
-                os.remove(temporaneo)
+        for temp_file, _, _ in ready.values():
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
         raise
 
     # 2) manifest written BEFORE putting the paks in place: if things stop halfway, restore
     #    recognizes both the new pak and the one that was there before ("precedenti" field)
-    def scrivi_manifesto(file, precedenti):
-        scrivi_atomico(os.path.join(cartella, MANIFESTO), json.dumps({
+    def write_manifest(file, prior):
+        write_atomic(os.path.join(folder, MANIFEST), json.dumps({
             "versione": 1, "patchsmith": True, "patchsmith_versione": __version__, "lingua": a,
-            "profilo": nome_profilo,
+            "profilo": profile_name,
             "data": datetime.datetime.now().isoformat(timespec="seconds"),
-            "file": file, "precedenti": precedenti,
-            "sorgenti": {n: hashlib.sha1(o).hexdigest() for _, (_, f) in per_pak.items() for n, _, o in f},
+            "file": file, "precedenti": prior,
+            "sorgenti": {n: hashlib.sha1(o).hexdigest() for _, (_, f) in by_pak.items() for n, _, o in f},
         }, ensure_ascii=False, indent=2).encode("utf-8"))
 
-    nuovi_file = {rel: impronta for rel, (_, _, impronta) in pronti.items()}
-    scrivi_manifesto(dict(vecchi, **nuovi_file), {rel: h for rel, h in vecchi.items() if rel in nuovi_file})
-    for temporaneo, destinazione, _ in pronti.values():
-        os.replace(temporaneo, destinazione)
+    new_files = {rel: fingerprint for rel, (_, _, fingerprint) in ready.items()}
+    write_manifest(dict(old_files, **new_files), {rel: h for rel, h in old_files.items() if rel in new_files})
+    for temp_file, dest_lang, _ in ready.values():
+        os.replace(temp_file, dest_lang)
     # 3) paks of a previous language (e.g. switching from it to es): remove them
-    for rel, impronta in vecchi.items():
-        p = os.path.join(cartella, *rel.split("/"))
-        if rel not in nuovi_file and os.path.exists(p) and _sha256(p) == impronta:
+    for rel, fingerprint in old_files.items():
+        p = os.path.join(folder, *rel.split("/"))
+        if rel not in new_files and os.path.exists(p) and _sha256(p) == fingerprint:
             os.remove(p)
-    scrivi_manifesto(nuovi_file, {})
-    log("  Pak di traduzione scritto: %s (%d frasi tradotte su %d)" % (", ".join(nuovi_file), tradotte, totale))
-    return tradotte
+    write_manifest(new_files, {})
+    log("  Pak di traduzione scritto: %s (%d frasi tradotte su %d)" % (", ".join(new_files), translated_count, total))
+    return translated_count
 
 
-def disinstalla(cartella, log=print):
-    cartella = os.path.abspath(cartella)
-    if not manifesto_presente(cartella):
+def uninstall(folder, log=print):
+    folder = os.path.abspath(folder)
+    if not manifest_present(folder):
         return False
-    manifesto = leggi_manifesto(cartella)
-    if manifesto is None:
-        raise ErroreUnreal("Il file %s non e' valido: per sicurezza non cancello nulla." % MANIFESTO)
-    if gioco_aperto(cartella):
-        raise ErroreUnreal("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
-    for rel, impronta in manifesto["file"].items():
-        p = os.path.join(cartella, *rel.split("/"))
-        if os.path.exists(p + SUFFISSO_TMP):
-            os.remove(p + SUFFISSO_TMP)
+    manifest = read_manifest(folder)
+    if manifest is None:
+        raise UnrealError("Il file %s non e' valido: per sicurezza non cancello nulla." % MANIFEST)
+    if game_open(folder):
+        raise UnrealError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+    for rel, fingerprint in manifest["file"].items():
+        p = os.path.join(folder, *rel.split("/"))
+        if os.path.exists(p + TMP_SUFFIX):
+            os.remove(p + TMP_SUFFIX)
         if os.path.exists(p):
-            if _sha256(p) in (impronta, manifesto.get("precedenti", {}).get(rel)):
+            if _sha256(p) in (fingerprint, manifest.get("precedenti", {}).get(rel)):
                 os.remove(p)
                 log("  Rimosso %s" % rel)
             else:
                 log("  ! %s e' stato modificato da altri: lo lascio" % rel)
-    if os.path.exists(os.path.join(cartella, MANIFESTO + SUFFISSO_TMP)):
-        os.remove(os.path.join(cartella, MANIFESTO + SUFFISSO_TMP))
-    os.remove(os.path.join(cartella, MANIFESTO))
+    if os.path.exists(os.path.join(folder, MANIFEST + TMP_SUFFIX)):
+        os.remove(os.path.join(folder, MANIFEST + TMP_SUFFIX))
+    os.remove(os.path.join(folder, MANIFEST))
     log("  Traduzione rimossa: il gioco usa di nuovo i suoi file originali.")
     return True
 
 
-def stato(cartella, log=print):
-    info = analizza(cartella)
+def state(folder, log=print):
+    info = analyze(folder)
     log("  Pak del gioco: %d (versioni %s)%s" % (len(info["paks"]), sorted(set(info["versioni"])),
                                                 ", IoStore presente" if info["iostore"] else ""))
     for p in info["problemi"]:
         log("  ! " + p)
-    manifesto = leggi_manifesto(cartella)
-    if not manifesto:
+    manifest = read_manifest(folder)
+    if not manifest:
         log("  Traduzione non installata.")
         return False
-    for rel, impronta in manifesto["file"].items():
-        p = os.path.join(cartella, *rel.split("/"))
-        ok = os.path.exists(p) and _sha256(p) == impronta
-        log("  %s %s (lingua %s, %s)" % ("OK " if ok else "NO ", rel, manifesto.get("lingua"), manifesto.get("data")))
+    for rel, fingerprint in manifest["file"].items():
+        p = os.path.join(folder, *rel.split("/"))
+        ok = os.path.exists(p) and _sha256(p) == fingerprint
+        log("  %s %s (lingua %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("lingua"), manifest.get("data")))
     try:
-        attuali = {n: hashlib.sha1(pak.leggi(n)).hexdigest() for pak, n, _, _ in trova_locres(cartella)}
-        if attuali != manifesto.get("sorgenti"):
+        current_count = {n: hashlib.sha1(pak.read_file(n)).hexdigest() for pak, n, _, _ in find_locres(folder)}
+        if current_count != manifest.get("sorgenti"):
             log("  ! Il gioco e' stato aggiornato: premi 'Analizza e traduci' per tradurre anche i testi nuovi "
                 "(quelli gia' tradotti restano).")
-    except ErroreUnreal as e:
+    except UnrealError as e:
         log("  ! " + str(e))
     return True

@@ -1,4 +1,4 @@
-"""Live translation of Electron games with encrypted files (adapter_web_vivo + injector_live.js).
+"""Live translation of Electron games with encrypted files (adapter_web_live + injector_live.js).
 
 Usage: python -I test/test_web_live.py <test_folder_that_does_not_exist>
 - fake Electron game with GemShell: game profile "web-vivo", script in preload.js with a backup, dictionary and the
@@ -15,44 +15,44 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from patchsmith import (adapter_web_live as adapter_web_vivo, auto as automatico, checks as controllo,
-                        project as progetto)  # noqa: E402
+from patchsmith import (adapter_web_live, auto as automatic, checks,
+                        project)  # noqa: E402
 
-ESITI = []
+OUTCOMES = []
 PRELOAD = "const{ipcRenderer}=require('electron');\nwindow.gemshell={version:'1.0.1'};\n"
 MAIN = ("const{app,BrowserWindow}=require('electron');new BrowserWindow({webPreferences:{preload:'preload.js',"
         "contextIsolation:false,nodeIntegration:true,sandbox:false}});")
 
 
-def controlla(nome, condizione):
-    ESITI.append((nome, bool(condizione)))
-    print(("OK    " if condizione else "ERRORE") + "  " + nome)
+def check(name, condition):
+    OUTCOMES.append((name, bool(condition)))
+    print(("OK    " if condition else "ERRORE") + "  " + name)
 
 
-def scrivi(percorso, dati):
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    with open(percorso, "wb") as f:
-        f.write(dati if isinstance(dati, bytes) else dati.encode("utf-8"))
+def write(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data if isinstance(data, bytes) else data.encode("utf-8"))
 
 
-def impronte(cartella):
-    uscita = {}
-    for radice, _, files in os.walk(cartella):
+def fingerprints(folder):
+    output = {}
+    for root, _, files in os.walk(folder):
         for n in files:
-            with open(os.path.join(radice, n), "rb") as f:
-                uscita[os.path.relpath(os.path.join(radice, n), cartella)] = hashlib.sha256(f.read()).hexdigest()
-    return uscita
+            with open(os.path.join(root, n), "rb") as f:
+                output[os.path.relpath(os.path.join(root, n), folder)] = hashlib.sha256(f.read()).hexdigest()
+    return output
 
 
-def gioco_finto(cartella):
-    for nome, dati in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "drago.exe": b"MZ",
+def fake_game(folder):
+    for name, data in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "drago.exe": b"MZ",
                        "resources/app/main.js": MAIN, "resources/app/preload.js": PRELOAD,
                        "resources/app/package.json": '{"main": "main.js"}',
                        "resources/app/gemshell-assets": b"GS02\x16\x00drago" + bytes(range(64))}.items():
-        scrivi(os.path.join(cartella, "game", *nome.split("/")), dati)
+        write(os.path.join(folder, "game", *name.split("/")), data)
 
 
-NODO = r"""
+NODE = r"""
 // pagina finta per injector_live.js: nodi di testo, TreeWalker, MutationObserver, nessun font; traduttore finto
 // (POST /traduci-gruppo) che risponde dopo 400 ms
 const path = require('path'), http = require('http');
@@ -93,94 +93,94 @@ const server = http.createServer((req, res) => {
 """
 
 
-def prova_script(base, preload, porta):
+def test_script(base, preload, port):
     node = shutil.which("node")
     if not node:
         print("(Node.js non c'e': lo script nella pagina non e' stato provato)")
         return
     # the script as PatchSmith writes it, with the fake translator's port and without the Python command
     with open(preload, encoding="utf-8") as f:
-        script = f.read().split(adapter_web_vivo.SEGNO, 1)[1]
-    config = {"dizionario": adapter_web_vivo.NOME_DIZIONARIO, "porta": porta, "da": "en", "a": "it", "comando": None}
-    inizio = script.index("var CFG = ") + len("var CFG = ")
-    fine = script.index(";", inizio)
-    script = ";(function () { //" + script[:inizio] + json.dumps(config) + script[fine:]
-    pagina = os.path.join(os.path.dirname(preload), "prova-pagina.js")
-    scrivi(pagina, script)
-    scrivi(os.path.join(base, "nodo.js"), NODO)
-    uscita = os.path.join(base, "nodi.json")
-    subprocess.run([node, os.path.join(base, "nodo.js"), pagina, str(porta), uscita], timeout=30)
-    os.remove(pagina)
-    with open(uscita, encoding="utf-8") as f:
+        script = f.read().split(adapter_web_live.MARKER, 1)[1]
+    config = {"dizionario": adapter_web_live.DICTIONARY_NAME, "porta": port, "da": "en", "a": "it", "comando": None}
+    start = script.index("var CFG = ") + len("var CFG = ")
+    end = script.index(";", start)
+    script = ";(function () { //" + script[:start] + json.dumps(config) + script[end:]
+    page = os.path.join(os.path.dirname(preload), "prova-pagina.js")
+    write(page, script)
+    write(os.path.join(base, "nodo.js"), NODE)
+    output = os.path.join(base, "nodi.json")
+    subprocess.run([node, os.path.join(base, "nodo.js"), page, str(port), output], timeout=30)
+    os.remove(page)
+    with open(output, encoding="utf-8") as f:
         r = json.load(f)
-    controlla("nella pagina: frasi tradotte dal dizionario e dal traduttore (numeri tolti e rimessi), tasti e numeri "
+    check("nella pagina: frasi tradotte dal dizionario e dal traduttore (numeri tolti e rimessi), tasti e numeri "
               "come sono (%s)" % r["valori"],
               r["valori"] == ["Clicca o premi Z per attaccare il drago!", "IT Elapsed: 1.28 minutes", "Q", "999,999",
                               "IT Settings"] and r["title"] == "IT Close")
-    controlla("frasi nuove chieste in un solo gruppo, mai le traduzioni gia' scritte (%s)" % r["richieste"],
+    check("frasi nuove chieste in un solo gruppo, mai le traduzioni gia' scritte (%s)" % r["richieste"],
               len(r["richieste"]) == 1 and sorted(r["richieste"][0]) == ["Close", "Elapsed: {{A}} minutes", "Settings"])
-    controlla("frase in attesa nascosta per poco, poi visibile e tradotta (%r -> %r)" % (r["nascosto"], r["dopo"]),
+    check("frase in attesa nascosta per poco, poi visibile e tradotta (%r -> %r)" % (r["nascosto"], r["dopo"]),
               r["nascosto"] == "hidden" and r["dopo"] == "")
 
 
 def main(base):
     base = os.path.abspath(base)
     os.makedirs(base)
-    progetto.RADICE_DATI = os.path.join(base, "dati")
-    automatico.CARTELLA_PROFILI = os.path.join(progetto.RADICE_DATI, "profiles")
-    gioco = os.path.join(base, "Drago")
-    gioco_finto(gioco)
-    prima = impronte(gioco)
-    righe = []
-    percorso, completato, esito = automatico.analizza_e_traduci(gioco, "auto", "it", "finto", righe.append)
-    preload = os.path.join(gioco, "game", "resources", "app", "preload.js")
+    project.DATA_ROOT = os.path.join(base, "dati")
+    automatic.PROFILES_FOLDER = os.path.join(project.DATA_ROOT, "profiles")
+    game = os.path.join(base, "Drago")
+    fake_game(game)
+    before = fingerprints(game)
+    lines = []
+    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "finto", lines.append)
+    preload = os.path.join(game, "game", "resources", "app", "preload.js")
     with open(preload, encoding="utf-8") as f:
-        scritto = f.read()
-    profilo = json.load(open(percorso, encoding="utf-8")) if percorso else {}
-    controlla("file cifrati con preload.js in chiaro: traduzione dal vivo (profilo web-vivo), esito OK",
-              completato and profilo.get("motore") == "web-vivo" and esito["esito"].codice == "OK")
-    controlla("preload.js: originale in testa, script in fondo; backup verificato; dizionario e comando accanto",
-              scritto.startswith(PRELOAD.rstrip("\n")) and adapter_web_vivo.SEGNO in scritto
-              and os.path.exists(preload + progetto.SUFFISSO_BACKUP)
-              and os.path.exists(os.path.join(os.path.dirname(preload), adapter_web_vivo.NOME_CONFIG))
-              and "servizio-xunity" in scritto and "gemshell-assets" not in [r for r in righe])
+        written = f.read()
+    profile = json.load(open(path, encoding="utf-8")) if path else {}
+    check("file cifrati con preload.js in chiaro: traduzione dal vivo (profilo web-vivo), esito OK",
+              completed and profile.get("motore") == "web-vivo" and outcome["esito"].code == "OK")
+    check("preload.js: originale in testa, script in fondo; backup verificato; dizionario e comando accanto",
+              written.startswith(PRELOAD.rstrip("\n")) and adapter_web_live.MARKER in written
+              and os.path.exists(preload + project.BACKUP_SUFFIX)
+              and os.path.exists(os.path.join(os.path.dirname(preload), adapter_web_live.CONFIG_NAME))
+              and "servizio-xunity" in written and "gemshell-assets" not in [r for r in lines])
     # translations that arrived while playing (the game's translation memory): Reapply puts them in the dictionary
-    memoria = progetto.percorso_memoria(profilo, prova=True)
-    scrivi(memoria, json.dumps({"Click or press Z to attack the dragon!": "Clicca o premi Z per attaccare il drago!",
+    memory = project.memory_path(profile, test=True)
+    write(memory, json.dumps({"Click or press Z to attack the dragon!": "Clicca o premi Z per attaccare il drago!",
                                 "{{A}} minutes": "{{A}} minuti"}))
     d = {}
-    automatico.riapplica(gioco, righe.append, prova=True, esito=d)
-    with open(os.path.join(os.path.dirname(preload), adapter_web_vivo.NOME_DIZIONARIO), encoding="utf-8") as f:
-        dizionario = json.load(f)
+    automatic.reapply(game, lines.append, test=True, outcome=d)
+    with open(os.path.join(os.path.dirname(preload), adapter_web_live.DICTIONARY_NAME), encoding="utf-8") as f:
+        dictionary = json.load(f)
     with open(preload, encoding="utf-8") as f:
-        riscritto = f.read()
-    controlla("Riapplica: dizionario con le traduzioni salvate, script una volta sola",
-              dizionario.get("{{A}} minutes") == "{{A}} minuti" and riscritto.count(adapter_web_vivo.SEGNO) == 1)
-    prova_script(base, preload, 47999)
+        rewritten = f.read()
+    check("Riapplica: dizionario con le traduzioni salvate, script una volta sola",
+              dictionary.get("{{A}} minutes") == "{{A}} minuti" and rewritten.count(adapter_web_live.MARKER) == 1)
+    test_script(base, preload, 47999)
     # "No" at the end of Analyze and translate: no translator in the preload, only the dictionary; "Yes": on again
-    automatico.imposta_dal_vivo(gioco, False, righe.append)
+    automatic.set_live(game, False, lines.append)
     with open(preload, encoding="utf-8") as f:
-        spento = f.read()
-    profilo_spento = json.load(open(percorso, encoding="utf-8"))
-    automatico.imposta_dal_vivo(gioco, True, righe.append)
+        off_button = f.read()
+    profile_off = json.load(open(path, encoding="utf-8"))
+    automatic.set_live(game, True, lines.append)
     with open(preload, encoding="utf-8") as f:
-        acceso = f.read()
-    controlla("traduzione mentre giochi spenta (solo dizionario, nessun traduttore avviato) e poi riaccesa",
-              '"porta": 0' in spento and '"comando": null' in spento and profilo_spento["dal_vivo"] == "nessuno"
-              and '"porta": 0' not in acceso and "servizio-xunity" in acceso
-              and automatico.traduzione_dal_vivo(gioco)[1] is True and acceso.count(adapter_web_vivo.SEGNO) == 1)
+        is_on = f.read()
+    check("traduzione mentre giochi spenta (solo dizionario, nessun traduttore avviato) e poi riaccesa",
+              '"porta": 0' in off_button and '"comando": null' in off_button and profile_off["dal_vivo"] == "nessuno"
+              and '"porta": 0' not in is_on and "servizio-xunity" in is_on
+              and automatic.live_translation(game)[1] is True and is_on.count(adapter_web_live.MARKER) == 1)
     # the game puts back its own preload.js: the after-play check notices it
-    scrivi(preload, PRELOAD)
-    problemi = controllo.controlla(percorso, applica=False, log=lambda _m: None, ritraduci=False)
-    controlla("preload.js rimesso dal gioco: il controllo dopo aver giocato propone di rimettere la traduzione",
-              any(p.codice == "RIPRISTINATO_DAL_GIOCO" for p in problemi))
-    automatico.riapplica(gioco, righe.append, prova=True, esito={})
-    automatico.ripristina(gioco, righe.append, esito={})
-    controlla("Ripristina originali: cartella del gioco identica a prima (preload.js, nessun file di PatchSmith)",
-              impronte(gioco) == prima)
-    falliti = [n for n, ok in ESITI if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(ESITI) - len(falliti), len(ESITI)))
-    return 1 if falliti else 0
+    write(preload, PRELOAD)
+    problems = checks.check(path, apply=False, log=lambda _m: None, retranslate=False)
+    check("preload.js rimesso dal gioco: il controllo dopo aver giocato propone di rimettere la traduzione",
+              any(p.code == "RIPRISTINATO_DAL_GIOCO" for p in problems))
+    automatic.reapply(game, lines.append, test=True, outcome={})
+    automatic.restore(game, lines.append, outcome={})
+    check("Ripristina originali: cartella del gioco identica a prima (preload.js, nessun file di PatchSmith)",
+              fingerprints(game) == before)
+    failed = [n for n, ok in OUTCOMES if not ok]
+    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """Unity (Mono) adapter: installs and configures BepInEx 5 + XUnity.AutoTranslator.
 
 XUnity translates the texts WHILE the game runs (UGUI, TextMeshPro, IMGUI...): the sentences it does not find already
-translated it asks PatchSmith's translator for (servizio_xunity, started by the PatchsmithServizio plugin when the
+translated it asks PatchSmith's translator for (xunity_service, started by the PatchsmithServizio plugin when the
 game opens), which uses the game's translation memory and the checks and pauses of PatchSmith's translators. Only if
 the plugin cannot be prepared (e.g. the Windows C# compiler is missing) does XUnity use free Google by itself, and
 never while Google is paused because of a block. The translations stay in
@@ -34,103 +34,103 @@ import sys
 import time
 import zipfile
 
-from . import (__version__, adapter_unity_loc, components as componenti, interruption as interruzione,
-               language as lingua, detection as rilevamento, unityfs)
-from .adapter_webjson import SUFFISSO_TMP, scrivi_atomico
-from .project import CARTELLA_PROGETTO, cartella_dati
-from .text import DETTAGLIO, e_testo_leggibile, solo_parole
+from . import (__version__, adapter_unity_loc, components, interruption,
+               language, detection, unityfs)
+from .adapter_webjson import TMP_SUFFIX, write_atomic
+from .project import PROJECT_FOLDER, data_folder
+from .text import DETAIL, is_readable_text, words_only
 
-MANIFESTO = "patchsmith-unity.json"
+MANIFEST = "patchsmith-unity.json"
 CONFIG_XUNITY = "BepInEx/config/AutoTranslatorConfig.ini"
 CONFIG_BEPINEX = "BepInEx/config/BepInEx.cfg"
-# translator of new sentences while playing: plugin that starts servizio_xunity and the command to run
-CONFIG_SERVIZIO = "BepInEx/config/patchsmith-servizio.cfg"
-PLUGIN_SERVIZIO = "BepInEx/plugins/Patchsmith/Patchsmith.Servizio.dll"
+# translator of new sentences while playing: plugin that starts xunity_service and the command to run
+SERVICE_CONFIG = "BepInEx/config/patchsmith-servizio.cfg"
+SERVICE_PLUGIN = "BepInEx/plugins/Patchsmith/Patchsmith.Servizio.dll"
 # written by the plugin at every game start: whether and how it started the translator (for the after-play checks)
-STATO_SERVIZIO = "BepInEx/patchsmith-servizio-stato.txt"
-SORGENTE_SERVIZIO = os.path.join(CARTELLA_PROGETTO, "components", "plugin", "PatchsmithServizio.cs")
-LOG_BEPINEX = "BepInEx/LogOutput.log"
+SERVICE_STATE = "BepInEx/patchsmith-servizio-stato.txt"
+SERVICE_SOURCE = os.path.join(PROJECT_FOLDER, "components", "plugin", "PatchsmithServizio.cs")
+BEPINEX_LOG = "BepInEx/LogOutput.log"
 # Presence of another mod loader: better not to install a second one.
-CONFLITTI = ["BepInEx", "MelonLoader", "winhttp.dll", "version.dll", "doorstop_config.ini", ".doorstop_version"]
+CONFLICTS = ["BepInEx", "MelonLoader", "winhttp.dll", "version.dll", "doorstop_config.ini", ".doorstop_version"]
 # Package files that are not needed (and might already exist in the game).
-ESCLUSI = {"changelog.txt"}
+EXCLUDED = {"changelog.txt"}
 # The only files allowed outside BepInEx/ (manifest validation).
-RADICE_AMMESSI = {"winhttp.dll", "doorstop_config.ini", ".doorstop_version"}
+ROOT_ALLOWED = {"winhttp.dll", "doorstop_config.ini", ".doorstop_version"}
 # Files that BepInEx/XUnity (and PatchSmith, after the installation) create inside BepInEx/ (removed on uninstall).
-CREATI_DA_LORO = [
+CREATED_BY_THEM = [
     "config/BepInEx.cfg", "config/AutoTranslatorConfig.ini", "config/gravydevsupreme.*.cfg",
     "config/patchsmith-servizio.cfg", "plugins/Patchsmith/*", "patchsmith-servizio-stato.txt",
     "cache/*", "LogOutput.log*", "Translation/*", "DumpedAssemblies/*",
 ]
 # Files that BepInEx can create in the game's root while running.
-ARTEFATTI_RADICE = re.compile(r"^(preloader_.*\.log|output_log\.txt|BepInEx_Shim_Backup)$", re.I)
+ROOT_ARTIFACTS = re.compile(r"^(preloader_.*\.log|output_log\.txt|BepInEx_Shim_Backup)$", re.I)
 
 
-class ErroreUnity(Exception):
-    def __init__(self, messaggio="", codice=None):
-        super().__init__(messaggio)
-        self.codice = codice  # outcome for the interface (see outcome.py), e.g. GIOCO_APERTO
+class UnityError(Exception):
+    def __init__(self, message="", code=None):
+        super().__init__(message)
+        self.code = code  # outcome for the interface (see outcome.py), e.g. GIOCO_APERTO
 
 
-def _sha256(percorso):
+def _sha256(path):
     h = hashlib.sha256()
-    with open(percorso, "rb") as f:
-        for blocco in iter(lambda: f.read(1 << 20), b""):
-            h.update(blocco)
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
     return h.hexdigest()
 
 
-def _percorso(cartella, rel):
-    return os.path.join(cartella, *rel.split("/"))
+def _path(folder, rel):
+    return os.path.join(folder, *rel.split("/"))
 
 
 # --- game analysis ------------------------------------------------------------------------------
 
-def _trova_exe(cartella):
+def _find_exe(folder):
     """The game's executable: the .exe that has the <nome>_Data folder next to it."""
     try:
-        nomi = sorted(os.listdir(cartella))
+        names = sorted(os.listdir(folder))
     except OSError:
         return None
-    for nome in nomi:
-        if nome.lower().endswith(".exe") and os.path.isdir(os.path.join(cartella, nome[:-4] + "_Data")):
-            return nome
+    for name in names:
+        if name.lower().endswith(".exe") and os.path.isdir(os.path.join(folder, name[:-4] + "_Data")):
+            return name
     return None
 
 
-def trova_radice(cartella, profondita=2):
+def find_root(folder, depth=2):
     """The Unity game's folder (the one with the .exe and the _Data folder), even if the parent one was chosen."""
-    if _trova_exe(cartella):
-        return cartella
-    if profondita == 0:
+    if _find_exe(folder):
+        return folder
+    if depth == 0:
         return None
     try:
-        sotto = sorted(d for d in os.listdir(cartella) if os.path.isdir(os.path.join(cartella, d)))
+        subfolders = sorted(d for d in os.listdir(folder) if os.path.isdir(os.path.join(folder, d)))
     except OSError:
         return None
-    for d in sotto:
+    for d in subfolders:
         if d.lower().startswith(("_commonredist", "_redist")) or d.endswith("_Data"):
             continue
-        trovata = trova_radice(os.path.join(cartella, d), profondita - 1)
-        if trovata:
-            return trovata
+        found_root = find_root(os.path.join(folder, d), depth - 1)
+        if found_root:
+            return found_root
     return None
 
 
-def _architettura(percorso_exe):
+def _architecture(exe_path):
     try:
-        with open(percorso_exe, "rb") as f:
-            testa = f.read(4096)
-        pe = struct.unpack_from("<I", testa, 0x3C)[0]
-        macchina = struct.unpack_from("<H", testa, pe + 4)[0]
+        with open(exe_path, "rb") as f:
+            head = f.read(4096)
+        pe = struct.unpack_from("<I", head, 0x3C)[0]
+        machine = struct.unpack_from("<H", head, pe + 4)[0]
     except (OSError, struct.error):
         return None
-    return {0x8664: "x64", 0x14C: "x86"}.get(macchina)
+    return {0x8664: "x64", 0x14C: "x86"}.get(machine)
 
 
-def _versione_unity(cartella_dati):
-    for nome in ("globalgamemanagers", "data.unity3d", "mainData"):
-        p = os.path.join(cartella_dati, nome)
+def _unity_version(data_folder):
+    for name in ("globalgamemanagers", "data.unity3d", "mainData"):
+        p = os.path.join(data_folder, name)
         if os.path.exists(p):
             with open(p, "rb") as f:
                 m = re.search(rb"(\d{1,4}\.\d+\.\d+[abfpx]\d+)", f.read(65536))
@@ -139,107 +139,108 @@ def _versione_unity(cartella_dati):
     return None
 
 
-def _processi_windows():
+def _windows_processes():
     """Full paths of the running executables (Windows, Unicode)."""
     from ctypes import wintypes
     k32 = ctypes.WinDLL("kernel32", use_last_error=True)
     psapi = ctypes.WinDLL("psapi", use_last_error=True)
     ids = (wintypes.DWORD * 4096)()
-    usati = wintypes.DWORD()
-    if not psapi.EnumProcesses(ctypes.byref(ids), ctypes.sizeof(ids), ctypes.byref(usati)):
+    used = wintypes.DWORD()
+    if not psapi.EnumProcesses(ctypes.byref(ids), ctypes.sizeof(ids), ctypes.byref(used)):
         raise OSError("EnumProcesses non riuscito")
     k32.OpenProcess.restype = wintypes.HANDLE
-    percorsi = []
-    for pid in ids[: usati.value // ctypes.sizeof(wintypes.DWORD)]:
+    paths = []
+    for pid in ids[: used.value // ctypes.sizeof(wintypes.DWORD)]:
         h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not h:
             continue
         try:
             buffer = ctypes.create_unicode_buffer(32768)
-            dimensione = wintypes.DWORD(len(buffer))
-            if k32.QueryFullProcessImageNameW(h, 0, buffer, ctypes.byref(dimensione)):
-                percorsi.append(buffer.value)
+            size = wintypes.DWORD(len(buffer))
+            if k32.QueryFullProcessImageNameW(h, 0, buffer, ctypes.byref(size)):
+                paths.append(buffer.value)
         finally:
             k32.CloseHandle(h)
-    return percorsi
+    return paths
 
 
-def in_esecuzione(cartella, exe):
+def is_running(folder, exe):
     """True if the game's executable (in this folder) is open. When in doubt it raises an error."""
     if not exe or not sys.platform.startswith("win"):
         return False
     try:
-        percorsi = _processi_windows()
+        paths = _windows_processes()
     except (OSError, AttributeError) as e:
-        raise ErroreUnity("Non riesco a controllare se il gioco e' aperto (%s): chiudilo e riprova." % e) from e
-    obiettivo = os.path.normcase(os.path.abspath(os.path.join(cartella, exe)))
-    return any(os.path.normcase(p) == obiettivo for p in percorsi)
+        raise UnityError("Non riesco a controllare se il gioco e' aperto (%s): chiudilo e riprova." % e) from e
+    goal = os.path.normcase(os.path.abspath(os.path.join(folder, exe)))
+    return any(os.path.normcase(p) == goal for p in paths)
 
 
-def analizza(cartella):
-    exe = _trova_exe(cartella)
-    dati = os.path.join(cartella, exe[:-4] + "_Data") if exe else None
+def analyze(folder):
+    exe = _find_exe(folder)
+    data = os.path.join(folder, exe[:-4] + "_Data") if exe else None
     backend = None
-    if os.path.exists(os.path.join(cartella, "GameAssembly.dll")) or (dati and os.path.isdir(os.path.join(dati, "il2cpp_data"))):
+    if (os.path.exists(os.path.join(folder, "GameAssembly.dll"))
+            or (data and os.path.isdir(os.path.join(data, "il2cpp_data")))):
         backend = "il2cpp"
-    elif dati and os.path.isdir(os.path.join(dati, "Managed")):
+    elif data and os.path.isdir(os.path.join(data, "Managed")):
         backend = "mono"
     return {
         "exe": exe,
-        "dati": dati,
+        "dati": data,
         "backend": backend,
-        "architettura": _architettura(os.path.join(cartella, exe)) if exe else None,
-        "versione_unity": _versione_unity(dati) if dati else None,
-        "conflitti": [c for c in CONFLITTI if os.path.exists(os.path.join(cartella, c))],
-        "installato": os.path.exists(os.path.join(cartella, MANIFESTO)),
+        "architettura": _architecture(os.path.join(folder, exe)) if exe else None,
+        "versione_unity": _unity_version(data) if data else None,
+        "conflitti": [c for c in CONFLICTS if os.path.exists(os.path.join(folder, c))],
+        "installato": os.path.exists(os.path.join(folder, MANIFEST)),
     }
 
 
-def stringhe_dotnet(dati):
+def dotnet_strings(data):
     """String literals of .NET code: reads the #US heap of the metadata (no random reads)."""
-    radice = dati.find(b"BSJB")
-    if radice < 0:
+    root = data.find(b"BSJB")
+    if root < 0:
         return []
     try:
-        lunghezza_versione = struct.unpack_from("<I", dati, radice + 12)[0]
-        p = radice + 16 + lunghezza_versione
-        flussi = struct.unpack_from("<H", dati, p + 2)[0]
+        version_length = struct.unpack_from("<I", data, root + 12)[0]
+        p = root + 16 + version_length
+        streams = struct.unpack_from("<H", data, p + 2)[0]
         p += 4
         heap = None
-        for _ in range(flussi):
-            offset, dimensione = struct.unpack_from("<II", dati, p)
-            fine_nome = dati.index(b"\x00", p + 8)
-            nome = dati[p + 8:fine_nome]
-            p = p + 8 + ((fine_nome - (p + 8)) // 4 + 1) * 4
-            if nome == b"#US":
-                heap = (radice + offset, radice + offset + dimensione)
+        for _ in range(streams):
+            offset, size = struct.unpack_from("<II", data, p)
+            name_end = data.index(b"\x00", p + 8)
+            name = data[p + 8:name_end]
+            p = p + 8 + ((name_end - (p + 8)) // 4 + 1) * 4
+            if name == b"#US":
+                heap = (root + offset, root + offset + size)
         if not heap:
             return []
-        stringhe, i, fine = [], heap[0] + 1, heap[1]
-        while i < fine:
-            b0 = dati[i]
+        strings, i, end = [], heap[0] + 1, heap[1]
+        while i < end:
+            b0 = data[i]
             if b0 & 0x80 == 0:
                 n, i = b0, i + 1
             elif b0 & 0xC0 == 0x80:
-                n, i = ((b0 & 0x3F) << 8) | dati[i + 1], i + 2
+                n, i = ((b0 & 0x3F) << 8) | data[i + 1], i + 2
             else:
-                n, i = ((b0 & 0x1F) << 24) | (dati[i + 1] << 16) | (dati[i + 2] << 8) | dati[i + 3], i + 4
+                n, i = ((b0 & 0x1F) << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3], i + 4
             if n > 1:
-                stringhe.append(dati[i:i + n - 1].decode("utf-16-le", "replace"))
+                strings.append(data[i:i + n - 1].decode("utf-16-le", "replace"))
             i += n
-        return stringhe
+        return strings
     except (struct.error, ValueError, IndexError):
         return []
 
 
-_UTF8_VALIDO = re.compile(
+_VALID_UTF8 = re.compile(
     rb"(?:[\x20-\x7e]|[\xc2-\xdf][\x80-\xbf]|[\xe0-\xef][\x80-\xbf]{2}|[\xf0-\xf4][\x80-\xbf]{3}){12,}")
 
 # DLLs of the engine, of .NET and of third-party components in <gioco>_Data/Managed: they are not the game's code
 # (their strings are not game texts and their OnGUI is not its interface). The other DLLs belong to the game: besides
 # Assembly-CSharp, those of its modules (e.g. SunHaven.Core.dll, Mouse.dll) and Assembly-UnityScript (the code of old
 # Unity games written in UnityScript; UnityScript.dll and Boo.Lang.dll are instead its libraries).
-_ASSEMBLY_DI_ALTRI = re.compile(
+_THIRD_PARTY_ASSEMBLY = re.compile(
     r"^(?:Boo\.Lang|Unity|GLTF|System[._]"
     r"|System$|Mono[._]|mscorlib|netstandard|Microsoft[._]|Newtonsoft|Rewired|DOTween|Demigiant|DemiLib|BepInEx"
     r"|0?Harmony|MonoMod|Sirenix|OdinSerializer|Steamworks|com\.rlabrecque|Facepunch|FMOD|AK\.Wwise|Ak\.Wwise"
@@ -253,96 +254,96 @@ _ASSEMBLY_DI_ALTRI = re.compile(
 MAX_MB_ASSEMBLY = 64  # a larger DLL is read only up to here
 
 
-def assembly_del_gioco(dati):
+def game_assembly(data):
     """[percorso] of the DLLs of the game's code in <dati>/Managed: Assembly-CSharp and Assembly-CSharp-firstpass
     first (then the Assembly-UnityScript of old games), then the game's other ones (its modules, e.g.
-    SunHaven.Core.dll), without engine, .NET and third-party components (see _ASSEMBLY_DI_ALTRI) or the DLLs of the
+    SunHaven.Core.dll), without engine, .NET and third-party components (see _THIRD_PARTY_ASSEMBLY) or the DLLs of the
     editor tools and of the tests. Empty if there is no Managed."""
-    gestite = os.path.join(dati, "Managed") if dati else None
+    managed_folder = os.path.join(data, "Managed") if data else None
     try:
-        nomi = sorted(n for n in os.listdir(gestite) if n.lower().endswith(".dll"))
+        names = sorted(n for n in os.listdir(managed_folder) if n.lower().endswith(".dll"))
     except (OSError, TypeError):
         return []
-    primi = [n for n in ("Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Assembly-UnityScript.dll",
-                         "Assembly-UnityScript-firstpass.dll") if n in nomi]
-    altri = [n for n in nomi if n not in primi and not _ASSEMBLY_DI_ALTRI.match(n[:-4])
+    leading = [n for n in ("Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Assembly-UnityScript.dll",
+                         "Assembly-UnityScript-firstpass.dll") if n in names]
+    others = [n for n in names if n not in leading and not _THIRD_PARTY_ASSEMBLY.match(n[:-4])
              and not re.search(r"(?i)[._-](?:editor|tests?)$", n[:-4])]
-    return [os.path.join(gestite, n) for n in primi + altri]
+    return [os.path.join(managed_folder, n) for n in leading + others]
 
 
-def _leggi_assembly(percorso):
-    with open(percorso, "rb") as f:
+def _read_assembly(path):
+    with open(path, "rb") as f:
         return f.read(MAX_MB_ASSEMBLY * 1024 * 1024)
 
 
-def testi_campione(cartella, info, massimo_mb=40):
+def sample_texts(folder, info, max_mb=40):
     """Texts taken from the game's files to recognize its language (strings of the code and of the assets). Of the
     code only Assembly-CSharp counts: the game's other modules often have only technical messages in English, which
     would make even a Japanese game look English."""
-    testi = []
-    codice = os.path.join(info["dati"], "Managed", "Assembly-CSharp.dll") if info.get("dati") else None
-    if codice and os.path.exists(codice):
-        with open(codice, "rb") as f:
-            testi += [t for t in stringhe_dotnet(f.read()) if e_testo_leggibile(t)]
-    for nome in ("resources.assets", "sharedassets0.assets", "level0"):
-        p = os.path.join(info["dati"], nome) if info.get("dati") else None
+    texts = []
+    code = os.path.join(info["dati"], "Managed", "Assembly-CSharp.dll") if info.get("dati") else None
+    if code and os.path.exists(code):
+        with open(code, "rb") as f:
+            texts += [t for t in dotnet_strings(f.read()) if is_readable_text(t)]
+    for name in ("resources.assets", "sharedassets0.assets", "level0"):
+        p = os.path.join(info["dati"], name) if info.get("dati") else None
         if p and os.path.exists(p):
             with open(p, "rb") as f:
-                dati = f.read(massimo_mb * 1024 * 1024)
-            for m in _UTF8_VALIDO.finditer(dati):
+                data = f.read(max_mb * 1024 * 1024)
+            for m in _VALID_UTF8.finditer(data):
                 t = m.group(0).decode("utf-8", "replace")
-                if e_testo_leggibile(t) and (" " in t.strip() or any(ord(c) > 0x2E7F for c in t)):
-                    testi.append(t)
-    return testi
+                if is_readable_text(t) and (" " in t.strip() or any(ord(c) > 0x2E7F for c in t)):
+                    texts.append(t)
+    return texts
 
 
 # --- manifest -----------------------------------------------------------------------------------
 
-def _rel_valido(rel):
+def _valid_rel(rel):
     if not isinstance(rel, str) or not rel or rel.startswith("/") or "\\" in rel or re.match(r"^[A-Za-z]:", rel):
         return False
-    parti = rel.split("/")
-    if any(p in ("", ".", "..") for p in parti):
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts):
         return False
-    return parti[0] == "BepInEx" or rel in RADICE_AMMESSI
+    return parts[0] == "BepInEx" or rel in ROOT_ALLOWED
 
 
-def leggi_manifesto(cartella):
+def read_manifest(folder):
     """The manifest, only if valid (otherwise None): nothing is deleted on the basis of strange data."""
     try:
-        with open(os.path.join(cartella, MANIFESTO), encoding="utf-8") as f:
+        with open(os.path.join(folder, MANIFEST), encoding="utf-8") as f:
             m = json.load(f)
     except (OSError, ValueError):
         return None
     if not (isinstance(m, dict) and m.get("patchsmith") is True and m.get("versione") == 2
             and m.get("cartelle_create") in ([], ["BepInEx"]) and isinstance(m.get("radice_prima"), list)
-            and isinstance(m.get("file"), dict) and all(_rel_valido(r) for r in m["file"])):
+            and isinstance(m.get("file"), dict) and all(_valid_rel(r) for r in m["file"])):
         return None
     return m
 
 
-def manifesto_presente(cartella):
-    return os.path.exists(os.path.join(cartella, MANIFESTO))
+def manifest_present(folder):
+    return os.path.exists(os.path.join(folder, MANIFEST))
 
 
-def _salva_manifesto(cartella, m):
-    scrivi_atomico(os.path.join(cartella, MANIFESTO), json.dumps(m, ensure_ascii=False, indent=2).encode("utf-8"))
+def _save_manifest(folder, m):
+    write_atomic(os.path.join(folder, MANIFEST), json.dumps(m, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
-def _cartella_memoria(nome_profilo):
-    return cartella_dati("memory", "%s.unity" % nome_profilo)
+def _memory_folder(profile_name):
+    return data_folder("memory", "%s.unity" % profile_name)
 
 
 # --- XUnity configuration -----------------------------------------------------------------------
 
-def _valori_config(da, a, imgui=False, url=None, google=True):
-    """The XUnity keys that PatchSmith enforces. url: address of PatchSmith's translator (servizio_xunity); without
+def _config_values(src_lang, a, imgui=False, url=None, google=True):
+    """The XUnity keys that PatchSmith enforces. url: address of PatchSmith's translator (xunity_service); without
     it, XUnity uses free Google by itself (google=True) or no translator (empty Endpoint: Google paused)."""
-    valori = {
+    values = {
         # empty FallbackEndpoint: an XUnity fallback to Google would bypass PatchSmith's pauses
         "Service": {"Endpoint": "CustomTranslate" if url else ("GoogleTranslateV2" if google else ""),
                     "FallbackEndpoint": ""},
-        "General": {"Language": a, "FromLanguage": da},
+        "General": {"Language": a, "FromLanguage": src_lang},
         # EnableBatching=False: with GoogleTranslateV2 batched requests fail ("incorrect number of
         # translations") and XUnity redoes everything one sentence at a time, doubling the wait. With PatchSmith's
         # translator long texts too (up to XUnity's maximum, 2500 characters): it splits them itself.
@@ -353,384 +354,385 @@ def _valori_config(da, a, imgui=False, url=None, google=True):
                       "CopyToClipboard": "False"},
     }
     if imgui:  # XUnity keeps it off: games that draw their texts with OnGUI would be left untranslated
-        valori["TextFrameworks"] = {"EnableIMGUI": "True"}
+        values["TextFrameworks"] = {"EnableIMGUI": "True"}
     if url:  # PatchSmith's translator on the PC: no waits between sentences and no XUnity anti-spam check
         # (which would switch the plugin off when a game shows many new sentences in a row); the pauses of the online
         # translators are respected by the service
-        valori["Custom"] = {"Url": url, "EnableShortDelay": "True", "DisableSpamChecks": "True"}
-    return valori
+        values["Custom"] = {"Url": url, "EnableShortDelay": "True", "DisableSpamChecks": "True"}
+    return values
 
 
-def usa_imgui(cartella):
+def uses_imgui(folder):
     """True if the game's code draws texts with IMGUI (OnGUI with GUIStyle, GUIContent or GUILayout in the same DLL):
     e.g. One Million Coins, which has its whole interface this way. Every DLL of the game counts
-    (assembly_del_gioco), not only Assembly-CSharp: many games have their interface in a module of their own."""
-    info = analizza(cartella)
-    dati = info.get("dati") if isinstance(info, dict) else None
-    for percorso in assembly_del_gioco(dati):
+    (game_assembly), not only Assembly-CSharp: many games have their interface in a module of their own."""
+    info = analyze(folder)
+    data = info.get("dati") if isinstance(info, dict) else None
+    for path in game_assembly(data):
         try:
-            codice = _leggi_assembly(percorso)
+            code = _read_assembly(path)
         except OSError:
             continue
-        if b"OnGUI" in codice and (b"GUIStyle" in codice or b"GUIContent" in codice or b"GUILayout" in codice):
+        if b"OnGUI" in code and (b"GUIStyle" in code or b"GUIContent" in code or b"GUILayout" in code):
             return True
     return False
 
 
-def entrypoint_bepinex(cartella, versione_unity, forza=False):
+def bepinex_entrypoint(folder, unity_version, force=False):
     """Unity 6 (6000.x): BepInEx 5 starts in Application's static constructor, and adding its component there makes
     the game crash (GameObject.AddComponent inside UnityPlayer: seen with One Million Coins, Unity 6000.6).
     For these games BepInEx starts at the first MonoBehaviour, when the engine is ready. True if set.
     forza=True: with any Unity version (the after-play check saw exactly that crash)."""
-    if not forza:
+    if not force:
         try:
-            maggiore = int((versione_unity or "").split(".")[0])
+            major = int((unity_version or "").split(".")[0])
         except ValueError:
             return False
-        if maggiore < 6000:
+        if major < 6000:
             return False
-    _imposta_bepinex(cartella, "Preloader.Entrypoint", "Type", "MonoBehaviour",
+    _set_bepinex(folder, "Preloader.Entrypoint", "Type", "MonoBehaviour",
                      ["Assembly = UnityEngine.CoreModule.dll", "Type = MonoBehaviour", "Method = .cctor"])
     return True
 
 
-def _imposta_bepinex(cartella, sezione, chiave, valore, nuova_sezione=None):
+def _set_bepinex(folder, section, key, value_, new_section=None):
     """Writes 'chiave = valore' in the BepInEx.cfg section; if the section is not there it adds it at the end (with
     the lines of 'nuova_sezione', if others are needed). The rest of the file stays as it is; BepInEx completes the
     other settings at the first start (and keeps those it finds)."""
-    percorso = _percorso(cartella, CONFIG_BEPINEX)
-    righe = []
-    if os.path.exists(percorso):  # (non-UTF-8 bytes, e.g. a comment written by hand: rewritten unchanged)
-        with open(percorso, encoding="utf-8-sig", errors="surrogateescape") as f:
-            righe = f.read().splitlines()
-    riga_nuova = "%s = %s" % (chiave, valore)
-    nuove, attuale, fatto = [], None, False
-    for riga in righe:
-        m = re.match(r"^\s*\[([^\]]+)\]\s*$", riga)
+    path = _path(folder, CONFIG_BEPINEX)
+    lines = []
+    if os.path.exists(path):  # (non-UTF-8 bytes, e.g. a comment written by hand: rewritten unchanged)
+        with open(path, encoding="utf-8-sig", errors="surrogateescape") as f:
+            lines = f.read().splitlines()
+    new_line = "%s = %s" % (key, value_)
+    new_lines, current, done = [], None, False
+    for line in lines:
+        m = re.match(r"^\s*\[([^\]]+)\]\s*$", line)
         if m:
-            if attuale == sezione and not fatto:
-                nuove.append(riga_nuova)
-                fatto = True
-            attuale = m.group(1).strip()
-        elif attuale == sezione and re.match(r"^\s*%s\s*=" % re.escape(chiave), riga):
-            if not fatto:
-                nuove.append(riga_nuova)
-                fatto = True
+            if current == section and not done:
+                new_lines.append(new_line)
+                done = True
+            current = m.group(1).strip()
+        elif current == section and re.match(r"^\s*%s\s*=" % re.escape(key), line):
+            if not done:
+                new_lines.append(new_line)
+                done = True
             continue
-        nuove.append(riga)
-    if attuale == sezione and not fatto:
-        nuove.append(riga_nuova)
-        fatto = True
-    if not fatto:
-        nuove += ["", "[%s]" % sezione] + list(nuova_sezione or [riga_nuova])
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    with open(percorso, "w", encoding="utf-8", errors="surrogateescape", newline="\n") as f:
-        f.write("\n".join(nuove) + "\n")
+        new_lines.append(line)
+    if current == section and not done:
+        new_lines.append(new_line)
+        done = True
+    if not done:
+        new_lines += ["", "[%s]" % section] + list(new_section or [new_line])
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="\n") as f:
+        f.write("\n".join(new_lines) + "\n")
 
 
-def registro_unity_attivo(cartella):
+def unity_log_enabled(folder):
     """True if BepInEx also copies Unity's messages into its log (LogOutput.log) ([Logging.Disk]
     WriteUnityLog): there TextMeshPro writes the characters the game's fonts do not have (see checks.py)."""
-    valore = (leggi_ini(_percorso(cartella, CONFIG_BEPINEX)).get("Logging.Disk") or {}).get("WriteUnityLog")
-    return (valore or "").strip().lower() == "true"
+    value_ = (read_ini(_path(folder, CONFIG_BEPINEX)).get("Logging.Disk") or {}).get("WriteUnityLog")
+    return (value_ or "").strip().lower() == "true"
 
 
-def attiva_registro_unity(cartella):
+def enable_unity_log(folder):
     """Switches on [Logging.Disk] WriteUnityLog in BepInEx.cfg (off by default): this way the after-play check sees
     the letters the game's fonts cannot draw even in games without a Player.log. True if changed."""
-    if registro_unity_attivo(cartella):
+    if unity_log_enabled(folder):
         return False
-    _imposta_bepinex(cartella, "Logging.Disk", "WriteUnityLog", "true")
+    _set_bepinex(folder, "Logging.Disk", "WriteUnityLog", "true")
     return True
 
 
-def configura(cartella, da, a, imgui=None, url=None, google=True):
+def configure(folder, src_lang, a, imgui=None, url=None, google=True):
     """Writes/updates only the keys that are needed; XUnity completes the others at the first start. url: address of
-    PatchSmith's translator (servizio_xunity) for the new sentences; None = Google (google=False: none)."""
-    percorso = _percorso(cartella, CONFIG_XUNITY)
-    valori = _valori_config(da, a, usa_imgui(cartella) if imgui is None else imgui, url, google)
-    righe = []
-    if os.path.exists(percorso):
-        with open(percorso, encoding="utf-8-sig") as f:
-            righe = f.read().splitlines()
-    fatti = set()
-    sezione = None
-    nuove = []
-    for riga in righe:
-        m = re.match(r"^\s*\[([^\]]+)\]\s*$", riga)
+    PatchSmith's translator (xunity_service) for the new sentences; None = Google (google=False: none)."""
+    path = _path(folder, CONFIG_XUNITY)
+    values = _config_values(src_lang, a, uses_imgui(folder) if imgui is None else imgui, url, google)
+    lines = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8-sig") as f:
+            lines = f.read().splitlines()
+    handled = set()
+    section = None
+    new_lines = []
+    for line in lines:
+        m = re.match(r"^\s*\[([^\]]+)\]\s*$", line)
         if m:
-            if sezione in valori:  # missing keys at the end of the previous section
-                nuove += ["%s=%s" % (k, v) for k, v in valori[sezione].items() if (sezione, k) not in fatti]
-                fatti.update((sezione, k) for k in valori[sezione])
-            sezione = m.group(1).strip()
-            nuove.append(riga)
+            if section in values:  # missing keys at the end of the previous section
+                new_lines += ["%s=%s" % (k, v) for k, v in values[section].items() if (section, k) not in handled]
+                handled.update((section, k) for k in values[section])
+            section = m.group(1).strip()
+            new_lines.append(line)
             continue
-        m = re.match(r"^\s*([^=;#\s][^=]*?)\s*=", riga)
-        if m and sezione in valori and m.group(1) in valori[sezione]:
-            if (sezione, m.group(1)) not in fatti:  # any duplicates of the same key disappear
-                nuove.append("%s=%s" % (m.group(1), valori[sezione][m.group(1)]))
-                fatti.add((sezione, m.group(1)))
+        m = re.match(r"^\s*([^=;#\s][^=]*?)\s*=", line)
+        if m and section in values and m.group(1) in values[section]:
+            if (section, m.group(1)) not in handled:  # any duplicates of the same key disappear
+                new_lines.append("%s=%s" % (m.group(1), values[section][m.group(1)]))
+                handled.add((section, m.group(1)))
             continue
-        nuove.append(riga)
-    if sezione in valori:
-        nuove += ["%s=%s" % (k, v) for k, v in valori[sezione].items() if (sezione, k) not in fatti]
-        fatti.update((sezione, k) for k in valori[sezione])
-    for sez, chiavi in valori.items():
-        mancanti = [(k, v) for k, v in chiavi.items() if (sez, k) not in fatti]
-        if mancanti:
-            nuove += ["", "[%s]" % sez] + ["%s=%s" % kv for kv in mancanti]
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    scrivi_atomico(percorso, ("\r\n".join(nuove).strip("\r\n") + "\r\n").encode("utf-8"))
-    return percorso
+        new_lines.append(line)
+    if section in values:
+        new_lines += ["%s=%s" % (k, v) for k, v in values[section].items() if (section, k) not in handled]
+        handled.update((section, k) for k in values[section])
+    for sec, keys in values.items():
+        missing = [(k, v) for k, v in keys.items() if (sec, k) not in handled]
+        if missing:
+            new_lines += ["", "[%s]" % sec] + ["%s=%s" % kv for kv in missing]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    write_atomic(path, ("\r\n".join(new_lines).strip("\r\n") + "\r\n").encode("utf-8"))
+    return path
 
 
-def leggi_ini(percorso):
+def read_ini(path):
     """{sezione: {chiave: valore}} of a BepInEx or XUnity .ini file (read only; empty if missing). The first time a
     key appears in the section counts, as for XUnity."""
     try:
-        with open(percorso, encoding="utf-8-sig", errors="replace") as f:
-            righe = f.read().splitlines()
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
+            lines = f.read().splitlines()
     except OSError:
         return {}
-    dati, sezione = {}, None
-    for riga in righe:
-        m = re.match(r"^\s*\[([^\]]+)\]\s*$", riga)
+    data, section = {}, None
+    for line in lines:
+        m = re.match(r"^\s*\[([^\]]+)\]\s*$", line)
         if m:
-            sezione = dati.setdefault(m.group(1).strip(), {})
+            section = data.setdefault(m.group(1).strip(), {})
             continue
-        m = re.match(r"^\s*([^=;#\s][^=]*?)\s*=\s*(.*?)\s*$", riga)
-        if m and sezione is not None and m.group(1) not in sezione:
-            sezione[m.group(1)] = m.group(2)
-    return dati
+        m = re.match(r"^\s*([^=;#\s][^=]*?)\s*=\s*(.*?)\s*$", line)
+        if m and section is not None and m.group(1) not in section:
+            section[m.group(1)] = m.group(2)
+    return data
 
 
-def entrypoint_attuale(cartella):
+def current_entrypoint(folder):
     """Where BepInEx starts ([Preloader.Entrypoint] Type in BepInEx.cfg: 'Application' by default, 'MonoBehaviour'
     for Unity 6), or None if the file is not there yet."""
-    return leggi_ini(_percorso(cartella, CONFIG_BEPINEX)).get("Preloader.Entrypoint", {}).get("Type")
+    return read_ini(_path(folder, CONFIG_BEPINEX)).get("Preloader.Entrypoint", {}).get("Type")
 
 
-# --- PatchSmith's translator while playing (servizio_xunity) ---------------------------------------
+# --- PatchSmith's translator while playing (xunity_service) ---------------------------------------
 
 def _csc():
     """C# compiler of .NET Framework 4 (present in every Windows 10 and 11)."""
     windows = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or r"C:\Windows"
-    for quadro in ("Framework64", "Framework"):
-        p = os.path.join(windows, "Microsoft.NET", quadro, "v4.0.30319", "csc.exe")
+    for framework in ("Framework64", "Framework"):
+        p = os.path.join(windows, "Microsoft.NET", framework, "v4.0.30319", "csc.exe")
         if os.path.exists(p):
             return p
     return None
 
 
-def _compila_plugin(cartella, info):
+def _compile_plugin(folder, info):
     """Compiles the plugin that starts the service against THIS game's libraries (so it works with every Unity
     version). Writes under a temporary name and then renames."""
     csc = _csc()
     if not csc:
-        raise ErroreUnity("manca il compilatore C# di Windows (.NET Framework 4)")
+        raise UnityError("manca il compilatore C# di Windows (.NET Framework 4)")
     managed = os.path.join(info["dati"], "Managed")
-    riferimenti = [os.path.join(managed, n) for n in ("mscorlib.dll", "netstandard.dll", "System.dll", "UnityEngine.dll",
+    references = [os.path.join(managed, n) for n in ("mscorlib.dll", "netstandard.dll", "System.dll", "UnityEngine.dll",
                                                       "UnityEngine.CoreModule.dll")
                    if os.path.exists(os.path.join(managed, n))]
-    riferimenti.append(_percorso(cartella, "BepInEx/core/BepInEx.dll"))
-    dest = _percorso(cartella, PLUGIN_SERVIZIO)
+    references.append(_path(folder, "BepInEx/core/BepInEx.dll"))
+    dest = _path(folder, SERVICE_PLUGIN)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    temporaneo = dest + SUFFISSO_TMP
-    comando = [csc, "-nologo", "-noconfig", "-nostdlib", "-target:library", "-optimize", "-out:" + temporaneo] + \
-        ["-r:" + r for r in riferimenti] + [SORGENTE_SERVIZIO]
-    esito = subprocess.run(comando, capture_output=True, timeout=180,
+    temp_file = dest + TMP_SUFFIX
+    command = [csc, "-nologo", "-noconfig", "-nostdlib", "-target:library", "-optimize", "-out:" + temp_file] + \
+        ["-r:" + r for r in references] + [SERVICE_SOURCE]
+    outcome = subprocess.run(command, capture_output=True, timeout=180,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    if esito.returncode != 0 or not os.path.exists(temporaneo):
-        if os.path.exists(temporaneo):
-            os.remove(temporaneo)
-        errori = [r.strip() for r in esito.stdout.decode("utf-8", "replace").splitlines() if "error" in r.lower()]
-        raise ErroreUnity("compilazione del plugin non riuscita (%s)" % ("; ".join(errori[:2]) or esito.returncode))
-    os.replace(temporaneo, dest)
+    if outcome.returncode != 0 or not os.path.exists(temp_file):
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+        errors = [r.strip() for r in outcome.stdout.decode("utf-8", "replace").splitlines() if "error" in r.lower()]
+        raise UnityError("compilazione del plugin non riuscita (%s)" % ("; ".join(errors[:2]) or outcome.returncode))
+    os.replace(temp_file, dest)
 
 
-def _python_senza_finestra():
+def _windowless_python():
     """pythonw.exe next to python.exe: no black window while playing."""
     w = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
     return w if os.path.exists(w) else sys.executable
 
 
-def servizio_attivo(cartella):
-    return all(os.path.exists(_percorso(cartella, rel)) for rel in (CONFIG_SERVIZIO, PLUGIN_SERVIZIO))
+def service_installed(folder):
+    return all(os.path.exists(_path(folder, rel)) for rel in (SERVICE_CONFIG, SERVICE_PLUGIN))
 
 
-def url_servizio(cartella):
+def service_url(folder):
     """Address of PatchSmith's translator written in the plugin's command, or None if not active."""
-    from . import xunity_service as servizio_xunity
-    if not servizio_attivo(cartella):
+    from . import xunity_service
+    if not service_installed(folder):
         return None
-    with open(_percorso(cartella, CONFIG_SERVIZIO), encoding="utf-8-sig") as f:
+    with open(_path(folder, SERVICE_CONFIG), encoding="utf-8-sig") as f:
         m = re.search(r"--porta (\d+)", f.read())
-    return servizio_xunity.indirizzo(int(m.group(1))) if m else None
+    return xunity_service.address(int(m.group(1))) if m else None
 
 
-def traduttore_dal_vivo(cartella):
+def live_translator(folder):
     """Who receives the new sentences while playing: 'servizio' (PatchSmith's translator started by the game: which
-    translators it uses is told by servizio_xunity.traduttori_previsti), 'google' (XUnity with Google, on its own),
+    translators it uses is told by xunity_service.expected_translators), 'google' (XUnity with Google, on its own),
     'nessuno' (configuration without a usable translator); None if XUnity is not installed."""
-    if not manifesto_presente(cartella):
+    if not manifest_present(folder):
         return None
     try:
-        if url_servizio(cartella):
+        if service_url(folder):
             return "servizio"
-        with open(_percorso(cartella, CONFIG_XUNITY), encoding="utf-8-sig", errors="replace") as f:
+        with open(_path(folder, CONFIG_XUNITY), encoding="utf-8-sig", errors="replace") as f:
             m = re.search(r"^\s*Endpoint\s*=\s*(\S*)", f.read(), re.M)
     except OSError:
         return "nessuno"
     return "google" if m and m.group(1).lower().startswith("google") else "nessuno"
 
 
-def attiva_servizio(cartella, info, percorso_profilo, nome_profilo):
-    """The new sentences while playing are translated by PatchSmith (servizio_xunity): compiles the plugin that starts
+def enable_service(folder, info, profile_path, profile_name):
+    """The new sentences while playing are translated by PatchSmith (xunity_service): compiles the plugin that starts
     the service when the game opens and writes the command. Returns the address for XUnity."""
-    from . import xunity_service as servizio_xunity
-    porta = servizio_xunity.porta_per(nome_profilo)
-    righe = [
+    from . import xunity_service
+    port = xunity_service.port_for(profile_name)
+    lines = [
         "# Scritto da Patchsmith: traduttore delle frasi nuove avviato all'apertura del gioco (plugin "
         "Patchsmith.Servizio)",
-        "Programma=" + _python_senza_finestra(),
+        "Programma=" + _windowless_python(),
         'Argomenti=-I "%s" servizio-xunity --profilo "%s" --porta %d' % (
-            os.path.join(CARTELLA_PROGETTO, "smith.py"), os.path.abspath(percorso_profilo), porta),
-        "Cartella=" + CARTELLA_PROGETTO,
+            os.path.join(PROJECT_FOLDER, "smith.py"), os.path.abspath(profile_path), port),
+        "Cartella=" + PROJECT_FOLDER,
     ]
-    _compila_plugin(cartella, info)
+    _compile_plugin(folder, info)
     # on a new installation BepInEx/config does not exist yet (BepInEx creates it at the first start)
-    os.makedirs(os.path.dirname(_percorso(cartella, CONFIG_SERVIZIO)), exist_ok=True)
-    scrivi_atomico(_percorso(cartella, CONFIG_SERVIZIO), ("\r\n".join(righe) + "\r\n").encode("utf-8"))
-    return servizio_xunity.indirizzo(porta)
+    os.makedirs(os.path.dirname(_path(folder, SERVICE_CONFIG)), exist_ok=True)
+    write_atomic(_path(folder, SERVICE_CONFIG), ("\r\n".join(lines) + "\r\n").encode("utf-8"))
+    return xunity_service.address(port)
 
 
-def leggi_stato_servizio(cartella):
-    """What the plugin wrote at the game's last start (STATO_SERVIZIO): {Esito, Data, Processo, Programma,
-    Dettaglio}; Esito is avviato, cfg-mancante, patchsmith-mancante, python-mancante or errore. {} if the game has not
+def read_service_state(folder):
+    """What the plugin wrote at the game's last start (SERVICE_STATE): {Outcome, Data, Processo, Programma,
+    Dettaglio}; Outcome is avviato, cfg-mancante, patchsmith-mancante, python-mancante or errore. {} if the game has not
     been started with the plugin yet."""
     try:
-        with open(_percorso(cartella, STATO_SERVIZIO), encoding="utf-8-sig", errors="replace") as f:
-            righe = f.read().splitlines()
+        with open(_path(folder, SERVICE_STATE), encoding="utf-8-sig", errors="replace") as f:
+            lines = f.read().splitlines()
     except OSError:
         return {}
-    return dict(r.split("=", 1) for r in righe if "=" in r and not r.startswith("#"))
+    return dict(r.split("=", 1) for r in lines if "=" in r and not r.startswith("#"))
 
 
-def leggi_comando_servizio(cartella):
-    """The command with which the plugin starts PatchSmith's translator (CONFIG_SERVIZIO): {Programma, Argomenti,
+def read_service_command(folder):
+    """The command with which the plugin starts PatchSmith's translator (SERVICE_CONFIG): {Programma, Argomenti,
     Cartella}; {} if missing."""
     try:
-        with open(_percorso(cartella, CONFIG_SERVIZIO), encoding="utf-8-sig", errors="replace") as f:
-            righe = f.read().splitlines()
+        with open(_path(folder, SERVICE_CONFIG), encoding="utf-8-sig", errors="replace") as f:
+            lines = f.read().splitlines()
     except OSError:
         return {}
-    return dict(r.split("=", 1) for r in righe if "=" in r and not r.startswith("#"))
+    return dict(r.split("=", 1) for r in lines if "=" in r and not r.startswith("#"))
 
 
-def disattiva_servizio(cartella):
+def disable_service(folder):
     """Removes the plugin and the command of PatchSmith's translator. True if they were there."""
-    tolti = False
-    for rel in (PLUGIN_SERVIZIO, CONFIG_SERVIZIO):
-        p = _percorso(cartella, rel)
+    dropped = False
+    for rel in (SERVICE_PLUGIN, SERVICE_CONFIG):
+        p = _path(folder, rel)
         if os.path.exists(p):
             os.remove(p)
-            tolti = True
+            dropped = True
     try:
-        os.rmdir(os.path.dirname(_percorso(cartella, PLUGIN_SERVIZIO)))
+        os.rmdir(os.path.dirname(_path(folder, SERVICE_PLUGIN)))
     except OSError:
         pass
-    return tolti
+    return dropped
 
 
-def google_libero():
+def google_free():
     """True if free Google is not paused because of a block. XUnity with Google sends the requests by itself, without
     PatchSmith's pauses: during a pause it is not configured (it would be a translator that does not answer)."""
-    from .limiter import Limitatore
+    from .limiter import Limiter
     try:
-        return Limitatore("google", log=None).pausa() is None
+        return Limiter("google", log=None).pause() is None
     except (OSError, ValueError, TypeError, AttributeError):
         return True
 
 
-def _configura_traduttore(cartella, info, da, a, locale, nome_profilo, log):
+def _configure_translator(folder, info, src_lang, a, local, profile_name, log):
     """locale: game profile path = new sentences to PatchSmith's translator (if the plugin compiles); False = to
     XUnity with Google; None = as before. Without PatchSmith's translator, XUnity uses Google only if it is not
     paused; otherwise no translator (the new sentences are left untranslated)."""
-    url, problema = None, None
-    if locale == "nessuno":  # chosen by the user: while playing only the translations already saved
-        disattiva_servizio(cartella)
+    url, problem = None, None
+    if local == "nessuno":  # chosen by the user: while playing only the translations already saved
+        disable_service(folder)
         log("  Traduzione mentre giochi spenta: XUnity usa solo le traduzioni gia' salvate")
-        configura(cartella, da, a, url=None, google=False)
+        configure(folder, src_lang, a, url=None, google=False)
         return
-    if locale:
+    if local:
         try:
-            url = attiva_servizio(cartella, info, locale, nome_profilo)
-            log(DETTAGLIO + "  Frasi nuove mentre giochi: le traduce PatchSmith (%s), che si avvia e si chiude con il gioco" % url)
-        except (ErroreUnity, OSError, subprocess.SubprocessError) as e:
-            disattiva_servizio(cartella)
-            problema = e
-    elif locale is False:
-        if disattiva_servizio(cartella):
+            url = enable_service(folder, info, local, profile_name)
+            log(DETAIL + "  Frasi nuove mentre giochi: le traduce PatchSmith (%s), "
+                         "che si avvia e si chiude con il gioco" % url)
+        except (UnityError, OSError, subprocess.SubprocessError) as e:
+            disable_service(folder)
+            problem = e
+    elif local is False:
+        if disable_service(folder):
             log("  Traduttore di PatchSmith tolto dal gioco: le frasi nuove le chiede XUnity a Google")
     else:
-        url = url_servizio(cartella)
-    google = url is None and google_libero()
-    if problema is not None:
-        log("  ! Non riesco a preparare nel gioco il traduttore di PatchSmith (%s): %s" % (problema, (
+        url = service_url(folder)
+    google = url is None and google_free()
+    if problem is not None:
+        log("  ! Non riesco a preparare nel gioco il traduttore di PatchSmith (%s): %s" % (problem, (
             "le frasi nuove le chiede XUnity a Google" if google else
             "Google e' in pausa, quindi le frasi nuove resteranno in originale")))
     elif url is None and not google:
         log("  ! Google e' in pausa: XUnity non avra' un traduttore per le frasi nuove (restano in originale)")
-    configura(cartella, da, a, url=url, google=google)
+    configure(folder, src_lang, a, url=url, google=google)
 
 
 # --- saved translations -------------------------------------------------------------------------
 
-def _cartella_traduzioni(cartella):
-    return _percorso(cartella, "BepInEx/Translation")
+def _translations_folder(folder):
+    return _path(folder, "BepInEx/Translation")
 
 
-def file_traduzioni(cartella, nome_profilo, a):
+def translations_file(folder, profile_name, a):
     """File with the machine translations (in the game if installed, otherwise the copy in the translation memory)."""
     rel = os.path.join(a, "Text", "_AutoGeneratedTranslations.txt")
-    nel_gioco = os.path.join(_cartella_traduzioni(cartella), rel)
-    if os.path.exists(nel_gioco):
-        return nel_gioco
-    in_memoria = os.path.join(_cartella_memoria(nome_profilo), "Translation", rel)
-    return in_memoria if os.path.exists(in_memoria) else None
+    in_game = os.path.join(_translations_folder(folder), rel)
+    if os.path.exists(in_game):
+        return in_game
+    in_memory = os.path.join(_memory_folder(profile_name), "Translation", rel)
+    return in_memory if os.path.exists(in_memory) else None
 
 
-def salva_traduzioni(cartella, nome_profilo):
+def save_translations(folder, profile_name):
     """Copies the game's WHOLE Translation folder into PatchSmith's translation memory."""
-    sorgente = _cartella_traduzioni(cartella)
-    if not os.path.isdir(sorgente):
+    source = _translations_folder(folder)
+    if not os.path.isdir(source):
         return 0
-    destinazione = os.path.join(_cartella_memoria(nome_profilo), "Translation")
+    dest_lang = os.path.join(_memory_folder(profile_name), "Translation")
     n = 0
-    for radice, _, files in os.walk(sorgente):
-        rel = os.path.relpath(radice, sorgente)
+    for root, _, files in os.walk(source):
+        rel = os.path.relpath(root, source)
         for f in files:
-            os.makedirs(os.path.join(destinazione, rel), exist_ok=True)
-            shutil.copy2(os.path.join(radice, f), os.path.join(destinazione, rel, f))
+            os.makedirs(os.path.join(dest_lang, rel), exist_ok=True)
+            shutil.copy2(os.path.join(root, f), os.path.join(dest_lang, rel, f))
             n += 1
     return n
 
 
-def _rimetti_traduzioni(cartella, nome_profilo):
+def _put_back_translations(folder, profile_name):
     """On a new installation puts back the saved translations, never overwriting existing files."""
-    sorgente = os.path.join(_cartella_memoria(nome_profilo), "Translation")
-    if not os.path.isdir(sorgente):
+    source = os.path.join(_memory_folder(profile_name), "Translation")
+    if not os.path.isdir(source):
         return 0
-    destinazione = _cartella_traduzioni(cartella)
+    dest_lang = _translations_folder(folder)
     n = 0
-    for radice, _, files in os.walk(sorgente):
-        rel = os.path.relpath(radice, sorgente)
+    for root, _, files in os.walk(source):
+        rel = os.path.relpath(root, source)
         for f in files:
-            dest = os.path.join(destinazione, rel, f)
+            dest = os.path.join(dest_lang, rel, f)
             if os.path.exists(dest):
                 continue
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            shutil.copy2(os.path.join(radice, f), dest)
+            shutil.copy2(os.path.join(root, f), dest)
             n += 1
     return n
 
@@ -738,19 +740,19 @@ def _rimetti_traduzioni(cartella, nome_profilo):
 # --- pre-translation: texts read from the game's files and put into the XUnity cache ------------
 # This way a sentence appears in Italian from the very first time, without waiting for the live translation.
 
-_SEQUENZA_TESTO = re.compile(
+_TEXT_SEQUENCE = re.compile(
     rb"(?:[\x20-\x7e\x09\x0a\x0d]|[\xc2-\xdf][\x80-\xbf]|[\xe0-\xef][\x80-\xbf]{2}|[\xf0-\xf4][\x80-\xbf]{3}){2,}")
-_NON_LATINO = re.compile("[\u0370-\u03ff\u0400-\u04ff\u0590-\u06ff\u0e00-\u0e7f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
-_LETTERE_ACCENTATE = re.compile("[àáâãäçèéêëìíîïñòóôõöùúûüßœ]")
-_ESTENSIONI_SALTATE = (".resS", ".resource", ".json", ".config", ".info", ".bank", ".txt", ".dll", ".exe")
-MAX_TESTI = 20000
-MAX_CARATTERI = 600_000
+_NON_LATIN = re.compile("[\u0370-\u03ff\u0400-\u04ff\u0590-\u06ff\u0e00-\u0e7f\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+_ACCENTED_LETTERS = re.compile("[àáâãäçèéêëìíîïñòóôõöùúûüßœ]")
+_SKIPPED_EXTENSIONS = (".resS", ".resource", ".json", ".config", ".info", ".bank", ".txt", ".dll", ".exe")
+MAX_TEXTS = 20000
+MAX_CHARS = 600_000
 
 
-def _testo_di_gioco(t, origine):
+def _is_game_text(t, origin):
     """Text for the player in the game's language (not object names, identifiers or other languages)."""
-    from .adapter_webui import e_testo_ui
-    if not e_testo_ui(t):
+    from .adapter_webui import is_ui_text
+    if not is_ui_text(t):
         return False
     s = t.strip()
     if re.search(r"\(\d+\)\s*$", s):  # objects duplicated in the editor: "Paper (17)"
@@ -759,689 +761,694 @@ def _testo_di_gioco(t, origine):
         return False
     if not any(c.isupper() for c in s) and re.search(r"\d", s):  # "joystick 4 analog 1"
         return False
-    latina = origine.split("-")[0] not in ("ja", "zh", "ko", "ru", "uk", "el", "ar", "he", "th", "hi")
-    if latina:
-        if _NON_LATINO.search(s):  # the official translations in other languages present in the game
+    latin = origin.split("-")[0] not in ("ja", "zh", "ko", "ru", "uk", "el", "ar", "he", "th", "hi")
+    if latin:
+        if _NON_LATIN.search(s):  # the official translations in other languages present in the game
             return False
-        if origine == "en" and _LETTERE_ACCENTATE.search(s.lower()):
+        if origin == "en" and _ACCENTED_LETTERS.search(s.lower()):
             return False
-        parole = re.findall(r"[^\W\d_]+", s.lower())
-        if len(parole) >= 4:
-            punti = {l: sum(1 for p in parole if p in insieme) for l, insieme in lingua._PAROLE.items()}
-            migliore = max(punti, key=punti.get)
-            if migliore != origine and punti[migliore] >= 2 and punti[migliore] > punti.get(origine, 0):
+        words = re.findall(r"[^\W\d_]+", s.lower())
+        if len(words) >= 4:
+            periods = {l: sum(1 for p in words if p in item_set) for l, item_set in language._WORDS.items()}
+            best = max(periods, key=periods.get)
+            if best != origin and periods[best] >= 2 and periods[best] > periods.get(origin, 0):
                 return False
-    elif not _NON_LATINO.search(s):
+    elif not _NON_LATIN.search(s):
         return False
     return True
 
 
-MAX_MB_BUNDLE = 400  # maximum MB (decompressed) read from the bundles: data.unity3d and those in StreamingAssets
-MAX_SECONDI_BUNDLE = 60  # maximum seconds to read the bundles (the other texts are translated live)
-_PEZZO = 16 * 1024 * 1024  # files are read in pieces, even multi-GB ones
-_SOVRAPPOSIZIONE = 8192  # bytes taken again from the previous piece: a text straddling two pieces is not lost
-_ESTENSIONI_BUNDLE = (".bundle", ".unity3d", ".assetbundle")
+MAX_MB_BUNDLE = 400  # maximum MB (decompressed) read from the bundles: date.unity3d and those in StreamingAssets
+MAX_BUNDLE_SECONDS = 60  # maximum seconds to read the bundles (the other texts are translated live)
+_PIECE = 16 * 1024 * 1024  # files are read in pieces, even multi-GB ones
+_OVERLAP = 8192  # bytes taken again from the previous piece: a text straddling two pieces is not lost
+_BUNDLE_EXTENSIONS = (".bundle", ".unity3d", ".assetbundle")
 # bundles that usually have texts (read first) and those with images, sounds and models (last)
-_BUNDLE_CON_TESTI = re.compile(r"(?i)local|lang|text|string|dialog|quest|item|menu|ui[-_]|data|config|scriptable")
-_BUNDLE_SENZA_TESTI = re.compile(r"(?i)texture|sprite|atlas|audio|sound|music|sfx|shader|font|mesh|model|anim|vfx|"
+_BUNDLE_WITH_TEXTS = re.compile(r"(?i)local|lang|text|string|dialog|quest|item|menu|ui[-_]|data|config|scriptable")
+_BUNDLE_WITHOUT_TEXTS = re.compile(r"(?i)texture|sprite|atlas|audio|sound|music|sfx|shader|font|mesh|model|anim|vfx|"
                                  r"material|video|terrain|lightmap")
 
 
-class _Testi:
+class _Texts:
     """The texts found (in order) and the rejected ones, so as not to redo the checks on repeated strings."""
 
-    def __init__(self, origine):
-        self.origine, self.testi, self.scartati = origine, {}, set()
+    def __init__(self, origin):
+        self.origin, self.texts, self.discarded = origin, {}, set()
 
-    def aggiungi(self, t, controllo=None):
-        if t in self.testi or t in self.scartati:
+    def add(self, t, checks=None):
+        if t in self.texts or t in self.discarded:
             return
-        if (controllo or _testo_di_gioco)(t, self.origine):
-            self.testi[t] = None
+        if (checks or _is_game_text)(t, self.origin):
+            self.texts[t] = None
         else:
-            if len(self.scartati) > 500_000:  # in large files: memory must not grow without end
-                self.scartati.clear()
-            self.scartati.add(t)
+            if len(self.discarded) > 500_000:  # in large files: memory must not grow without end
+                self.discarded.clear()
+            self.discarded.add(t)
 
-    def scansiona(self, dati):
+    def scan_folder(self, data):
         """The serialized strings (4-byte length + UTF-8) in the bytes of a game file."""
-        for m in _SEQUENZA_TESTO.finditer(dati):
-            inizio = m.start()
-            if inizio < 4:
+        for m in _TEXT_SEQUENCE.finditer(data):
+            start = m.start()
+            if start < 4:
                 continue
-            lunghezza = struct.unpack_from("<i", dati, inizio - 4)[0]
-            if lunghezza < 1 or lunghezza > 4000 or lunghezza > m.end() - inizio:
+            length = struct.unpack_from("<i", data, start - 4)[0]
+            if length < 1 or length > 4000 or length > m.end() - start:
                 continue
             try:
-                t = dati[inizio:inizio + lunghezza].decode("utf-8")
+                t = data[start:start + length].decode("utf-8")
             except UnicodeDecodeError:
                 continue
-            self.aggiungi(t)
+            self.add(t)
 
-    def scansiona_pezzi(self, pezzi):
+    def scan_pieces(self, pieces):
         """Like scansiona, on a file read in consecutive pieces (with the end of the previous piece)."""
-        coda = b""
-        for pezzo in pezzi:
-            interruzione.controlla()
-            dati = coda + pezzo
-            self.scansiona(dati)
-            coda = dati[-_SOVRAPPOSIZIONE:]
+        tail = b""
+        for piece in pieces:
+            interruption.check()
+            data = tail + piece
+            self.scan_folder(data)
+            tail = data[-_OVERLAP:]
 
 
-def _pezzi_file(percorso):
-    with open(percorso, "rb") as f:
+def _file_pieces(path):
+    with open(path, "rb") as f:
         while True:
-            pezzo = f.read(_PEZZO)
-            if not pezzo:
+            piece = f.read(_PIECE)
+            if not piece:
                 return
-            yield pezzo
+            yield piece
 
 
-def _testo_di_tabella(t, _origine):
+def _is_table_text(t, _origin):
     """Text of a Unity Localization text table: it is already a text for the player (even a long one)."""
-    return len(t) <= 2500 and e_testo_leggibile(t)
+    return len(t) <= 2500 and is_readable_text(t)
 
 
-class _Limite:
+class _Limit:
     """How much to read from the bundles (decompressed MB and seconds)."""
 
-    def __init__(self, mb, secondi):
-        self.massimo, self.fine, self.letti = mb * 1024 * 1024, time.monotonic() + secondi, 0
+    def __init__(self, mb, seconds):
+        self.maximum, self.end, self.read_items = mb * 1024 * 1024, time.monotonic() + seconds, 0
 
-    def finito(self):
-        return self.letti >= self.massimo or time.monotonic() > self.fine
+    def finished(self):
+        return self.read_items >= self.maximum or time.monotonic() > self.end
 
 
-def _ordine_nodo(nome):
+def _node_order(name):
     """Reading order of the inner files of data.unity3d (None: images and sounds, not to be read)."""
-    basso = nome.lower()
-    if basso.endswith((".ress", ".resource")):
+    low = name.lower()
+    if low.endswith((".ress", ".resource")):
         return None
-    numero = int(re.sub(r"\D", "", basso) or 0)
-    for k, prefisso in enumerate(("resources", "globalgamemanagers", "level", "sharedassets")):
-        if basso.startswith(prefisso):
-            return k, numero
-    return 4, numero
+    number = int(re.sub(r"\D", "", low) or 0)
+    for k, prefix in enumerate(("resources", "globalgamemanagers", "level", "sharedassets")):
+        if low.startswith(prefix):
+            return k, number
+    return 4, number
 
 
-def _scansiona_bundle(percorso, raccolta, limite):
+def _scan_bundle(path, collector, limit):
     """The texts of a bundle's inner files (not images and sounds), read in pieces within the limit."""
-    with unityfs.Indice(percorso) as indice:
-        nodi = sorted((n for n in indice.nodi if _ordine_nodo(n[0]) is not None), key=lambda n: _ordine_nodo(n[0]))
-        for _nome, inizio, dimensione, _segni in nodi:
-            if limite.finito():
+    with unityfs.Index(path) as idx:
+        nodes = sorted((n for n in idx.nodes if _node_order(n[0]) is not None), key=lambda n: _node_order(n[0]))
+        for _name, start, size, _flags in nodes:
+            if limit.finished():
                 return
 
-            def pezzi(inizio=inizio, dimensione=dimensione):
-                for _posizione, pezzo in indice.pezzi(inizio, inizio + dimensione):
-                    limite.letti += len(pezzo)
-                    yield pezzo
-                    if limite.finito():
+            def pieces(start=start, size=size):
+                for _position, piece in idx.pieces(start, start + size):
+                    limit.read_items += len(piece)
+                    yield piece
+                    if limit.finished():
                         return
-            raccolta.scansiona_pezzi(pezzi())
+            collector.scan_pieces(pieces())
 
 
-def _bundle_streaming(cartella):
+def _streaming_bundles(folder):
     """[(percorso, dimensione)] of the bundles in StreamingAssets (also in subfolders)."""
-    trovati, pila = [], [cartella]
-    while pila:
-        d = pila.pop()
+    found, stack = [], [folder]
+    while stack:
+        d = stack.pop()
         try:
-            voci = list(os.scandir(d))
+            entries = list(os.scandir(d))
         except OSError:
             continue
-        for e in voci:
+        for e in entries:
             try:
                 if e.is_dir(follow_symlinks=False):
-                    pila.append(e.path)
-                elif e.name.lower().endswith(_ESTENSIONI_BUNDLE) and ".patchsmith-" not in e.name:
-                    trovati.append((e.path, e.stat().st_size))  # on Windows the size is already in the listing
+                    stack.append(e.path)
+                elif e.name.lower().endswith(_BUNDLE_EXTENSIONS) and ".patchsmith-" not in e.name:
+                    found.append((e.path, e.stat().st_size))  # on Windows the size is already in the listing
             except OSError:
                 continue
-    return trovati
+    return found
 
 
-def estrai_testi(cartella, info, origine, log=print):
+def extract_texts(folder, info, origin, log=print):
     """The game's texts, in this order:
     1. the Unity Localization text tables in the game's language;
     2. the serialized strings (length + UTF-8) of the files in <gioco>_Data, read in pieces;
-    3. the strings of the game's code (all its DLLs, see assembly_del_gioco);
-    4. the inner files of data.unity3d (compressed) and the bundles in StreamingAssets, within MAX_MB_BUNDLE and
-       MAX_SECONDI_BUNDLE (first those that usually have texts; never images and sounds, nor the tables of the other
+    3. the strings of the game's code (all its DLLs, see game_assembly);
+    4. the inner files of date.unity3d (compressed) and the bundles in StreamingAssets, within MAX_MB_BUNDLE and
+       MAX_BUNDLE_SECONDS (first those that usually have texts; never images and sounds, nor the tables of the other
        languages). Read only."""
-    dati_dir = info["dati"]
-    raccolta = _Testi(origine)
-    streaming = os.path.join(dati_dir, "StreamingAssets")
-    tabelle = {}
+    data_dir = info["dati"]
+    collector = _Texts(origin)
+    streaming = os.path.join(data_dir, "StreamingAssets")
+    tables = {}
     if os.path.isdir(streaming):
         try:
-            tabelle = adapter_unity_loc.bundle_tabelle(streaming)
+            tables = adapter_unity_loc.table_bundles(streaming)
         except (OSError, ValueError):
-            tabelle = {}
-    del_gioco = [p for c, ps in tabelle.items() if lingua.stessa_lingua(c, origine) for p in ps]
-    for rel in del_gioco:
-        interruzione.controlla()
+            tables = {}
+    game_tables = [p for c, ps in tables.items() if language.same_language(c, origin) for p in ps]
+    for rel in game_tables:
+        interruption.check()
         try:
-            for _pos, t in adapter_unity_loc.FileTabelle(os.path.join(streaming, *rel.split("/"))).testi():
-                raccolta.aggiungi(t, _testo_di_tabella)
+            for _pos, t in adapter_unity_loc.TablesFile(os.path.join(streaming, *rel.split("/"))).texts():
+                collector.add(t, _is_table_text)
         except (OSError, ValueError, IndexError, struct.error) as e:
             log("  ! Tabella dei testi %s non letta (%s)" % (rel.split("/")[-1], e))
-    if del_gioco:
-        log(DETTAGLIO + "  Tabelle dei testi di Unity Localization: %d testi" % len(raccolta.testi))
-    file_asset = sorted(f for f in (os.path.join(dati_dir, n) for n in os.listdir(dati_dir))
-                        if os.path.isfile(f) and not f.endswith(_ESTENSIONI_SALTATE)
+    if game_tables:
+        log(DETAIL + "  Tabelle dei testi di Unity Localization: %d testi" % len(collector.texts))
+    asset_files = sorted(f for f in (os.path.join(data_dir, n) for n in os.listdir(data_dir))
+                        if os.path.isfile(f) and not f.endswith(_SKIPPED_EXTENSIONS)
                         and os.path.basename(f).lower() != "data.unity3d")
-    log(DETTAGLIO + "  Lettura dei testi dai file del gioco (%d file, sola lettura)..." % len(file_asset))
-    for percorso in file_asset:
+    log(DETAIL + "  Lettura dei testi dai file del gioco (%d file, sola lettura)..." % len(asset_files))
+    for path in asset_files:
         try:
-            raccolta.scansiona_pezzi(_pezzi_file(percorso))
+            collector.scan_pieces(_file_pieces(path))
         except OSError as e:
-            log("  ! %s non letto (%s)" % (os.path.basename(percorso), e))
-    codice = assembly_del_gioco(dati_dir)
-    for percorso in codice:
-        interruzione.controlla()
+            log("  ! %s non letto (%s)" % (os.path.basename(path), e))
+    code = game_assembly(data_dir)
+    for path in code:
+        interruption.check()
         try:
-            stringhe = stringhe_dotnet(_leggi_assembly(percorso))
+            strings = dotnet_strings(_read_assembly(path))
         except OSError:
             continue
-        for t in stringhe:
-            raccolta.aggiungi(t)
-    if len(codice) > 2:
-        log(DETTAGLIO + "  Codice del gioco: %d file (%s)" % (len(codice), ", ".join(
-            os.path.basename(p) for p in codice[:6]) + (", ..." if len(codice) > 6 else "")))
-    # bundles: data.unity3d first, then those in StreamingAssets (not the text tables, already read above)
+        for t in strings:
+            collector.add(t)
+    if len(code) > 2:
+        log(DETAIL + "  Codice del gioco: %d file (%s)" % (len(code), ", ".join(
+            os.path.basename(p) for p in code[:6]) + (", ..." if len(code) > 6 else "")))
+    # bundles: date.unity3d first, then those in StreamingAssets (not the text tables, already read above)
     bundle = []
-    unity3d = os.path.join(dati_dir, "data.unity3d")
+    unity3d = os.path.join(data_dir, "data.unity3d")
     if os.path.isfile(unity3d):
         bundle.append(unity3d)
-    tabelle_tutte = {os.path.normcase(os.path.join(streaming, *rel.split("/"))) for ps in tabelle.values()
+    all_tables = {os.path.normcase(os.path.join(streaming, *rel.split("/"))) for ps in tables.values()
                      for rel in ps}
-    altri = [(p, d) for p, d in _bundle_streaming(streaming) if os.path.normcase(p) not in tabelle_tutte] \
+    others = [(p, d) for p, d in _streaming_bundles(streaming) if os.path.normcase(p) not in all_tables] \
         if os.path.isdir(streaming) else []
-    altri.sort(key=lambda x: (0 if _BUNDLE_CON_TESTI.search(os.path.basename(x[0])) else
-                              2 if _BUNDLE_SENZA_TESTI.search(os.path.basename(x[0])) else 1, x[1]))
-    bundle += [p for p, _ in altri]
+    others.sort(key=lambda x: (0 if _BUNDLE_WITH_TEXTS.search(os.path.basename(x[0])) else
+                              2 if _BUNDLE_WITHOUT_TEXTS.search(os.path.basename(x[0])) else 1, x[1]))
+    bundle += [p for p, _ in others]
     if bundle:
-        limite = _Limite(MAX_MB_BUNDLE, MAX_SECONDI_BUNDLE)
-        prima, letti = len(raccolta.testi), 0
-        for percorso in bundle:
-            if limite.finito():
+        limit = _Limit(MAX_MB_BUNDLE, MAX_BUNDLE_SECONDS)
+        before, read_items = len(collector.texts), 0
+        for path in bundle:
+            if limit.finished():
                 break
-            interruzione.controlla()
+            interruption.check()
             try:
-                _scansiona_bundle(percorso, raccolta, limite)
-                letti += 1
+                _scan_bundle(path, collector, limit)
+                read_items += 1
             except (OSError, ValueError) as e:  # bundle not UnityFS, damaged or in an old format: skipped
-                if percorso == unity3d:
+                if path == unity3d:
                     log("  ! data.unity3d non letto (%s)" % e)
-        log(DETTAGLIO + "  Bundle del gioco: letti %d su %d (%d MB), %d testi in piu'%s" % (
-            letti, len(bundle), limite.letti // (1024 * 1024), len(raccolta.testi) - prima,
-            "; gli altri restano alla traduzione dal vivo" if letti < len(bundle) else ""))
-    testi = raccolta.testi
-    elenco, caratteri = [], 0
-    for t in testi:
-        if len(elenco) >= MAX_TESTI or caratteri + len(t) > MAX_CARATTERI:
-            log("  ! Troppi testi: ne pre-traduco %d su %d (gli altri verranno tradotti dal vivo)" % (len(elenco), len(testi)))
+        log(DETAIL + "  Bundle del gioco: letti %d su %d (%d MB), %d testi in piu'%s" % (
+            read_items, len(bundle), limit.read_items // (1024 * 1024), len(collector.texts) - before,
+            "; gli altri restano alla traduzione dal vivo" if read_items < len(bundle) else ""))
+    texts = collector.texts
+    items, chars = [], 0
+    for t in texts:
+        if len(items) >= MAX_TEXTS or chars + len(t) > MAX_CHARS:
+            log("  ! Troppi testi: ne pre-traduco %d su %d (gli altri verranno tradotti dal vivo)"
+                % (len(items), len(texts)))
             break
-        elenco.append(t)
-        caratteri += len(t)
-    return elenco
+        items.append(t)
+        chars += len(t)
+    return items
 
 
-def _codifica_xunity(s):
+def _encode_xunity(s):
     """Format of XUnity's files: \\ -> \\\\, = -> \\=, line break -> \\n, // -> \\/\\/."""
     s = s.replace("\\", "\\\\").replace("=", "\\=").replace("\n", "\\n").replace("\r", "\\r")
     return s.replace("//", "\\/\\/")
 
 
-def _uguale_xunity(riga):
+def _unchanged_xunity(line):
     """Position of the first '=' not preceded by '\\' in a cache line, or None."""
-    i, n = 0, len(riga)
+    i, n = 0, len(line)
     while i < n:
-        if riga[i] == "\\":
+        if line[i] == "\\":
             i += 2
             continue
-        if riga[i] == "=":
+        if line[i] == "=":
             return i
         i += 1
     return None
 
 
-def _chiave_xunity(riga):
+def _xunity_key(line):
     """Original part (decoded) of an 'originale=traduzione' line, or None."""
-    i = _uguale_xunity(riga)
-    return None if i is None else _decodifica_xunity(riga[:i])
+    i = _unchanged_xunity(line)
+    return None if i is None else _decode_xunity(line[:i])
 
 
-def _riga_xunity(riga):
+def _xunity_line(line):
     """Decoded (originale, traduzione) of a cache line, or None (comments, empty lines or lines without '=')."""
-    if riga.lstrip().startswith("//"):
+    if line.lstrip().startswith("//"):
         return None
-    i = _uguale_xunity(riga)
-    return None if i is None else (_decodifica_xunity(riga[:i]), _decodifica_xunity(riga[i + 1:]))
+    i = _unchanged_xunity(line)
+    return None if i is None else (_decode_xunity(line[:i]), _decode_xunity(line[i + 1:]))
 
 
-def _decodifica_xunity(s):
+def _decode_xunity(s):
     """Inverse of _codifica_xunity, character by character (like XUnity)."""
-    uscita, i = [], 0
-    semplici = {"n": "\n", "r": "\r", "=": "=", "\\": "\\", "/": "/"}
+    output, i = [], 0
+    simple_escapes = {"n": "\n", "r": "\r", "=": "=", "\\": "\\", "/": "/"}
     while i < len(s):
         if s[i] == "\\" and i + 1 < len(s):
             d = s[i + 1]
             if d == "u" and re.fullmatch(r"[0-9a-fA-F]{4}", s[i + 2:i + 6]):
-                uscita.append(chr(int(s[i + 2:i + 6], 16)))
+                output.append(chr(int(s[i + 2:i + 6], 16)))
                 i += 6
                 continue
-            uscita.append(semplici.get(d, "\\" + d))
+            output.append(simple_escapes.get(d, "\\" + d))
             i += 2
         else:
-            uscita.append(s[i])
+            output.append(s[i])
             i += 1
-    return "".join(uscita)
+    return "".join(output)
 
 
-def _percorso_cache(cartella, a):
-    return os.path.join(_cartella_traduzioni(cartella), a, "Text", "_AutoGeneratedTranslations.txt")
+def _cache_path(folder, a):
+    return os.path.join(_translations_folder(folder), a, "Text", "_AutoGeneratedTranslations.txt")
 
 
-def scrivi_cache_xunity(cartella, a, traduzioni, log=print, sostituisci=None, conteggi=None, esclusi=None):
+def write_xunity_cache(folder, a, translations, log=print, substitute=None, counts=None, excluded=None):
     """Adds the translations to the XUnity cache without touching those already there (including those fixed by
     hand). The language names (English, Español...) stay unchanged. To be used with the game closed.
 
     sostituisci: {originale: translation the line must have now}: those lines are rewritten with the translation
     from 'traduzioni', but only if the file still has exactly that translation (written by PatchSmith or by its live
-    translator, see controlla_cache_xunity): a line changed by hand in the meantime stays as it is.
+    translator, see check_xunity_cache): a line changed by hand in the meantime stays as it is.
     esclusi: the characters the game's fonts cannot draw (profilo["caratteri_mancanti"], see checks.py): in the
-    lines written now they are adapted (è -> e', caratteri.adatta_senza).
+    lines written now they are adapted (è -> e', chars.adapt_without).
     Returns how many lines it added; in 'conteggi' (if given) also {'aggiunte', 'sostituite'}."""
-    percorso = _percorso_cache(cartella, a)
-    sostituisci = sostituisci or {}
-    if esclusi:
-        from .characters import adatta_senza
-        traduzioni = {t: (adatta_senza(v, esclusi, a) or v) for t, v in traduzioni.items()}
-    righe, bom = [], False
-    if os.path.exists(percorso):
-        with open(percorso, "rb") as f:
-            grezzo = f.read()
-        bom = grezzo.startswith(b"\xef\xbb\xbf")
-        righe = grezzo.decode("utf-8-sig", "replace").splitlines()
-    presenti, uscita, sostituite = set(), [], 0
-    for riga in righe:
-        chiave = _chiave_xunity(riga)
-        if chiave in lingua.ENDONIMI:
-            riga = "%s=%s" % (_codifica_xunity(chiave), _codifica_xunity(chiave))
-        elif chiave in sostituisci and chiave not in presenti:
-            coppia = _riga_xunity(riga)
-            nuova = traduzioni.get(chiave)
-            if coppia and coppia[1] == sostituisci[chiave] and nuova and nuova != coppia[1]:
-                riga = "%s=%s" % (_codifica_xunity(chiave), _codifica_xunity(nuova))
-                sostituite += 1
-        if chiave is not None:
-            presenti.add(chiave)
-        uscita.append(riga)
-    nuove = 0
-    for originale, tradotto in traduzioni.items():
-        if originale in presenti or not tradotto:
+    path = _cache_path(folder, a)
+    substitute = substitute or {}
+    if excluded:
+        from .characters import adapt_without
+        translations = {t: (adapt_without(v, excluded, a) or v) for t, v in translations.items()}
+    lines, bom = [], False
+    if os.path.exists(path):
+        with open(path, "rb") as f:
+            raw = f.read()
+        bom = raw.startswith(b"\xef\xbb\xbf")
+        lines = raw.decode("utf-8-sig", "replace").splitlines()
+    present, output, replaced = set(), [], 0
+    for line in lines:
+        key = _xunity_key(line)
+        if key in language.ENDONYMS:
+            line = "%s=%s" % (_encode_xunity(key), _encode_xunity(key))
+        elif key in substitute and key not in present:
+            pair = _xunity_line(line)
+            new_value = translations.get(key)
+            if pair and pair[1] == substitute[key] and new_value and new_value != pair[1]:
+                line = "%s=%s" % (_encode_xunity(key), _encode_xunity(new_value))
+                replaced += 1
+        if key is not None:
+            present.add(key)
+        output.append(line)
+    new_lines = 0
+    for original, translated in translations.items():
+        if original in present or not translated:
             continue
-        valore = originale if originale in lingua.ENDONIMI else tradotto
-        uscita.append("%s=%s" % (_codifica_xunity(originale), _codifica_xunity(valore)))
-        presenti.add(originale)
-        nuove += 1
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    dati = ("\n".join(uscita) + "\n").encode("utf-8")
-    scrivi_atomico(percorso, (b"\xef\xbb\xbf" + dati) if bom else dati)
-    if conteggi is not None:
-        conteggi.update(aggiunte=nuove, sostituite=sostituite)
-    return nuove
+        value_ = original if original in language.ENDONYMS else translated
+        output.append("%s=%s" % (_encode_xunity(original), _encode_xunity(value_)))
+        present.add(original)
+        new_lines += 1
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = ("\n".join(output) + "\n").encode("utf-8")
+    write_atomic(path, (b"\xef\xbb\xbf" + data) if bom else data)
+    if counts is not None:
+        counts.update(aggiunte=new_lines, sostituite=replaced)
+    return new_lines
 
 
-def percorso_cache_salvata(nome_profilo, a):
+def saved_cache_path(profile_name, a):
     """The XUnity cache saved in PatchSmith's translation memory by "Restore originals" (see salva_traduzioni)."""
-    return os.path.join(_cartella_memoria(nome_profilo), "Translation", a, "Text", "_AutoGeneratedTranslations.txt")
+    return os.path.join(_memory_folder(profile_name), "Translation", a, "Text", "_AutoGeneratedTranslations.txt")
 
 
-def voci_cache_xunity(cartella, a, percorso=None):
+def xunity_cache_entries(folder, a, path=None):
     """{originale: traduzione} of the game's XUnity cache (empty if missing); percorso: another cache (e.g. the saved
-    one, percorso_cache_salvata). Read only."""
+    one, saved_cache_path). Read only."""
     try:
-        with open(percorso or _percorso_cache(cartella, a), "rb") as f:
-            righe = f.read().decode("utf-8-sig", "replace").splitlines()
+        with open(path or _cache_path(folder, a), "rb") as f:
+            lines = f.read().decode("utf-8-sig", "replace").splitlines()
     except OSError:
         return {}
-    voci = {}
-    for riga in righe:
-        coppia = _riga_xunity(riga)
-        if coppia and coppia[0] not in voci:  # XUnity uses the first one
-            voci[coppia[0]] = coppia[1]
-    return voci
+    entries = {}
+    for line in lines:
+        pair = _xunity_line(line)
+        if pair and pair[0] not in entries:  # XUnity uses the first one
+            entries[pair[0]] = pair[1]
+    return entries
 
 
-_SEGNAPOSTO_XUNITY = re.compile(r"\{\{[^{}]*\}\}")
+_XUNITY_PLACEHOLDER = re.compile(r"\{\{[^{}]*\}\}")
 
 
-def controlla_cache_xunity(voci, origine="en", destinazione="it", nomi=()):
+def check_xunity_cache(entries, origin="en", dest_lang="it", names=()):
     """{originale: (traduzione, [motivi])} of the XUnity cache lines that are wrong (read only):
     - 'uguale all'originale': with at least 2 frequent words of the game's language ('Xbox' or 'Codec' stay: they
       are names);
     - 'in un'altra lingua': the translation clearly has the frequent words of another language, usually the game's
-      one (lingua.lingua_evidente);
+      one (language.obvious_language);
     - 'a capo diversi': more or fewer lines than the original (the label goes outside its space);
     - 'segnaposto diversi': XUnity's {{A}} do not match;
     - 'nome tradotto': a game name (nomi) translated.
     The language names (English, Español...) stay the same on purpose and do not count. Which lines can be fixed
-    (those written by PatchSmith) is decided by the caller: see automatico._righe_cache_da_rifare."""
+    (those written by PatchSmith) is decided by the caller: see automatic._cache_lines_to_redo."""
     import collections
-    base = (origine or "en").split("-")[0]
-    frequenti = lingua._PAROLE.get(base, lingua._PAROLE["en"])
-    schema = re.compile(r"(?<![^\W\d_])(?:%s)(?![^\W\d_])" % "|".join(
-        re.escape(n) for n in sorted(nomi, key=len, reverse=True))) if nomi else None
-    uscita = {}
-    for originale, tradotto in voci.items():
-        if originale in lingua.ENDONIMI or not re.search(r"[^\W\d_]", originale):
+    base = (origin or "en").split("-")[0]
+    common_words = language._WORDS.get(base, language._WORDS["en"])
+    pattern = re.compile(r"(?<![^\W\d_])(?:%s)(?![^\W\d_])" % "|".join(
+        re.escape(n) for n in sorted(names, key=len, reverse=True))) if names else None
+    output = {}
+    for original, translated in entries.items():
+        if original in language.ENDONYMS or not re.search(r"[^\W\d_]", original):
             continue
-        motivi = []
-        pulito = solo_parole(_SEGNAPOSTO_XUNITY.sub(" ", tradotto))  # without tags, codes and quoted titles
-        if tradotto.strip() == originale.strip():
-            parole = re.findall(r"[^\W\d_]+", _SEGNAPOSTO_XUNITY.sub(" ", originale).lower())
-            if sum(1 for p in parole if p in frequenti) >= 2:
-                motivi.append("uguale all'originale")
-        elif lingua.lingua_evidente(pulito, destinazione):
-            motivi.append("in un'altra lingua")
-        if tradotto.count("\n") != originale.count("\n"):
-            motivi.append("a capo diversi")
-        if collections.Counter(_SEGNAPOSTO_XUNITY.findall(originale)) != \
-                collections.Counter(_SEGNAPOSTO_XUNITY.findall(tradotto)):
-            motivi.append("segnaposto diversi")
-        if schema and collections.Counter(schema.findall(originale)) - collections.Counter(schema.findall(tradotto)):
-            motivi.append("nome tradotto")
-        if motivi:
-            uscita[originale] = (tradotto, motivi)
-    return uscita
+        reasons = []
+        cleaned = words_only(_XUNITY_PLACEHOLDER.sub(" ", translated))  # without tags, codes and quoted titles
+        if translated.strip() == original.strip():
+            words = re.findall(r"[^\W\d_]+", _XUNITY_PLACEHOLDER.sub(" ", original).lower())
+            if sum(1 for p in words if p in common_words) >= 2:
+                reasons.append("uguale all'originale")
+        elif language.obvious_language(cleaned, dest_lang):
+            reasons.append("in un'altra lingua")
+        if translated.count("\n") != original.count("\n"):
+            reasons.append("a capo diversi")
+        if collections.Counter(_XUNITY_PLACEHOLDER.findall(original)) != \
+                collections.Counter(_XUNITY_PLACEHOLDER.findall(translated)):
+            reasons.append("segnaposto diversi")
+        if pattern and (collections.Counter(pattern.findall(original))
+                        - collections.Counter(pattern.findall(translated))):
+            reasons.append("nome tradotto")
+        if reasons:
+            output[original] = (translated, reasons)
+    return output
 
 
 # --- installation -------------------------------------------------------------------------------
 
-def _voci_pacchetto(percorso_zip, cartella):
+def _package_entries(zip_path, folder):
     """{rel: (zip, nome nello zip, sha256 atteso)} of the files to install, with a check of the paths."""
-    radice = os.path.abspath(cartella)
-    voci = {}
-    with zipfile.ZipFile(percorso_zip) as z:
+    root = os.path.abspath(folder)
+    entries = {}
+    with zipfile.ZipFile(zip_path) as z:
         for info in z.infolist():
-            nome = info.filename
-            rel = nome.replace("\\", "/")
-            if rel.endswith("/") or rel in ESCLUSI:
+            name = info.filename
+            rel = name.replace("\\", "/")
+            if rel.endswith("/") or rel in EXCLUDED:
                 continue
-            if not _rel_valido(rel):
-                raise ErroreUnity("Il pacchetto %s contiene un percorso non ammesso: %s"
-                                  % (os.path.basename(percorso_zip), nome))
-            if os.path.commonpath([radice, os.path.abspath(_percorso(radice, rel))]) != radice:
-                raise ErroreUnity("Percorso fuori dalla cartella del gioco: %s" % nome)
-            voci[rel] = (percorso_zip, nome, hashlib.sha256(z.read(info)).hexdigest())
-    return voci
+            if not _valid_rel(rel):
+                raise UnityError("Il pacchetto %s contiene un percorso non ammesso: %s"
+                                  % (os.path.basename(zip_path), name))
+            if os.path.commonpath([root, os.path.abspath(_path(root, rel))]) != root:
+                raise UnityError("Percorso fuori dalla cartella del gioco: %s" % name)
+            entries[rel] = (zip_path, name, hashlib.sha256(z.read(info)).hexdigest())
+    return entries
 
 
-def _scrivi_voce(cartella, rel, voce):
+def _write_entry(folder, rel, entry):
     """Extracts a file under a temporary name, checks the fingerprint and renames it (never half-written files)."""
-    percorso_zip, nome, impronta = voce
-    dest = _percorso(cartella, rel)
+    zip_path, name, fingerprint = entry
+    dest = _path(folder, rel)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    temporaneo = dest + SUFFISSO_TMP
-    with zipfile.ZipFile(percorso_zip) as z, z.open(nome) as sorgente, open(temporaneo, "wb") as uscita:
-        shutil.copyfileobj(sorgente, uscita)
-    if _sha256(temporaneo) != impronta:
-        os.remove(temporaneo)
-        raise ErroreUnity("Estrazione di %s non riuscita (impronta diversa)" % rel)
-    os.replace(temporaneo, dest)
+    temp_file = dest + TMP_SUFFIX
+    with zipfile.ZipFile(zip_path) as z, z.open(name) as source, open(temp_file, "wb") as output:
+        shutil.copyfileobj(source, output)
+    if _sha256(temp_file) != fingerprint:
+        os.remove(temp_file)
+        raise UnityError("Estrazione di %s non riuscita (impronta diversa)" % rel)
+    os.replace(temp_file, dest)
 
 
-def _pacchetti(info, log):
-    nome_bepinex = "bepinex5_%s" % info["architettura"]
-    return nome_bepinex, [componenti.ottieni(nome_bepinex, log), componenti.ottieni("xunity_bepinex5", log)]
+def _packages(info, log):
+    bepinex_name = "bepinex5_%s" % info["architettura"]
+    return bepinex_name, [components.obtain(bepinex_name, log), components.obtain("xunity_bepinex5", log)]
 
 
-def _controlla_anticheat(cartella):
-    esito = rilevamento.rileva(cartella)
-    nomi = [r["nome"] for r in esito["risultati"] if r["sezione"] == "AntiCheat"]
-    if nomi:
-        raise ErroreUnity("Questo gioco ha un anti-cheat (%s): non installo un loader di mod (rischio di ban)."
-                          % ", ".join(nomi), "ANTICHEAT")
+def _check_anticheat(folder):
+    outcome = detection.detect(folder)
+    names = [r["nome"] for r in outcome["risultati"] if r["sezione"] == "AntiCheat"]
+    if names:
+        raise UnityError("Questo gioco ha un anti-cheat (%s): non installo un loader di mod (rischio di ban)."
+                          % ", ".join(names), "ANTICHEAT")
 
 
-def installa(cartella, da, a, nome_profilo, log=print, anticheat=False, locale=None):
+def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local=None):
     """Installs (or updates the configuration of) BepInEx + XUnity. locale: game profile path, to have the new
     sentences while playing translated by PatchSmith's translator (if the plugin compiles); False: by XUnity with
     Google; None: leaves it as it is (at first Google, or none if Google is paused).
 
     Returns the game language used (e.g. 'en') if it is ready, False if no translation is needed."""
-    cartella = os.path.abspath(cartella)
-    info = analizza(cartella)
+    folder = os.path.abspath(folder)
+    info = analyze(folder)
     if anticheat:
-        raise ErroreUnity("Questo gioco ha un anti-cheat: non installo un loader di mod (rischio di ban).", "ANTICHEAT")
+        raise UnityError("Questo gioco ha un anti-cheat: non installo un loader di mod (rischio di ban).", "ANTICHEAT")
     if not info["exe"]:
-        raise ErroreUnity("Non trovo l'eseguibile del gioco Unity (il .exe con accanto la cartella _Data).")
+        raise UnityError("Non trovo l'eseguibile del gioco Unity (il .exe con accanto la cartella _Data).")
     if info["backend"] == "il2cpp":
-        raise ErroreUnity("Gioco Unity IL2CPP: non ancora supportato (serve BepInEx 6, in arrivo).", "NON_SUPPORTATO")
+        raise UnityError("Gioco Unity IL2CPP: non ancora supportato (serve BepInEx 6, in arrivo).", "NON_SUPPORTATO")
     if info["backend"] != "mono":
-        raise ErroreUnity("Non riconosco il tipo di gioco Unity (manca la cartella Managed).", "NON_SUPPORTATO")
+        raise UnityError("Non riconosco il tipo di gioco Unity (manca la cartella Managed).", "NON_SUPPORTATO")
     if info["architettura"] not in ("x64", "x86"):
-        raise ErroreUnity("Architettura dell'eseguibile non riconosciuta.")
-    _controlla_anticheat(cartella)
-    if in_esecuzione(cartella, info["exe"]):
-        raise ErroreUnity("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
-    if da == lingua.AUTO:
-        da, motivo = lingua.rileva(testi_campione(cartella, info))
-        log("  Lingua del gioco rilevata: %s" % lingua.etichetta(da))
-        log(DETTAGLIO + "  (lingua riconosciuta da: %s)" % motivo)
-        sicura = "uso l'inglese" not in motivo
+        raise UnityError("Architettura dell'eseguibile non riconosciuta.")
+    _check_anticheat(folder)
+    if is_running(folder, info["exe"]):
+        raise UnityError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+    if src_lang == language.AUTO:
+        src_lang, reason = language.detect(sample_texts(folder, info))
+        log("  Lingua del gioco rilevata: %s" % language.label(src_lang))
+        log(DETAIL + "  (lingua riconosciuta da: %s)" % reason)
+        sure = "uso l'inglese" not in reason
     else:
-        sicura = True
-    if sicura and da.split("-")[0] == a.split("-")[0]:
-        log("  Il gioco e' gia' in %s: niente da tradurre." % lingua.etichetta(a))
+        sure = True
+    if sure and src_lang.split("-")[0] == a.split("-")[0]:
+        log("  Il gioco e' gia' in %s: niente da tradurre." % language.label(a))
         return False
-    log(DETTAGLIO + "  Unity %s, %s, %s" % (info["versione_unity"] or "?", info["backend"], info["architettura"]))
+    log(DETAIL + "  Unity %s, %s, %s" % (info["versione_unity"] or "?", info["backend"], info["architettura"]))
 
-    if manifesto_presente(cartella):
-        manifesto = leggi_manifesto(cartella)
-        if manifesto is None:
-            raise ErroreUnity("Il file %s non e' valido: non lo uso. Controlla la cartella a mano." % MANIFESTO)
-        if manifesto.get("in_corso"):
-            raise ErroreUnity("Un'installazione precedente si e' interrotta: usa 'Ripristina originali' e riprova.")
-        return _aggiorna(cartella, manifesto, info, da, a, log, locale, nome_profilo)
+    if manifest_present(folder):
+        manifest = read_manifest(folder)
+        if manifest is None:
+            raise UnityError("Il file %s non e' valido: non lo uso. Controlla la cartella a mano." % MANIFEST)
+        if manifest.get("in_corso"):
+            raise UnityError("Un'installazione precedente si e' interrotta: usa 'Ripristina originali' e riprova.")
+        return _update(folder, manifest, info, src_lang, a, log, local, profile_name)
 
     if info["conflitti"]:
-        raise ErroreUnity("Nel gioco c'e' gia' un loader di mod (%s): non installo per non rompere le mod "
+        raise UnityError("Nel gioco c'e' gia' un loader di mod (%s): non installo per non rompere le mod "
                           "esistenti." % ", ".join(info["conflitti"]))
 
-    nome_bepinex, pacchetti = _pacchetti(info, log)
-    voci = {}
-    for p in pacchetti:
-        for rel, voce in _voci_pacchetto(p, cartella).items():
-            if rel in voci:
-                raise ErroreUnity("I pacchetti contengono lo stesso file due volte (%s): annullato." % rel)
-            voci[rel] = voce
-    occupati = [rel for rel in voci if os.path.exists(_percorso(cartella, rel))]
-    if occupati:
-        raise ErroreUnity("Questi file esistono gia' nel gioco: %s. Non sovrascrivo nulla." % occupati[:3])
+    bepinex_name, packages = _packages(info, log)
+    entries = {}
+    for p in packages:
+        for rel, entry in _package_entries(p, folder).items():
+            if rel in entries:
+                raise UnityError("I pacchetti contengono lo stesso file due volte (%s): annullato." % rel)
+            entries[rel] = entry
+    in_use = [rel for rel in entries if os.path.exists(_path(folder, rel))]
+    if in_use:
+        raise UnityError("Questi file esistono gia' nel gioco: %s. Non sovrascrivo nulla." % in_use[:3])
 
-    manifesto = {
+    manifest = {
         "versione": 2,
         "patchsmith": True,
         "data": datetime.datetime.now().isoformat(timespec="seconds"),
         "exe": info["exe"],
         "versione_unity": info["versione_unity"],
-        "componenti": {nome_bepinex: componenti.CATALOGO[nome_bepinex]["versione"],
-                       "xunity_bepinex5": componenti.CATALOGO["xunity_bepinex5"]["versione"]},
-        "radice_prima": sorted(os.listdir(cartella)),
+        "componenti": {bepinex_name: components.CATALOG[bepinex_name]["versione"],
+                       "xunity_bepinex5": components.CATALOG["xunity_bepinex5"]["versione"]},
+        "radice_prima": sorted(os.listdir(folder)),
         "cartelle_create": ["BepInEx"],
-        "file": {rel: voce[2] for rel, voce in voci.items()},  # FULL list, before writing
+        "file": {rel: entry[2] for rel, entry in entries.items()},  # FULL list, before writing
         "in_corso": True,
         # which PatchSmith version wrote the configuration (the after-play check updates it when it is from another
         # version)
         "patchsmith_versione": __version__,
     }
-    interruzione.controlla()  # up to here nothing has been written to the game
-    _salva_manifesto(cartella, manifesto)
+    interruption.check()  # up to here nothing has been written to the game
+    _save_manifest(folder, manifest)
     try:
-        for rel, voce in voci.items():
-            _scrivi_voce(cartella, rel, voce)
-        _configura_traduttore(cartella, info, da, a, locale, nome_profilo, log)
-        if entrypoint_bepinex(cartella, info["versione_unity"]):
-            log(DETTAGLIO + "  Unity 6: BepInEx partira' al primo MonoBehaviour (all'avvio di Application il gioco crasherebbe)")
-        attiva_registro_unity(cartella)  # the characters missing from the fonts end up in the BepInEx log
-        n = _rimetti_traduzioni(cartella, nome_profilo)
-        manifesto["in_corso"] = False
-        _salva_manifesto(cartella, manifesto)
+        for rel, entry in entries.items():
+            _write_entry(folder, rel, entry)
+        _configure_translator(folder, info, src_lang, a, local, profile_name, log)
+        if bepinex_entrypoint(folder, info["versione_unity"]):
+            log(DETAIL + "  Unity 6: BepInEx partira' al primo MonoBehaviour "
+                         "(all'avvio di Application il gioco crasherebbe)")
+        enable_unity_log(folder)  # the characters missing from the fonts end up in the BepInEx log
+        n = _put_back_translations(folder, profile_name)
+        manifest["in_corso"] = False
+        _save_manifest(folder, manifest)
     except BaseException:
-        _rimuovi(cartella, manifesto, lambda m: None, forzato=True)
+        _remove(folder, manifest, lambda m: None, forced=True)
         raise
     log("  Installati BepInEx %s e XUnity.AutoTranslator %s (%d file)%s" % (
-        manifesto["componenti"][nome_bepinex], manifesto["componenti"]["xunity_bepinex5"], len(manifesto["file"]),
+        manifest["componenti"][bepinex_name], manifest["componenti"]["xunity_bepinex5"], len(manifest["file"]),
         ", %d file di traduzioni rimessi" % n if n else ""))
-    return da
+    return src_lang
 
 
-def _aggiorna(cartella, manifesto, info, da, a, log, locale=None, nome_profilo=None):
+def _update(folder, manifest, info, src_lang, a, log, local=None, profile_name=None):
     """Already installed: puts back the missing files (e.g. removed by the antivirus) and updates the configuration.
     The translations in the game are NOT touched (they are the most recent ones, with any fixes)."""
-    mancanti = [rel for rel in manifesto["file"] if not os.path.exists(_percorso(cartella, rel))]
-    if mancanti:
-        log("  ! %d file installati mancano (antivirus?), es. %s: li rimetto" % (len(mancanti), mancanti[0]))
-        _, pacchetti = _pacchetti(info, log)
-        voci = {}
-        for p in pacchetti:
-            voci.update(_voci_pacchetto(p, cartella))
-        for rel in mancanti:
-            if rel not in voci or voci[rel][2] != manifesto["file"][rel]:
-                raise ErroreUnity("Non riesco a rimettere %s: usa 'Ripristina originali' e reinstalla." % rel)
-            _scrivi_voce(cartella, rel, voci[rel])
-    _configura_traduttore(cartella, info, da, a, locale, nome_profilo, log)
-    if entrypoint_bepinex(cartella, info["versione_unity"]):
-        log(DETTAGLIO + "  Unity 6: BepInEx partira' al primo MonoBehaviour (all'avvio di Application il gioco crasherebbe)")
-    attiva_registro_unity(cartella)
+    missing = [rel for rel in manifest["file"] if not os.path.exists(_path(folder, rel))]
+    if missing:
+        log("  ! %d file installati mancano (antivirus?), es. %s: li rimetto" % (len(missing), missing[0]))
+        _, packages = _packages(info, log)
+        entries = {}
+        for p in packages:
+            entries.update(_package_entries(p, folder))
+        for rel in missing:
+            if rel not in entries or entries[rel][2] != manifest["file"][rel]:
+                raise UnityError("Non riesco a rimettere %s: usa 'Ripristina originali' e reinstalla." % rel)
+            _write_entry(folder, rel, entries[rel])
+    _configure_translator(folder, info, src_lang, a, local, profile_name, log)
+    if bepinex_entrypoint(folder, info["versione_unity"]):
+        log(DETAIL + "  Unity 6: BepInEx partira' al primo MonoBehaviour "
+                     "(all'avvio di Application il gioco crasherebbe)")
+    enable_unity_log(folder)
     # the configuration is now this version's: in the manifest the version and when (the after-play check counts only
     # the signals that arrived after PatchSmith's last write)
-    manifesto["patchsmith_versione"] = __version__
-    manifesto["aggiornato"] = datetime.datetime.now().isoformat(timespec="seconds")
-    _salva_manifesto(cartella, manifesto)
-    log("  Gia' installato: configurazione aggiornata (%s -> %s)." % (da, a))
-    return da
+    manifest["patchsmith_versione"] = __version__
+    manifest["aggiornato"] = datetime.datetime.now().isoformat(timespec="seconds")
+    _save_manifest(folder, manifest)
+    log("  Gia' installato: configurazione aggiornata (%s -> %s)." % (src_lang, a))
+    return src_lang
 
 
 # --- uninstall ----------------------------------------------------------------------------------
 
-def _creato_da_loro(rel_bepinex):
-    return any(fnmatch.fnmatch(rel_bepinex, schema) for schema in CREATI_DA_LORO)
+def _created_by_them(rel_bepinex):
+    return any(fnmatch.fnmatch(rel_bepinex, pattern) for pattern in CREATED_BY_THEM)
 
 
-def _rimuovi(cartella, manifesto, log, forzato=False):
+def _remove(folder, manifest, log, forced=False):
     """Removes the files put there by us (and those created by BepInEx/XUnity). Returns the items left in place.
 
     forzato=True (undoing an installation that has just started): removes the planned files even if the fingerprint
     does not match (they might be half-written), because they did not exist before.
     """
-    lasciati = []
-    for rel, impronta in manifesto.get("file", {}).items():
-        p = _percorso(cartella, rel)
-        for candidato in (p, p + SUFFISSO_TMP):
-            if os.path.exists(candidato) and (forzato or candidato != p or _sha256(candidato) == impronta):
-                os.remove(candidato)
+    left_behind = []
+    for rel, fingerprint in manifest.get("file", {}).items():
+        p = _path(folder, rel)
+        for candidate in (p, p + TMP_SUFFIX):
+            if os.path.exists(candidate) and (forced or candidate != p or _sha256(candidate) == fingerprint):
+                os.remove(candidate)
         if os.path.exists(p):
-            lasciati.append(rel)
+            left_behind.append(rel)
             log("  ! %s e' stato modificato da altri dopo l'installazione: lo lascio" % rel)
-    bepinex = os.path.join(cartella, "BepInEx")
-    if "BepInEx" in manifesto.get("cartelle_create", []) and "BepInEx" not in manifesto.get("radice_prima", []) \
+    bepinex = os.path.join(folder, "BepInEx")
+    if "BepInEx" in manifest.get("cartelle_create", []) and "BepInEx" not in manifest.get("radice_prima", []) \
             and os.path.isdir(bepinex):
-        for radice, dirs, files in os.walk(bepinex, topdown=False):
+        for root, dirs, files in os.walk(bepinex, topdown=False):
             for f in files:
-                rel = os.path.relpath(os.path.join(radice, f), bepinex).replace(os.sep, "/")
-                if _creato_da_loro(rel) or forzato:
-                    os.remove(os.path.join(radice, f))
+                rel = os.path.relpath(os.path.join(root, f), bepinex).replace(os.sep, "/")
+                if _created_by_them(rel) or forced:
+                    os.remove(os.path.join(root, f))
                 else:
-                    lasciati.append("BepInEx/" + rel)
+                    left_behind.append("BepInEx/" + rel)
             for d in dirs:
                 try:
-                    os.rmdir(os.path.join(radice, d))  # only if empty
+                    os.rmdir(os.path.join(root, d))  # only if empty
                 except OSError:
                     pass
         try:
             os.rmdir(bepinex)
         except OSError:
             log("  ! Nella cartella BepInEx ci sono file non messi da PatchSmith (es. altre mod): li lascio.")
-    prima = set(manifesto.get("radice_prima", []))
-    for nome in os.listdir(cartella):
-        if nome not in prima and ARTEFATTI_RADICE.match(nome):
-            p = os.path.join(cartella, nome)
+    before = set(manifest.get("radice_prima", []))
+    for name in os.listdir(folder):
+        if name not in before and ROOT_ARTIFACTS.match(name):
+            p = os.path.join(folder, name)
             shutil.rmtree(p) if os.path.isdir(p) else os.remove(p)
-    p = os.path.join(cartella, MANIFESTO)
+    p = os.path.join(folder, MANIFEST)
     if os.path.exists(p):
         os.remove(p)
-    return lasciati
+    return left_behind
 
 
-def disinstalla(cartella, nome_profilo, log=print):
+def uninstall(folder, profile_name, log=print):
     """Saves the translations to the translation memory and removes BepInEx + XUnity. False if not installed."""
-    cartella = os.path.abspath(cartella)
-    if not manifesto_presente(cartella):
+    folder = os.path.abspath(folder)
+    if not manifest_present(folder):
         return False
-    manifesto = leggi_manifesto(cartella)
-    if manifesto is None:
-        raise ErroreUnity("Il file %s non e' valido: per sicurezza non cancello nulla. Controlla la cartella."
-                          % MANIFESTO)
-    if in_esecuzione(cartella, manifesto.get("exe")):
-        raise ErroreUnity("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
-    n = salva_traduzioni(cartella, nome_profilo)
+    manifest = read_manifest(folder)
+    if manifest is None:
+        raise UnityError("Il file %s non e' valido: per sicurezza non cancello nulla. Controlla la cartella."
+                          % MANIFEST)
+    if is_running(folder, manifest.get("exe")):
+        raise UnityError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+    n = save_translations(folder, profile_name)
     if n:
         log("  Traduzioni salvate in memoria (%d file): torneranno con 'Analizza e traduci'" % n)
-    lasciati = _rimuovi(cartella, manifesto, log)
-    if lasciati:
-        log("  Lasciati al loro posto (non messi da PatchSmith o modificati): %s" % ", ".join(lasciati[:6]))
-    prima = set(manifesto.get("radice_prima", []))
-    dopo = set(os.listdir(cartella))
-    if prima == dopo:
+    left_behind = _remove(folder, manifest, log)
+    if left_behind:
+        log("  Lasciati al loro posto (non messi da PatchSmith o modificati): %s" % ", ".join(left_behind[:6]))
+    before = set(manifest.get("radice_prima", []))
+    after = set(os.listdir(folder))
+    if before == after:
         log("  BepInEx e XUnity rimossi: la cartella del gioco e' tornata com'era.")
     else:
-        log("  BepInEx e XUnity rimossi. Differenze rispetto a prima: %s" % sorted(dopo ^ prima)[:6])
+        log("  BepInEx e XUnity rimossi. Differenze rispetto a prima: %s" % sorted(after ^ before)[:6])
     return True
 
 
 # --- status and verification --------------------------------------------------------------------
 
-def stato(cartella, nome_profilo, a, log=print):
+def state(folder, profile_name, a, log=print):
     """Checks the installation and the first start (BepInEx/LogOutput.log) and counts the translations."""
-    info = analizza(cartella)
-    manifesto = leggi_manifesto(cartella)
-    log(DETTAGLIO + "  Unity %s, %s, %s" % (info["versione_unity"] or "?", info["backend"], info["architettura"]))
-    if not manifesto:
-        log("  Traduzione non installata." if not manifesto_presente(cartella) else "  Manifesto non valido!")
+    info = analyze(folder)
+    manifest = read_manifest(folder)
+    log(DETAIL + "  Unity %s, %s, %s" % (info["versione_unity"] or "?", info["backend"], info["architettura"]))
+    if not manifest:
+        log("  Traduzione non installata." if not manifest_present(folder) else "  Manifesto non valido!")
         return False
-    mancanti = [rel for rel in manifesto["file"] if not os.path.exists(_percorso(cartella, rel))]
-    log("  Installato il %s: %d file%s" % (manifesto.get("data", "?"), len(manifesto["file"]),
-                                            ", MANCANO %d (antivirus?)" % len(mancanti) if mancanti else ""))
-    registro = _percorso(cartella, LOG_BEPINEX)
-    if not os.path.exists(registro):
+    missing = [rel for rel in manifest["file"] if not os.path.exists(_path(folder, rel))]
+    log("  Installato il %s: %d file%s" % (manifest.get("data", "?"), len(manifest["file"]),
+                                            ", MANCANO %d (antivirus?)" % len(missing) if missing else ""))
+    log_file = _path(folder, BEPINEX_LOG)
+    if not os.path.exists(log_file):
         log("  Il gioco non e' ancora stato avviato con la traduzione (manca BepInEx/LogOutput.log).")
     else:
-        with open(registro, encoding="utf-8", errors="replace") as f:
-            testo = f.read()
-        controlli = [
+        with open(log_file, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+        check_list = [
             # only "startup complete": "Chainloader started" is there even when the game crashes right after
-            ("BepInEx avviato", "Chainloader startup complete" in testo),
-            ("XUnity caricato", "XUnity Auto Translator" in testo),
-            ("nessun errore grave", not re.search(r"Could not run preloader|Failed to start BepInEx|Error occurred starting the game", testo)),
+            ("BepInEx avviato", "Chainloader startup complete" in text),
+            ("XUnity caricato", "XUnity Auto Translator" in text),
+            ("nessun errore grave",
+             not re.search(r"Could not run preloader|Failed to start BepInEx|Error occurred starting the game", text)),
         ]
-        for nome, ok in controlli:
-            log("  %s %s" % ("OK " if ok else "NO ", nome))
-        errori = [r for r in testo.splitlines() if "[Error" in r or "[Fatal" in r][:5]
-        for r in errori:
+        for name, ok in check_list:
+            log("  %s %s" % ("OK " if ok else "NO ", name))
+        errors = [r for r in text.splitlines() if "[Error" in r or "[Fatal" in r][:5]
+        for r in errors:
             log("    ! " + r[:200])
-    stato_servizio = leggi_stato_servizio(cartella)
-    if stato_servizio:
+    service_state = read_service_state(folder)
+    if service_state:
         log("  Traduttore di PatchSmith all'ultimo avvio del gioco: %s (%s)%s" % (
-            stato_servizio.get("Esito", "?"), stato_servizio.get("Data", "?"),
-            ", " + stato_servizio["Dettaglio"] if stato_servizio.get("Dettaglio") else ""))
-    traduzioni = file_traduzioni(cartella, nome_profilo, a)
-    if traduzioni:
-        with open(traduzioni, encoding="utf-8", errors="replace") as f:
-            righe = [r for r in f if "=" in r and not r.startswith("//")]
-        log("  Frasi tradotte finora: %d (%s)" % (len(righe), traduzioni))
+            service_state.get("Esito", "?"), service_state.get("Data", "?"),
+            ", " + service_state["Dettaglio"] if service_state.get("Dettaglio") else ""))
+    translations = translations_file(folder, profile_name, a)
+    if translations:
+        with open(translations, encoding="utf-8", errors="replace") as f:
+            lines = [r for r in f if "=" in r and not r.startswith("//")]
+        log("  Frasi tradotte finora: %d (%s)" % (len(lines), translations))
     return True

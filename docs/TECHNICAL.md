@@ -2,7 +2,7 @@
 
 *How PatchSmith works engine by engine, every check, the command line, the tests and how to add an adapter. To just use it, the [README](../README.md) is enough (in Italian: [LEGGIMI](../LEGGIMI.md)). Italian version of this document: [TECNICO.md](TECNICO.md).*
 
-In PatchSmith's source code the names and the interface's source texts are in Italian, comments and docstrings in English (see [CONTRIBUTING.md](../CONTRIBUTING.md), with a glossary); the English interface comes from `patchsmith/ui_language/en.json`.
+PatchSmith's source code is in English, except the interface's source texts and the keys of the saved data, which are in Italian (see [CONTRIBUTING.md](../CONTRIBUTING.md), with a glossary); the English interface comes from `patchsmith/ui_language/en.json`.
 
 ## Interface language
 

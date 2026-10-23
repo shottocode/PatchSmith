@@ -8,14 +8,14 @@ import json
 import os
 import re
 
-from .text import e_testo_leggibile
+from .text import is_readable_text
 
 # All the files PatchSmith creates in the game's folder contain this marker in their name.
-MARCATORE = "patchsmith-"
-SUFFISSO_TMP = ".patchsmith-tmp"
+MARKER = "patchsmith-"
+TMP_SUFFIX = ".patchsmith-tmp"
 
 # Last keys that almost always hold technical data or credits, not text to translate.
-CHIAVI_TECNICHE = {
+TECHNICAL_KEYS = {
     "id", "uid", "uuid", "guid", "key", "keys", "type", "kind", "class", "classname", "url", "uri",
     "href", "src", "path", "file", "filename", "image", "img", "icon", "sprite", "texture", "sound",
     "audio", "music", "bgm", "se", "font", "fontface", "color", "colour", "version", "author",
@@ -23,7 +23,7 @@ CHIAVI_TECNICHE = {
     "format", "mime", "encoding", "event", "action", "method", "script", "eval", "regex", "source",
 }
 # Keys that END with a technical suffix: achievementId, imageUrl, music_path, ruleType...
-_SUFFISSO_TECNICO = re.compile(
+_TECHNICAL_SUFFIX = re.compile(
     r"(?:[a-z0-9](?:Id|ID|Ids|IDs|Key|Keys|Url|URL|Uri|Path|File|Color|Colour|Hash|Type|Code)"
     r"|_(?:id|ids|key|keys|url|uri|path|file|color|colour|hash|type|code))$"
 )
@@ -35,268 +35,268 @@ _SUFFISSO_TECNICO = re.compile(
 # original text only the literals of the translated strings: comments, spaces, newlines and everything else stay
 # identical byte for byte.
 
-_STRINGA = r'"[^"\\]*(?:\\.[^"\\]*)*"'
-_STRINGA_O_COMMENTO = re.compile(_STRINGA + r"|//[^\n]*|/\*.*?(?:\*/|\Z)", re.S)
-_STRINGA_O_VIRGOLA = re.compile(_STRINGA + r"|,(?=\s*[}\]])", re.S)
+_STRING = r'"[^"\\]*(?:\\.[^"\\]*)*"'
+_STRING_OR_COMMENT = re.compile(_STRING + r"|//[^\n]*|/\*.*?(?:\*/|\Z)", re.S)
+_STRING_OR_COMMA = re.compile(_STRING + r"|,(?=\s*[}\]])", re.S)
 
 
-def _spazi(pezzo):
+def _spaces(piece):
     """The piece covered with spaces, keeping the newlines (same positions and same lines in error messages)."""
-    return re.sub(r"[^\r\n]", " ", pezzo)
+    return re.sub(r"[^\r\n]", " ", piece)
 
 
-def senza_commenti(testo):
+def without_comments(text):
     """The JSON text without // and /* */ comments and without commas before } or ] (outside strings), with spaces
     in their place: every remaining character is in the same position as in the original."""
-    testo = _STRINGA_O_COMMENTO.sub(lambda m: m.group(0) if m.group(0).startswith('"') else _spazi(m.group(0)), testo)
-    return _STRINGA_O_VIRGOLA.sub(lambda m: m.group(0) if m.group(0).startswith('"') else " ", testo)
+    text = _STRING_OR_COMMENT.sub(lambda m: m.group(0) if m.group(0).startswith('"') else _spaces(m.group(0)), text)
+    return _STRING_OR_COMMA.sub(lambda m: m.group(0) if m.group(0).startswith('"') else " ", text)
 
 
-def leggi_tollerante(testo):
+def read_lenient(text):
     """The data of a JSON text, even with comments and trailing commas. Raises ValueError if it is not JSON."""
-    return json.loads(senza_commenti(testo))
+    return json.loads(without_comments(text))
 
 
-_SPAZI_JSON = re.compile(r"[ \t\n\r]*")
-_DECODIFICATORE = json.JSONDecoder()
+_JSON_SPACES = re.compile(r"[ \t\n\r]*")
+_DECODER = json.JSONDecoder()
 
 
-def posizioni_stringhe(testo):
+def string_positions(text):
     """{percorso: (inizio, fine)} of the string literals that are values (not keys) in a JSON text already
-    without comments (see senza_commenti). With repeated keys the last one wins, as with json.loads."""
-    uscita = {}
+    without comments (see without_comments). With repeated keys the last one wins, as with json.loads."""
+    output = {}
 
-    def spazi(i):
-        return _SPAZI_JSON.match(testo, i).end()
+    def spaces(i):
+        return _JSON_SPACES.match(text, i).end()
 
-    def valore(i, percorso):
-        i = spazi(i)
-        c = testo[i:i + 1]
+    def value_(i, path):
+        i = spaces(i)
+        c = text[i:i + 1]
         if c == "{":
-            i = spazi(i + 1)
-            if testo[i:i + 1] == "}":
+            i = spaces(i + 1)
+            if text[i:i + 1] == "}":
                 return i + 1
             while True:
-                if testo[i:i + 1] != '"':
+                if text[i:i + 1] != '"':
                     raise ValueError("chiave attesa alla posizione %d" % i)
-                chiave, i = json.decoder.scanstring(testo, i + 1)
-                i = spazi(i)
-                if testo[i:i + 1] != ":":
+                key, i = json.decoder.scanstring(text, i + 1)
+                i = spaces(i)
+                if text[i:i + 1] != ":":
                     raise ValueError("':' atteso alla posizione %d" % i)
-                i = spazi(valore(i + 1, percorso + (chiave,)))
-                if testo[i:i + 1] == ",":
-                    i = spazi(i + 1)
+                i = spaces(value_(i + 1, path + (key,)))
+                if text[i:i + 1] == ",":
+                    i = spaces(i + 1)
                     continue
-                if testo[i:i + 1] == "}":
+                if text[i:i + 1] == "}":
                     return i + 1
                 raise ValueError("',' o '}' atteso alla posizione %d" % i)
         if c == "[":
-            i = spazi(i + 1)
-            if testo[i:i + 1] == "]":
+            i = spaces(i + 1)
+            if text[i:i + 1] == "]":
                 return i + 1
             n = 0
             while True:
-                i = spazi(valore(i, percorso + (n,)))
+                i = spaces(value_(i, path + (n,)))
                 n += 1
-                if testo[i:i + 1] == ",":
+                if text[i:i + 1] == ",":
                     i += 1
                     continue
-                if testo[i:i + 1] == "]":
+                if text[i:i + 1] == "]":
                     return i + 1
                 raise ValueError("',' o ']' atteso alla posizione %d" % i)
         if c == '"':
-            _, fine = json.decoder.scanstring(testo, i + 1)
-            uscita[percorso] = (i, fine)
-            return fine
+            _, end = json.decoder.scanstring(text, i + 1)
+            output[path] = (i, end)
+            return end
         try:
-            _, fine = _DECODIFICATORE.scan_once(testo, i)  # numbers, true, false, null
+            _, end = _DECODER.scan_once(text, i)  # numbers, true, false, null
         except StopIteration:
             raise ValueError("valore atteso alla posizione %d" % i) from None
-        return fine
+        return end
 
     try:
-        valore(0, ())
+        value_(0, ())
     except RecursionError:
         raise ValueError("JSON troppo annidato") from None
-    return uscita
+    return output
 
 
-def _al_percorso(dati, percorso):
-    for passo in percorso:
-        dati = dati[passo]
-    return dati
+def _at_path(data, path):
+    for step in path:
+        data = data[step]
+    return data
 
 
-class FileJSON:
+class JSONFile:
     """A JSON file read from disk, with the information to rewrite it in the same format. A file with comments or
     trailing commas (tollerante=True) is rewritten replacing only the literals of the changed strings."""
 
-    def __init__(self, percorso):
-        self.percorso = percorso
-        with open(percorso, "rb") as f:
-            grezzo = f.read()
-        self.bom = grezzo.startswith(b"\xef\xbb\xbf")
-        testo = grezzo.decode("utf-8-sig")
-        self.tollerante = False
+    def __init__(self, path):
+        self.path = path
+        with open(path, "rb") as f:
+            raw = f.read()
+        self.bom = raw.startswith(b"\xef\xbb\xbf")
+        text = raw.decode("utf-8-sig")
+        self.lenient = False
         try:
-            self.dati = json.loads(testo)
+            self.data = json.loads(text)
         except ValueError as e:
             try:
-                self.dati = leggi_tollerante(testo)
+                self.data = read_lenient(text)
             except ValueError:
                 raise e from None
-            self.tollerante = True
-            self._testo = testo
-        m = re.search(r"\n([ \t]+)\S", testo)
+            self.lenient = True
+            self._text = text
+        m = re.search(r"\n([ \t]+)\S", text)
         self.indent = (m.group(1) if m.group(1).startswith("\t") else len(m.group(1))) if m else None
-        self.solo_ascii = not re.search(r"[^\x00-\x7f]", testo) and "\\u" in testo
-        self.a_capo_finale = testo.endswith("\n")
+        self.ascii_only = not re.search(r"[^\x00-\x7f]", text) and "\\u" in text
+        self.trailing_line_break = text.endswith("\n")
 
-    def serializza(self, dati):
+    def serialize(self, data):
         """Same format as the original. Raises ValueError if NaN/Infinity would be needed (invalid JSON)."""
-        if self.tollerante:
-            return self._sostituisci(dati)
+        if self.lenient:
+            return self._replace(data)
         if self.indent is None:
-            testo = json.dumps(dati, ensure_ascii=self.solo_ascii, separators=(",", ":"), allow_nan=False)
+            text = json.dumps(data, ensure_ascii=self.ascii_only, separators=(",", ":"), allow_nan=False)
         else:
-            testo = json.dumps(dati, ensure_ascii=self.solo_ascii, indent=self.indent, allow_nan=False)
-        if self.a_capo_finale:
-            testo += "\n"
-        dati_byte = testo.encode("utf-8")
-        return (b"\xef\xbb\xbf" + dati_byte) if self.bom else dati_byte
+            text = json.dumps(data, ensure_ascii=self.ascii_only, indent=self.indent, allow_nan=False)
+        if self.trailing_line_break:
+            text += "\n"
+        data_bytes = text.encode("utf-8")
+        return (b"\xef\xbb\xbf" + data_bytes) if self.bom else data_bytes
 
-    def _sostituisci(self, dati):
+    def _replace(self, data):
         """The original text with only the literals of the changed strings rewritten; the rest (comments, spaces,
         trailing commas, numbers written as they were) stays identical. Raises ValueError if something that is not
         a string changed, or if the result, read back, does not give 'dati'."""
-        pezzi, ultimo = [], 0
-        for percorso, (inizio, fine) in sorted(posizioni_stringhe(senza_commenti(self._testo)).items(),
+        pieces, last = [], 0
+        for path, (start, end) in sorted(string_positions(without_comments(self._text)).items(),
                                                key=lambda x: x[1][0]):
             try:
-                prima, dopo = _al_percorso(self.dati, percorso), _al_percorso(dati, percorso)
+                before, after = _at_path(self.data, path), _at_path(data, path)
             except (KeyError, IndexError, TypeError):
-                raise ValueError("struttura cambiata in %s" % (percorso,)) from None
-            if dopo == prima:
+                raise ValueError("struttura cambiata in %s" % (path,)) from None
+            if after == before:
                 continue
-            if not isinstance(dopo, str):
-                raise ValueError("valore non stringa in %s" % (percorso,))
-            pezzi += [self._testo[ultimo:inizio], json.dumps(dopo, ensure_ascii=self.solo_ascii)]
-            ultimo = fine
-        testo = "".join(pezzi) + self._testo[ultimo:]
-        if leggi_tollerante(testo) != dati:
+            if not isinstance(after, str):
+                raise ValueError("valore non stringa in %s" % (path,))
+            pieces += [self._text[last:start], json.dumps(after, ensure_ascii=self.ascii_only)]
+            last = end
+        text = "".join(pieces) + self._text[last:]
+        if read_lenient(text) != data:
             raise ValueError("il file riscritto non torna: cambiato qualcosa che non e' una stringa")
-        dati_byte = testo.encode("utf-8")
-        return (b"\xef\xbb\xbf" + dati_byte) if self.bom else dati_byte
+        data_bytes = text.encode("utf-8")
+        return (b"\xef\xbb\xbf" + data_bytes) if self.bom else data_bytes
 
 
-def _rifiuta_costante(nome):
-    raise ValueError("valore non ammesso in JSON standard: %s" % nome)
+def _refuse_constant(name):
+    raise ValueError("valore non ammesso in JSON standard: %s" % name)
 
 
-def rileggi_rigoroso(dati_byte, tollerante=False):
+def reread_strict(data_bytes, lenient=False):
     """Reads back with the rules of JSON.parse (no NaN/Infinity). Raises ValueError if invalid. tollerante: the
-    original file had comments or trailing commas (FileJSON.tollerante), which the game accepts: removed first."""
-    testo = dati_byte.decode("utf-8-sig")
-    return json.loads(senza_commenti(testo) if tollerante else testo, parse_constant=_rifiuta_costante)
+    original file had comments or trailing commas (JSONFile.lenient), which the game accepts: removed first."""
+    text = data_bytes.decode("utf-8-sig")
+    return json.loads(without_comments(text) if lenient else text, parse_constant=_refuse_constant)
 
 
-def foglie(dati, percorso=(), schema=""):
+def leaves(data, path=(), pattern=""):
     """Yields (percorso_tupla, schema, valore) for every string of the JSON."""
-    if isinstance(dati, dict):
-        for k, v in dati.items():
-            yield from foglie(v, percorso + (k,), (schema + "." + k) if schema else k)
-    elif isinstance(dati, list):
-        for i, v in enumerate(dati):
-            yield from foglie(v, percorso + (i,), schema + "[]")
-    elif isinstance(dati, str):
-        yield percorso, schema, dati
+    if isinstance(data, dict):
+        for k, v in data.items():
+            yield from leaves(v, path + (k,), (pattern + "." + k) if pattern else k)
+    elif isinstance(data, list):
+        for i, v in enumerate(data):
+            yield from leaves(v, path + (i,), pattern + "[]")
+    elif isinstance(data, str):
+        yield path, pattern, data
 
 
-def statistiche_schemi(dati, max_esempi=3):
+def schema_stats(data, max_examples=3):
     """For each schema: how many strings, how many readable, characters, examples."""
     stat = {}
-    for _, schema, valore in foglie(dati):
-        s = stat.setdefault(schema, {"stringhe": 0, "leggibili": 0, "caratteri": 0, "esempi": []})
+    for _, pattern, value_ in leaves(data):
+        s = stat.setdefault(pattern, {"stringhe": 0, "leggibili": 0, "caratteri": 0, "esempi": []})
         s["stringhe"] += 1
-        if e_testo_leggibile(valore):
+        if is_readable_text(value_):
             s["leggibili"] += 1
-            s["caratteri"] += len(valore)
-            if len(s["esempi"]) < max_esempi:
-                s["esempi"].append(valore[:90].replace("\n", " / "))
+            s["caratteri"] += len(value_)
+            if len(s["esempi"]) < max_examples:
+                s["esempi"].append(value_[:90].replace("\n", " / "))
     return stat
 
 
-def ultima_chiave(schema):
-    return schema.replace("[]", "").rsplit(".", 1)[-1]
+def last_key(pattern):
+    return pattern.replace("[]", "").rsplit(".", 1)[-1]
 
 
-def chiave_tecnica(schema):
-    chiave = ultima_chiave(schema)
-    return chiave.lower() in CHIAVI_TECNICHE or bool(_SUFFISSO_TECNICO.search(chiave))
+def technical_key(pattern):
+    key = last_key(pattern)
+    return key.lower() in TECHNICAL_KEYS or bool(_TECHNICAL_SUFFIX.search(key))
 
 
-def proponi_schemi(stat):
+def suggest_schemas(stat):
     """Splits the schemas into (includi, escludi) with generic rules."""
-    includi, escludi = [], []
-    for schema, s in sorted(stat.items()):
+    include, exclude = [], []
+    for pattern, s in sorted(stat.items()):
         if s["leggibili"] == 0:
             continue
-        if chiave_tecnica(schema):
-            escludi.append(schema)
+        if technical_key(pattern):
+            exclude.append(pattern)
         else:
-            includi.append(schema)
-    return includi, escludi
+            include.append(pattern)
+    return include, exclude
 
 
-def estrai(dati, includi, leggibile=e_testo_leggibile):
+def extract(data, include, readable=is_readable_text):
     """[(percorso_tupla, testo)] of the strings to translate ('leggibile' decides which values are text)."""
-    includi = set(includi)
-    return [(p, v) for p, schema, v in foglie(dati) if schema in includi and leggibile(v)]
+    include = set(include)
+    return [(p, v) for p, pattern, v in leaves(data) if pattern in include and readable(v)]
 
 
-def applica(dati, sostituzioni):
+def apply(data, replacements):
     """Copy of the data with the strings replaced. sostituzioni: {percorso_tupla: nuovo_testo}."""
-    nuovi = copy.deepcopy(dati)
-    for percorso, testo in sostituzioni.items():
-        nodo = nuovi
-        for passo in percorso[:-1]:
-            nodo = nodo[passo]
-        nodo[percorso[-1]] = testo
-    return nuovi
+    new_items = copy.deepcopy(data)
+    for path, text in replacements.items():
+        tree_node = new_items
+        for step in path[:-1]:
+            tree_node = tree_node[step]
+        tree_node[path[-1]] = text
+    return new_items
 
 
-def verifica_struttura(originale, nuovo, consentiti, percorso=()):
+def verify_structure(original, new, allowed, path=()):
     """List of problems: the structure must be identical, only the allowed strings change."""
-    problemi = []
-    if type(originale) is not type(nuovo):
-        return ["tipo diverso in %s" % (percorso,)]
-    if isinstance(originale, dict):
-        if list(originale.keys()) != list(nuovo.keys()):
-            return ["chiavi diverse in %s" % (percorso,)]
-        for k in originale:
-            problemi += verifica_struttura(originale[k], nuovo[k], consentiti, percorso + (k,))
-    elif isinstance(originale, list):
-        if len(originale) != len(nuovo):
-            return ["lunghezza diversa in %s" % (percorso,)]
-        for i, (a, b) in enumerate(zip(originale, nuovo)):
-            problemi += verifica_struttura(a, b, consentiti, percorso + (i,))
-    elif originale != nuovo and percorso not in consentiti:
-        problemi.append("valore cambiato senza permesso in %s" % (percorso,))
-    return problemi[:20]
+    problems = []
+    if type(original) is not type(new):
+        return ["tipo diverso in %s" % (path,)]
+    if isinstance(original, dict):
+        if list(original.keys()) != list(new.keys()):
+            return ["chiavi diverse in %s" % (path,)]
+        for k in original:
+            problems += verify_structure(original[k], new[k], allowed, path + (k,))
+    elif isinstance(original, list):
+        if len(original) != len(new):
+            return ["lunghezza diversa in %s" % (path,)]
+        for i, (a, b) in enumerate(zip(original, new)):
+            problems += verify_structure(a, b, allowed, path + (i,))
+    elif original != new and path not in allowed:
+        problems.append("valore cambiato senza permesso in %s" % (path,))
+    return problems[:20]
 
 
-def scrivi_atomico(percorso, dati_byte):
-    temporaneo = percorso + SUFFISSO_TMP
+def write_atomic(path, data_bytes):
+    temp_file = path + TMP_SUFFIX
     try:
-        with open(temporaneo, "wb") as f:
-            f.write(dati_byte)
+        with open(temp_file, "wb") as f:
+            f.write(data_bytes)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(temporaneo, percorso)
+        os.replace(temp_file, path)
     except BaseException:  # no temporary file left next to the game's file
-        if os.path.exists(temporaneo):
+        if os.path.exists(temp_file):
             try:
-                os.remove(temporaneo)
+                os.remove(temp_file)
             except OSError:
                 pass
         raise

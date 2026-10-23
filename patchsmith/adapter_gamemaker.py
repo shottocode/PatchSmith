@@ -2,9 +2,9 @@
 
 Many GameMaker games read their texts from files included next to the executable, one per language
 (Localization/english_ui.txt, Localization/french/ui.txt...). PatchSmith:
-1. finds the files of the original language in the "lines with id" format (adapter_righe);
+1. finds the files of the original language in the "lines with id" format (adapter_lines);
 2. translates them (translation memory + Google, with codes like /name/ and /n/ protected);
-3. adapts the characters to those of the game's fonts (read from data.win: in GameMaker a character that
+3. adapts the characters to those of the game's fonts (read from date.win: in GameMaker a character that
    the font lacks becomes a small square), for Italian ì -> í, ò -> ó, ù -> ú if the font has the acute ones;
 4. repairs what the game would read wrongly (an extra "/" is taken as the start of a code);
 5. writes them back in place with a verified backup of the originals (as for web games).
@@ -13,18 +13,18 @@ In the game the language of the translated files stays selected (usually English
 Other recognized formats: JSON files per language (local/english.json, also with sections, // comments and trailing
 commas, and with the code attached to the name as in localization/stringsEN.json) and CSV tables with one column per
 language (translations.csv: id,english,french...; see adapter_csv).
-Limits: texts written in the game's code (data.win) are left untranslated; other localization formats are not
+Limits: texts written in the game's code (date.win) are left untranslated; other localization formats are not
 covered.
 """
 import os
 import re
 import struct
 
-from . import adapter_lines as adapter_righe, gamemaker, language as lingua
+from . import adapter_lines, gamemaker, language
 from .characters import ASCII
 
 # full language names (valid anywhere in the path) and short codes (valid only in safe positions)
-NOMI_LINGUE = {
+LANGUAGE_NAMES = {
     "en": {"english", "inglese"}, "fr": {"french", "francais", "français"}, "de": {"german", "deutsch"},
     "es": {"spanish", "espanol", "español"}, "it": {"italian", "italiano"},
     "pt": {"portuguese", "brazilian", "portugues", "português"}, "ru": {"russian"}, "ja": {"japanese"},
@@ -35,220 +35,220 @@ NOMI_LINGUE = {
     "ro": {"romanian"}, "el": {"greek"}, "uk": {"ukrainian"}, "ar": {"arabic"}, "vi": {"vietnamese"},
     "id": {"indonesian"},
 }
-_CINESE_TRADIZIONALE = re.compile(r"(?<![a-z])(?:traditional|tradition|tchinese|hant|cht|tw)(?![a-z])")
+_TRADITIONAL_CHINESE = re.compile(r"(?<![a-z])(?:traditional|tradition|tchinese|hant|cht|tw)(?![a-z])")
 # words that go with the language in a file name (chinese_traditional, portuguese_br): they are part of the language
-_QUALIFICATORI = {"traditional", "tradition", "simplified", "hant", "hans", "tw", "cn", "hk", "br", "pt", "latam",
+_QUALIFIERS = {"traditional", "tradition", "simplified", "hant", "hans", "tw", "cn", "hk", "br", "pt", "latam",
                   "mx", "us", "uk", "gb", "eu", "es"}
-CODICI_LINGUE = {
+LANGUAGE_CODES = {
     "en": {"en", "eng", "en-us", "en_us"}, "fr": {"fr", "fra", "fre"}, "de": {"de", "ger", "deu"},
     "es": {"es", "spa"}, "it": {"it", "ita"}, "pt": {"pt", "ptbr", "pt-br", "pt_br", "por"}, "ru": {"ru", "rus"},
     "ja": {"ja", "jp", "jpn"}, "ko": {"ko", "kr", "kor"}, "zh": {"zh", "cn", "chs", "cht", "zh-cn", "zh_cn"},
     "pl": {"pl", "pol"}, "tr": {"tr", "tur"},
 }
-_ESTENSIONI = (".txt", ".lang", ".loc", ".csv")
-_MASSIMO = 20 * 1024 * 1024
+_EXTENSIONS = (".txt", ".lang", ".loc", ".csv")
+_MAXIMUM = 20 * 1024 * 1024
 # files that are not game texts even if they look like them
-_DA_SALTARE = re.compile(r"copia|copy|backup|\bbak\b|_bak|\.bak|_old|\bold\b|readme|license|licence|changelog|"
+_TO_SKIP = re.compile(r"copia|copy|backup|\bbak\b|_bak|\.bak|_old|\bold\b|readme|license|licence|changelog|"
                          r"patch.?notes|credits?_?list|save|score|config|settings|\blog\b|debug", re.I)
 
 
-def _codice_di(parola):
-    for codice, nomi in NOMI_LINGUE.items():
-        if parola in nomi:
-            return codice
+def _code_of(word):
+    for code, names in LANGUAGE_NAMES.items():
+        if word in names:
+            return code
     return None
 
 
-def _codice_breve(parola):
-    for codice, codici in CODICI_LINGUE.items():
-        if parola in codici:
-            return codice
+def _short_code(word):
+    for code, codes in LANGUAGE_CODES.items():
+        if word in codes:
+            return code
     return None
 
 
 # language code attached at the end of the name, in uppercase after a lowercase letter (Another Door: stringsEN.json,
 # stringsIT.json, stringsJP.json, stringsBR.json, stringsSC.json): also the codes used only this way
-_ATTACCATO = re.compile(r"^(.*[a-z])([A-Z]{2,4})$")
-_CODICI_ATTACCATI = {"br": "pt", "ptbr": "pt", "sc": "zh", "chs": "zh", "tc": "zh-TW", "cht": "zh-TW", "tw": "zh-TW"}
+_ATTACHED = re.compile(r"^(.*[a-z])([A-Z]{2,4})$")
+_ATTACHED_CODES = {"br": "pt", "ptbr": "pt", "sc": "zh", "chs": "zh", "tc": "zh-TW", "cht": "zh-TW", "tw": "zh-TW"}
 
 
-def _attaccato(parola):
+def _attached(word):
     """(radice, codice) if the word (with its original capitalization) ends with an attached language code
     (stringsEN -> ('strings', 'en')), otherwise None."""
-    m = _ATTACCATO.match(parola or "")
+    m = _ATTACHED.match(word or "")
     if not m:
         return None
-    codice = _CODICI_ATTACCATI.get(m.group(2).lower()) or _codice_breve(m.group(2).lower())
-    return (m.group(1), codice) if codice else None
+    code = _ATTACHED_CODES.get(m.group(2).lower()) or _short_code(m.group(2).lower())
+    return (m.group(1), code) if code else None
 
 
-def _ultima_parola(rel):
+def _last_word(rel):
     """The last part of the file name (without extension), with the original capitals: strings_menuEN -> menuEN."""
-    nome = rel.split("/")[-1].rsplit(".", 1)[0]
-    pezzi = [p for p in re.split(r"[\s_.\-]+", nome) if p]
-    return pezzi[-1] if pezzi else ""
+    name = rel.split("/")[-1].rsplit(".", 1)[0]
+    pieces = [p for p in re.split(r"[\s_.\-]+", name) if p]
+    return pieces[-1] if pieces else ""
 
 
-def lingua_del_percorso(rel):
+def path_language(rel):
     """Code of the language indicated by the path, or None.
 
     Full names (english, french...) are valid anywhere; short codes (en, it, pt...) only if they are
     a folder name, the whole file name, or the first/last part of the name (ui_it, en_ui), also
     attached in uppercase at the end of the name (stringsEN)."""
-    parti = rel.lower().split("/")
-    cartelle, nome = parti[:-1], parti[-1].rsplit(".", 1)[0]
-    trovate = set()
-    for c in cartelle:
-        codice = _codice_di(c) or _codice_breve(c)
-        if codice:
-            trovate.add(codice)
-    pezzi = [p for p in re.split(r"[\s_.\-]+", nome) if p]
-    for p in pezzi:
-        if _codice_di(p):
-            trovate.add(_codice_di(p))
-    if len(pezzi) == 1 and _codice_breve(nome):
-        trovate.add(_codice_breve(nome))
-    elif len(pezzi) > 1:
-        for p in (pezzi[0], pezzi[-1]):
-            if _codice_breve(p):
-                trovate.add(_codice_breve(p))
-    attaccato = _attaccato(_ultima_parola(rel))
-    if attaccato:
-        trovate.add(attaccato[1])
-    if trovate == {"zh"} and _CINESE_TRADIZIONALE.search(rel.lower()):
+    parts = rel.lower().split("/")
+    folders, name = parts[:-1], parts[-1].rsplit(".", 1)[0]
+    matches = set()
+    for c in folders:
+        code = _code_of(c) or _short_code(c)
+        if code:
+            matches.add(code)
+    pieces = [p for p in re.split(r"[\s_.\-]+", name) if p]
+    for p in pieces:
+        if _code_of(p):
+            matches.add(_code_of(p))
+    if len(pieces) == 1 and _short_code(name):
+        matches.add(_short_code(name))
+    elif len(pieces) > 1:
+        for p in (pieces[0], pieces[-1]):
+            if _short_code(p):
+                matches.add(_short_code(p))
+    attached = _attached(_last_word(rel))
+    if attached:
+        matches.add(attached[1])
+    if matches == {"zh"} and _TRADITIONAL_CHINESE.search(rel.lower()):
         return "zh-TW"
-    return trovate.pop() if len(trovate) == 1 else None
+    return matches.pop() if len(matches) == 1 else None
 
 
-def famiglia(rel):
+def family(rel):
     """The path with '{L}' in place of the language: 'local/{L}.json', 'lang/{L}/ui.json', '{L}_credits.json'.
     Files of the same family in different languages are translations of each other."""
-    parti = rel.lower().split("/")
-    cartelle = ["{L}" if (_codice_di(c) or _codice_breve(c)) else c for c in parti[:-1]]
-    nome = parti[-1]
-    radice, punto, estensione = nome.rpartition(".") if "." in nome else (nome, "", "")
-    pezzi = re.split(r"([\s_.\-]+)", radice)
-    parole = list(range(0, len(pezzi), 2))
-    attaccato = _attaccato(_ultima_parola(rel))
-    if attaccato:  # stringsEN, stringsIT -> strings{L}
-        pezzi[parole[-1]] = attaccato[0].lower() + "{L}"
-    for n, i in enumerate(parole):
-        p = pezzi[i]
-        if _codice_di(p) or (_codice_breve(p) and (len(parole) == 1 or n in (0, len(parole) - 1))):
-            pezzi[i] = "{L}"
-    for n, i in enumerate(parole):  # qualifiers next to the language: chinese_traditional, portuguese_br
-        vicini = [pezzi[parole[m]] for m in (n - 1, n + 1) if 0 <= m < len(parole)]
-        if pezzi[i] in _QUALIFICATORI and "{L}" in vicini:
-            pezzi[i] = "{L}"
-    nome = re.sub(r"\{L\}(?:[\s_.\-]+\{L\})+", "{L}", "".join(pezzi))
-    return "/".join(cartelle + [nome + punto + estensione])
+    parts = rel.lower().split("/")
+    folders = ["{L}" if (_code_of(c) or _short_code(c)) else c for c in parts[:-1]]
+    name = parts[-1]
+    root, bullet, extension = name.rpartition(".") if "." in name else (name, "", "")
+    pieces = re.split(r"([\s_.\-]+)", root)
+    words = list(range(0, len(pieces), 2))
+    attached = _attached(_last_word(rel))
+    if attached:  # stringsEN, stringsIT -> strings{L}
+        pieces[words[-1]] = attached[0].lower() + "{L}"
+    for n, i in enumerate(words):
+        p = pieces[i]
+        if _code_of(p) or (_short_code(p) and (len(words) == 1 or n in (0, len(words) - 1))):
+            pieces[i] = "{L}"
+    for n, i in enumerate(words):  # qualifiers next to the language: chinese_traditional, portuguese_br
+        neighbors = [pieces[words[m]] for m in (n - 1, n + 1) if 0 <= m < len(words)]
+        if pieces[i] in _QUALIFIERS and "{L}" in neighbors:
+            pieces[i] = "{L}"
+    name = re.sub(r"\{L\}(?:[\s_.\-]+\{L\})+", "{L}", "".join(pieces))
+    return "/".join(folders + [name + bullet + extension])
 
 
-def leggi_originale(percorso, lettore):
+def read_original(path, reader):
     """The data of the file as it originally was: from PatchSmith's backup if there is one and it is valid (the file
     may already be translated), otherwise from the file itself. 'lettore' reads a path."""
-    from . import project as progetto
-    backup = percorso + progetto.SUFFISSO_BACKUP
+    from . import project
+    backup = path + project.BACKUP_SUFFIX
     if os.path.exists(backup):
-        info = progetto.leggi_info(percorso)
-        if info and progetto._hash_file(backup) == info["hash_originale"]:
-            return lettore(backup)
-    return lettore(percorso)
+        info = project.read_info(path)
+        if info and project._hash_file(backup) == info["hash_originale"]:
+            return reader(backup)
+    return reader(path)
 
 
-def file_localizzazione(cartella):
+def localization_file(folder):
     """{relativo: language or None} of the files in the 'lines with id' format (read-only)."""
-    trovati = {}
-    for radice, dirs, files in os.walk(cartella):
+    found = {}
+    for root, dirs, files in os.walk(folder):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
-        for nome in files:
-            if not nome.lower().endswith(_ESTENSIONI) or ".patchsmith-" in nome or _DA_SALTARE.search(nome):
+        for name in files:
+            if not name.lower().endswith(_EXTENSIONS) or ".patchsmith-" in name or _TO_SKIP.search(name):
                 continue
-            p = os.path.join(radice, nome)
+            p = os.path.join(root, name)
             try:
-                if os.path.getsize(p) > _MASSIMO:
+                if os.path.getsize(p) > _MAXIMUM:
                     continue
             except OSError:
                 continue
-            rel = os.path.relpath(p, cartella).replace(os.sep, "/")
-            lingua_file = lingua_del_percorso(rel)
+            rel = os.path.relpath(p, folder).replace(os.sep, "/")
+            file_language = path_language(rel)
             # a file with the language in its name (english_ui.txt) only needs a few texts
-            if adapter_righe.sembra_localizzazione(p, minimo=2 if lingua_file else 5):
-                trovati[rel] = lingua_file
-    return trovati
+            if adapter_lines.looks_like_localization(p, minimum=2 if file_language else 5):
+                found[rel] = file_language
+    return found
 
 
-def scegli_sorgenti(trovati, origine="auto", cartella=None):
+def choose_sources(found, origin="auto", folder=None):
     """(files to translate, languages present, language of the chosen files).
 
     The files of the original language are translated; if they are spread over several folders the one with
     the most is kept (e.g. Localization/), so isolated files elsewhere are not touched."""
-    lingue = {l for l in trovati.values() if l}
-    base = (origine or "auto").split("-")[0].lower()
+    languages = {l for l in found.values() if l}
+    base = (origin or "auto").split("-")[0].lower()
     if base == "auto":
-        base = "en" if "en" in lingue else None
-    sorgenti = sorted(r for r, l in trovati.items() if l == base) if base else []
-    if not sorgenti:
+        base = "en" if "en" in languages else None
+    sources = sorted(r for r, l in found.items() if l == base) if base else []
+    if not sources:
         # files without a language in the name next to the translations (e.g. ui.txt + french/ui.txt): they are
         # the original
-        senza = sorted(r for r, l in trovati.items() if l is None)
-        if senza and cartella:
-            testi = []
-            for r in senza:
+        unlabeled = sorted(r for r, l in found.items() if l is None)
+        if unlabeled and folder:
+            texts = []
+            for r in unlabeled:
                 try:
-                    testi += [t for _, t in adapter_righe.leggi(os.path.join(cartella, *r.split("/"))).unita]
-                except (adapter_righe.ErroreRighe, OSError):
+                    texts += [t for _, t in adapter_lines.read_file(os.path.join(folder, *r.split("/"))).units]
+                except (adapter_lines.LinesError, OSError):
                     continue
-            rilevata = lingua.rileva(testi)[0].split("-")[0] if testi else None
-            if base is None or rilevata == base:
-                sorgenti, base = senza, rilevata
-        elif senza and not lingue:
-            sorgenti = senza
-    if sorgenti:
-        conta = {}
-        for r in sorgenti:
-            conta[os.path.dirname(r)] = conta.get(os.path.dirname(r), 0) + 1
-        principale = max(conta, key=lambda d: (conta[d], -len(d)))
-        sorgenti = [r for r in sorgenti if os.path.dirname(r) == principale]
-    return sorgenti, lingue, base
+            detected = language.detect(texts)[0].split("-")[0] if texts else None
+            if base is None or detected == base:
+                sources, base = unlabeled, detected
+        elif unlabeled and not languages:
+            sources = unlabeled
+    if sources:
+        tally = {}
+        for r in sources:
+            tally[os.path.dirname(r)] = tally.get(os.path.dirname(r), 0) + 1
+        main_src = max(tally, key=lambda d: (tally[d], -len(d)))
+        sources = [r for r in sources if os.path.dirname(r) == main_src]
+    return sources, languages, base
 
 
 # scripts other than Latin: a font with only these besides ASCII is for other languages (e.g. Korean)
-def _altro_alfabeto(c):
+def _other_alphabet(c):
     o = ord(c)
     return 0x3040 <= o <= 0x30FF or 0x4E00 <= o <= 0x9FFF or 0xAC00 <= o <= 0xD7A3 or 0x0400 <= o <= 0x04FF \
         or 0x3400 <= o <= 0x4DBF or 0x1100 <= o <= 0x11FF or 0x3130 <= o <= 0x318F
 
 
-def _latino_accentato(c):
+def _accented_latin(c):
     return 0xC0 <= ord(c) <= 0x24F and c.isalpha()
 
 
 # fonts that a library adds to the game as a fallback (Scribble: scribble_fallback_font, ASCII only)
-_FONT_DI_RIPIEGO = re.compile(r"fallback", re.I)
+_FALLBACK_FONT = re.compile(r"fallback", re.I)
 
 
-def file_dati(cartella):
+def data_file(folder):
     """Path of the game's data.win (the least deep one), or None."""
-    radici = gamemaker.radici(cartella)
-    for r in radici:
-        for nome in gamemaker.NOMI_DATI:
-            if os.path.exists(os.path.join(r, nome)):
-                return os.path.join(r, nome)
+    roots = gamemaker.roots(folder)
+    for r in roots:
+        for name in gamemaker.DATA_NAMES:
+            if os.path.exists(os.path.join(r, name)):
+                return os.path.join(r, name)
     return None
 
 
-def _font_della_lingua(nome_font, codice):
+def _language_font(font_name, code):
     """True if the font name says it is for the language 'codice' (e.g. fnt_english, font_en)."""
-    if not codice or not nome_font:
+    if not code or not font_name:
         return False
-    base = codice.split("-")[0].lower()
-    pezzi = [p for p in re.split(r"[^a-z]+", re.sub(r"([a-z])([A-Z])", r"\1_\2", nome_font).lower()) if p]
-    return any(p in NOMI_LINGUE.get(base, ()) or p in CODICI_LINGUE.get(base, ()) for p in pezzi)
+    base = code.split("-")[0].lower()
+    pieces = [p for p in re.split(r"[^a-z]+", re.sub(r"([a-z])([A-Z])", r"\1_\2", font_name).lower()) if p]
+    return any(p in LANGUAGE_NAMES.get(base, ()) or p in LANGUAGE_CODES.get(base, ()) for p in pieces)
 
 
-def caratteri_font(cartella, log=None, ufficiali=None, sorgente=None):
-    """Characters that the game's text fonts (data.win) can draw, or None if not known.
+def font_chars(folder, log=None, officials=None, source=None):
+    """Characters that the game's text fonts (date.win) can draw, or None if not known.
 
     - fonts with at least 20 Latin letters count, except those for another alphabet: besides ASCII they mostly
       have another script (e.g. a Korean or Japanese font with a few accented letters: at least 100 characters
@@ -264,643 +264,644 @@ def caratteri_font(cartella, log=None, ufficiali=None, sorgente=None):
     - an uppercase-only font (the game puts text in uppercase) also works for lowercase letters;
     - if some font cannot be read, to be safe ASCII only;
     - the small square U+25AF (missing character) does not count as a drawable character."""
-    ufficiali = {c for c in (ufficiali or ()) if _latino_accentato(c)}
-    percorso = file_dati(cartella)
-    if not percorso:
+    officials = {c for c in (officials or ()) if _accented_latin(c)}
+    path = data_file(folder)
+    if not path:
         return None
     try:
-        elenco, illeggibili = gamemaker.font(gamemaker.leggi(percorso))
-    except (gamemaker.ErroreGameMaker, OSError, ValueError, IndexError, struct.error):
+        items, unreadable = gamemaker.font(gamemaker.read_file(path))
+    except (gamemaker.GameMakerError, OSError, ValueError, IndexError, struct.error):
         if log:
             log("  ! Font del gioco non leggibili: per sicurezza uso solo caratteri ASCII")
         return set(ASCII)
-    comuni = None
-    for f in elenco:
-        caratteri = set(f["caratteri"]) - {"\u25af"}
-        lettere = [c for c in caratteri if c.isascii() and c.isalpha()]
-        if len(lettere) < 20:
+    common = None
+    for f in items:
+        chars = set(f["caratteri"]) - {"\u25af"}
+        letters = [c for c in chars if c.isascii() and c.isalpha()]
+        if len(letters) < 20:
             continue
-        altro = sum(1 for c in caratteri if _altro_alfabeto(c))
-        if altro >= 100 and altro > 10 * sum(1 for c in caratteri if _latino_accentato(c)):
+        other = sum(1 for c in chars if _other_alphabet(c))
+        if other >= 100 and other > 10 * sum(1 for c in chars if _accented_latin(c)):
             continue  # font for another language (e.g. Korean, or Japanese with ç ê ñ Œ œ)
-        if _FONT_DI_RIPIEGO.search(f.get("nome") or ""):
+        if _FALLBACK_FONT.search(f.get("nome") or ""):
             if log:
                 log("  Font %s non considerato: e' il font di ripiego di una libreria" % f.get("nome"))
             continue
-        if len(ufficiali) >= 3 and not (caratteri & ufficiali) and not _font_della_lingua(f.get("nome"), sorgente):
+        if len(officials) >= 3 and not (chars & officials) and not _language_font(f.get("nome"), source):
             if log:
                 log("  Font %s non considerato: le traduzioni ufficiali del gioco non lo usano (non ha le loro "
                     "lettere accentate)" % f.get("nome"))
             continue
-        if not any(c.islower() for c in lettere):
-            caratteri |= {c.lower() for c in caratteri}
-        elif not any(c.isupper() for c in lettere):
-            caratteri |= {c.upper() for c in caratteri}
-        comuni = caratteri if comuni is None else comuni & caratteri
-    if illeggibili:
-        comuni = set(ASCII) if comuni is None else comuni & ASCII
+        if not any(c.islower() for c in letters):
+            chars |= {c.lower() for c in chars}
+        elif not any(c.isupper() for c in letters):
+            chars |= {c.upper() for c in chars}
+        common = chars if common is None else common & chars
+    if unreadable:
+        common = set(ASCII) if common is None else common & ASCII
         if log:
-            log("  ! %d font del gioco non leggibili: per sicurezza uso solo caratteri ASCII" % illeggibili)
-    elif comuni is None and elenco:
-        comuni = set(ASCII)
+            log("  ! %d font del gioco non leggibili: per sicurezza uso solo caratteri ASCII" % unreadable)
+    elif common is None and items:
+        common = set(ASCII)
         if log:
             log("  ! Nessun font del gioco (data.win) sembra quello dei testi: per sicurezza uso solo caratteri ASCII")
-    return comuni
+    return common
 
 
 # --- JSON localization files (e.g. Forager: local/english.json, local/french.json...) -------------
 
-_MINIMO_VOCI_JSON = 20
+_MIN_JSON_ENTRIES = 20
 
 
-def _leggi_json(percorso):
-    from .adapter_webjson import FileJSON
-    return FileJSON(percorso).dati
+def _read_json(path):
+    from .adapter_webjson import JSONFile
+    return JSONFile(path).data
 
 
-def _valori(dati):
+def _values(data):
     """The values of a JSON, also inside sections and lists of texts, in file order. A list of objects
     ([{"id": "sword", "name": "Sword"}]) is a data file, not a language file: ValueError (its identifiers, such as
     'sword', would no longer be found once translated)."""
-    sezione = isinstance(dati, dict)
-    for v in (dati.values() if sezione else dati):
+    section = isinstance(data, dict)
+    for v in (data.values() if section else data):
         if isinstance(v, (dict, list)):
-            if not sezione:
+            if not section:
                 raise ValueError("elenco di oggetti")
-            yield from _valori(v)
+            yield from _values(v)
         else:
             yield v
 
 
-def _stringhe(dati):
+def _strings(data):
     """String values of a {chiave: testo} dictionary, also split into sections ({"menu": {"_play": "Play"...}}) or
-    with lists of texts: at least _MINIMO_VOCI_JSON texts and 80% of the values (None if the file does not have this
+    with lists of texts: at least _MIN_JSON_ENTRIES texts and 80% of the values (None if the file does not have this
     shape)."""
-    if not isinstance(dati, dict):
+    if not isinstance(data, dict):
         return None
     try:
-        tutti = list(_valori(dati))
+        all_ = list(_values(data))
     except (RecursionError, ValueError):
         return None
-    valori = [v for v in tutti if isinstance(v, str)]
-    return valori if len(valori) >= max(_MINIMO_VOCI_JSON, 0.8 * len(tutti)) else None
+    values = [v for v in all_ if isinstance(v, str)]
+    return values if len(values) >= max(_MIN_JSON_ENTRIES, 0.8 * len(all_)) else None
 
 
-def chiave_di(percorso):
+def key_of(path):
     """The key of a text in a localization file: the file's own key ('_play'), or for a text inside a section the
     keys joined with '.' ('menu._play')."""
-    return ".".join(str(x) for x in percorso)
+    return ".".join(str(x) for x in path)
 
 
-def piatto(dati):
-    """{chiave: testo} of the texts of a localization file (see chiave_di): for a flat dictionary it is the
+def flatten(data):
+    """{chiave: testo} of the texts of a localization file (see key_of): for a flat dictionary it is the
     dictionary itself (only the string values)."""
-    from .adapter_webjson import foglie
-    return {chiave_di(p): v for p, _, v in foglie(dati)} if isinstance(dati, dict) else {}
+    from .adapter_webjson import leaves
+    return {key_of(p): v for p, _, v in leaves(data)} if isinstance(data, dict) else {}
 
 
-def al_percorso(dati, percorso):
+def at_path(data, path):
     """The value of 'dati' at position 'percorso' (tuple of keys and indexes), or None if it is not there."""
-    for passo in percorso:
+    for step in path:
         try:
-            dati = dati[passo]
+            data = data[step]
         except (KeyError, IndexError, TypeError):
             return None
-    return dati
+    return data
 
 
-def creati_da_patchsmith(cartella):
-    """Names of the files that PatchSmith created in this folder (e.g. the new language local/italiano.json), read
+def created_by_patchsmith(folder):
+    """Names of the files that PatchSmith created in this folder (e.g. the new language local/italian.json), read
     from the backup information: they are not game files. A file created and then replaced by someone else (e.g. an
-    official italiano.json that came with an update: fingerprint different from the recorded one) no longer counts."""
-    from . import project as progetto
-    creati = set()
+    official italian.json that came with an update: fingerprint different from the recorded one) no longer counts."""
+    from . import project
+    created = set()
     try:
-        nomi = os.listdir(cartella)
+        names = os.listdir(folder)
     except OSError:
-        return creati
-    for nome in nomi:
-        for suffisso in progetto.SUFFISSI_INFO:
-            if nome.endswith(suffisso):
-                info = progetto.leggi_info(os.path.join(cartella, nome[:-len(suffisso)])) or {}
-                impronte = info.get("hash_creati") or {}
-                for creato in info.get("creati", []):
-                    p = os.path.join(cartella, creato)
-                    if creato not in impronte or not os.path.exists(p) or progetto._hash_file(p) == impronte[creato]:
-                        creati.add(creato)
-    return creati
+        return created
+    for name in names:
+        for suffix in project.INFO_SUFFIXES:
+            if name.endswith(suffix):
+                info = project.read_info(os.path.join(folder, name[:-len(suffix)])) or {}
+                fingerprints = info.get("hash_creati") or {}
+                for created_one in info.get("creati", []):
+                    p = os.path.join(folder, created_one)
+                    if (created_one not in fingerprints or not os.path.exists(p)
+                            or project._hash_file(p) == fingerprints[created_one]):
+                        created.add(created_one)
+    return created
 
 
-def file_json_lingue(cartella, log=None):
+def language_json_files(folder, log=None):
     """{relativo: lingua} of the JSON localization files: {chiave: testo} dictionaries (also split into sections, and
     also with // comments and trailing commas, which many games accept) with the language in the path, present in at
     least two languages in the same family (local/{L}.json, lang/{L}/ui.json, localization/strings{L}.json;
     read-only). Files created by PatchSmith (the added language) do not count. With 'log': the language files that
     cannot be read."""
-    per_famiglia, illeggibili = {}, []
-    for radice, dirs, files in os.walk(cartella):
+    by_family, unreadable = {}, []
+    for root, dirs, files in os.walk(folder):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
-        nostri = creati_da_patchsmith(radice) if any(".patchsmith-" in f for f in files) else set()
-        for nome in files:
-            if not nome.lower().endswith(".json") or ".patchsmith-" in nome or _DA_SALTARE.search(nome) \
-                    or nome in nostri:
+        ours = created_by_patchsmith(root) if any(".patchsmith-" in f for f in files) else set()
+        for name in files:
+            if not name.lower().endswith(".json") or ".patchsmith-" in name or _TO_SKIP.search(name) \
+                    or name in ours:
                 continue
-            p = os.path.join(radice, nome)
-            rel = os.path.relpath(p, cartella).replace(os.sep, "/")
-            lingua_file = lingua_del_percorso(rel)
-            if not lingua_file:
+            p = os.path.join(root, name)
+            rel = os.path.relpath(p, folder).replace(os.sep, "/")
+            file_language = path_language(rel)
+            if not file_language:
                 continue
             try:
-                if os.path.getsize(p) > _MASSIMO:
-                    illeggibili.append("%s (%d MB: troppo grande)" % (rel, os.path.getsize(p) // (1024 * 1024)))
+                if os.path.getsize(p) > _MAXIMUM:
+                    unreadable.append("%s (%d MB: troppo grande)" % (rel, os.path.getsize(p) // (1024 * 1024)))
                     continue
-                if _stringhe(leggi_originale(p, _leggi_json)) is None:
+                if _strings(read_original(p, _read_json)) is None:
                     continue
             except (OSError, ValueError) as e:
-                illeggibili.append("%s (%s)" % (rel, str(e)[:80]))
+                unreadable.append("%s (%s)" % (rel, str(e)[:80]))
                 continue
-            per_famiglia.setdefault(famiglia(rel), {})[rel] = lingua_file
-    trovati = {}
-    for gruppo in per_famiglia.values():
-        if len(set(gruppo.values())) >= 2:
-            trovati.update(gruppo)
-    if log and illeggibili:
-        log("  ! %d file di lingua JSON non letti: %s" % (len(illeggibili), "; ".join(illeggibili[:3])))
-    return trovati
+            by_family.setdefault(family(rel), {})[rel] = file_language
+    found = {}
+    for group in by_family.values():
+        if len(set(group.values())) >= 2:
+            found.update(group)
+    if log and unreadable:
+        log("  ! %d file di lingua JSON non letti: %s" % (len(unreadable), "; ".join(unreadable[:3])))
+    return found
 
 
-def lettere_ufficiali(cartella, trovati, sorgenti):
+def official_letters(folder, found, sources):
     """Accented Latin letters used by the game's official translations (the other language files)."""
-    lettere = set()
-    for rel in trovati:
-        if rel in sorgenti:
+    letters = set()
+    for rel in found:
+        if rel in sources:
             continue
-        p = os.path.join(cartella, *rel.split("/"))
+        p = os.path.join(folder, *rel.split("/"))
         try:
             if rel.lower().endswith(".json"):
-                testi = _stringhe(leggi_originale(p, _leggi_json)) or []
+                texts = _strings(read_original(p, _read_json)) or []
             else:
-                testi = [t for _, t in leggi_originale(p, adapter_righe.leggi).unita]
-        except (OSError, ValueError, adapter_righe.ErroreRighe):
+                texts = [t for _, t in read_original(p, adapter_lines.read_file).units]
+        except (OSError, ValueError, adapter_lines.LinesError):
             continue
-        lettere |= {c for t in testi for c in t if _latino_accentato(c)}
-    return "".join(sorted(lettere))
+        letters |= {c for t in texts for c in t if _accented_latin(c)}
+    return "".join(sorted(letters))
 
 
 # in a localization file every value is an interface text, even a single word ("wood"); only the identifiers left in
 # place of a missing text are not ("Structure.NuclearFurnace", "menu_title_2")
-_IDENTIFICATIVO = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:[.:/\\][A-Za-z0-9_]+)+$|^[a-z0-9]+(?:_[a-z0-9]+)+$")
+_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:[.:/\\][A-Za-z0-9_]+)+$|^[a-z0-9]+(?:_[a-z0-9]+)+$")
 
 
-def testo_localizzazione(valore):
-    v = valore.strip() if isinstance(valore, str) else ""
-    return bool(re.search(r"[^\W\d_]", v)) and not _IDENTIFICATIVO.match(v)
+def localization_text(value_):
+    v = value_.strip() if isinstance(value_, str) else ""
+    return bool(re.search(r"[^\W\d_]", v)) and not _IDENTIFIER.match(v)
 
 
-def schemi_json(dati):
+def json_patterns(data):
     """The keys with text of a localization file: they are all translated (they are interface texts; the rules on
     the "technical" keys of generic JSON files do not apply here)."""
-    from .adapter_webjson import foglie
-    return sorted({schema for _, schema, v in foglie(dati) if testo_localizzazione(v)})
+    from .adapter_webjson import leaves
+    return sorted({pattern for _, pattern, v in leaves(data) if localization_text(v)})
 
 
-_ASTERISCO_TRA_PAROLE = re.compile(r"[^\W\d_]\*+[^\W\d_]")  # between two letters: not emphasis ("*sigh*")
+_ASTERISK_BETWEEN_WORDS = re.compile(r"[^\W\d_]\*+[^\W\d_]")  # between two letters: not emphasis ("*sigh*")
 
 
-def _confermato(altri, posti, prova, forte, debole):
+def _confirmed(others, spots, test, strong, weak):
     """True if the official translations confirm the convention: at least one language almost always follows it
     ('prova(valore, posto)' true in at least 'forte' of the places it has) and at least half of the languages follow
     it at least in part ('debole'): translators remove it where it is not needed (e.g. a word that fits on one line)."""
-    quote = []
-    for a in altri:
-        validi = [p for p in posti if isinstance(a.get(p[0]), str)]
-        if validi:
-            quote.append(sum(1 for p in validi if prova(a[p[0]], p)) / len(validi))
-    return bool(quote) and max(quote) >= forte and sum(1 for q in quote if q >= debole) >= len(altri) / 2
+    shares = []
+    for a in others:
+        valid_spots = [p for p in spots if isinstance(a.get(p[0]), str)]
+        if valid_spots:
+            shares.append(sum(1 for p in valid_spots if test(a[p[0]], p)) / len(valid_spots))
+    return bool(shares) and max(shares) >= strong and sum(1 for q in shares if q >= weak) >= len(others) / 2
 
 
-def markup(dati, altri):
+def markup(data, others):
     """Writing conventions of the source file's texts, confirmed by the majority of the official translations
     ('altri': the other dictionaries of the same folder): {'a_capo': '*' if the asterisk acts as a line break (e.g.
     "iron*ore"), 'punto_elenco': letter used as a symbol at the start of a paragraph (e.g.
     "U unlocks...**U gain...")}."""
-    esito = {"a_capo": None, "punto_elenco": None}
-    testi = {k: v for k, v in dati.items() if isinstance(v, str)} if isinstance(dati, dict) else {}
-    altri = [a for a in altri if isinstance(a, dict)]
-    if not testi or not altri:
-        return esito
-    con_asterisco = [(k,) for k, v in testi.items() if _ASTERISCO_TRA_PAROLE.search(v)]
-    if len(con_asterisco) >= max(5, 0.05 * len(testi)) and \
-            _confermato(altri, con_asterisco, lambda valore, _posto: "*" in valore, 0.6, 0.2):
-        esito["a_capo"] = "*"
-    separatore = "**" if esito["a_capo"] else "\n\n"
-    occorrenze = {}  # letter -> [(key, paragraph number)]
-    for k, v in testi.items():
-        for n, paragrafo in enumerate(v.split(separatore)):
-            m = re.match(r"([A-Z]) +[a-z]", paragrafo)
+    outcome = {"a_capo": None, "punto_elenco": None}
+    texts = {k: v for k, v in data.items() if isinstance(v, str)} if isinstance(data, dict) else {}
+    others = [a for a in others if isinstance(a, dict)]
+    if not texts or not others:
+        return outcome
+    with_asterisk = [(k,) for k, v in texts.items() if _ASTERISK_BETWEEN_WORDS.search(v)]
+    if len(with_asterisk) >= max(5, 0.05 * len(texts)) and \
+            _confirmed(others, with_asterisk, lambda value_, _spot: "*" in value_, 0.6, 0.2):
+        outcome["a_capo"] = "*"
+    separator = "**" if outcome["a_capo"] else "\n\n"
+    occurrences = {}  # letter -> [(key, paragraph number)]
+    for k, v in texts.items():
+        for n, paragraph in enumerate(v.split(separator)):
+            m = re.match(r"([A-Z]) +[a-z]", paragraph)
             if m:
-                occorrenze.setdefault(m.group(1), []).append((k, n))
-    for lettera, posti in sorted(occorrenze.items(), key=lambda x: -len(x[1])):
-        if len(posti) < 5:
+                occurrences.setdefault(m.group(1), []).append((k, n))
+    for letter, spots in sorted(occurrences.items(), key=lambda x: -len(x[1])):
+        if len(spots) < 5:
             break
 
-        def ha_punto(valore, posto, lettera=lettera):
-            paragrafi = valore.split(separatore)
-            return posto[1] < len(paragrafi) and re.match(re.escape(lettera) + r" +\S", paragrafi[posto[1]])
-        if _confermato(altri, posti, ha_punto, 0.8, 0.3):
-            esito["punto_elenco"] = lettera
+        def has_bullet(value_, spot, letter=letter):
+            paragraphs = value_.split(separator)
+            return spot[1] < len(paragraphs) and re.match(re.escape(letter) + r" +\S", paragraphs[spot[1]])
+        if _confirmed(others, spots, has_bullet, 0.8, 0.3):
+            outcome["punto_elenco"] = letter
             break
-    return esito
+    return outcome
 
 
-def _prefisso_punto(paragrafo, punto):
-    if not punto:
+def _point_prefix(paragraph, bullet):
+    if not bullet:
         return ""
-    m = re.match(re.escape(punto) + r" +(?=\S)", paragrafo)
+    m = re.match(re.escape(bullet) + r" +(?=\S)", paragraph)
     return m.group(0) if m else ""
 
 
-_FINE_FRASE = re.compile(r"[.!?:;\u2026\u3002\uff01\uff1f][\"')\]]*$")
+_SENTENCE_END = re.compile(r"[.!?:;\u2026\u3002\uff01\uff1f][\"')\]]*$")
 
 
-def _corpo(paragrafo, segno, punto):
-    corpo = paragrafo[len(_prefisso_punto(paragrafo, punto)):]
-    return (corpo.replace(segno, " ") if segno else corpo).strip()
+def _body(paragraph, marker, bullet):
+    body = paragraph[len(_point_prefix(paragraph, bullet)):]
+    return (body.replace(marker, " ") if marker else body).strip()
 
 
-def _gruppi_frase(paragrafi, segno, punto):
+def _sentence_groups(paragraphs, marker, bullet):
     """Paragraphs grouped by sentence (lists of indexes). The double marker separates paragraphs but in many games
     it also splits a sentence in the middle (Forager: "U items discarded from your**inventory are instantly**sold
     instead"): translated on their own, the pieces lose their meaning. A paragraph continues the previous one if it
     has no bullet symbol, starts with a lowercase letter and the previous one does not end the sentence with
     punctuation; the previous one must be a bullet item or have at least three words (a title such as
     "Controls**move with WASD" stays on its own)."""
-    gruppi = []
-    for i, p in enumerate(paragrafi):
-        corpo = _corpo(p, segno, punto)
-        prima = _corpo(paragrafi[i - 1], segno, punto) if i else ""
-        voce = bool(_prefisso_punto(paragrafi[gruppi[-1][0]], punto)) if gruppi else False
-        if prima and corpo[:1].islower() and not _prefisso_punto(p, punto) and not _FINE_FRASE.search(prima) \
-                and (voce or len(prima.split()) >= 3):
-            gruppi[-1].append(i)
+    groups = []
+    for i, p in enumerate(paragraphs):
+        body = _body(p, marker, bullet)
+        before = _body(paragraphs[i - 1], marker, bullet) if i else ""
+        entry = bool(_point_prefix(paragraphs[groups[-1][0]], bullet)) if groups else False
+        if before and body[:1].islower() and not _point_prefix(p, bullet) and not _SENTENCE_END.search(before) \
+                and (entry or len(before.split()) >= 3):
+            groups[-1].append(i)
         else:
-            gruppi.append([i])
-    return gruppi
+            groups.append([i])
+    return groups
 
 
-def normalizza_a_capo(testo, segno=None, punto=None):
+def normalize_line_breaks(text, marker=None, bullet=None):
     """The text as it is translated: the 'segno' line breaks become spaces (the sentence is translated whole),
     paragraphs (double marker) become lines separated by a blank line, joining the pieces of the same sentence; the
     symbol at the start of a paragraph is removed."""
-    if (not segno and not punto) or "\n" in testo:
-        return testo
-    separatore = segno * 2 if segno else None
-    paragrafi = testo.split(separatore) if separatore else [testo]
-    uscita = []
-    for gruppo in _gruppi_frase(paragrafi, segno, punto):
-        p = " ".join(_corpo(paragrafi[i], segno, punto) for i in gruppo)
-        uscita.append(re.sub(r" {2,}", " ", p).strip())
-    return "\n\n".join(uscita)
+    if (not marker and not bullet) or "\n" in text:
+        return text
+    separator = marker * 2 if marker else None
+    paragraphs = text.split(separator) if separator else [text]
+    output = []
+    for group in _sentence_groups(paragraphs, marker, bullet):
+        p = " ".join(_body(paragraphs[i], marker, bullet) for i in group)
+        output.append(re.sub(r" {2,}", " ", p).strip())
+    return "\n\n".join(output)
 
 
-def _a_capo_bilanciato(testo, segmenti, segno):
+def _balanced_line_breaks(text, segments, marker):
     """Puts the original's line breaks back into the translated text: the same number (or fewer, if there are not
     enough words), in proportion to the lengths of the original lines, always between two words. 'segno' is the
     line break marker, or the list of the original separators between one segment and the next (line breaks and
     paragraphs of the same sentence)."""
-    separatori = [segno] * (len(segmenti) - 1) if isinstance(segno, str) else list(segno)
-    n = len(segmenti) - 1
-    parole = testo.split(" ")
-    if n <= 0 or len(parole) < 2:
-        return testo
-    n = min(n, len(parole) - 1)
-    totale_o = sum(len(s) for s in segmenti) or 1
-    posizioni, cumulato = [], 0  # position in the text of each space between words
-    for parola in parole[:-1]:
-        cumulato += len(parola)
-        posizioni.append(cumulato)
-        cumulato += 1
-    tagli, inizio, fatto = [], 0, 0
+    separators = [marker] * (len(segments) - 1) if isinstance(marker, str) else list(marker)
+    n = len(segments) - 1
+    words = text.split(" ")
+    if n <= 0 or len(words) < 2:
+        return text
+    n = min(n, len(words) - 1)
+    total_o = sum(len(s) for s in segments) or 1
+    positions, cumulative = [], 0  # position in the text of each space between words
+    for word in words[:-1]:
+        cumulative += len(word)
+        positions.append(cumulative)
+        cumulative += 1
+    cuts, start, done = [], 0, 0
     for i in range(1, n + 1):
-        fatto += len(segmenti[i - 1])
-        obiettivo = fatto / totale_o * len(testo)
-        rimasti = n - i  # cuts still to make after this one: each leaves at least one space
-        scelte = range(inizio, len(posizioni) - rimasti)
-        k = min(scelte, key=lambda j: abs(posizioni[j] - obiettivo))
-        tagli.append(k)
-        inizio = k + 1
-    righe, da = [], 0
-    for k in tagli:
-        righe.append(" ".join(parole[da:k + 1]))
-        da = k + 1
-    righe.append(" ".join(parole[da:]))
-    if n < len(separatori):  # fewer words than line breaks: paragraph separators (the longest) are kept first
-        tenuti = sorted(sorted(range(len(separatori)), key=lambda j: -len(separatori[j]))[:n])
-        separatori = [separatori[j] for j in tenuti]
-    return righe[0] + "".join(sep + r for sep, r in zip(separatori, righe[1:]))
+        done += len(segments[i - 1])
+        goal = done / total_o * len(text)
+        remaining = n - i  # cuts still to make after this one: each leaves at least one space
+        choices = range(start, len(positions) - remaining)
+        k = min(choices, key=lambda j: abs(positions[j] - goal))
+        cuts.append(k)
+        start = k + 1
+    lines, src_lang = [], 0
+    for k in cuts:
+        lines.append(" ".join(words[src_lang:k + 1]))
+        src_lang = k + 1
+    lines.append(" ".join(words[src_lang:]))
+    if n < len(separators):  # fewer words than line breaks: paragraph separators (the longest) are kept first
+        kept_items = sorted(sorted(range(len(separators)), key=lambda j: -len(separators[j]))[:n])
+        separators = [separators[j] for j in kept_items]
+    return lines[0] + "".join(sep + r for sep, r in zip(separators, lines[1:]))
 
 
-def ricomponi_a_capo(originale, tradotto, segno=None, punto=None, larghezza=None, righe=None):
+def reassemble_line_breaks(original, translated, marker=None, bullet=None, width=None, lines=None):
     """The translated (normalized) text brought back to the game's conventions, with the original's paragraphs,
     paragraph-start symbol and line breaks. None if the paragraphs do not match (the original stays).
     With 'larghezza' and 'righe' (the longest line and the number of lines of the game's versions of this text):
     if a line exceeds the width, the line breaks are redistributed, adding lines up to 'righe'."""
-    risultato = _ricomponi(originale, tradotto, segno, punto)
-    if risultato is None or not segno or not larghezza or _riga_piu_lunga(risultato, segno) <= larghezza:
-        return risultato
-    return _entro_larghezza(risultato, segno, punto, larghezza, righe or 1)
+    result = _reassemble(original, translated, marker, bullet)
+    if result is None or not marker or not width or _longest_line(result, marker) <= width:
+        return result
+    return _within_width(result, marker, bullet, width, lines or 1)
 
 
-def _righe_di(testo, segno):
+def _lines_of(text, marker):
     """The non-empty lines of the text as the game draws them (line break = segno or '\\n')."""
-    pezzi = re.split("%s|\n" % re.escape(segno), testo) if segno else testo.split("\n")
-    return [x.strip() for x in pezzi if x.strip()]
+    pieces = re.split("%s|\n" % re.escape(marker), text) if marker else text.split("\n")
+    return [x.strip() for x in pieces if x.strip()]
 
 
-def _riga_piu_lunga(testo, segno):
-    return max((len(x) for x in _righe_di(testo, segno)), default=0)
+def _longest_line(text, marker):
+    return max((len(x) for x in _lines_of(text, marker)), default=0)
 
 
-def _taglio_minimo(parole, k, prima=0):
+def _min_cut(words, k, before=0):
     """The words on k lines so that the longest line is as short as possible (dynamic programming).
     'prima': characters already taken at the start of the first line (e.g. the symbol 'U ').
     Returns (indexes of the words that start each line after the first, length of the longest line)."""
-    n = len(parole)
+    n = len(words)
     k = max(1, min(k, n))
-    lunghezze = [0]
-    for w in parole:
-        lunghezze.append(lunghezze[-1] + len(w))
+    lengths = [0]
+    for w in words:
+        lengths.append(lengths[-1] + len(w))
 
-    def lunga(i, j):  # words i..j-1 on one line
-        return lunghezze[j] - lunghezze[i] + (j - i - 1) + (prima if i == 0 else 0)
-    infinito = float("inf")
-    costo = [[infinito] * (n + 1) for _ in range(k + 1)]
-    da = [[0] * (n + 1) for _ in range(k + 1)]
-    costo[0][0] = 0
+    def line_len(i, j):  # words i..j-1 on one line
+        return lengths[j] - lengths[i] + (j - i - 1) + (before if i == 0 else 0)
+    infinity = float("inf")
+    cost = [[infinity] * (n + 1) for _ in range(k + 1)]
+    src_lang = [[0] * (n + 1) for _ in range(k + 1)]
+    cost[0][0] = 0
     for r in range(1, k + 1):
         for j in range(r, n + 1):
             for i in range(r - 1, j):
-                c = max(costo[r - 1][i], lunga(i, j))
-                if c < costo[r][j]:
-                    costo[r][j], da[r][j] = c, i
-    tagli, j = [], n
+                c = max(cost[r - 1][i], line_len(i, j))
+                if c < cost[r][j]:
+                    cost[r][j], src_lang[r][j] = c, i
+    cuts, j = [], n
     for r in range(k, 0, -1):
-        i = da[r][j]
+        i = src_lang[r][j]
         if r > 1:
-            tagli.append(i)
+            cuts.append(i)
         j = i
-    return sorted(tagli), costo[k][n]
+    return sorted(cuts), cost[k][n]
 
 
-def _entro_larghezza(testo, segno, punto, larghezza, righe):
+def _within_width(text, marker, bullet, width, lines):
     """Redistributes the line breaks of paragraphs that are too wide (only those with simple line breaks only: the
     game's paragraphs and blank lines stay where they are), adding lines as long as the total does not exceed
     'righe'."""
-    separatore = segno * 2
-    paragrafi = testo.split(separatore)
-    totale = len(_righe_di(testo, segno))
-    libere = max(0, righe - totale)
-    fatti = set()
-    for _ in range(len(paragrafi)):
-        larghi = [(i, _riga_piu_lunga(p, segno)) for i, p in enumerate(paragrafi) if i not in fatti]
-        if not larghi:
+    separator = marker * 2
+    paragraphs = text.split(separator)
+    total = len(_lines_of(text, marker))
+    free_lines = max(0, lines - total)
+    handled = set()
+    for _ in range(len(paragraphs)):
+        wide = [(i, _longest_line(p, marker)) for i, p in enumerate(paragraphs) if i not in handled]
+        if not wide:
             break
-        i, piu_lunga = max(larghi, key=lambda x: x[1])
-        if piu_lunga <= larghezza:
+        i, longest = max(wide, key=lambda x: x[1])
+        if longest <= width:
             break
-        fatti.add(i)
-        p = paragrafi[i]
-        prefisso = _prefisso_punto(p, punto)
-        bordo = r"[\s%s]*" % re.escape(segno)
-        testa, interno, coda = re.match(r"(%s)(.*?)(%s)$" % (bordo, bordo), p[len(prefisso):], re.S).groups()
-        if re.search("%s\\s*%s" % (re.escape(segno), re.escape(segno)), interno) or "\n" in interno:
+        handled.add(i)
+        p = paragraphs[i]
+        prefix = _point_prefix(p, bullet)
+        edge = r"[\s%s]*" % re.escape(marker)
+        head, inner, tail = re.match(r"(%s)(.*?)(%s)$" % (edge, edge), p[len(prefix):], re.S).groups()
+        if re.search("%s\\s*%s" % (re.escape(marker), re.escape(marker)), inner) or "\n" in inner:
             continue  # paragraphs or blank lines inside: left alone
-        parole = interno.replace(segno, " ").split()
-        if not parole:
+        words = inner.replace(marker, " ").split()
+        if not words:
             continue
-        attuali = interno.count(segno) + 1
-        migliore = None
-        for k in range(attuali, attuali + libere + 1):
-            tagli, lunga = _taglio_minimo(parole, k, len(prefisso + testa))
-            if migliore is None or lunga < migliore[1]:
-                migliore = (tagli, lunga, k)
-            if lunga <= larghezza:
+        current_count = inner.count(marker) + 1
+        best = None
+        for k in range(current_count, current_count + free_lines + 1):
+            cuts, line_len = _min_cut(words, k, len(prefix + head))
+            if best is None or line_len < best[1]:
+                best = (cuts, line_len, k)
+            if line_len <= width:
                 break
-        if migliore is None or migliore[1] >= piu_lunga:
+        if best is None or best[1] >= longest:
             continue
-        tagli, _, k = migliore
-        righe_nuove, da = [], 0
-        for t in tagli + [len(parole)]:
-            righe_nuove.append(" ".join(parole[da:t]))
-            da = t
-        paragrafi[i] = prefisso + testa + segno.join(righe_nuove) + coda
-        libere -= k - attuali
-    return separatore.join(paragrafi)
+        cuts, _, k = best
+        new_lines, src_lang = [], 0
+        for t in cuts + [len(words)]:
+            new_lines.append(" ".join(words[src_lang:t]))
+            src_lang = t
+        paragraphs[i] = prefix + head + marker.join(new_lines) + tail
+        free_lines -= k - current_count
+    return separator.join(paragraphs)
 
 
-def _ricomponi(originale, tradotto, segno=None, punto=None):
-    if (not segno and not punto) or "\n" in originale:
-        return tradotto
-    separatore = segno * 2 if segno else None
-    paragrafi = originale.split(separatore) if separatore else [originale]
-    paragrafi_o = [separatore.join(paragrafi[i] for i in g) if separatore else paragrafi[g[0]]
-                   for g in _gruppi_frase(paragrafi, segno, punto)]  # the pieces of the same sentence, together
-    paragrafi_t = tradotto.split("\n\n") if len(paragrafi_o) > 1 else [tradotto]
-    if len(paragrafi_o) != len(paragrafi_t) or any("\n" in t for t in paragrafi_t):
+def _reassemble(original, translated, marker=None, bullet=None):
+    if (not marker and not bullet) or "\n" in original:
+        return translated
+    separator = marker * 2 if marker else None
+    paragraphs = original.split(separator) if separator else [original]
+    paragraphs_o = [separator.join(paragraphs[i] for i in g) if separator else paragraphs[g[0]]
+                   for g in _sentence_groups(paragraphs, marker, bullet)]  # the pieces of the same sentence, together
+    paragraphs_t = translated.split("\n\n") if len(paragraphs_o) > 1 else [translated]
+    if len(paragraphs_o) != len(paragraphs_t) or any("\n" in t for t in paragraphs_t):
         return None
-    uscita = []
-    bordo = r"[\s%s]*" % re.escape(segno) if segno else r"\s*"
-    for o, t in zip(paragrafi_o, paragrafi_t):
-        prefisso = _prefisso_punto(o, punto)
-        corpo = o[len(prefisso):]
+    output = []
+    edge = r"[\s%s]*" % re.escape(marker) if marker else r"\s*"
+    for o, t in zip(paragraphs_o, paragraphs_t):
+        prefix = _point_prefix(o, bullet)
+        body = o[len(prefix):]
         # leading and trailing line breaks and spaces stay fixed ("*attacks burn!" , "your time: ")
-        testa, interno, coda = re.match(r"(%s)(.*?)(%s)$" % (bordo, bordo), corpo, re.S).groups()
+        head, inner, tail = re.match(r"(%s)(.*?)(%s)$" % (edge, edge), body, re.S).groups()
         t = re.sub(r" {2,}", " ", t.strip())
-        if segno and segno in t:
+        if marker and marker in t:
             return None  # the translator left a marker: I do not know where it would go
-        if not t and interno.strip():
+        if not t and inner.strip():
             return None  # paragraph lost in translation
-        if segno and t:
+        if marker and t:
             # single line breaks and paragraphs of the sentence; "* *" (blank line with a space) is one separator
-            divisi = re.split("(%s(?:\\s*%s)*)" % (re.escape(segno), re.escape(segno)), interno)
-            t = _a_capo_bilanciato(t, divisi[0::2], divisi[1::2])
-        uscita.append(prefisso + testa + t + coda)
-    return (separatore or "").join(uscita)
+            split_parts = re.split("(%s(?:\\s*%s)*)" % (re.escape(marker), re.escape(marker)), inner)
+            t = _balanced_line_breaks(t, split_parts[0::2], split_parts[1::2])
+        output.append(prefix + head + t + tail)
+    return (separator or "").join(output)
 
 
-_CODICE = re.compile(r"/[A-Za-z_]{1,16}/")
+_CODE = re.compile(r"/[A-Za-z_]{1,16}/")
 
 
-def ripara(originale, tradotto):
+def repair(original, translated):
     """Translation that the game reads like the original, or None.
 
     In GameMaker many games (e.g. Dokimon) expand codes between slashes (/name/, /n/): an extra slash
     is taken as the start of a code and the rest of the line disappears; a code right at the end of
     a dialogue line is not closed. So: the same codes as the original, no extra slash
     (it becomes '-'), and a space after a code that ends the line."""
-    if sorted(_CODICE.findall(originale)) != sorted(_CODICE.findall(tradotto)):
+    if sorted(_CODE.findall(original)) != sorted(_CODE.findall(translated)):
         return None
-    barre_originale = _CODICE.sub("", originale).count("/")
-    pezzi = _CODICE.split(tradotto)
-    codici = _CODICE.findall(tradotto)
-    extra = sum(p.count("/") for p in pezzi) - barre_originale
+    original_slashes = _CODE.sub("", original).count("/")
+    pieces = _CODE.split(translated)
+    codes = _CODE.findall(translated)
+    extra = sum(p.count("/") for p in pieces) - original_slashes
     if extra > 0:
-        pezzi = [p.replace("/", "-") for p in pezzi]
-        if barre_originale:  # I do not know which slashes to keep: better the original
+        pieces = [p.replace("/", "-") for p in pieces]
+        if original_slashes:  # I do not know which slashes to keep: better the original
             return None
-    testo = pezzi[0] + "".join(c + p for c, p in zip(codici, pezzi[1:]))
-    righe_o, righe_t = originale.split("\n"), testo.split("\n")
-    if len(righe_o) == len(righe_t):
-        righe_t = [t + " " if t.endswith("/") and not o.endswith("/") else t for o, t in zip(righe_o, righe_t)]
-        testo = "\n".join(righe_t)
-    return testo
+    text = pieces[0] + "".join(c + p for c, p in zip(codes, pieces[1:]))
+    lines_o, lines_t = original.split("\n"), text.split("\n")
+    if len(lines_o) == len(lines_t):
+        lines_t = [t + " " if t.endswith("/") and not o.endswith("/") else t for o, t in zip(lines_o, lines_t)]
+        text = "\n".join(lines_t)
+    return text
 
 
 # --- capitals: games written all in lowercase, with capitals used as icons (Forager) ----------------------
 
-_PAROLA = re.compile(r"[^\W\d_]+")
+_WORD = re.compile(r"[^\W\d_]+")
 
 
-def _parole_miste(testo):
+def _mixed_words(text):
     """True if the text has a word with both uppercase and lowercase letters (Hello, CamelCase)."""
-    return any(not w.isupper() and not w.islower() for w in _PAROLA.findall(testo))
+    return any(not w.isupper() and not w.islower() for w in _WORD.findall(text))
 
 
-def _senza_segnaposto(testo):
-    from .text import _SEGNAPOSTO
-    return _SEGNAPOSTO.sub(" ", testo)
+def _without_placeholders(text):
+    from .text import _PLACEHOLDER
+    return _PLACEHOLDER.sub(" ", text)
 
 
-def stile_maiuscole(testi):
+def caps_style(texts):
     """How the game uses capitals in its texts: 'minuscolo' (almost all lowercase: capitals are codes or icons),
     'maiuscolo', 'normale', or 'non applicabile' (few texts, or scripts without capitals such as Chinese,
     Japanese, Korean, Thai). Identifiers and placeholders do not count."""
-    validi, lettere_casi, lettere = [], 0, 0
-    for t in testi:
-        if not isinstance(t, str) or _IDENTIFICATIVO.match(t.strip()):
+    valid_spots, cased_letters, letters = [], 0, 0
+    for t in texts:
+        if not isinstance(t, str) or _IDENTIFIER.match(t.strip()):
             continue
-        t = _senza_segnaposto(t)
-        lettere += sum(1 for c in t if c.isalpha())
-        con_caso = [c for c in t if c.isalpha() and c.lower() != c.upper()]
-        lettere_casi += len(con_caso)
-        if con_caso:
-            validi.append(t)
-    if len(validi) < 30 or lettere_casi < 0.5 * max(1, lettere):
+        t = _without_placeholders(t)
+        letters += sum(1 for c in t if c.isalpha())
+        cased = [c for c in t if c.isalpha() and c.lower() != c.upper()]
+        cased_letters += len(cased)
+        if cased:
+            valid_spots.append(t)
+    if len(valid_spots) < 30 or cased_letters < 0.5 * max(1, letters):
         return "non applicabile"
-    senza_minuscole = sum(1 for t in validi if not any(c.islower() for c in t))
-    if senza_minuscole >= 0.95 * len(validi):
+    no_lowercase = sum(1 for t in valid_spots if not any(c.islower() for c in t))
+    if no_lowercase >= 0.95 * len(valid_spots):
         return "maiuscolo"
-    misti = sum(1 for t in validi if _parole_miste(t))
-    if misti <= 0.05 * len(validi) and senza_minuscole <= 0.05 * len(validi):
+    mixed_count = sum(1 for t in valid_spots if _mixed_words(t))
+    if mixed_count <= 0.05 * len(valid_spots) and no_lowercase <= 0.05 * len(valid_spots):
         return "minuscolo"
     return "normale"
 
 
-def codici_maiuscoli(testi, mappa=None, punto=None):
+def uppercase_codes(texts, mapping=None, bullet=None):
     """In lowercase games, all-uppercase words (at most 4 letters, in at least 3 texts) are codes or font icons
     (Forager: 'EP' = XP icon, 'H' = heart). Only those that the sprite font draws as capitals (its icons) are kept:
     without the font map there is no way to know, and nothing is protected."""
-    if not mappa:
+    if not mapping:
         return []
-    icone = {c for c in mappa if c.isupper()}
-    conta = {}
-    for t in testi:
-        if not isinstance(t, str) or _parole_miste(_senza_segnaposto(t)):
+    icons = {c for c in mapping if c.isupper()}
+    tally = {}
+    for t in texts:
+        if not isinstance(t, str) or _mixed_words(_without_placeholders(t)):
             continue
-        for w in set(_PAROLA.findall(_senza_segnaposto(t))):
-            if w.isupper() and len(w) <= 4 and w != punto:
-                conta[w] = conta.get(w, 0) + 1
-    return sorted(w for w, n in conta.items() if n >= 3 and set(w) <= icone)
+        for w in set(_WORD.findall(_without_placeholders(t))):
+            if w.isupper() and len(w) <= 4 and w != bullet:
+                tally[w] = tally.get(w, 0) + 1
+    return sorted(w for w, n in tally.items() if n >= 3 and set(w) <= icons)
 
 
-def in_minuscolo(tradotto, originale, codici=(), lingua_dest="it"):
+def to_lowercase(translated, original, codes=(), target_lang="it"):
     """The translation with capitals as the game writes them: for a text whose original is in lowercase, all
     letters in lowercase except the original's codes (icons) and the placeholders. Texts with normal capitals
     (system messages) stay as they are."""
-    from .text import _SEGNAPOSTO
-    if _parole_miste(_senza_segnaposto(originale)):
-        return tradotto
-    presenti = [c for c in codici if re.search(r"(?<![^\W\d_])%s(?![^\W\d_])" % re.escape(c), originale)]
-    protetti = [_SEGNAPOSTO.pattern]
-    if presenti:
-        protetti.append(r"(?<![^\W\d_])(?:%s)(?![^\W\d_])" % "|".join(map(re.escape, presenti)))
-    turco = lingua_dest.split("-")[0] in ("tr", "az")
-    uscita, ultimo = [], 0
-    for m in re.finditer("|".join("(?:%s)" % x for x in protetti), tradotto):
-        uscita.append(tradotto[ultimo:m.start()])
-        uscita.append(None)
-        uscita.append(m.group())
-        ultimo = m.end()
-    uscita.append(tradotto[ultimo:])
-    pezzi, proteggi = [], False
-    for x in uscita:
+    from .text import _PLACEHOLDER
+    if _mixed_words(_without_placeholders(original)):
+        return translated
+    present = [c for c in codes if re.search(r"(?<![^\W\d_])%s(?![^\W\d_])" % re.escape(c), original)]
+    protected = [_PLACEHOLDER.pattern]
+    if present:
+        protected.append(r"(?<![^\W\d_])(?:%s)(?![^\W\d_])" % "|".join(map(re.escape, present)))
+    turkish = target_lang.split("-")[0] in ("tr", "az")
+    output, last = [], 0
+    for m in re.finditer("|".join("(?:%s)" % x for x in protected), translated):
+        output.append(translated[last:m.start()])
+        output.append(None)
+        output.append(m.group())
+        last = m.end()
+    output.append(translated[last:])
+    pieces, protect = [], False
+    for x in output:
         if x is None:
-            proteggi = True
+            protect = True
             continue
-        if proteggi:
-            pezzi.append(x)
-            proteggi = False
+        if protect:
+            pieces.append(x)
+            protect = False
         else:
-            pezzi.append(x.replace("I", "\u0131").replace("\u0130", "i").lower() if turco else x.lower())
-    return "".join(pezzi)
+            pieces.append(x.replace("I", "\u0131").replace("\u0130", "i").lower() if turkish else x.lower())
+    return "".join(pieces)
 
 
 # --- line width: how much space the game's versions give to the text -------------------------------------------
 
-def font_dedicati(dati_win, codici):
+def dedicated_fonts(data_win, codes):
     """Languages that have a font of their own (from the name: fntGerman, fntRussian...): their lines have a
     different width and cannot be used to measure the text's space."""
     try:
-        elenco, _ = gamemaker.font(dati_win)
-    except (gamemaker.ErroreGameMaker, struct.error, ValueError, IndexError):
+        items, _ = gamemaker.font(data_win)
+    except (gamemaker.GameMakerError, struct.error, ValueError, IndexError):
         return set()
-    return {c for c in codici for f in elenco if _font_della_lingua(f.get("nome"), c)}
+    return {c for c in codes for f in items if _language_font(f.get("nome"), c)}
 
 
-def _altra_scrittura_testo(testo):
-    lettere = [c for c in testo if c.isalpha()]
-    return bool(lettere) and sum(1 for c in lettere if _altro_alfabeto(c)) > 0.3 * len(lettere)
+def _other_script_text(text):
+    letters = [c for c in text if c.isalpha()]
+    return bool(letters) and sum(1 for c in letters if _other_alphabet(c)) > 0.3 * len(letters)
 
 
-def limiti_righe(dati, altri, segno):
+def line_limits(data, others, marker):
     """{chiave: [larghezza, righe, uguali]} for each text: the longest line (in characters) and the maximum number
     of lines among the original and the official translations that use the same font ('altri': their
     dictionaries), and how many official translations leave the text the same as the original (e.g. 'vsync:')."""
-    uscita = {}
-    if not isinstance(dati, dict):
-        return uscita
-    for k, v in dati.items():
-        if not isinstance(v, str) or not testo_localizzazione(v):
+    output = {}
+    if not isinstance(data, dict):
+        return output
+    for k, v in data.items():
+        if not isinstance(v, str) or not localization_text(v):
             continue
-        versioni = [v] + [a.get(k) for a in altri if isinstance(a, dict) and isinstance(a.get(k), str)
-                          and a.get(k).strip() and not _altra_scrittura_testo(a.get(k))]
-        righe = [_righe_di(x, segno) for x in versioni]
-        larghezza = max((len(r) for rr in righe for r in rr), default=0)
-        uguali = sum(1 for x in versioni[1:] if x.strip().casefold() == v.strip().casefold())
-        uscita[k] = [larghezza, max((len(rr) for rr in righe), default=1), uguali]
-    return uscita
+        versions = [v] + [a.get(k) for a in others if isinstance(a, dict) and isinstance(a.get(k), str)
+                          and a.get(k).strip() and not _other_script_text(a.get(k))]
+        lines = [_lines_of(x, marker) for x in versions]
+        width = max((len(r) for rr in lines for r in rr), default=0)
+        equal_count = sum(1 for x in versions[1:] if x.strip().casefold() == v.strip().casefold())
+        output[k] = [width, max((len(rr) for rr in lines), default=1), equal_count]
+    return output
 
 
-def nome_lingua_nuova(destinazione, cartella, estensione=".json"):
+def new_language_name(dest_lang, folder, extension=".json"):
     """File name of the language to add (e.g. 'italiano.json'): the language's name in the language itself,
     which the game shows in its menu. None if a file with that name already exists and is not PatchSmith's."""
-    nome = (lingua.endonimo(destinazione) or destinazione).split(" (")[0].strip().lower()
-    nome = re.sub(r"[^\w]+", "_", nome).strip("_") or destinazione
-    file = nome + estensione
-    if os.path.exists(os.path.join(cartella, file)) and file not in creati_da_patchsmith(cartella):
+    name = (language.endonym(dest_lang) or dest_lang).split(" (")[0].strip().lower()
+    name = re.sub(r"[^\w]+", "_", name).strip("_") or dest_lang
+    file = name + extension
+    if os.path.exists(os.path.join(folder, file)) and file not in created_by_patchsmith(folder):
         return None
     return file
 
 
-def caratteri_font_sprite(cartella):
+def sprite_font_chars(folder):
     """Characters of the game's main sprite font (the longest map), or None if there is none."""
-    dati = file_dati(cartella)
-    if not dati:
+    data = data_file(folder)
+    if not data:
         return None
     try:
-        mappe = gamemaker.mappe_font_sprite(os.path.dirname(dati))
-    except (gamemaker.ErroreGameMaker, OSError, ValueError, IndexError, struct.error):
+        maps = gamemaker.font_sprite_maps(os.path.dirname(data))
+    except (gamemaker.GameMakerError, OSError, ValueError, IndexError, struct.error):
         return None
-    if not mappe:
+    if not maps:
         return None
-    return max((m for _, m in mappe), key=len)
+    return max((m for _, m in maps), key=len)

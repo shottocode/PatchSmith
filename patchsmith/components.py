@@ -8,18 +8,18 @@ import os
 import urllib.request
 import zipfile
 
-from . import interruption as interruzione
-from .project import cartella_componenti
+from . import interruption
+from .project import components_folder
 
-CARTELLA = None  # None: components/ next to the program (progetto.cartella_componenti); the tests change it
+FOLDER = None  # None: components/ next to the program (project.components_folder); the tests change it
 
 
-def cartella():
-    return CARTELLA or cartella_componenti()
+def folder():
+    return FOLDER or components_folder()
 
 # name -> {url, file, dimensione, sha256, licenza, versione}
 # Fingerprints read from the official GitHub releases API ("digest" field) on 2026-10-13.
-CATALOGO = {
+CATALOG = {
     "bepinex5_x64": {
         "url": "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x64_5.4.23.5.zip",
         "file": "BepInEx_win_x64_5.4.23.5.zip", "dimensione": 639118, "versione": "5.4.23.5",
@@ -39,63 +39,63 @@ CATALOGO = {
 }
 
 
-class ErroreComponente(Exception):
+class ComponentError(Exception):
     pass
 
 
-def _sha256(percorso):
+def _sha256(path):
     h = hashlib.sha256()
-    with open(percorso, "rb") as f:
-        for blocco in iter(lambda: f.read(1 << 20), b""):
-            h.update(blocco)
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
     return h.hexdigest()
 
 
-def percorso(nome):
-    return os.path.join(cartella(), CATALOGO[nome]["file"])
+def path(name):
+    return os.path.join(folder(), CATALOG[name]["file"])
 
 
-def disponibile(nome):
+def is_available(name):
     """True if the component is already in the cache and intact."""
-    p = percorso(nome)
-    return os.path.exists(p) and _sha256(p) == CATALOGO[nome]["sha256"]
+    p = path(name)
+    return os.path.exists(p) and _sha256(p) == CATALOG[name]["sha256"]
 
 
-def ottieni(nome, log=print):
+def obtain(name, log=print):
     """Path of the component's file, downloading it if needed. Always verifies the fingerprint."""
-    voce = CATALOGO[nome]
-    destinazione = percorso(nome)
-    if disponibile(nome):
-        return destinazione
-    os.makedirs(cartella(), exist_ok=True)
-    temporaneo = destinazione + ".scaricamento"
-    log("  scarico %s (%d KB) da %s" % (voce["file"], voce["dimensione"] // 1024, voce["url"]))
-    req = urllib.request.Request(voce["url"], headers={"User-Agent": "Mozilla/5.0 (patchsmith)"})
+    entry = CATALOG[name]
+    dest_lang = path(name)
+    if is_available(name):
+        return dest_lang
+    os.makedirs(folder(), exist_ok=True)
+    temp_file = dest_lang + ".scaricamento"
+    log("  scarico %s (%d KB) da %s" % (entry["file"], entry["dimensione"] // 1024, entry["url"]))
+    req = urllib.request.Request(entry["url"], headers={"User-Agent": "Mozilla/5.0 (patchsmith)"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as risposta, open(temporaneo, "wb") as f:
-            letti = 0
-            for blocco in iter(lambda: risposta.read(1 << 16), b""):
-                interruzione.controlla()
-                letti += len(blocco)
-                if letti > voce["dimensione"] * 2 + 1_000_000:
-                    raise ErroreComponente("%s: il file scaricato e' troppo grande, scaricamento interrotto" % nome)
-                f.write(blocco)
+        with urllib.request.urlopen(req, timeout=60) as response, open(temp_file, "wb") as f:
+            read_items = 0
+            for block in iter(lambda: response.read(1 << 16), b""):
+                interruption.check()
+                read_items += len(block)
+                if read_items > entry["dimensione"] * 2 + 1_000_000:
+                    raise ComponentError("%s: il file scaricato e' troppo grande, scaricamento interrotto" % name)
+                f.write(block)
     except BaseException as e:  # "Stop" too: no half-finished downloads
-        if os.path.exists(temporaneo):
-            os.remove(temporaneo)
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
         if isinstance(e, OSError):
-            raise ErroreComponente("Scaricamento di %s non riuscito: %s" % (nome, e)) from e
+            raise ComponentError("Scaricamento di %s non riuscito: %s" % (name, e)) from e
         raise
-    impronta = _sha256(temporaneo)
-    if impronta != voce["sha256"]:
-        os.remove(temporaneo)
-        raise ErroreComponente("%s: impronta SHA-256 diversa da quella attesa (%s): file scartato per sicurezza"
-                               % (nome, impronta))
-    os.replace(temporaneo, destinazione)
-    return destinazione
+    fingerprint = _sha256(temp_file)
+    if fingerprint != entry["sha256"]:
+        os.remove(temp_file)
+        raise ComponentError("%s: impronta SHA-256 diversa da quella attesa (%s): file scartato per sicurezza"
+                               % (name, fingerprint))
+    os.replace(temp_file, dest_lang)
+    return dest_lang
 
 
-def elenco_zip(nome):
+def zip_entries(name):
     """Paths (with /) contained in the component's zip."""
-    with zipfile.ZipFile(percorso(nome)) as z:
+    with zipfile.ZipFile(path(name)) as z:
         return [i.filename for i in z.infolist()]

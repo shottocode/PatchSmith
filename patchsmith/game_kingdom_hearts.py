@@ -22,32 +22,32 @@ import re
 import shutil
 import struct
 
-from . import configurator as configuratore, language as lingua, project as progetto
+from . import configurator, language, project
 
 ID = "kingdom-hearts-hd-1.5-2.5"
-NOME = "KINGDOM HEARTS HD 1.5+2.5 ReMIX"
-ESEGUIBILI = ("KINGDOM HEARTS FINAL MIX.exe", "KINGDOM HEARTS Re_Chain of Memories.exe",
+NAME = "KINGDOM HEARTS HD 1.5+2.5 ReMIX"
+EXECUTABLES = ("KINGDOM HEARTS FINAL MIX.exe", "KINGDOM HEARTS Re_Chain of Memories.exe",
               "KINGDOM HEARTS II FINAL MIX.exe", "KINGDOM HEARTS Birth by Sleep FINAL MIX.exe",
               "KINGDOM HEARTS HD 1.5+2.5 Launcher.exe", "KINGDOM HEARTS Theater.exe")
-CODICI = {"en": 1, "de": 3, "fr": 4, "es": 5, "it": 6}  # the game's internal codes
-_CARTELLA_MSG = {"en": "us", "it": "it", "fr": "fr", "de": "gr", "es": "sp"}  # msg/<cartella>/ in KH2
-_VALORI = set(CODICI.values())
-SCHEMA = re.compile(rb"\xBB([\x00-\xFF])\x00\x00\x00\x48\x83\x3D[\x00-\xFF]{4}\x00\x75\x31\x8B\xCB\xE8")
-TABELLA = b"english\x00french\x00\x00italian\x00german\x00\x00spanish\x00"
-DISTANZA_CONFRONTO = 0x300
-SALVATAGGI = None  # None = the user's Documenti/My Games/<NOME> (can be set for the tests)
-MASSIMO_SALVATAGGI = 512 * 1024 * 1024
+CODES = {"en": 1, "de": 3, "fr": 4, "es": 5, "it": 6}  # the game's internal codes
+_MSG_FOLDER = {"en": "us", "it": "it", "fr": "fr", "de": "gr", "es": "sp"}  # msg/<cartella>/ in KH2
+_VALUES = set(CODES.values())
+PATTERN = re.compile(rb"\xBB([\x00-\xFF])\x00\x00\x00\x48\x83\x3D[\x00-\xFF]{4}\x00\x75\x31\x8B\xCB\xE8")
+TABLE = b"english\x00french\x00\x00italian\x00german\x00\x00spanish\x00"
+COMPARE_DISTANCE = 0x300
+SAVES = None  # None = the user's Documenti/My Games/<NAME> (can be set for the tests)
+MAX_SAVES = 512 * 1024 * 1024
 
 
-class ErroreScheda(ValueError):
+class SheetError(ValueError):
     pass
 
 
-class ErroreLettura(ErroreScheda):
+class ReadError(SheetError):
     pass
 
 
-def _documenti():
+def _documents():
     """The user's Documents folder as the game sees it (even if moved or on OneDrive)."""
     try:
         import ctypes
@@ -59,230 +59,230 @@ def _documenti():
     return os.path.join(os.path.expanduser("~"), "Documents")
 
 
-def cartella_salvataggi():
-    return SALVATAGGI or os.path.join(_documenti(), "My Games", NOME)
+def saves_folder():
+    return SAVES or os.path.join(_documents(), "My Games", NAME)
 
 
 # --- recognition ----------------------------------------------------------------------------------
 
-def _e_radice(cartella):
-    return bool(glob.glob(os.path.join(glob.escape(cartella), "Image", "*", "kh2_first.hed"))) and \
-        any(os.path.isfile(os.path.join(cartella, e)) for e in ESEGUIBILI)
+def _is_root(folder):
+    return bool(glob.glob(os.path.join(glob.escape(folder), "Image", "*", "kh2_first.hed"))) and \
+        any(os.path.isfile(os.path.join(folder, e)) for e in EXECUTABLES)
 
 
-def radici(cartella):
+def roots(folder):
     """The game's folders (those with Image/ and the executables): the folder itself, or searched up to two
     levels below (more than one if the folder contains several copies of the game)."""
-    if not os.path.isdir(cartella):
+    if not os.path.isdir(folder):
         return []
-    if _e_radice(cartella):
-        return [os.path.abspath(cartella)]
-    trovate = []
-    for radice, dirs, _ in os.walk(cartella):
-        livello = os.path.relpath(radice, cartella).count(os.sep) + (radice != cartella)
-        if livello >= 2:
+    if _is_root(folder):
+        return [os.path.abspath(folder)]
+    matches = []
+    for root, dirs, _ in os.walk(folder):
+        level = os.path.relpath(root, folder).count(os.sep) + (root != folder)
+        if level >= 2:
             dirs[:] = []
         for d in sorted(dirs):
-            p = os.path.join(radice, d)
-            if _e_radice(p):
-                trovate.append(os.path.abspath(p))
-        dirs[:] = [d for d in dirs if os.path.abspath(os.path.join(radice, d)) not in trovate]
-    return trovate
+            p = os.path.join(root, d)
+            if _is_root(p):
+                matches.append(os.path.abspath(p))
+        dirs[:] = [d for d in dirs if os.path.abspath(os.path.join(root, d)) not in matches]
+    return matches
 
 
-def riconosci(cartella):
+def identify(folder):
     """The game's folder if there is only one, otherwise None."""
-    trovate = radici(cartella)
-    return trovate[0] if len(trovate) == 1 else None
+    matches = roots(folder)
+    return matches[0] if len(matches) == 1 else None
 
 
-def lingue_presenti(radice):
+def present_languages(root):
     """{codes} of the installed text languages (from a sample entry of KH2: msg/<lingua>/sys.bar); None."""
-    indici = glob.glob(os.path.join(glob.escape(radice), "Image", "*", "kh2_first.hed"))
-    if not indici:
+    indices = glob.glob(os.path.join(glob.escape(root), "Image", "*", "kh2_first.hed"))
+    if not indices:
         return None
     try:
-        with open(indici[0], "rb") as f:
+        with open(indices[0], "rb") as f:
             hed = f.read()
     except OSError:
         return None
-    voci = {hed[i:i + 16] for i in range(0, len(hed) - 31, 32)}
-    return {codice for codice, cartella in _CARTELLA_MSG.items()
-            if hashlib.md5(("msg/%s/sys.bar" % cartella).encode()).digest() in voci}
+    entries = {hed[i:i + 16] for i in range(0, len(hed) - 31, 32)}
+    return {code for code, folder in _MSG_FOLDER.items()
+            if hashlib.md5(("msg/%s/sys.bar" % folder).encode()).digest() in entries}
 
 
 # --- the spot of the default language in the executables ------------------------------------------
 
-def _sezioni(dati):
+def _sections(data):
     """[(name, rva, virtual size, offset in the file, size in the file, characteristics)] of a PE."""
     try:
-        if dati[:2] != b"MZ":
-            raise ErroreScheda("non e' un eseguibile Windows")
-        pe = struct.unpack_from("<I", dati, 0x3C)[0]
-        if dati[pe:pe + 4] != b"PE\x00\x00":
-            raise ErroreScheda("intestazione PE mancante")
-        n, = struct.unpack_from("<H", dati, pe + 6)
-        opzionale, = struct.unpack_from("<H", dati, pe + 20)
-        inizio, uscita = pe + 24 + opzionale, []
+        if data[:2] != b"MZ":
+            raise SheetError("non e' un eseguibile Windows")
+        pe = struct.unpack_from("<I", data, 0x3C)[0]
+        if data[pe:pe + 4] != b"PE\x00\x00":
+            raise SheetError("intestazione PE mancante")
+        n, = struct.unpack_from("<H", data, pe + 6)
+        optional, = struct.unpack_from("<H", data, pe + 20)
+        start, output = pe + 24 + optional, []
         for i in range(n):
-            s = inizio + 40 * i
-            nome = dati[s:s + 8].rstrip(b"\x00").decode("latin-1")
-            vdim, rva, fdim, foff = struct.unpack_from("<IIII", dati, s + 8)
-            car, = struct.unpack_from("<I", dati, s + 36)
-            uscita.append((nome, rva, vdim, foff, fdim, car))
-        return uscita
+            s = start + 40 * i
+            name = data[s:s + 8].rstrip(b"\x00").decode("latin-1")
+            vdim, rva, fsize, foff = struct.unpack_from("<IIII", data, s + 8)
+            sec_flags, = struct.unpack_from("<I", data, s + 36)
+            output.append((name, rva, vdim, foff, fsize, sec_flags))
+        return output
     except struct.error as e:
-        raise ErroreScheda("eseguibile illeggibile (%s)" % e) from e
+        raise SheetError("eseguibile illeggibile (%s)" % e) from e
 
 
-def _sezione_di(sezioni, offset):
-    for s in sezioni:
+def _section_of(sections, offset):
+    for s in sections:
         if s[3] <= offset < s[3] + s[4]:
             return s
     return None
 
 
-def punto_lingua(dati):
-    """(offset in the file of the default language byte, current value). Raises ErroreScheda if the executable
+def language_byte(data):
+    """(offset in the file of the default language byte, current value). Raises SheetError if the executable
     is not the expected one: the pattern must be unique, in the code, and followed by the comparison with
     "english"."""
-    sezioni = _sezioni(dati)
-    trovati = list(SCHEMA.finditer(dati))
-    if len(trovati) != 1:
-        raise ErroreScheda("punto della lingua %s" % ("non trovato" if not trovati else "ambiguo"))
-    m = trovati[0]
-    codice = _sezione_di(sezioni, m.start())
-    if not codice or not codice[5] & 0x20000000:
-        raise ErroreScheda("il punto della lingua non e' nel codice")
-    t = dati.find(TABELLA)
-    if t < 0 or dati.find(TABELLA, t + 1) >= 0:
-        raise ErroreScheda("tabella delle lingue %s" % ("non trovata" if t < 0 else "ambigua"))
-    sez_tabella = _sezione_di(sezioni, t)
-    if not sez_tabella or sez_tabella[5] & 0x20000000:
-        raise ErroreScheda("tabella delle lingue fuori posto")
-    rva_english = sez_tabella[1] + t - sez_tabella[3]
-    for k in range(m.end(), min(m.start() + DISTANZA_CONFRONTO, len(dati) - 7)):
-        if dati[k:k + 3] == b"\x48\x8D\x15":  # lea rdx,[rip+displacement]
-            rva_k = codice[1] + k - codice[3]
-            if rva_k + 7 + struct.unpack_from("<i", dati, k + 3)[0] == rva_english:
-                return m.start() + 1, dati[m.start() + 1]
-    raise ErroreScheda("il punto trovato non porta al confronto con la lingua")
+    sections = _sections(data)
+    found = list(PATTERN.finditer(data))
+    if len(found) != 1:
+        raise SheetError("punto della lingua %s" % ("non trovato" if not found else "ambiguo"))
+    m = found[0]
+    code = _section_of(sections, m.start())
+    if not code or not code[5] & 0x20000000:
+        raise SheetError("il punto della lingua non e' nel codice")
+    t = data.find(TABLE)
+    if t < 0 or data.find(TABLE, t + 1) >= 0:
+        raise SheetError("tabella delle lingue %s" % ("non trovata" if t < 0 else "ambigua"))
+    table_section = _section_of(sections, t)
+    if not table_section or table_section[5] & 0x20000000:
+        raise SheetError("tabella delle lingue fuori posto")
+    rva_english = table_section[1] + t - table_section[3]
+    for k in range(m.end(), min(m.start() + COMPARE_DISTANCE, len(data) - 7)):
+        if data[k:k + 3] == b"\x48\x8D\x15":  # lea rdx,[rip+displacement]
+            rva_k = code[1] + k - code[3]
+            if rva_k + 7 + struct.unpack_from("<i", data, k + 3)[0] == rva_english:
+                return m.start() + 1, data[m.start() + 1]
+    raise SheetError("il punto trovato non porta al confronto con la lingua")
 
 
-def analizza(radice):
+def analyze(root):
     """[(name, path, offset, value)] of the executables present. Raises ErroreScheda (with the file name)."""
-    uscita = []
-    for nome in ESEGUIBILI:
-        percorso = os.path.join(radice, nome)
-        if not os.path.isfile(percorso):
+    output = []
+    for name in EXECUTABLES:
+        path = os.path.join(root, name)
+        if not os.path.isfile(path):
             continue
         try:
-            with open(percorso, "rb") as f:
-                dati = f.read()
+            with open(path, "rb") as f:
+                data = f.read()
         except OSError as e:
-            raise ErroreLettura("%s: %s" % (nome, e)) from e
+            raise ReadError("%s: %s" % (name, e)) from e
         try:
-            offset, valore = punto_lingua(dati)
-        except ErroreScheda as e:
-            raise ErroreScheda("%s: %s" % (nome, e)) from e
-        uscita.append((nome, percorso, offset, valore))
-    if not uscita:
-        raise ErroreScheda("nessun eseguibile del gioco trovato")
-    return uscita
+            offset, value_ = language_byte(data)
+        except SheetError as e:
+            raise SheetError("%s: %s" % (name, e)) from e
+        output.append((name, path, offset, value_))
+    if not output:
+        raise SheetError("nessun eseguibile del gioco trovato")
+    return output
 
 
 # --- saves ----------------------------------------------------------------------------------------
 
-def _copia_salvataggi(radice, log):
+def _copy_saves(root, log):
     """Backup copy of the saves (only read) in PatchSmith's folder, the first time. The copy appears only if it is
     complete."""
-    if configuratore.nota(radice, "salvataggi_copiati"):
+    if configurator.note(root, "salvataggi_copiati"):
         return
-    sorgente = cartella_salvataggi()
-    if not os.path.isdir(sorgente):
-        log("  Salvataggi non trovati in %s: nessuna copia da fare." % sorgente)
+    source = saves_folder()
+    if not os.path.isdir(source):
+        log("  Salvataggi non trovati in %s: nessuna copia da fare." % source)
         return
-    totale = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(sorgente) for f in fs)
-    if totale > MASSIMO_SALVATAGGI:
-        log("  ! Salvataggi troppo grandi per una copia automatica (%.0f MB): copiali tu se vuoi." % (totale / 1048576))
+    total = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(source) for f in fs)
+    if total > MAX_SAVES:
+        log("  ! Salvataggi troppo grandi per una copia automatica (%.0f MB): copiali tu se vuoi." % (total / 1048576))
         return
-    destinazione = progetto.cartella_dati("save-backups", ID, configuratore._adesso().replace(":", "").replace("-", ""))
-    temporanea = destinazione + ".incompleta"
+    dest_lang = project.data_folder("save-backups", ID, configurator._now().replace(":", "").replace("-", ""))
+    temp_path = dest_lang + ".incompleta"
     try:
-        shutil.copytree(sorgente, temporanea)
-        os.replace(temporanea, destinazione)
+        shutil.copytree(source, temp_path)
+        os.replace(temp_path, dest_lang)
     except BaseException:
-        shutil.rmtree(temporanea, ignore_errors=True)
+        shutil.rmtree(temp_path, ignore_errors=True)
         raise
-    configuratore.segna(radice, "salvataggi_copiati", destinazione)
-    log("  Copia di sicurezza dei salvataggi: %s" % destinazione)
+    configurator.mark(root, "salvataggi_copiati", dest_lang)
+    log("  Copia di sicurezza dei salvataggi: %s" % dest_lang)
 
 
 # --- language lever -------------------------------------------------------------------------------
 
-def imposta_lingua(radice, destinazione, consenso=False, log=print):
+def set_language(root, dest_lang, consent=False, log=print):
     """Activates the language 'destinazione'. (True, righe) done or already active; (None, righe) the user's consent
     is needed (proposal); (False, righe) it cannot be done (with the reason)."""
-    nome = lingua.etichetta(destinazione)
-    nella_piattaforma = ("scegli %s nella piattaforma da cui avvii il gioco (Steam: Proprieta' > Generali > Lingua)"
-                         % nome)
-    codice = CODICI.get(lingua.chiave_confronto(destinazione))
-    if codice is None:
-        return False, ["%s non ha la lingua %s." % (NOME, nome)]
-    configuratore.ripara_interrotte(radice, log)
+    name = language.label(dest_lang)
+    in_platform = ("scegli %s nella piattaforma da cui avvii il gioco (Steam: Proprieta' > Generali > Lingua)"
+                         % name)
+    code = CODES.get(language.comparison_key(dest_lang))
+    if code is None:
+        return False, ["%s non ha la lingua %s." % (NAME, name)]
+    configurator.repair_interrupted(root, log)
     try:
-        punti = analizza(radice)
-    except ErroreLettura as e:
+        periods = analyze(root)
+    except ReadError as e:
         return False, ["Non riesco a leggere un eseguibile del gioco (%s): controlla antivirus e permessi e riprova. "
                        "Non ho modificato nulla." % e]
-    except ErroreScheda as e:
-        righe = ["Non riconosco questa versione degli eseguibili di %s (%s): non modifico nulla. In alternativa %s."
-                 % (NOME, e, nella_piattaforma)]
-        if configuratore.leva(radice, "lingua"):
-            righe.append("Alcuni eseguibili hanno ancora la modifica di PatchSmith: premi 'Ripristina originali'.")
-        return False, righe
-    strani = [n for n, _, _, v in punti if v not in _VALORI]
-    if strani:
+    except SheetError as e:
+        lines = ["Non riconosco questa versione degli eseguibili di %s (%s): non modifico nulla. In alternativa %s."
+                 % (NAME, e, in_platform)]
+        if configurator.lever(root, "lingua"):
+            lines.append("Alcuni eseguibili hanno ancora la modifica di PatchSmith: premi 'Ripristina originali'.")
+        return False, lines
+    unknown = [n for n, _, _, v in periods if v not in _VALUES]
+    if unknown:
         return False, ["%s: valore della lingua inatteso, il file e' stato modificato da altri. Non lo tocco."
-                       % ", ".join(strani)]
-    da_fare = [(n, p, o, v) for n, p, o, v in punti if v != codice]
-    if not da_fare:
-        nostri = all(progetto.leggi_info(p) for _, p, _, _ in punti) or codice == CODICI["en"]
-        return True, ["%s e' gia' attivo nel gioco%s." % (nome, "" if nostri else " (non impostato da PatchSmith)")]
-    problemi = configuratore.controlli_eseguibili()
-    if problemi:
-        return False, problemi + ["In alternativa %s." % nella_piattaforma]
-    if not consenso and not configuratore.ha_consenso(radice):
-        mb = sum(os.path.getsize(p) for _, p, _, _ in da_fare
-                 if not os.path.exists(p + progetto.SUFFISSO_BACKUP)) / 1048576
+                       % ", ".join(unknown)]
+    to_do = [(n, p, o, v) for n, p, o, v in periods if v != code]
+    if not to_do:
+        ours = all(project.read_info(p) for _, p, _, _ in periods) or code == CODES["en"]
+        return True, ["%s e' gia' attivo nel gioco%s." % (name, "" if ours else " (non impostato da PatchSmith)")]
+    problems = configurator.executable_checks()
+    if problems:
+        return False, problems + ["In alternativa %s." % in_platform]
+    if not consent and not configurator.has_consent(root):
+        mb = sum(os.path.getsize(p) for _, p, _, _ in to_do
+                 if not os.path.exists(p + project.BACKUP_SUFFIX)) / 1048576
         return None, ["Posso attivare %s davvero in %s (%s): il gioco prende la lingua dalla piattaforma e, se la "
                       "risposta e' l'inglese, usa un valore predefinito scritto nei suoi eseguibili. Cambio quel "
                       "valore (1 byte in ciascuno di %d eseguibili), con backup (%.1f MB) e ripristino con "
-                      "'Ripristina originali'." % (nome, NOME, radice, len(da_fare), mb),
+                      "'Ripristina originali'." % (name, NAME, root, len(to_do), mb),
                       "La firma digitale di quei file non sara' piu' valida: qualche antivirus potrebbe segnalarli. "
                       "Non tocco ne' i componenti di Steam ne' il programma di avvio protetto."]
-    if consenso:
-        configuratore.salva_consenso(radice)  # given once: I do not ask again even if something goes wrong now
+    if consent:
+        configurator.save_consent(root)  # given once: I do not ask again even if something goes wrong now
     try:
-        configuratore._gioco_chiuso(radice)
-    except configuratore.ErroreConfiguratore as e:
-        return False, ["Non ho potuto attivare %s: %s" % (nome, e)]
+        configurator._game_closed(root)
+    except configurator.ConfiguratorError as e:
+        return False, ["Non ho potuto attivare %s: %s" % (name, e)]
     try:
-        _copia_salvataggi(radice, log)
+        _copy_saves(root, log)
     except OSError as e:
         log("  ! Copia dei salvataggi non riuscita (%s): continuo, i salvataggi non vengono toccati." % e)
-    piani = [{"percorso": p, "modifiche": [(o, bytes([v]), bytes([codice]))]} for _, p, o, v in punti]
+    plans = [{"percorso": p, "modifiche": [(o, bytes([v]), bytes([code]))]} for _, p, o, v in periods]
     try:
-        scritti = configuratore.applica_byte(radice, "lingua", piani, log, valore=destinazione,
-                                             descrizione="lingua predefinita negli eseguibili (%s)" % ID)
-    except (configuratore.ErroreConfiguratore, OSError) as e:
-        return False, ["Non ho potuto attivare %s: %s" % (nome, e)]
+        writes = configurator.apply_bytes(root, "lingua", plans, log, value_=dest_lang,
+                                             description="lingua predefinita negli eseguibili (%s)" % ID)
+    except (configurator.ConfiguratorError, OSError) as e:
+        return False, ["Non ho potuto attivare %s: %s" % (name, e)]
     return True, ["Ho attivato %s in %s (%s): ho cambiato la lingua predefinita in %d eseguibili (1 byte "
-                  "ciascuno), con backup." % (nome, NOME, radice, scritti),
+                  "ciascuno), con backup." % (name, NAME, root, writes),
                   "Avvia il gioco come sempre: menu, testi e sottotitoli dovrebbero essere in %s (le voci restano "
-                  "quelle originali, come nella versione ufficiale)." % nome,
+                  "quelle originali, come nella versione ufficiale)." % name,
                   "Se il gioco e' in francese, tedesco o spagnolo, e' la piattaforma a imporlo: lasciala su inglese "
                   "(o scegli %s). Se un programma non parte o resta in inglese, premi 'Ripristina originali' e "
-                  "segnalalo." % nome,
+                  "segnalalo." % name,
                   "Un aggiornamento o la verifica dei file del gioco annullano la modifica: premi di nuovo 'Analizza e "
                   "traduci' e PatchSmith la riapplica da solo."]

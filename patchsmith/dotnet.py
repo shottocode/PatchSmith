@@ -10,7 +10,7 @@ None of this runs the game's code: only bytes are read.
 import struct
 
 
-class ErroreDotnet(ValueError):
+class DotnetError(ValueError):
     pass
 
 
@@ -19,7 +19,7 @@ class ErroreDotnet(ValueError):
 # metadata tables (ECMA-335 II.22): name, columns. Column types:
 #   number = fixed bytes; "s" strings heap; "g" guid heap; "b" blob heap;
 #   ("t", n) simple index into table n; ("c", name) coded index
-TABELLE = {
+TABLES = {
     0x00: ("Module", [2, "s", "g", "g", "g"]),
     0x01: ("TypeRef", [("c", "ResolutionScope"), "s", "s"]),
     0x02: ("TypeDef", [4, "s", "s", ("c", "TypeDefOrRef"), ("t", 0x04), ("t", 0x06)]),
@@ -68,7 +68,7 @@ TABELLE = {
 }
 
 # coded indexes: tag bits, tables (None = unused value)
-CODIFICATI = {
+CODED_INDEXES = {
     "TypeDefOrRef": (2, [0x02, 0x01, 0x1B]),
     "HasConstant": (2, [0x04, 0x08, 0x17]),
     "HasCustomAttribute": (5, [0x06, 0x04, 0x01, 0x02, 0x08, 0x09, 0x0A, 0x00, 0x0E, 0x17, 0x14, 0x11, 0x1A,
@@ -86,452 +86,453 @@ CODIFICATI = {
 }
 
 
-def _cstr(dati, pos):
-    fine = dati.index(b"\x00", pos)
-    return dati[pos:fine].decode("utf-8", "replace")
+def _cstr(data, pos):
+    end = data.index(b"\x00", pos)
+    return data[pos:end].decode("utf-8", "replace")
 
 
-def leggi_compresso(dati, pos):
+def read_compressed(data, pos):
     """Compressed integer of the ECMA-335 blobs (1, 2 or 4 bytes). Returns (value, new position)."""
-    b = dati[pos]
+    b = data[pos]
     if b & 0x80 == 0:
         return b, pos + 1
     if b & 0xC0 == 0x80:
-        return ((b & 0x3F) << 8) | dati[pos + 1], pos + 2
+        return ((b & 0x3F) << 8) | data[pos + 1], pos + 2
     if b & 0xE0 == 0xC0:
-        return ((b & 0x1F) << 24) | (dati[pos + 1] << 16) | (dati[pos + 2] << 8) | dati[pos + 3], pos + 4
-    raise ErroreDotnet("intero compresso non valido")
+        return ((b & 0x1F) << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3], pos + 4
+    raise DotnetError("intero compresso non valido")
 
 
 class Assembly:
     """.NET assembly read from a file (read only)."""
 
-    def __init__(self, percorso=None, dati=None):
-        self.percorso = percorso
-        if dati is None:
-            with open(percorso, "rb") as f:
-                dati = f.read()
-        self.dati = dati
+    def __init__(self, path=None, data=None):
+        self.path = path
+        if data is None:
+            with open(path, "rb") as f:
+                data = f.read()
+        self.data = data
         self._pe()
-        self._metadati()
+        self._metadata()
 
     # PE ------------------------------------------------------------------------------------------
     def _pe(self):
-        d = self.dati
+        d = self.data
         if d[:2] != b"MZ":
-            raise ErroreDotnet("non e' un eseguibile Windows")
+            raise DotnetError("non e' un eseguibile Windows")
         pe = struct.unpack_from("<I", d, 0x3C)[0]
         if d[pe:pe + 4] != b"PE\x00\x00":
-            raise ErroreDotnet("intestazione PE mancante")
-        self.macchina, nsez, _, _, _, dim_opz, self.caratteristiche = struct.unpack_from("<HHIIIHH", d, pe + 4)
-        opz = pe + 24
-        magia = struct.unpack_from("<H", d, opz)[0]
-        if magia == 0x10B:
-            dir_dati = opz + 96
-        elif magia == 0x20B:
-            dir_dati = opz + 112
+            raise DotnetError("intestazione PE mancante")
+        self.machine, nsect, _, _, _, opt_size, self.characteristics = struct.unpack_from("<HHIIIHH", d, pe + 4)
+        opt = pe + 24
+        magic = struct.unpack_from("<H", d, opt)[0]
+        if magic == 0x10B:
+            data_dirs = opt + 96
+        elif magic == 0x20B:
+            data_dirs = opt + 112
         else:
-            raise ErroreDotnet("intestazione opzionale PE sconosciuta")
-        self.pe32_plus = magia == 0x20B
-        n_dir = struct.unpack_from("<I", d, dir_dati - 4)[0]
+            raise DotnetError("intestazione opzionale PE sconosciuta")
+        self.pe32_plus = magic == 0x20B
+        n_dir = struct.unpack_from("<I", d, data_dirs - 4)[0]
         if n_dir <= 14:
-            raise ErroreDotnet("non e' un assembly .NET (manca l'intestazione CLI)")
-        self.sezioni = []
-        tab = opz + dim_opz
-        for k in range(nsez):
-            nome = d[tab + 40 * k:tab + 40 * k + 8].rstrip(b"\x00").decode("ascii", "replace")
+            raise DotnetError("non e' un assembly .NET (manca l'intestazione CLI)")
+        self.sections = []
+        tab = opt + opt_size
+        for k in range(nsect):
+            name = d[tab + 40 * k:tab + 40 * k + 8].rstrip(b"\x00").decode("ascii", "replace")
             vdim, vrva, rdim, rpos = struct.unpack_from("<IIII", d, tab + 40 * k + 8)
-            self.sezioni.append((nome, vrva, vdim, rpos, rdim))
-        cli_rva, cli_dim = struct.unpack_from("<II", d, dir_dati + 14 * 8)
+            self.sections.append((name, vrva, vdim, rpos, rdim))
+        cli_rva, cli_size = struct.unpack_from("<II", d, data_dirs + 14 * 8)
         if not cli_rva:
-            raise ErroreDotnet("non e' un assembly .NET (intestazione CLI vuota)")
+            raise DotnetError("non e' un assembly .NET (intestazione CLI vuota)")
         c = self.offset(cli_rva)
-        (_, self.cli_major, self.cli_minor, self.meta_rva, self.meta_dim, self.cli_flags, self.entry_token,
-         self.risorse_rva, self.risorse_dim, self.firma_rva, self.firma_dim) = struct.unpack_from("<IHHIIIIIIII", d, c)
+        (_, self.cli_major, self.cli_minor, self.meta_rva, self.meta_size, self.cli_flags, self.entry_token,
+         self.resources_rva, self.resources_size, self.signature_rva,
+         self.signature_size) = struct.unpack_from("<IHHIIIIIIII", d, c)
 
     def offset(self, rva):
-        for _, vrva, vdim, rpos, rdim in self.sezioni:
+        for _, vrva, vdim, rpos, rdim in self.sections:
             if vrva <= rva < vrva + max(vdim, rdim):
                 return rva - vrva + rpos
-        raise ErroreDotnet("RVA 0x%x fuori dalle sezioni" % rva)
+        raise DotnetError("RVA 0x%x fuori dalle sezioni" % rva)
 
     @property
-    def solo_32bit(self):
+    def only_32bit(self):
         """True if the assembly requires a 32-bit process (COMIMAGE_FLAGS_32BITREQUIRED without 32BITPREFERRED)."""
         return bool(self.cli_flags & 0x2) and not (self.cli_flags & 0x20000)
 
     @property
-    def firmato(self):
+    def signed(self):
         """True if it has a strong name signature."""
-        return bool(self.cli_flags & 0x8) and self.firma_dim > 0
+        return bool(self.cli_flags & 0x8) and self.signature_size > 0
 
     # metadata ------------------------------------------------------------------------------------
-    def _metadati(self):
-        d = self.dati
+    def _metadata(self):
+        d = self.data
         base = self.offset(self.meta_rva)
         if struct.unpack_from("<I", d, base)[0] != 0x424A5342:
-            raise ErroreDotnet("firma dei metadati non valida")
-        lung = struct.unpack_from("<I", d, base + 12)[0]
-        self.versione_runtime = d[base + 16:base + 16 + lung].split(b"\x00")[0].decode("ascii", "replace")
-        pos = base + 16 + lung + 2
-        n_flussi = struct.unpack_from("<H", d, pos)[0]
+            raise DotnetError("firma dei metadati non valida")
+        length = struct.unpack_from("<I", d, base + 12)[0]
+        self.runtime_version = d[base + 16:base + 16 + length].split(b"\x00")[0].decode("ascii", "replace")
+        pos = base + 16 + length + 2
+        n_streams = struct.unpack_from("<H", d, pos)[0]
         pos += 2
-        self.flussi = {}
-        for _ in range(n_flussi):
+        self.streams = {}
+        for _ in range(n_streams):
             off, dim = struct.unpack_from("<II", d, pos)
-            nome = _cstr(d, pos + 8)
-            pos += 8 + ((len(nome) + 4) & ~3)
-            self.flussi[nome] = (base + off, dim)
-        tabelle = self.flussi.get("#~") or self.flussi.get("#-")
-        if not tabelle:
-            raise ErroreDotnet("flusso delle tabelle dei metadati mancante")
-        self._tabelle(*tabelle)
+            name = _cstr(d, pos + 8)
+            pos += 8 + ((len(name) + 4) & ~3)
+            self.streams[name] = (base + off, dim)
+        tables = self.streams.get("#~") or self.streams.get("#-")
+        if not tables:
+            raise DotnetError("flusso delle tabelle dei metadati mancante")
+        self._tables(*tables)
 
-    def _heap(self, nome):
-        if nome not in self.flussi:
+    def _heap(self, name):
+        if name not in self.streams:
             return b""
-        pos, dim = self.flussi[nome]
-        return self.dati[pos:pos + dim]
+        pos, dim = self.streams[name]
+        return self.data[pos:pos + dim]
 
-    def _tabelle(self, pos, _dim):
-        d = self.dati
-        heap_dim = d[pos + 6]
-        valide = struct.unpack_from("<Q", d, pos + 8)[0]
+    def _tables(self, pos, _size):
+        d = self.data
+        heap_size = d[pos + 6]
+        valid_mask = struct.unpack_from("<Q", d, pos + 8)[0]
         p = pos + 24
-        self.righe = {}
+        self.lines = {}
         for t in range(64):
-            if valide >> t & 1:
-                self.righe[t] = struct.unpack_from("<I", d, p)[0]
+            if valid_mask >> t & 1:
+                self.lines[t] = struct.unpack_from("<I", d, p)[0]
                 p += 4
-        if heap_dim & 0x40:  # extra data (rare)
+        if heap_size & 0x40:  # extra data (rare)
             p += 4
-        self._dim_str = 4 if heap_dim & 1 else 2
-        self._dim_guid = 4 if heap_dim & 2 else 2
-        self._dim_blob = 4 if heap_dim & 4 else 2
-        sconosciute = [t for t in self.righe if t not in TABELLE]
-        if sconosciute:
-            raise ErroreDotnet("tabelle di metadati sconosciute: %s" % sconosciute)
-        self._colonne, self._inizio, self._dim_riga = {}, {}, {}
-        for t in sorted(self.righe):
-            larghezze = [self._larghezza(c) for c in TABELLE[t][1]]
-            self._colonne[t] = larghezze
-            self._dim_riga[t] = sum(larghezze)
-            self._inizio[t] = p
-            p += self._dim_riga[t] * self.righe[t]
+        self._str_size = 4 if heap_size & 1 else 2
+        self._guid_size = 4 if heap_size & 2 else 2
+        self._blob_size = 4 if heap_size & 4 else 2
+        unknowns = [t for t in self.lines if t not in TABLES]
+        if unknowns:
+            raise DotnetError("tabelle di metadati sconosciute: %s" % unknowns)
+        self._columns, self._start, self._row_size = {}, {}, {}
+        for t in sorted(self.lines):
+            widths = [self._width(c) for c in TABLES[t][1]]
+            self._columns[t] = widths
+            self._row_size[t] = sum(widths)
+            self._start[t] = p
+            p += self._row_size[t] * self.lines[t]
         self._str = self._heap("#Strings")
         self._blob = self._heap("#Blob")
         self._us = self._heap("#US")
 
-    def _larghezza(self, colonna):
-        if isinstance(colonna, int):
-            return colonna
-        if colonna == "s":
-            return self._dim_str
-        if colonna == "g":
-            return self._dim_guid
-        if colonna == "b":
-            return self._dim_blob
-        tipo, val = colonna
-        if tipo == "t":
-            return 2 if self.righe.get(val, 0) < 0x10000 else 4
-        bit, tab = CODIFICATI[val]
-        massimo = max(self.righe.get(t, 0) for t in tab if t is not None)
-        return 2 if massimo < (1 << (16 - bit)) else 4
+    def _width(self, column):
+        if isinstance(column, int):
+            return column
+        if column == "s":
+            return self._str_size
+        if column == "g":
+            return self._guid_size
+        if column == "b":
+            return self._blob_size
+        kind, val = column
+        if kind == "t":
+            return 2 if self.lines.get(val, 0) < 0x10000 else 4
+        bit, tab = CODED_INDEXES[val]
+        maximum = max(self.lines.get(t, 0) for t in tab if t is not None)
+        return 2 if maximum < (1 << (16 - bit)) else 4
 
-    def riga(self, tabella, indice):
+    def line(self, table, idx):
         """Raw values of row 'indice' (from 1) of the table."""
-        if not 1 <= indice <= self.righe.get(tabella, 0):
-            raise ErroreDotnet("riga %d fuori dalla tabella %s" % (indice, TABELLE[tabella][0]))
-        p = self._inizio[tabella] + (indice - 1) * self._dim_riga[tabella]
-        valori = []
-        for larghezza in self._colonne[tabella]:
-            valori.append(int.from_bytes(self.dati[p:p + larghezza], "little"))
-            p += larghezza
-        return valori
+        if not 1 <= idx <= self.lines.get(table, 0):
+            raise DotnetError("riga %d fuori dalla tabella %s" % (idx, TABLES[table][0]))
+        p = self._start[table] + (idx - 1) * self._row_size[table]
+        values = []
+        for width in self._columns[table]:
+            values.append(int.from_bytes(self.data[p:p + width], "little"))
+            p += width
+        return values
 
-    def righe_di(self, tabella):
-        return [self.riga(tabella, i) for i in range(1, self.righe.get(tabella, 0) + 1)]
+    def rows_of(self, table):
+        return [self.line(table, i) for i in range(1, self.lines.get(table, 0) + 1)]
 
-    def stringa(self, indice):
-        return _cstr(self._str, indice) if indice else ""
+    def read_string(self, idx):
+        return _cstr(self._str, idx) if idx else ""
 
-    def blob(self, indice):
-        if not indice:
+    def blob(self, idx):
+        if not idx:
             return b""
-        n, p = leggi_compresso(self._blob, indice)
+        n, p = read_compressed(self._blob, idx)
         return self._blob[p:p + n]
 
     @staticmethod
-    def decodifica(codificato, tipo):
+    def decode(encoded, kind):
         """Coded index -> (table, row)."""
-        bit, tab = CODIFICATI[tipo]
-        return tab[codificato & ((1 << bit) - 1)], codificato >> bit
+        bit, tab = CODED_INDEXES[kind]
+        return tab[encoded & ((1 << bit) - 1)], encoded >> bit
 
     # high-level information ----------------------------------------------------------------------
-    def identita(self):
+    def identity(self):
         """Name, version, culture and public key of the assembly."""
-        if not self.righe.get(0x20):
-            raise ErroreDotnet("manca la tabella Assembly (e' un modulo, non un assembly)")
-        _, ma, mi, bu, re, flags, chiave, nome, cultura = self.riga(0x20, 1)
-        return {"nome": self.stringa(nome), "versione": "%d.%d.%d.%d" % (ma, mi, bu, re),
-                "cultura": self.stringa(cultura), "chiave_pubblica": self.blob(chiave).hex(), "flags": flags}
+        if not self.lines.get(0x20):
+            raise DotnetError("manca la tabella Assembly (e' un modulo, non un assembly)")
+        _, ma, mi, bu, re, flags, key, name, culture = self.line(0x20, 1)
+        return {"nome": self.read_string(name), "versione": "%d.%d.%d.%d" % (ma, mi, bu, re),
+                "cultura": self.read_string(culture), "chiave_pubblica": self.blob(key).hex(), "flags": flags}
 
-    def riferimenti(self):
+    def references(self):
         """Referenced assemblies: [(name, version)]."""
-        return [(self.stringa(r[6]), "%d.%d.%d.%d" % tuple(r[:4])) for r in self.righe_di(0x23)]
+        return [(self.read_string(r[6]), "%d.%d.%d.%d" % tuple(r[:4])) for r in self.rows_of(0x23)]
 
-    def risorse(self):
+    def resources(self):
         """Embedded resources: {name: (offset of the data in the file, length)}."""
-        uscita = {}
-        for offset, _flags, nome, impl in self.righe_di(0x28):
+        output = {}
+        for offset, _flags, name, impl in self.rows_of(0x28):
             if impl:  # resource in another file/assembly
                 continue
-            if not self.risorse_rva:
-                raise ErroreDotnet("risorse dichiarate ma directory delle risorse assente")
-            p = self.offset(self.risorse_rva) + offset
-            n = struct.unpack_from("<I", self.dati, p)[0]
-            if offset + 4 + n > self.risorse_dim:
-                raise ErroreDotnet("risorsa %s oltre la directory delle risorse" % self.stringa(nome))
-            uscita[self.stringa(nome)] = (p + 4, n)
-        return uscita
+            if not self.resources_rva:
+                raise DotnetError("risorse dichiarate ma directory delle risorse assente")
+            p = self.offset(self.resources_rva) + offset
+            n = struct.unpack_from("<I", self.data, p)[0]
+            if offset + 4 + n > self.resources_size:
+                raise DotnetError("risorsa %s oltre la directory delle risorse" % self.read_string(name))
+            output[self.read_string(name)] = (p + 4, n)
+        return output
 
-    def leggi_risorsa(self, nome):
-        p, n = self.risorse()[nome]
-        return self.dati[p:p + n]
+    def read_resource(self, name):
+        p, n = self.resources()[name]
+        return self.data[p:p + n]
 
-    def _nome_tipo(self, tabella, riga):
-        if tabella == 0x01:
-            _, nome, spazio = self.riga(0x01, riga)
-        elif tabella == 0x02:
-            _, nome, spazio, _, _, _ = self.riga(0x02, riga)
+    def _type_name(self, table, line):
+        if table == 0x01:
+            _, name, space = self.line(0x01, line)
+        elif table == 0x02:
+            _, name, space, _, _, _ = self.line(0x02, line)
         else:
             return ""
-        return (self.stringa(spazio) + "." if spazio else "") + self.stringa(nome)
+        return (self.read_string(space) + "." if space else "") + self.read_string(name)
 
-    def attributi_assembly(self):
+    def assembly_attributes(self):
         """Attributes of the assembly: [(full name of the type, blob of the value)]."""
-        uscita = []
-        for genitore, tipo, valore in self.righe_di(0x0C):
-            tab, r = self.decodifica(genitore, "HasCustomAttribute")
+        output = []
+        for parent, kind, value_ in self.rows_of(0x0C):
+            tab, r = self.decode(parent, "HasCustomAttribute")
             if tab != 0x20:
                 continue
-            tab_c, r_c = self.decodifica(tipo, "CustomAttributeType")
-            nome = ""
+            tab_c, r_c = self.decode(kind, "CustomAttributeType")
+            name = ""
             if tab_c == 0x0A:
-                classe, _, _ = self.riga(0x0A, r_c)
-                nome = self._nome_tipo(*self.decodifica(classe, "MemberRefParent"))
+                class_, _, _ = self.line(0x0A, r_c)
+                name = self._type_name(*self.decode(class_, "MemberRefParent"))
             elif tab_c == 0x06:  # constructor defined in the same assembly: look for the owning type
-                nome = self._tipo_del_metodo(r_c)
-            uscita.append((nome, self.blob(valore)))
-        return uscita
+                name = self._declaring_type(r_c)
+            output.append((name, self.blob(value_)))
+        return output
 
-    def _tipo_del_metodo(self, metodo):
-        tipi = self.righe_di(0x02)
-        for i, t in enumerate(tipi):
-            inizio = t[5]
-            fine = tipi[i + 1][5] if i + 1 < len(tipi) else self.righe.get(0x06, 0) + 1
-            if inizio <= metodo < fine:
-                return self._nome_tipo(0x02, i + 1)
+    def _declaring_type(self, method):
+        kinds = self.rows_of(0x02)
+        for i, t in enumerate(kinds):
+            start = t[5]
+            end = kinds[i + 1][5] if i + 1 < len(kinds) else self.lines.get(0x06, 0) + 1
+            if start <= method < end:
+                return self._type_name(0x02, i + 1)
         return ""
 
-    def lingua_neutra(self):
+    def neutral_language(self):
         """Value of [assembly: NeutralResourcesLanguage("..")] and fallback location (0 = MainAssembly)."""
-        for nome, valore in self.attributi_assembly():
-            if nome == "System.Resources.NeutralResourcesLanguageAttribute" and valore[:2] == b"\x01\x00":
-                if valore[2] == 0xFF:
+        for name, value_ in self.assembly_attributes():
+            if name == "System.Resources.NeutralResourcesLanguageAttribute" and value_[:2] == b"\x01\x00":
+                if value_[2] == 0xFF:
                     return None, 0
-                n, p = leggi_compresso(valore, 2)
-                cultura = valore[p:p + n].decode("utf-8")
+                n, p = read_compressed(value_, 2)
+                culture = value_[p:p + n].decode("utf-8")
                 p += n
-                posizione = struct.unpack_from("<i", valore, p)[0] if len(valore) >= p + 4 + 2 else 0
-                return cultura, posizione
+                position = struct.unpack_from("<i", value_, p)[0] if len(value_) >= p + 4 + 2 else 0
+                return culture, position
         return None, None
 
-    def versione_satelliti(self):
+    def satellite_version(self):
         """Version the satellites must have: [SatelliteContractVersion] if present, otherwise its own."""
-        for nome, valore in self.attributi_assembly():
-            if (nome == "System.Resources.SatelliteContractVersionAttribute" and valore[:2] == b"\x01\x00"
-                    and len(valore) > 2 and valore[2] != 0xFF):
-                n, p = leggi_compresso(valore, 2)
-                parti = valore[p:p + n].decode("utf-8", "replace").strip().split(".")
+        for name, value_ in self.assembly_attributes():
+            if (name == "System.Resources.SatelliteContractVersionAttribute" and value_[:2] == b"\x01\x00"
+                    and len(value_) > 2 and value_[2] != 0xFF):
+                n, p = read_compressed(value_, 2)
+                parts = value_[p:p + n].decode("utf-8", "replace").strip().split(".")
                 # like csc for AssemblyVersion: "1.0" becomes "1.0.0.0"
-                if 2 <= len(parti) <= 4 and all(x.isdigit() and int(x) < 65535 for x in parti):
-                    return ".".join(str(int(x)) for x in parti + ["0"] * (4 - len(parti)))
-        return self.identita()["versione"]
+                if 2 <= len(parts) <= 4 and all(x.isdigit() and int(x) < 65535 for x in parts):
+                    return ".".join(str(int(x)) for x in parts + ["0"] * (4 - len(parts)))
+        return self.identity()["versione"]
 
-    def stringhe_codice(self):
+    def code_strings(self):
         """Strings of the #US heap (literals written in the code), in order of appearance."""
-        us, uscita, p = self._us, [], 1
+        us, output, p = self._us, [], 1
         while p < len(us):
-            n, q = leggi_compresso(us, p)
+            n, q = read_compressed(us, p)
             if n == 0:
                 p = q
                 continue
-            uscita.append(us[q:q + n - 1].decode("utf-16-le", "replace"))
+            output.append(us[q:q + n - 1].decode("utf-16-le", "replace"))
             p = q + n
-        return uscita
+        return output
 
 
 # --- .resources files (System.Resources.ResourceWriter) ----------------------------------------
 
-MAGIC_RISORSE = 0xBEEFCACE
-LETTORE_PREDEFINITO = ("System.Resources.ResourceReader, mscorlib, Version=4.0.0.0, Culture=neutral, "
+MAGIC_RESOURCES = 0xBEEFCACE
+DEFAULT_READER = ("System.Resources.ResourceReader, mscorlib, Version=4.0.0.0, Culture=neutral, "
                        "PublicKeyToken=b77a5c561934e089")
-INSIEME_PREDEFINITO = "System.Resources.RuntimeResourceSet"
-TIPO_STRINGA = 1
-TIPO_NULL = 0
+DEFAULT_RESOURCE_SET = "System.Resources.RuntimeResourceSet"
+KIND_STRING = 1
+KIND_NULL = 0
 
 
-def _leggi_7bit(dati, pos):
-    valore = spostamento = 0
+def _read_7bit(data, pos):
+    value_ = shift = 0
     while True:
-        b = dati[pos]
+        b = data[pos]
         pos += 1
-        valore |= (b & 0x7F) << spostamento
+        value_ |= (b & 0x7F) << shift
         if not b & 0x80:
-            return valore, pos
-        spostamento += 7
-        if spostamento > 35:
-            raise ErroreDotnet("intero a 7 bit non valido")
+            return value_, pos
+        shift += 7
+        if shift > 35:
+            raise DotnetError("intero a 7 bit non valido")
 
 
-def _scrivi_7bit(n):
-    uscita = bytearray()
+def _write_7bit(n):
+    output = bytearray()
     while True:
         b = n & 0x7F
         n >>= 7
         if n:
-            uscita.append(b | 0x80)
+            output.append(b | 0x80)
         else:
-            uscita.append(b)
-            return bytes(uscita)
+            output.append(b)
+            return bytes(output)
 
 
-def _stringa_bw(dati, pos, codifica="utf-8"):
+def _string_bw(data, pos, encoding="utf-8"):
     """String as BinaryWriter writes it: length in bytes (7 bit) + text."""
-    n, pos = _leggi_7bit(dati, pos)
-    return dati[pos:pos + n].decode(codifica, "surrogatepass"), pos + n
+    n, pos = _read_7bit(data, pos)
+    return data[pos:pos + n].decode(encoding, "surrogatepass"), pos + n
 
 
-def _scrivi_stringa_bw(testo, codifica="utf-8"):
-    b = testo.encode(codifica, "surrogatepass")
-    return _scrivi_7bit(len(b)) + b
+def _write_string_bw(text, encoding="utf-8"):
+    b = text.encode(encoding, "surrogatepass")
+    return _write_7bit(len(b)) + b
 
 
-def hash_nome(nome):
+def hash_name(name):
     """FastResourceComparer.HashFunction of .NET (djb2 with xor, on the UTF-16 characters)."""
     h = 5381
-    for unita in struct.unpack("<%dH" % (len(nome.encode("utf-16-le", "surrogatepass")) // 2),
-                               nome.encode("utf-16-le", "surrogatepass")):
-        h = (((h << 5) + h) & 0xFFFFFFFF) ^ unita
+    for units in struct.unpack("<%dH" % (len(name.encode("utf-16-le", "surrogatepass")) // 2),
+                               name.encode("utf-16-le", "surrogatepass")):
+        h = (((h << 5) + h) & 0xFFFFFFFF) ^ units
     return struct.unpack("<i", struct.pack("<I", h))[0]
 
 
-def leggi_resources(dati):
+def read_resources(data):
     """.resources file -> {"lettore", "insieme", "versione", "tipi", "voci": [(name, type_code, value)]}.
 
     The entries are in the order of the data section. Non-string values stay raw bytes (untouched)."""
     try:
-        return _leggi_resources(dati)
+        return _read_resources(data)
     except (struct.error, IndexError, UnicodeDecodeError) as e:
-        raise ErroreDotnet("file .resources non valido (%s)" % e) from e
+        raise DotnetError("file .resources non valido (%s)" % e) from e
 
 
-def _leggi_resources(dati):
-    if len(dati) < 12 or struct.unpack_from("<I", dati, 0)[0] != MAGIC_RISORSE:
-        raise ErroreDotnet("non e' un file .resources")
-    versione_testa, salto = struct.unpack_from("<ii", dati, 4)
-    if versione_testa != 1:
-        raise ErroreDotnet("intestazione .resources versione %d non supportata" % versione_testa)
-    lettore, p = _stringa_bw(dati, 12)
-    insieme, p = _stringa_bw(dati, p)
-    if p != 12 + salto:
-        raise ErroreDotnet("intestazione .resources non coerente")
-    versione, n, n_tipi = struct.unpack_from("<iii", dati, p)
+def _read_resources(data):
+    if len(data) < 12 or struct.unpack_from("<I", data, 0)[0] != MAGIC_RESOURCES:
+        raise DotnetError("non e' un file .resources")
+    header_version, skip_bytes = struct.unpack_from("<ii", data, 4)
+    if header_version != 1:
+        raise DotnetError("intestazione .resources versione %d non supportata" % header_version)
+    reader, p = _string_bw(data, 12)
+    item_set, p = _string_bw(data, p)
+    if p != 12 + skip_bytes:
+        raise DotnetError("intestazione .resources non coerente")
+    version, n, n_types = struct.unpack_from("<iii", data, p)
     p += 12
-    if versione not in (1, 2):
-        raise ErroreDotnet(".resources versione %d non supportata" % versione)
-    tipi = []
-    for _ in range(n_tipi):
-        t, p = _stringa_bw(dati, p)
-        tipi.append(t)
-    inizio_pad = p
+    if version not in (1, 2):
+        raise DotnetError(".resources versione %d non supportata" % version)
+    kinds = []
+    for _ in range(n_types):
+        t, p = _string_bw(data, p)
+        kinds.append(t)
+    pad_start = p
     while p % 8:
         p += 1
-    if dati[inizio_pad:p] != b"PADPADP"[:p - inizio_pad]:
-        raise ErroreDotnet("riempimento .resources inatteso")
-    hash_ = struct.unpack_from("<%di" % n, dati, p)
+    if data[pad_start:p] != b"PADPADP"[:p - pad_start]:
+        raise DotnetError("riempimento .resources inatteso")
+    hash_ = struct.unpack_from("<%di" % n, data, p)
     p += 4 * n
-    posizioni = struct.unpack_from("<%di" % n, dati, p)
+    positions = struct.unpack_from("<%di" % n, data, p)
     p += 4 * n
-    inizio_dati = struct.unpack_from("<i", dati, p)[0]
-    inizio_nomi = p + 4
-    voci = []
-    for h, pos_nome in zip(hash_, posizioni):
-        nome, q = _stringa_bw(dati, inizio_nomi + pos_nome, "utf-16-le")
-        if hash_nome(nome) != h:
-            raise ErroreDotnet("hash del nome '%s' non corrisponde" % nome)
-        off_dato = struct.unpack_from("<i", dati, q)[0]
-        voci.append((off_dato, nome))
-    ordine_hash = [nome for _, nome in voci]  # order of the hash list (matters for names with the same hash)
-    voci.sort()
-    risultato = []
-    for k, (off_dato, nome) in enumerate(voci):
-        q = inizio_dati + off_dato
-        fine = inizio_dati + voci[k + 1][0] if k + 1 < len(voci) else len(dati)
-        if versione == 2:
-            codice, q2 = _leggi_7bit(dati, q)
+    data_start = struct.unpack_from("<i", data, p)[0]
+    names_start = p + 4
+    entries = []
+    for h, pos_name in zip(hash_, positions):
+        name, q = _string_bw(data, names_start + pos_name, "utf-16-le")
+        if hash_name(name) != h:
+            raise DotnetError("hash del nome '%s' non corrisponde" % name)
+        off_data = struct.unpack_from("<i", data, q)[0]
+        entries.append((off_data, name))
+    hash_order = [name for _, name in entries]  # order of the hash list (matters for names with the same hash)
+    entries.sort()
+    result = []
+    for k, (off_data, name) in enumerate(entries):
+        q = data_start + off_data
+        end = data_start + entries[k + 1][0] if k + 1 < len(entries) else len(data)
+        if version == 2:
+            code, q2 = _read_7bit(data, q)
         else:
-            codice_v1, q2 = _leggi_7bit(dati, q)  # v1: index into the types table (-1 = null)
-            codice = TIPO_STRINGA if 0 <= codice_v1 < len(tipi) and tipi[codice_v1].startswith("System.String") \
-                else ("v1", codice_v1)
-        if codice == TIPO_STRINGA:
-            valore, q3 = _stringa_bw(dati, q2)
-            if q3 != fine:
-                raise ErroreDotnet("stringa della risorsa '%s' non coerente" % nome)
+            v1_code, q2 = _read_7bit(data, q)  # v1: index into the types table (-1 = null)
+            code = KIND_STRING if 0 <= v1_code < len(kinds) and kinds[v1_code].startswith("System.String") \
+                else ("v1", v1_code)
+        if code == KIND_STRING:
+            value_, q3 = _string_bw(data, q2)
+            if q3 != end:
+                raise DotnetError("stringa della risorsa '%s' non coerente" % name)
         else:
-            valore = dati[q2:fine]
-        risultato.append((nome, codice, valore))
-    return {"lettore": lettore, "insieme": insieme, "versione": versione, "tipi": tipi,
-            "voci": risultato, "ordine_hash": ordine_hash}
+            value_ = data[q2:end]
+        result.append((name, code, value_))
+    return {"lettore": reader, "insieme": item_set, "versione": version, "tipi": kinds,
+            "voci": result, "ordine_hash": hash_order}
 
 
-def scrivi_resources(info, nuove=None):
+def write_resources(info, new_lines=None):
     """Rewrites a version 2 .resources like ResourceWriter. nuove: {name: text} replaces the strings.
 
     Non-string entries are copied identically. Order and headers as in the file read."""
     if info["versione"] != 2:
-        raise ErroreDotnet("scrittura supportata solo per .resources versione 2")
-    nuove = nuove or {}
-    testa = _scrivi_stringa_bw(info["lettore"]) + _scrivi_stringa_bw(info["insieme"])
-    uscita = bytearray(struct.pack("<Iii", MAGIC_RISORSE, 1, len(testa)) + testa)
-    voci = info["voci"]
-    uscita += struct.pack("<iii", 2, len(voci), len(info["tipi"]))
+        raise DotnetError("scrittura supportata solo per .resources versione 2")
+    new_lines = new_lines or {}
+    head = _write_string_bw(info["lettore"]) + _write_string_bw(info["insieme"])
+    output = bytearray(struct.pack("<Iii", MAGIC_RESOURCES, 1, len(head)) + head)
+    entries = info["voci"]
+    output += struct.pack("<iii", 2, len(entries), len(info["tipi"]))
     for t in info["tipi"]:
-        uscita += _scrivi_stringa_bw(t)
+        output += _write_string_bw(t)
     k = 0
-    while len(uscita) % 8:
-        uscita += b"PAD"[k % 3:k % 3 + 1]
+    while len(output) % 8:
+        output += b"PAD"[k % 3:k % 3 + 1]
         k += 1
-    nomi, dati_sez, elenco = bytearray(), bytearray(), []
-    rango = {nome: k for k, nome in enumerate(info.get("ordine_hash", []))}
-    for k, (nome, codice, valore) in enumerate(voci):
-        elenco.append((hash_nome(nome), rango.get(nome, len(rango) + k), len(nomi)))
-        nomi += _scrivi_stringa_bw(nome, "utf-16-le") + struct.pack("<i", len(dati_sez))
-        if codice == TIPO_STRINGA:
-            testo = nuove.get(nome, valore)
-            dati_sez += _scrivi_7bit(TIPO_STRINGA) + _scrivi_stringa_bw(testo)
+    names, section_data, items = bytearray(), bytearray(), []
+    rank = {name: k for k, name in enumerate(info.get("ordine_hash", []))}
+    for k, (name, code, value_) in enumerate(entries):
+        items.append((hash_name(name), rank.get(name, len(rank) + k), len(names)))
+        names += _write_string_bw(name, "utf-16-le") + struct.pack("<i", len(section_data))
+        if code == KIND_STRING:
+            text = new_lines.get(name, value_)
+            section_data += _write_7bit(KIND_STRING) + _write_string_bw(text)
         else:
-            dati_sez += _scrivi_7bit(codice) + valore
+            section_data += _write_7bit(code) + value_
     # hashes in ascending order; for equal hashes the order of the file read is kept (any order is valid:
     # ResourceReader checks all the names with the same hash)
-    elenco.sort(key=lambda v: (v[0], v[1]))
-    uscita += struct.pack("<%di" % len(elenco), *[h for h, _, _ in elenco])
-    uscita += struct.pack("<%di" % len(elenco), *[p for _, _, p in elenco])
-    uscita += struct.pack("<i", len(uscita) + 4 + len(nomi))
-    return bytes(uscita + nomi + dati_sez)
+    items.sort(key=lambda v: (v[0], v[1]))
+    output += struct.pack("<%di" % len(items), *[h for h, _, _ in items])
+    output += struct.pack("<%di" % len(items), *[p for _, _, p in items])
+    output += struct.pack("<i", len(output) + 4 + len(names))
+    return bytes(output + names + section_data)
 
 
-def stringhe_resources(info):
+def resources_strings(info):
     """{name: text} of the string resources only."""
-    return {nome: valore for nome, codice, valore in info["voci"] if codice == TIPO_STRINGA}
+    return {name: value_ for name, code, value_ in info["voci"] if code == KIND_STRING}

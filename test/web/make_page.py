@@ -5,12 +5,12 @@ Usage: python -I test/web/make_page.py   (then open index-inline.html in a brows
 import os
 import sys
 
-QUI = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.dirname(os.path.dirname(QUI)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 from patchsmith import adapter_webui as w  # noqa: E402
 
-DIZIONARIO = {
+DICTIONARY = {
     "Quit Game": "Esci dal gioco", "Continue": "Continua", "Text size": "Dimensione testo",
     "The menu music is playing now. Drag the": "La musica del menu è in riproduzione. Trascina il",
     "Music": "Musica", "Open menu": "Apri menu", "Search…": "Cerca…", "Score": "Punteggio",
@@ -22,7 +22,7 @@ DIZIONARIO = {
     "PLAY": "GIOCA",  # one-word button, all upper case
 }
 
-PAGINA = """<!doctype html>
+PAGE = """<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
@@ -64,12 +64,12 @@ PAGINA = """<!doctype html>
 
 
 def main():
-    script = w.genera_script(DIZIONARIO)
-    pagina = w.inserisci_tag(PAGINA).replace(
+    script = w.generate_script(DICTIONARY)
+    page = w.insert_tag(PAGE).replace(
         w.TAG, "<script>\n" + script + "\n</script>")
-    with open(os.path.join(QUI, "index-inline.html"), "w", encoding="utf-8") as f:
-        f.write(pagina)
-    print("scritto", os.path.join(QUI, "index-inline.html"))
+    with open(os.path.join(HERE, "index-inline.html"), "w", encoding="utf-8") as f:
+        f.write(page)
+    print("scritto", os.path.join(HERE, "index-inline.html"))
 
 
 if __name__ == "__main__":

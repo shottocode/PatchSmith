@@ -3,11 +3,11 @@
 The program's texts are written in Italian in the code. The other languages are in
 patchsmith/ui_language/<codice>.json:
     {"nome": "English", "bandiera": {"tipo": "gb"}, "testi": {"testo italiano": "traduzione", ...}}
-Translation happens when the window shows a text (aggancia_tk: buttons, labels, titles, menus, values of drop-down
-menus; TestoVar for status lines; traduci() for the log), also for texts with values inside: an entry with %s, %d...
+Translation happens when the window shows a text (hook_tk: buttons, labels, titles, menus, values of drop-down
+menus; TextVar for status lines; translate() for the log), also for texts with values inside: an entry with %s, %d...
 ("Testi del gioco: %d, gia' tradotti: %d") works as a template for all the lines of that form. Texts without a
 translation stay in Italian. The original texts stay remembered in the widgets: when the language changes,
-ritraduci() puts the ones already shown back in the new language without reopening the program.
+retranslate() puts the ones already shown back in the new language without reopening the program.
 
 To add a language: the command line command "interface --create fr" (translates all the texts with the local
 translator; those already in the file stay) and then review the file patchsmith/ui_language/fr.json by hand. The flag
@@ -20,453 +20,455 @@ import os
 import re
 import weakref
 
-CARTELLA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_language")
-SORGENTE = "it"
-ITALIANO = {"nome": "Italiano", "bandiera": {"verticali": ["#009246", "#ffffff", "#ce2b37"]}}
+FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_language")
+SOURCE = "it"
+ITALIAN = {"nome": "Italiano", "bandiera": {"verticali": ["#009246", "#ffffff", "#ce2b37"]}}
 # placeholders of the program's texts: %s, %d, %5.1f, %r, %(nome)s, %%
-_SEGNO = re.compile(r"%(?:\([^)]*\))?[-+ #0]*(?:\d+)?(?:\.\d+)?[sdrifxXceEgG%]")
+_MARKER = re.compile(r"%(?:\([^)]*\))?[-+ #0]*(?:\d+)?(?:\.\d+)?[sdrifxXceEgG%]")
 # what each placeholder matches in a line already written
-_VALORE = {"d": r"-?\d[\d.,']*", "i": r"-?\d[\d.,']*", "f": r"-?[\d.,]+", "x": r"[0-9a-fA-F]+", "%": r"%"}
+_VALUE = {"d": r"-?\d[\d.,']*", "i": r"-?\d[\d.,']*", "f": r"-?[\d.,]+", "x": r"[0-9a-fA-F]+", "%": r"%"}
 # at the start of log lines: indentation and markers ("! ", "~ ", "* ", "- ", "== ") that stay as they are
-_PREFISSO = re.compile(r"^(\s*(?:(?:!|~|\*|-|==)\s+)?)(.*?)(\s*)$", re.S)
-_stato = {"codice": SORGENTE, "testi": {}, "modelli": None}
-FISSO = "⁠"  # at the start of a text: it stays as it is in every language (e.g. the language names in their menu)
+_PREFIX = re.compile(r"^(\s*(?:(?:!|~|\*|-|==)\s+)?)(.*?)(\s*)$", re.S)
+_state = {"codice": SOURCE, "testi": {}, "modelli": None}
+VERBATIM = "⁠"  # at the start of a text: it stays as it is in every language (e.g. the language names in their menu)
 
 
 # --- available languages ---------------------------------------------------------------------------------------------
 
-def lingue():
+def languages():
     """{codice: {"nome", "bandiera"}}: Italian (the language of the code) and the files in patchsmith/ui_language/."""
-    uscita = {SORGENTE: ITALIANO}
+    output = {SOURCE: ITALIAN}
     try:
-        nomi = sorted(os.listdir(CARTELLA))
+        names = sorted(os.listdir(FOLDER))
     except OSError:
-        nomi = []
-    for nome in nomi:
-        codice, est = os.path.splitext(nome)
-        if est.lower() != ".json" or codice == SORGENTE:
+        names = []
+    for name in names:
+        code, ext = os.path.splitext(name)
+        if ext.lower() != ".json" or code == SOURCE:
             continue
         try:
-            with open(os.path.join(CARTELLA, nome), encoding="utf-8") as f:
-                dati = json.load(f)
+            with open(os.path.join(FOLDER, name), encoding="utf-8") as f:
+                data = json.load(f)
         except (OSError, ValueError):
             continue
-        uscita[codice] = {"nome": dati.get("nome") or codice, "bandiera": dati.get("bandiera") or {}}
-    return uscita
+        output[code] = {"nome": data.get("nome") or code, "bandiera": data.get("bandiera") or {}}
+    return output
 
 
-def predefinita():
+def default_language():
     """The interface language if none was chosen: PATCHSMITH_INTERFACCIA, then the Windows one if available, then
     English if available, then Italian."""
-    disponibili = lingue()
-    scelta = os.environ.get("PATCHSMITH_INTERFACCIA")
-    if scelta in disponibili:
-        return scelta
-    from .language import lingua_di_windows
-    windows = (lingua_di_windows() or "").split("-")[0].lower()
-    if windows in disponibili:
+    available = languages()
+    choice = os.environ.get("PATCHSMITH_INTERFACCIA")
+    if choice in available:
+        return choice
+    from .language import windows_language
+    windows = (windows_language() or "").split("-")[0].lower()
+    if windows in available:
         return windows
-    return "en" if "en" in disponibili else SORGENTE
+    return "en" if "en" in available else SOURCE
 
 
-def imposta(codice):
+def set_(code):
     """Uses the language 'codice' (if it is not available, Italian). Returns the one used."""
-    testi = {}
-    if codice != SORGENTE:
+    texts = {}
+    if code != SOURCE:
         try:
-            with open(os.path.join(CARTELLA, codice + ".json"), encoding="utf-8") as f:
-                testi = json.load(f).get("testi") or {}
+            with open(os.path.join(FOLDER, code + ".json"), encoding="utf-8") as f:
+                texts = json.load(f).get("testi") or {}
         except (OSError, ValueError):
-            codice = SORGENTE
-    _stato.update(codice=codice, testi={k: v for k, v in testi.items() if isinstance(v, str) and v}, modelli=None)
-    return codice
+            code = SOURCE
+    _state.update(codice=code, testi={k: v for k, v in texts.items() if isinstance(v, str) and v}, modelli=None)
+    return code
 
 
-def attuale():
-    return _stato["codice"]
+def current():
+    return _state["codice"]
 
 
 # --- translation -----------------------------------------------------------------------------------------------------
 
-def _regex_modello(chiave):
+def _template_regex(key):
     """(regex, segni) of an entry with placeholders, or None if it has none."""
-    segni = _SEGNO.findall(chiave)
-    if not segni:
+    markers = _MARKER.findall(key)
+    if not markers:
         return None
-    parti, posizione = [], 0
-    for m in _SEGNO.finditer(chiave):
-        parti.append(re.escape(chiave[posizione:m.start()]))
-        tipo = m.group()[-1]
-        parti.append("(%s)" % _VALORE.get(tipo, r".*?") if tipo != "%" else "%")
-        posizione = m.end()
-    parti.append(re.escape(chiave[posizione:]))
+    parts, position = [], 0
+    for m in _MARKER.finditer(key):
+        parts.append(re.escape(key[position:m.start()]))
+        kind = m.group()[-1]
+        parts.append("(%s)" % _VALUE.get(kind, r".*?") if kind != "%" else "%")
+        position = m.end()
+    parts.append(re.escape(key[position:]))
     try:
-        return re.compile("^" + "".join(parti) + "$", re.S), [s for s in segni if s != "%%"]
+        return re.compile("^" + "".join(parts) + "$", re.S), [s for s in markers if s != "%%"]
     except re.error:
         return None
 
 
-def _modelli():
-    if _stato["modelli"] is None:
-        modelli = {}
-        for chiave, valore in _stato["testi"].items():
-            if not _SEGNO.sub("", chiave).strip():  # placeholders only ("%s", "%s%s"): it would match everything
+def _models():
+    if _state["modelli"] is None:
+        models = {}
+        for key, value_ in _state["testi"].items():
+            if not _MARKER.sub("", key).strip():  # placeholders only ("%s", "%s%s"): it would match everything
                 continue
-            r = _regex_modello(chiave)
+            r = _template_regex(key)
             if r is None:
                 continue
-            inizio = _SEGNO.split(chiave)[0][:6]
-            modelli.setdefault(inizio, []).append((len(_SEGNO.sub("", chiave)), r[0], r[1], valore))
-        for elenco in modelli.values():  # first the templates with more fixed text (the most precise)
-            elenco.sort(key=lambda m: -m[0])
+            start = _MARKER.split(key)[0][:6]
+            models.setdefault(start, []).append((len(_MARKER.sub("", key)), r[0], r[1], value_))
+        for items in models.values():  # first the templates with more fixed text (the most precise)
+            items.sort(key=lambda m: -m[0])
         # last fallback: two pieces separated by ": " or in parentheses, each translated on its own
-        modelli[None] = [(0,) + _regex_modello(k) + (k,) for k in ("%s: %s", "%s (%s)", "%s - %s")]
-        _stato["modelli"] = modelli
-    return _stato["modelli"]
+        models[None] = [(0,) + _template_regex(k) + (k,) for k in ("%s: %s", "%s (%s)", "%s - %s")]
+        _state["modelli"] = models
+    return _state["modelli"]
 
 
-def _riempi(traduzione, segni, valori):
+def _fill(translation, markers, values):
     """The translation with the values in place of the placeholders: by type and in order (the translation may have
     moved them)."""
     code = {}
-    for s, v in zip(segni, valori):
+    for s, v in zip(markers, values):
         code.setdefault(s, []).append(v)
-    uscita, posizione = [], 0
-    for m in _SEGNO.finditer(traduzione):
-        uscita.append(traduzione[posizione:m.start()])
+    output, position = [], 0
+    for m in _MARKER.finditer(translation):
+        output.append(translation[position:m.start()])
         if m.group() == "%%":
-            uscita.append("%")
+            output.append("%")
         else:
-            coda = code.get(m.group())
-            uscita.append(coda.pop(0) if coda else m.group())
-        posizione = m.end()
-    uscita.append(traduzione[posizione:])
-    return "".join(uscita)
+            tail = code.get(m.group())
+            output.append(tail.pop(0) if tail else m.group())
+        position = m.end()
+    output.append(translation[position:])
+    return "".join(output)
 
 
-def _traduci_nucleo(testo, profondita=0):
-    if not testo or not _stato["testi"]:
-        return testo
-    t = _stato["testi"].get(testo)
+def _translate_core(text, depth=0):
+    if not text or not _state["testi"]:
+        return text
+    t = _state["testi"].get(text)
     if t is not None:
         return t
-    modelli = _modelli()
+    models = _models()
     # among the templates that start like the text, the one with more fixed text wins (the most precise), not the one
     # with the longest start: "%s: interfaccia, %d testi tradotti..." beats "index.html: %s"
-    migliore = None
-    for inizio in [testo[:n] for n in range(min(6, len(testo)), -1, -1)]:
-        for fisso, regex, segni, traduzione in modelli.get(inizio, ()):
-            if migliore is not None and fisso <= migliore[0]:
+    best = None
+    for start in [text[:n] for n in range(min(6, len(text)), -1, -1)]:
+        for verbatim, regex, markers, translation in models.get(start, ()):
+            if best is not None and verbatim <= best[0]:
                 break  # (sorted by fixed text: the others in the group are less precise)
-            m = regex.match(testo)
+            m = regex.match(text)
             if m:
-                migliore = (fisso, m, segni, traduzione)
+                best = (verbatim, m, markers, translation)
                 break
-    if migliore is None and profondita == 0:  # messages made of several sentences of the file one after the other
-        tradotto = _per_frasi(testo)
-        if tradotto != testo:
-            return tradotto
-    if migliore is None and profondita <= 1:  # fallbacks ("%s: %s", "%s (%s)"), also for the pieces inside a sentence
-        for fisso, regex, segni, traduzione in modelli[None]:
-            m = regex.match(testo)
+    if best is None and depth == 0:  # messages made of several sentences of the file one after the other
+        translated = _by_sentences(text)
+        if translated != text:
+            return translated
+    if best is None and depth <= 1:  # fallbacks ("%s: %s", "%s (%s)"), also for the pieces inside a sentence
+        for verbatim, regex, markers, translation in models[None]:
+            m = regex.match(text)
             if m:
-                migliore = (fisso, m, segni, traduzione)
+                best = (verbatim, m, markers, translation)
                 break
-    if migliore is None:
-        return testo
-    _fisso, m, segni, traduzione = migliore
-    valori = list(m.groups())
-    if profondita < 2:  # the pieces of text inside (e.g. " (387 da altri giochi)"): translated too
-        valori = [_traduci_pezzo(v, profondita + 1) if s[-1] in "sr" else v for s, v in zip(segni, valori)]
-    return _riempi(traduzione, segni, valori)
+    if best is None:
+        return text
+    _verbatim, m, markers, translation = best
+    values = list(m.groups())
+    if depth < 2:  # the pieces of text inside (e.g. " (387 da altri giochi)"): translated too
+        values = [_translate_piece(v, depth + 1) if s[-1] in "sr" else v for s, v in zip(markers, values)]
+    return _fill(translation, markers, values)
 
 
-def _per_frasi(testo):
+def _by_sentences(text):
     """The text split into sentences ("... evitano. Una frase con..."), translated in groups: from the start, the
     longest group of consecutive sentences that is in the file (an entry can have several sentences); the sentences
     that are not there stay as they were."""
-    parti = re.split(r"(?<=[.!?])( +)(?=[A-ZÀ-Ý\"«(\d])", testo)
-    frasi, spazi = parti[0::2], parti[1::2] + [""]
-    if len(frasi) < 2:
-        return testo
-    uscita, i = [], 0
-    while i < len(frasi):
-        for j in range(len(frasi), i, -1):
-            if (i, j) == (0, len(frasi)):
+    parts = re.split(r"(?<=[.!?])( +)(?=[A-ZÀ-Ý\"«(\d])", text)
+    sentences, spaces = parts[0::2], parts[1::2] + [""]
+    if len(sentences) < 2:
+        return text
+    output, i = [], 0
+    while i < len(sentences):
+        for j in range(len(sentences), i, -1):
+            if (i, j) == (0, len(sentences)):
                 continue  # (the whole text is already known not to be there)
-            pezzo = "".join(frasi[k] + spazi[k] for k in range(i, j - 1)) + frasi[j - 1]
-            tradotto = _traduci_nucleo(pezzo, 1)
-            if tradotto != pezzo or j == i + 1:
-                uscita.append(tradotto + spazi[j - 1])
+            piece = "".join(sentences[k] + spaces[k] for k in range(i, j - 1)) + sentences[j - 1]
+            translated = _translate_core(piece, 1)
+            if translated != piece or j == i + 1:
+                output.append(translated + spaces[j - 1])
                 i = j
                 break
-    return "".join(uscita)
+    return "".join(output)
 
 
-def _traduci_pezzo(testo, profondita=0):
-    m = _PREFISSO.match(testo)
-    prefisso, nucleo, coda = m.group(1), m.group(2), m.group(3)
-    if not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo):  # numbers and symbols: only an entry of the file (e.g. "A:" -> "To:")
-        return prefisso + _stato["testi"].get(nucleo, nucleo) + coda if nucleo else testo
-    return prefisso + _traduci_nucleo(nucleo, profondita) + coda
+def _translate_piece(text, depth=0):
+    m = _PREFIX.match(text)
+    prefix, core, tail = m.group(1), m.group(2), m.group(3)
+    if not re.search(r"[A-Za-zÀ-ÿ]{2}", core):  # numbers and symbols: only an entry of the file (e.g. "A:" -> "To:")
+        return prefix + _state["testi"].get(core, core) + tail if core else text
+    return prefix + _translate_core(core, depth) + tail
 
 
-def traduci(testo):
+def translate(text):
     """The text in the interface language (line by line; what is not in the file stays as it is)."""
-    if isinstance(testo, str) and testo.startswith(FISSO):
-        return testo[len(FISSO):]
-    if not isinstance(testo, str) or _stato["codice"] == SORGENTE or not _stato["testi"] or not testo.strip():
-        return testo
-    intero = _traduci_pezzo(testo)
-    if intero != testo or "\n" not in testo:
-        return intero
-    return "\n".join(_traduci_pezzo(riga) for riga in testo.split("\n"))
+    if isinstance(text, str) and text.startswith(VERBATIM):
+        return text[len(VERBATIM):]
+    if not isinstance(text, str) or _state["codice"] == SOURCE or not _state["testi"] or not text.strip():
+        return text
+    whole = _translate_piece(text)
+    if whole != text or "\n" not in text:
+        return whole
+    return "\n".join(_translate_piece(line) for line in text.split("\n"))
 
 
 # --- window (Tkinter) ------------------------------------------------------------------------------------------------
 
-_OPZIONI_TESTO = ("text", "label", "title", "message")
-_VARIABILI = weakref.WeakSet()  # the TestoVar objects, to translate again when the language changes
+_TEXT_OPTIONS = ("text", "label", "title", "message")
+_VARIABLES = weakref.WeakSet()  # the TextVar objects, to translate again when the language changes
 
 
-def _ricorda(widget, cnf):
+def _remember(widget, cnf):
     """The original (Italian) texts given to the widget, to translate them again if the language changes (ritraduci)."""
     if not isinstance(cnf, dict):
         return
-    for k in _OPZIONI_TESTO + ("values",):
+    for k in _TEXT_OPTIONS + ("values",):
         v = cnf.get(k)
         if isinstance(v, str) or k == "values" and isinstance(v, (list, tuple)):
             widget.__dict__.setdefault("_patchsmith_testi", {})[k] = v
 
 
-def aggancia_tk():
+def hook_tk():
     """The texts given to Tkinter (buttons, labels, menus, window titles, values of drop-down menus) go through
-    traduci() and stay remembered in the widget (ritraduci). Only once; with Italian nothing changes."""
+    translate() and stay remembered in the widget (ritraduci). Only once; with Italian nothing changes."""
     import tkinter
-    if getattr(tkinter.Misc, "_patchsmith_lingua", False):
+    if getattr(tkinter.Misc, "_patchsmith_language", False):
         return
-    originale_opzioni = tkinter.Misc._options
-    originale_titolo = tkinter.Wm.wm_title
+    original_options = tkinter.Misc._options
+    original_title = tkinter.Wm.wm_title
 
-    def _traduci_opzioni(cnf):
-        if not cnf or _stato["codice"] == SORGENTE and not any(
-                isinstance(cnf.get(k), str) and cnf[k].startswith(FISSO) for k in _OPZIONI_TESTO):
+    def _translate_options(cnf):
+        if not cnf or _state["codice"] == SOURCE and not any(
+                isinstance(cnf.get(k), str) and cnf[k].startswith(VERBATIM) for k in _TEXT_OPTIONS):
             return cnf
         cnf = dict(cnf)
-        for k in _OPZIONI_TESTO:
+        for k in _TEXT_OPTIONS:
             if isinstance(cnf.get(k), str):
-                cnf[k] = traduci(cnf[k])
+                cnf[k] = translate(cnf[k])
         if isinstance(cnf.get("values"), (list, tuple)):
-            cnf["values"] = [traduci(v) if isinstance(v, str) else v for v in cnf["values"]]
+            cnf["values"] = [translate(v) if isinstance(v, str) else v for v in cnf["values"]]
         return cnf
 
     def _options(self, cnf, kw=None):
-        _ricorda(self, cnf)
-        _ricorda(self, kw)
-        return originale_opzioni(self, _traduci_opzioni(cnf), _traduci_opzioni(kw))
+        _remember(self, cnf)
+        _remember(self, kw)
+        return original_options(self, _translate_options(cnf), _translate_options(kw))
 
     def wm_title(self, string=None):
         if isinstance(string, str):
             self.__dict__["_patchsmith_titolo"] = string
-        return originale_titolo(self, traduci(string) if isinstance(string, str) else string)
+        return original_title(self, translate(string) if isinstance(string, str) else string)
 
     tkinter.Misc._options = _options
     tkinter.Wm.wm_title = tkinter.Wm.title = wm_title
     from tkinter import ttk
-    originale_intestazione = ttk.Treeview.heading
+    original_heading = ttk.Treeview.heading
 
     def heading(self, column, option=None, **kw):  # (column headings do not go through _options)
         if isinstance(kw.get("text"), str):
             self.__dict__.setdefault("_patchsmith_intestazioni", {})[column] = kw["text"]
-            kw["text"] = traduci(kw["text"])
-        return originale_intestazione(self, column, option, **kw)
+            kw["text"] = translate(kw["text"])
+        return original_heading(self, column, option, **kw)
     ttk.Treeview.heading = heading
-    tkinter.Misc._patchsmith_lingua = True
+    tkinter.Misc._patchsmith_language = True
 
 
-def ritraduci(radice):
-    """After imposta(): the texts already shown by the root window and its windows (buttons, labels, values of
-    drop-down menus, titles, column headings, TestoVar) again from their originals, in the new language.
+def retranslate(root):
+    """After set_(): the texts already shown by the root window and its windows (buttons, labels, values of
+    drop-down menus, titles, column headings, TextVar) again from their originals, in the new language.
     The choices of drop-down menus (their variables) and the log are put back by whoever wrote them."""
     import tkinter
 
-    def visita(w):
-        for opzione, originale in list(getattr(w, "_patchsmith_testi", {}).items()):
+    def visit(w):
+        for option_name, original in list(getattr(w, "_patchsmith_testi", {}).items()):
             try:
-                w.configure(**{opzione: originale})
+                w.configure(**{option_name: original})
             except tkinter.TclError:  # not an option of the widget (e.g. a menu entry): leave it alone
-                del w._patchsmith_testi[opzione]
+                del w._patchsmith_testi[option_name]
         if getattr(w, "_patchsmith_titolo", None) is not None:
             w.title(w._patchsmith_titolo)
-        for colonna, originale in list(getattr(w, "_patchsmith_intestazioni", {}).items()):
-            w.heading(colonna, text=originale)
-        for figlio in w.winfo_children():
-            visita(figlio)
-    visita(radice)
-    for v in list(_VARIABILI):
+        for column, original in list(getattr(w, "_patchsmith_intestazioni", {}).items()):
+            w.heading(column, text=original)
+        for child in w.winfo_children():
+            visit(child)
+    visit(root)
+    for v in list(_VARIABLES):
         try:
-            v.set(v.originale)
+            v.set(v.original)
         except tkinter.TclError:  # its window is already closed
             pass
 
 
-def TestoVar(*args, **kw):
-    """A StringVar for the texts shown (status lines): what is written goes through traduci() (and stays remembered,
+def TextVar(*args, **kw):
+    """A StringVar for the texts shown (status lines): what is written goes through translate() (and stays remembered,
     for ritraduci)."""
     import tkinter
 
-    class _TestoVar(tkinter.StringVar):
-        originale = ""
-        __hash__ = object.__hash__  # (Variable redefines == but not the hash: needed to be in _VARIABILI)
+    class _TextVar(tkinter.StringVar):
+        original = ""
+        __hash__ = object.__hash__  # (Variable redefines == but not the hash: needed to be in _VARIABLES)
 
         def set(self, value):
-            self.originale = value
-            return super().set(traduci(value) if isinstance(value, str) else value)
-    v = _TestoVar(*args, **kw)
+            self.original = value
+            return super().set(translate(value) if isinstance(value, str) else value)
+    v = _TextVar(*args, **kw)
     if kw.get("value"):
         v.set(kw["value"])
-    _VARIABILI.add(v)
+    _VARIABLES.add(v)
     return v
 
 
-def bandiera(codice, master=None):
+def flag(code, master=None):
     """The language's flag as a Tkinter image (24x16), or None."""
     import tkinter
-    info = lingue().get(codice, {}).get("bandiera") or {}
-    larghezza, altezza = 24, 16
+    info = languages().get(code, {}).get("bandiera") or {}
+    width, height = 24, 16
     if info.get("file"):
         try:
-            return tkinter.PhotoImage(master=master, file=os.path.join(CARTELLA, info["file"]))
+            return tkinter.PhotoImage(master=master, file=os.path.join(FOLDER, info["file"]))
         except tkinter.TclError:
             pass
-    img = tkinter.PhotoImage(master=master, width=larghezza, height=altezza)
+    img = tkinter.PhotoImage(master=master, width=width, height=height)
     if info.get("tipo") == "gb":  # simplified Union Jack
-        img.put("#012169", to=(0, 0, larghezza, altezza))
-        for x in range(larghezza):  # white diagonals with the red ones on top
-            y = round(x * (altezza - 1) / (larghezza - 1))
+        img.put("#012169", to=(0, 0, width, height))
+        for x in range(width):  # white diagonals with the red ones on top
+            y = round(x * (height - 1) / (width - 1))
             for dy in (-2, -1, 0, 1, 2):
-                for yy in (y + dy, altezza - 1 - y + dy):
-                    if 0 <= yy < altezza:
+                for yy in (y + dy, height - 1 - y + dy):
+                    if 0 <= yy < height:
                         img.put("#ffffff" if abs(dy) > 0 else "#c8102e", to=(x, yy, x + 1, yy + 1))
-        img.put("#ffffff", to=(0, altezza // 2 - 3, larghezza, altezza // 2 + 3))
-        img.put("#ffffff", to=(larghezza // 2 - 3, 0, larghezza // 2 + 3, altezza))
-        img.put("#c8102e", to=(0, altezza // 2 - 2, larghezza, altezza // 2 + 2))
-        img.put("#c8102e", to=(larghezza // 2 - 2, 0, larghezza // 2 + 2, altezza))
+        img.put("#ffffff", to=(0, height // 2 - 3, width, height // 2 + 3))
+        img.put("#ffffff", to=(width // 2 - 3, 0, width // 2 + 3, height))
+        img.put("#c8102e", to=(0, height // 2 - 2, width, height // 2 + 2))
+        img.put("#c8102e", to=(width // 2 - 2, 0, width // 2 + 2, height))
         return img
-    strisce, verticali = info.get("verticali"), True
-    if not strisce:
-        strisce, verticali = info.get("orizzontali"), False
-    if not strisce:
-        img.put("#888888", to=(0, 0, larghezza, altezza))
+    stripes, vertical = info.get("verticali"), True
+    if not stripes:
+        stripes, vertical = info.get("orizzontali"), False
+    if not stripes:
+        img.put("#888888", to=(0, 0, width, height))
         return img
-    n = len(strisce)
-    for i, colore in enumerate(strisce):
-        if verticali:
-            img.put(colore, to=(larghezza * i // n, 0, larghezza * (i + 1) // n, altezza))
+    n = len(stripes)
+    for i, color in enumerate(stripes):
+        if vertical:
+            img.put(color, to=(width * i // n, 0, width * (i + 1) // n, height))
         else:
-            img.put(colore, to=(0, altezza * i // n, larghezza, altezza * (i + 1) // n))
+            img.put(color, to=(0, height * i // n, width, height * (i + 1) // n))
     return img
 
 
 # --- creating a language (command "interface --create <codice>") -----------------------------------------------------
 
-def _sembra_testo(s):
+def _looks_like_text(s):
     """A text for the program's user (not an internal name, a path, a regex...)."""
-    nucleo = _PREFISSO.match(s).group(2).strip()
-    if len(nucleo) < 2 or not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo) or "\n\n\n" in nucleo:
+    core = _PREFIX.match(s).group(2).strip()
+    if len(core) < 2 or not re.search(r"[A-Za-zÀ-ÿ]{2}", core) or "\n\n\n" in core:
         return False
     if re.search(r"(\\[dswbAZ(\[]|\(\?|[{}]\s*$|^[\w./\\-]+\.(?:json|py|dll|exe|cfg|ini|txt|log|bundle)$|^https?://)",
-                 nucleo) or re.fullmatch(r"[\w.\-]+", nucleo) and not re.match(r"[A-ZÀ-Ý]", nucleo):
+                 core) or re.fullmatch(r"[\w.\-]+", core) and not re.match(r"[A-ZÀ-Ý]", core):
         return False
-    if re.fullmatch(r"[\w.\-/\\:]+", nucleo) and ("_" in nucleo or "/" in nucleo or "\\" in nucleo):
+    if re.fullmatch(r"[\w.\-/\\:]+", core) and ("_" in core or "/" in core or "\\" in core):
         return False
     if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|->|\[[^\]]*\]\?|^#|==|^if .*:$"
-                 r"|(?<![\w%])_[a-z]\w*", nucleo):
+                 r"|(?<![\w%])_[a-z]\w*", core):
         return False  # code (e.g. the script for Godot) or regular expressions
-    parole = nucleo.split()
-    if len(parole) >= 12 and nucleo == nucleo.lower() and not re.search(r"[.,:;!?()'\"]", nucleo) \
-            and sum(map(len, parole)) / len(parole) < 4.5:
+    words = core.split()
+    if len(words) >= 12 and core == core.lower() and not re.search(r"[.,:;!?()'\"]", core) \
+            and sum(map(len, words)) / len(words) < 4.5:
         return False  # list of frequent words (language detection), not a sentence
-    return " " in nucleo or nucleo.endswith(("…", ":", "?", "!")) or re.match(r"[A-ZÀ-Ý][a-zà-ÿ]+$", nucleo) is not None
+    return " " in core or core.endswith(("…", ":", "?", "!")) or re.match(r"[A-ZÀ-Ý][a-zà-ÿ]+$", core) is not None
 
 
-def testi_del_programma(cartella=None):
+def program_texts(folder=None):
     """The Italian texts of the code (patchsmith/*.py), without the docstrings, as they go in a language file."""
-    cartella = cartella or os.path.dirname(os.path.abspath(__file__))
-    testi = set()
-    for nome in sorted(os.listdir(cartella)):
-        if not nome.endswith(".py"):
+    folder = folder or os.path.dirname(os.path.abspath(__file__))
+    texts = set()
+    for name in sorted(os.listdir(folder)):
+        if not name.endswith(".py"):
             continue
-        with open(os.path.join(cartella, nome), encoding="utf-8") as f:
-            albero = ast.parse(f.read())
-        docstring = set()
-        for nodo in ast.walk(albero):
-            if isinstance(nodo, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and nodo.body and \
-                    isinstance(nodo.body[0], ast.Expr) and isinstance(getattr(nodo.body[0], "value", None), ast.Constant):
-                docstring.add(id(nodo.body[0].value))
-        for nodo in ast.walk(albero):
-            if isinstance(nodo, ast.Constant) and isinstance(nodo.value, str) and id(nodo) not in docstring:
-                for pezzo in nodo.value.split("\n"):
-                    if _sembra_testo(pezzo):
-                        testi.add(_PREFISSO.match(pezzo).group(2).strip())
-    from .language import ETICHETTA_AUTO, NOMI
-    testi.update(NOMI.values())
-    testi.add(ETICHETTA_AUTO)
-    return sorted(testi)
+        with open(os.path.join(folder, name), encoding="utf-8") as f:
+            tree = ast.parse(f.read())
+        skip = set()  # docstrings and the field names of namedtuples: code, not texts
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.body and \
+                    isinstance(n.body[0], ast.Expr) and isinstance(getattr(n.body[0], "value", None), ast.Constant):
+                skip.add(id(n.body[0].value))
+            if isinstance(n, ast.Call) and getattr(n.func, "id", getattr(n.func, "attr", None)) == "namedtuple":
+                skip.update(id(a) for a in n.args)
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skip:
+                for piece in n.value.split("\n"):
+                    if _looks_like_text(piece):
+                        texts.add(_PREFIX.match(piece).group(2).strip())
+    from .language import AUTO_LABEL, NAMES
+    texts.update(NAMES.values())
+    texts.add(AUTO_LABEL)
+    return sorted(texts)
 
 
-def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo=None):
-    """Creates or completes patchsmith/ui_language/<codice>.json by translating with 'traduttore' (e.g. backend.Locale)
+def create_language(code, name, translator, log=print, flag_info=None, maximum=None):
+    """Creates or completes patchsmith/ui_language/<codice>.json by translating with 'traduttore' (e.g. backend.Local)
     the program's texts that are missing; those already in the file (also fixed by hand) stay. Returns how many it
     added."""
-    from .backend import ErroreBackend
-    from .language import lingua_evidente
-    from .text import leggibile
-    percorso = os.path.join(CARTELLA, codice + ".json")
+    from .backend import BackendError
+    from .language import obvious_language
+    from .text import readable
+    path = os.path.join(FOLDER, code + ".json")
     try:
-        with open(percorso, encoding="utf-8") as f:
-            dati = json.load(f)
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
     except (OSError, ValueError):
-        dati = {"nome": nome, "bandiera": bandiera_info or {}, "testi": {}}
-    testi = dati.setdefault("testi", {})
-    mancanti = [t for t in testi_del_programma() if t not in testi]
-    for t in [t for t in mancanti if lingua_evidente(t, SORGENTE)]:
-        testi[t] = t  # already in another language (e.g. English instructions for the local translator): stays as is
-        mancanti.remove(t)
-    if massimo:
-        mancanti = mancanti[:massimo]
-    log("Testi del programma da tradurre in %s: %d (gia' nel file: %d)" % (nome, len(mancanti), len(testi)))
-    aggiunti = 0
-    for i in range(0, len(mancanti), 40):
-        gruppo = mancanti[i:i + 40]
-        protetti = []
-        for t in gruppo:  # placeholders (%s, %d...) become {{A}}, {{B}}: the translator leaves them alone
-            segni = []
+        data = {"nome": name, "bandiera": flag_info or {}, "testi": {}}
+    texts = data.setdefault("testi", {})
+    missing = [t for t in program_texts() if t not in texts]
+    for t in [t for t in missing if obvious_language(t, SOURCE)]:
+        texts[t] = t  # already in another language (e.g. English instructions for the local translator): stays as is
+        missing.remove(t)
+    if maximum:
+        missing = missing[:maximum]
+    log("Testi del programma da tradurre in %s: %d (gia' nel file: %d)" % (name, len(missing), len(texts)))
+    added = 0
+    for i in range(0, len(missing), 40):
+        group = missing[i:i + 40]
+        protected = []
+        for t in group:  # placeholders (%s, %d...) become {{A}}, {{B}}: the translator leaves them alone
+            markers = []
 
-            def _sost(m, segni=segni):
-                segni.append(m.group())
-                return "{{%s}}" % chr(64 + len(segni))
-            protetti.append((_SEGNO.sub(_sost, leggibile(t)), segni))
+            def _substitute(m, markers=markers):
+                markers.append(m.group())
+                return "{{%s}}" % chr(64 + len(markers))
+            protected.append((_MARKER.sub(_substitute, readable(t)), markers))
         try:
-            tradotti = traduttore.traduci_righe([p for p, _ in protetti], SORGENTE, codice)
-        except ErroreBackend as e:
+            translated_items = translator.translate_lines([p for p, _ in protected], SOURCE, code)
+        except BackendError as e:
             log("  ! traduzione interrotta: %s" % e)
             break
-        for t, (p, segni), r in zip(gruppo, protetti, tradotti):
+        for t, (p, markers), r in zip(group, protected, translated_items):
             if not r:
                 continue
-            ordine = [ord(m) - 65 for m in re.findall(r"\{\{([A-Z])\}\}", r)]
-            if any(segni[a] == segni[b] and a > b for i, a in enumerate(ordine) for b in ordine[i + 1:]
-                   if a < len(segni) and b < len(segni)):
+            order = [ord(m) - 65 for m in re.findall(r"\{\{([A-Z])\}\}", r)]
+            if any(markers[a] == markers[b] and a > b for i, a in enumerate(order) for b in order[i + 1:]
+                   if a < len(markers) and b < len(markers)):
                 continue  # two placeholders of the same type swapped: the values would end up in the wrong place
-            for j, s in enumerate(segni):
+            for j, s in enumerate(markers):
                 r = r.replace("{{%s}}" % chr(65 + j), s, 1)
-            if re.search(r"\{\{[A-Z]\}\}", r) or len(_SEGNO.findall(r)) != len(segni):
+            if re.search(r"\{\{[A-Z]\}\}", r) or len(_MARKER.findall(r)) != len(markers):
                 continue  # placeholders lost or extra: better the Italian
-            testi[t] = r
-            aggiunti += 1
-        log("  %d di %d" % (min(i + 40, len(mancanti)), len(mancanti)))
-        os.makedirs(CARTELLA, exist_ok=True)
-        with open(percorso, "w", encoding="utf-8") as f:
-            json.dump(dati, f, ensure_ascii=False, indent=1, sort_keys=True)
-    return aggiunti
+            texts[t] = r
+            added += 1
+        log("  %d di %d" % (min(i + 40, len(missing)), len(missing)))
+        os.makedirs(FOLDER, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1, sort_keys=True)
+    return added

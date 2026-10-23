@@ -2,7 +2,7 @@
 
 Detection (read only):
 - I2 Localization: the language lists (name, code, flag) saved in the assets (resources.assets, level*,
-  sharedassets*, also inside data.unity3d); a language with the "disabled" flag does not count;
+  sharedassets*, also inside date.unity3d); a language with the "disabled" flag does not count;
 - Unity Localization: the "Locales" in the Addressables catalog (StreamingAssets/aa).
 
 Setting: only for I2, which saves the chosen language in the PlayerPrefs (Windows registry,
@@ -19,46 +19,46 @@ import sys
 
 PREF_I2 = "I2 Language"
 _ASSET = re.compile(r"^(resources\.assets|globalgamemanagers\.assets|level\d+|sharedassets\d+\.assets)$")
-_MASSIMO = 400 * 1024 * 1024  # maximum bytes of assets read per game
+_MAXIMUM = 400 * 1024 * 1024  # maximum bytes of assets read per game
 
 
-class ErroreLinguaUnity(ValueError):
+class UnityLanguageError(ValueError):
     pass
 
 
 # --- data folder and app.info -------------------------------------------------------------------
 
-def cartella_dati(cartella):
-    for radice, dirs, files in os.walk(cartella):
-        if os.path.relpath(radice, cartella).count(os.sep) >= 2:
+def data_folder(folder):
+    for root, dirs, files in os.walk(folder):
+        if os.path.relpath(root, folder).count(os.sep) >= 2:
             dirs[:] = []
         for d in sorted(dirs):
-            p = os.path.join(radice, d)
+            p = os.path.join(root, d)
             if d.endswith("_Data") and (os.path.exists(os.path.join(p, "globalgamemanagers")) or
                                         os.path.exists(os.path.join(p, "data.unity3d"))):
                 return p
     return None
 
 
-def azienda_prodotto(dati):
+def company_product(data):
     try:
-        with open(os.path.join(dati, "app.info"), encoding="utf-8", errors="replace") as f:
-            righe = f.read().split("\n")
+        with open(os.path.join(data, "app.info"), encoding="utf-8", errors="replace") as f:
+            lines = f.read().split("\n")
     except OSError:
         return None, None
-    return (righe[0].strip() or None), (righe[1].strip() if len(righe) > 1 and righe[1].strip() else None)
+    return (lines[0].strip() or None), (lines[1].strip() if len(lines) > 1 and lines[1].strip() else None)
 
 
-# --- UnityFS (data.unity3d) -----------------------------------------------------------------------
+# --- UnityFS (date.unity3d) -----------------------------------------------------------------------
 
 def _lz4(src, dim):
     try:
-        return _lz4_blocco(src, dim)
+        return _lz4_block(src, dim)
     except IndexError as e:
-        raise ErroreLinguaUnity("LZ4 non valido") from e
+        raise UnityLanguageError("LZ4 non valido") from e
 
 
-def _lz4_blocco(src, dim):
+def _lz4_block(src, dim):
     out, i, n = bytearray(), 0, len(src)
     while i < n:
         tok = src[i]
@@ -77,92 +77,92 @@ def _lz4_blocco(src, dim):
             break
         off = src[i] | (src[i + 1] << 8)
         i += 2
-        lung = tok & 15
-        if lung == 15:
+        length = tok & 15
+        if length == 15:
             while True:
                 b = src[i]
                 i += 1
-                lung += b
+                length += b
                 if b != 255:
                     break
-        lung += 4
-        inizio = len(out) - off
-        if off <= 0 or inizio < 0:
-            raise ErroreLinguaUnity("LZ4 non valido")
-        if off >= lung:
-            out += out[inizio:inizio + lung]
+        length += 4
+        start = len(out) - off
+        if off <= 0 or start < 0:
+            raise UnityLanguageError("LZ4 non valido")
+        if off >= length:
+            out += out[start:start + length]
         else:
-            for k in range(lung):
-                out.append(out[inizio + k])
+            for k in range(length):
+                out.append(out[start + k])
     if len(out) != dim:
-        raise ErroreLinguaUnity("LZ4: dimensione inattesa")
+        raise UnityLanguageError("LZ4: dimensione inattesa")
     return out
 
 
-def _decomprimi(dati, tipo, dim):
-    if tipo == 0:
-        return dati
-    if tipo == 1:
-        props = dati[0]
-        filtro = [{"id": lzma.FILTER_LZMA1, "lc": props % 9, "lp": (props // 9) % 5, "pb": props // 45,
-                   "dict_size": struct.unpack_from("<I", dati, 1)[0]}]
-        return lzma.decompress(dati[5:], format=lzma.FORMAT_RAW, filters=filtro)[:dim]
-    if tipo in (2, 3):
-        return _lz4(dati, dim)
-    raise ErroreLinguaUnity("compressione %d non supportata" % tipo)
+def _decompress(data, kind, dim):
+    if kind == 0:
+        return data
+    if kind == 1:
+        props = data[0]
+        filter_ = [{"id": lzma.FILTER_LZMA1, "lc": props % 9, "lp": (props // 9) % 5, "pb": props // 45,
+                   "dict_size": struct.unpack_from("<I", data, 1)[0]}]
+        return lzma.decompress(data[5:], format=lzma.FORMAT_RAW, filters=filter_)[:dim]
+    if kind in (2, 3):
+        return _lz4(data, dim)
+    raise UnityLanguageError("compressione %d non supportata" % kind)
 
 
-def _apri_bundle(percorso):
-    f = open(percorso, "rb")
+def _open_bundle(path):
+    f = open(path, "rb")
     try:
-        testa = f.read(512)
-        p = testa.index(b"\0")
-        if testa[:p] != b"UnityFS":
-            raise ErroreLinguaUnity("non e' un bundle UnityFS")
+        head = f.read(512)
+        p = head.index(b"\0")
+        if head[:p] != b"UnityFS":
+            raise UnityLanguageError("non e' un bundle UnityFS")
         p += 1
-        versione = struct.unpack_from(">I", testa, p)[0]
+        version = struct.unpack_from(">I", head, p)[0]
         p += 4
         for _ in range(2):
-            p = testa.index(b"\0", p) + 1
-        totale, c_info, u_info, flags = struct.unpack_from(">qIII", testa, p)
+            p = head.index(b"\0", p) + 1
+        total, c_info, u_info, flags = struct.unpack_from(">qIII", head, p)
         p += 20
-        if versione >= 7:
+        if version >= 7:
             p = (p + 15) & ~15
-        f.seek(totale - c_info if flags & 0x80 else p)
-        info = _decomprimi(f.read(c_info), flags & 0x3F, u_info)
+        f.seek(total - c_info if flags & 0x80 else p)
+        info = _decompress(f.read(c_info), flags & 0x3F, u_info)
         if not flags & 0x80:
             p += c_info
             if flags & 0x200:
                 p = (p + 15) & ~15
         q = 16  # hash of the uncompressed data
-        quanti = struct.unpack_from(">i", info, q)[0]
+        count = struct.unpack_from(">i", info, q)[0]
         q += 4
-        blocchi = []
-        for _ in range(quanti):
-            blocchi.append(struct.unpack_from(">IIH", info, q))
+        blocks = []
+        for _ in range(count):
+            blocks.append(struct.unpack_from(">IIH", info, q))
             q += 10
-        quanti = struct.unpack_from(">i", info, q)[0]
+        count = struct.unpack_from(">i", info, q)[0]
         q += 4
-        nodi = []
-        for _ in range(quanti):
+        nodes = []
+        for _ in range(count):
             off, dim, _flag = struct.unpack_from(">qqI", info, q)
             q += 20
-            fine = info.index(b"\0", q)
-            nodi.append((info[q:fine].decode("utf-8", "replace"), off, dim))
-            q = fine + 1
-        return f, p, blocchi, nodi
+            end = info.index(b"\0", q)
+            nodes.append((info[q:end].decode("utf-8", "replace"), off, dim))
+            q = end + 1
+        return f, p, blocks, nodes
     except BaseException:
         f.close()
         raise
 
 
-def _estrai(f, inizio, blocchi, off, dim):
-    out, pos_c, pos_u = bytearray(), inizio, 0
-    for u, c, fl in blocchi:
+def _extract(f, start, blocks, off, dim):
+    out, pos_c, pos_u = bytearray(), start, 0
+    for u, c, fl in blocks:
         if pos_u + u > off and pos_u < off + dim:
             f.seek(pos_c)
-            blocco = _decomprimi(f.read(c), fl & 0x3F, u)
-            out += blocco[max(off, pos_u) - pos_u:min(off + dim, pos_u + u) - pos_u]
+            block = _decompress(f.read(c), fl & 0x3F, u)
+            out += block[max(off, pos_u) - pos_u:min(off + dim, pos_u + u) - pos_u]
         pos_c += c
         pos_u += u
         if pos_u >= off + dim:
@@ -170,57 +170,57 @@ def _estrai(f, inizio, blocchi, off, dim):
     return out
 
 
-def _mappa(percorso):
+def _mapping(path):
     """The file, read only, as an mmap (the memory is not taken all at once); b"" if it is empty."""
-    with open(percorso, "rb") as f:
+    with open(path, "rb") as f:
         if os.fstat(f.fileno()).st_size == 0:
             return b""
         return mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
 
 
-def _file_asset(dati):
+def _asset_file(data):
     """([(name, size, function that returns the bytes)], function to close) of the game's serialized files, the
     global catalog first."""
-    uscita, aperti = [], []
-    bundle = os.path.join(dati, "data.unity3d")
+    output, opened = [], []
+    bundle = os.path.join(data, "data.unity3d")
     if os.path.exists(bundle):
         try:
-            f, inizio, blocchi, nodi = _apri_bundle(bundle)
-            aperti.append(f)
-            for nome, off, dim in nodi:
-                if _ASSET.match(nome):
-                    uscita.append((nome, dim, lambda off=off, dim=dim: _estrai(f, inizio, blocchi, off, dim)))
-        except (ErroreLinguaUnity, OSError, struct.error, ValueError, IndexError, lzma.LZMAError):
+            f, start, blocks, nodes = _open_bundle(bundle)
+            opened.append(f)
+            for name, off, dim in nodes:
+                if _ASSET.match(name):
+                    output.append((name, dim, lambda off=off, dim=dim: _extract(f, start, blocks, off, dim)))
+        except (UnityLanguageError, OSError, struct.error, ValueError, IndexError, lzma.LZMAError):
             pass
-    for nome in sorted(os.listdir(dati)):
-        if _ASSET.match(nome):
-            p = os.path.join(dati, nome)
+    for name in sorted(os.listdir(data)):
+        if _ASSET.match(name):
+            p = os.path.join(data, name)
             try:
                 dim = os.path.getsize(p)
             except OSError:
                 continue
-            uscita.append((nome, dim, lambda p=p: _mappa(p)))
+            output.append((name, dim, lambda p=p: _mapping(p)))
 
-    def ordine(voce):
-        nome = voce[0]
-        if nome == "resources.assets":
+    def order(entry):
+        name = entry[0]
+        if name == "resources.assets":
             return (0, 0)
-        if nome == "globalgamemanagers.assets":
+        if name == "globalgamemanagers.assets":
             return (1, 0)
-        return (2 if nome.startswith("level") else 3, int(re.sub(r"\D", "", nome) or 0))
+        return (2 if name.startswith("level") else 3, int(re.sub(r"\D", "", name) or 0))
 
-    def chiudi():
-        for f in aperti:
+    def close():
+        for f in opened:
             f.close()
-    return sorted(uscita, key=ordine), chiudi
+    return sorted(output, key=order), close
 
 
 # --- I2 Localization ------------------------------------------------------------------------------
 
-_CODICE_I2 = re.compile(r"^[ -~]{1,24}$")
+_I2_CODE = re.compile(r"^[ -~]{1,24}$")
 
 
-def _stringa(d, p):
+def _string(d, p):
     if p + 4 > len(d):
         return None, p
     n = struct.unpack_from("<i", d, p)[0]
@@ -233,141 +233,141 @@ def _stringa(d, p):
     return s, p + 4 + ((n + 3) & ~3)
 
 
-def _prova_lista(d, p):
+def _try_list(d, p):
     if p + 4 > len(d):
         return None
-    quante = struct.unpack_from("<i", d, p)[0]
-    if not 1 <= quante <= 120:
+    how_many = struct.unpack_from("<i", d, p)[0]
+    if not 1 <= how_many <= 120:
         return None
-    q, voci = p + 4, []
-    for _ in range(quante):
-        nome, q = _stringa(d, q)
-        if not nome or len(nome) < 2 or not all(c.isprintable() or c in "\n\r\t" for c in nome):
+    q, entries = p + 4, []
+    for _ in range(how_many):
+        name, q = _string(d, q)
+        if not name or len(name) < 2 or not all(c.isprintable() or c in "\n\r\t" for c in name):
             return None
-        codice, q = _stringa(d, q)
-        if codice is None or (codice and not _CODICE_I2.match(codice)) or q + 4 > len(d):
+        code, q = _string(d, q)
+        if code is None or (code and not _I2_CODE.match(code)) or q + 4 > len(d):
             return None
         flag = d[q]
         if d[q + 1:q + 4] != b"\x00\x00\x00" or flag > 0x0F:
             return None
-        voci.append((nome, codice, flag))
+        entries.append((name, code, flag))
         q += 4
-    return voci, q
+    return entries, q
 
 
-def liste_i2(d):
+def i2_lists(d):
     """[[(nome, codice, flag)]] of the I2 language lists found in the bytes of an asset."""
-    uscita, viste, fine_ultima = [], set(), -1
+    output, seen, last_end = [], set(), -1
     for m in re.finditer(rb"\x02\x00\x00\x00en\x00\x00|\x05\x00\x00\x00en-[A-Z]{2}\x00\x00\x00", d):
-        if m.start() < fine_ultima:
+        if m.start() < last_end:
             continue  # inside a list already read
-        migliore = None
-        for indietro in range(m.start() - 4, max(0, m.start() - 16000), -4):
-            r = _prova_lista(d, indietro)
-            if r and r[1] > m.start() and (migliore is None or len(r[0]) > len(migliore[1][0])):
-                migliore = (indietro, r)
-        if migliore and migliore[0] not in viste:
-            viste.add(migliore[0])
-            uscita.append(migliore[1][0])
-            fine_ultima = migliore[1][1]
-    return uscita
+        best = None
+        for back in range(m.start() - 4, max(0, m.start() - 16000), -4):
+            r = _try_list(d, back)
+            if r and r[1] > m.start() and (best is None or len(r[0]) > len(best[1][0])):
+                best = (back, r)
+        if best and best[0] not in seen:
+            seen.add(best[0])
+            output.append(best[1][0])
+            last_end = best[1][1]
+    return output
 
 
-def usa_i2(dati):
+def uses_i2(data):
     """True if the game contains I2 Localization (from the managed libraries or the IL2CPP metadata)."""
-    gestite = os.path.join(dati, "Managed")
-    if os.path.isdir(gestite):
-        if any(n.lower().startswith("i2") and "locali" in n.lower() for n in os.listdir(gestite)):
+    managed_folder = os.path.join(data, "Managed")
+    if os.path.isdir(managed_folder):
+        if any(n.lower().startswith("i2") and "locali" in n.lower() for n in os.listdir(managed_folder)):
             return True
-        for nome in ("Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll"):
-            p = os.path.join(gestite, nome)
+        for name in ("Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll"):
+            p = os.path.join(managed_folder, name)
             if os.path.exists(p):
                 with open(p, "rb") as f:
                     if b"I2.Loc\x00" in f.read():
                         return True
-    meta = os.path.join(dati, "il2cpp_data", "Metadata", "global-metadata.dat")
-    if os.path.exists(meta):
-        with open(meta, "rb") as f:
+    half = os.path.join(data, "il2cpp_data", "Metadata", "global-metadata.dat")
+    if os.path.exists(half):
+        with open(half, "rb") as f:
             return b"I2.Loc\x00" in f.read()
     return False
 
 
-def lingue_i2(dati, dopo_la_prima=2):
+def i2_languages(data, after_first=2):
     """[(exact name, code)] of the ACTIVE I2 languages, or None if no lists are found.
-    Reads at most _MASSIMO bytes (files that would exceed it are skipped) and, once the first list is found, only
+    Reads at most _MAXIMUM bytes (files that would exceed it are skipped) and, once the first list is found, only
     'dopo_la_prima' more files (the lists of the single scenes usually repeat the main one)."""
-    attive, trovate, letti, dopo = {}, False, 0, None
+    active_langs, matches, read_items, after = {}, False, 0, None
     try:
-        voci, chiudi = _file_asset(dati)
+        entries, close = _asset_file(data)
     except (OSError, ValueError):
         return None
     try:
-        for _nome, dimensione, carica in voci:
-            if dopo is not None:
-                if dopo >= dopo_la_prima:
+        for _name, size, load in entries:
+            if after is not None:
+                if after >= after_first:
                     break
-                dopo += 1
-            if letti + dimensione > _MASSIMO:
+                after += 1
+            if read_items + size > _MAXIMUM:
                 continue
-            letti += dimensione
+            read_items += size
             byte = None
             try:
-                byte = carica()
-                liste = liste_i2(byte)
+                byte = load()
+                lists = i2_lists(byte)
             except Exception:  # an unreadable file must not lose what was already found
                 continue
             finally:
                 if isinstance(byte, mmap.mmap):
                     byte.close()
                 byte = None
-            for lista in liste:
-                if any(c for _, c, _ in lista):
-                    trovate = True
-                    for n, c, flag in lista:
+            for list_ in lists:
+                if any(c for _, c, _ in list_):
+                    matches = True
+                    for n, c, flag in list_:
                         if not flag & 1:
-                            attive.setdefault(n, c)
-            if trovate and dopo is None:
-                dopo = 0
+                            active_langs.setdefault(n, c)
+            if matches and after is None:
+                after = 0
     finally:
-        chiudi()
-    return list(attive.items()) if trovate else None
+        close()
+    return list(active_langs.items()) if matches else None
 
 
-def i2_personalizzato(dati):
+def i2_custom(data):
     """True if the game modified I2 to save the language its own way (e.g. 'LastSelectedLanguage',
     'last_language.txt'): then the "I2 Language" preference is not enough and the language is chosen from the menu."""
-    segni = [s for t in ("LastSelectedLanguage", "last_language.txt")
+    markers = [s for t in ("LastSelectedLanguage", "last_language.txt")
              for s in (t.encode("ascii"), t.encode("utf-16-le"))]
     file = []
-    gestite = os.path.join(dati, "Managed")
-    if os.path.isdir(gestite):
-        file += [os.path.join(gestite, n) for n in os.listdir(gestite)
+    managed_folder = os.path.join(data, "Managed")
+    if os.path.isdir(managed_folder):
+        file += [os.path.join(managed_folder, n) for n in os.listdir(managed_folder)
                  if n.lower().startswith("i2") and n.lower().endswith(".dll")]
-    file.append(os.path.join(dati, "il2cpp_data", "Metadata", "global-metadata.dat"))
+    file.append(os.path.join(data, "il2cpp_data", "Metadata", "global-metadata.dat"))
     for p in file:
         try:
             with open(p, "rb") as f:
-                contenuto = f.read(64 * 1024 * 1024)
+                content = f.read(64 * 1024 * 1024)
         except OSError:
             continue
-        if any(s in contenuto for s in segni):
+        if any(s in content for s in markers):
             return True
     return False
 
 
 # --- Unity Localization ---------------------------------------------------------------------------
 
-_LOCALE_TESTO = re.compile(rb"Locales/[^/\"\x00]{1,60} \(([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\)\.asset")
-_LOCALE_BINARIO = re.compile(
+_LOCALE_TEXT = re.compile(rb"Locales/[^/\"\x00]{1,60} \(([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\)\.asset")
+_LOCALE_BINARY = re.compile(
     rb"(?:^|[/\x00-\x1f\"])[A-Za-z][^/\"\x00-\x1f]{0,60} \(([A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)\)\.asset")
 
 
-def lingue_unity_localization(dati):
+def unity_localization_languages(data):
     """{codice} of the Locales in the Addressables catalog, or None if the game does not use it."""
-    aa = os.path.join(dati, "StreamingAssets", "aa")
+    aa = os.path.join(data, "StreamingAssets", "aa")
     if not os.path.isdir(aa):
         return None
-    codici = set()
+    codes = set()
     for f in os.listdir(aa):
         if not f.startswith("catalog") or f.endswith(".hash"):
             continue
@@ -379,100 +379,100 @@ def lingue_unity_localization(dati):
                 b = g.read()
         except OSError:
             continue
-        for m in _LOCALE_TESTO.finditer(b):
-            codici.add(m.group(1).decode())
+        for m in _LOCALE_TEXT.finditer(b):
+            codes.add(m.group(1).decode())
         # binary catalog (catalog.bin): the names are not necessarily under "Locales/"; they count only if the file
         # uses Unity Localization and each code also has its own "Locale-<codice>" label
         if f.endswith(".bin") and (b"Localization.Locale" in b or b"Localization/Locales" in b):
-            for m in _LOCALE_BINARIO.finditer(b):
+            for m in _LOCALE_BINARY.finditer(b):
                 if b"Locale-" + m.group(1) in b:
-                    codici.add(m.group(1).decode())
-    return codici or None
+                    codes.add(m.group(1).decode())
+    return codes or None
 
 
 # --- PlayerPrefs (Windows registry) ---------------------------------------------------------------
 
-def nome_pref(chiave):
+def pref_name(key):
     """Name of the registry value for a PlayerPrefs key: key + '_h' + djb2-xor hash of the UTF-8 bytes."""
     h = 5381
-    for b in chiave.encode("utf-8"):
+    for b in key.encode("utf-8"):
         h = ((h * 33) ^ b) & 0xFFFFFFFF
-    return "%s_h%d" % (chiave, h)
+    return "%s_h%d" % (key, h)
 
 
-def _chiave_registro(azienda, prodotto):
-    return "Software\\%s\\%s" % (azienda, prodotto)
+def _registry_key(company, product):
+    return "Software\\%s\\%s" % (company, product)
 
 
-def leggi_pref(azienda, prodotto, chiave):
+def read_pref(company, product, key):
     """(tipo, byte) of the value, None if the value is missing, False if the game's key is missing."""
     if not sys.platform.startswith("win"):
         return False
     import winreg
     try:
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _chiave_registro(azienda, prodotto), 0, winreg.KEY_READ) as k:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _registry_key(company, product), 0, winreg.KEY_READ) as k:
             try:
-                valore, tipo = winreg.QueryValueEx(k, nome_pref(chiave))
+                value_, kind = winreg.QueryValueEx(k, pref_name(key))
             except FileNotFoundError:
                 return None
     except FileNotFoundError:
         return False
-    if tipo == winreg.REG_BINARY:
-        return tipo, bytes(valore)
-    if tipo == winreg.REG_SZ:
-        return tipo, str(valore).encode("utf-8")
-    return tipo, valore if isinstance(valore, (bytes, bytearray)) else str(valore).encode()
+    if kind == winreg.REG_BINARY:
+        return kind, bytes(value_)
+    if kind == winreg.REG_SZ:
+        return kind, str(value_).encode("utf-8")
+    return kind, value_ if isinstance(value_, (bytes, bytearray)) else str(value_).encode()
 
 
-def scrivi_pref_stringa(azienda, prodotto, chiave, testo):
+def write_pref_string(company, product, key, text):
     """Writes a PlayerPrefs string (REG_BINARY UTF-8 + NUL) to an ALREADY existing key of the game."""
     import winreg
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _chiave_registro(azienda, prodotto), 0,
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _registry_key(company, product), 0,
                         winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
-        winreg.SetValueEx(k, nome_pref(chiave), 0, winreg.REG_BINARY, testo.encode("utf-8") + b"\x00")
-    letto = leggi_pref(azienda, prodotto, chiave)
-    if not letto or letto[1] != testo.encode("utf-8") + b"\x00":
-        raise ErroreLinguaUnity("la preferenza scritta non si rilegge uguale")
+        winreg.SetValueEx(k, pref_name(key), 0, winreg.REG_BINARY, text.encode("utf-8") + b"\x00")
+    was_read = read_pref(company, product, key)
+    if not was_read or was_read[1] != text.encode("utf-8") + b"\x00":
+        raise UnityLanguageError("la preferenza scritta non si rilegge uguale")
 
 
-def ripristina_pref(azienda, prodotto, chiave, precedente, scritto):
+def restore_pref(company, product, key, previous, written):
     """Puts back the previous value ((tipo, hex) or None = absent), only if the one we wrote is still there."""
     import winreg
-    attuale = leggi_pref(azienda, prodotto, chiave)
-    if not attuale or attuale[1] != scritto:
+    current = read_pref(company, product, key)
+    if not current or current[1] != written:
         return False
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _chiave_registro(azienda, prodotto), 0,
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _registry_key(company, product), 0,
                         winreg.KEY_READ | winreg.KEY_SET_VALUE) as k:
-        if precedente is None:
-            winreg.DeleteValue(k, nome_pref(chiave))
+        if previous is None:
+            winreg.DeleteValue(k, pref_name(key))
         else:
-            tipo, byte = int(precedente[0]), bytes.fromhex(precedente[1])
-            winreg.SetValueEx(k, nome_pref(chiave), 0, tipo, _valore_registro(tipo, byte))
+            kind, byte = int(previous[0]), bytes.fromhex(previous[1])
+            winreg.SetValueEx(k, pref_name(key), 0, kind, _registry_value(kind, byte))
     return True
 
 
-def _valore_registro(tipo, byte):
+def _registry_value(kind, byte):
     """The value in the form winreg wants for that type (leggi_pref always gives it as bytes)."""
     import winreg
-    if tipo in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
+    if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
         return byte.decode("utf-8")
-    if tipo in (winreg.REG_DWORD, winreg.REG_QWORD):
+    if kind in (winreg.REG_DWORD, winreg.REG_QWORD):
         return int(byte.decode("ascii"))
     return byte
 
 
-def voce_i2(voci, destinazione="it"):
+def i2_entry(entries, dest_lang="it"):
     """The exact name of the I2 entry [(nome, codice)] for the language 'destinazione', or None: first by code
     (same code, then the language without region, then a variant; never the other Chinese script), then, for
     Italian without a suitable code, by name."""
-    from .language import migliore
-    scelto = migliore([c for _, c in voci if c], destinazione)
-    if scelto is not None:
-        return next(n for n, c in voci if c == scelto)
-    if destinazione.split("-")[0].lower() == "it":
-        return next((n for n, _ in voci if "itali" in (n or "").lower()), None)
+    from .language import best
+    chosen = best([c for _, c in entries if c], dest_lang)
+    if chosen is not None:
+        return next(n for n, c in entries if c == chosen)
+    if dest_lang.split("-")[0].lower() == "it":
+        return next((n for n, _ in entries if "itali" in (n or "").lower()), None)
     return None
 
 
-def e_italiano(nome, codice, destinazione="it"):
-    return voce_i2([(nome, codice)], destinazione) is not None
+def is_italian(name, code, dest_lang="it"):
+    return i2_entry([(name, code)], dest_lang) is not None

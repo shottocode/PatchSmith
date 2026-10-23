@@ -1,7 +1,7 @@
 """Request to stop the work in progress (the interface's "Stop" button).
 
 The work checks the request at safe points (before each group of texts and each request to the translator, and
-during the waits between one attempt and the next). Interrotto derives from BaseException, like KeyboardInterrupt:
+during the waits between one attempt and the next). Interrupted derives from BaseException, like KeyboardInterrupt:
 blocks that skip an error and carry on ("except Exception") do not stop it, while those that put things back in
 place ("except BaseException" / finally) do so and then let it through.
 """
@@ -9,37 +9,37 @@ import threading
 import time
 
 
-class Interrotto(BaseException):
+class Interrupted(BaseException):
     """Work stopped at the user's request."""
 
 
-_richiesta = threading.Event()
+_request = threading.Event()
 
 
-def richiedi():
-    _richiesta.set()
+def request_stop():
+    _request.set()
 
 
-def azzera():
-    _richiesta.clear()
+def reset():
+    _request.clear()
 
 
-def richiesta():
-    return _richiesta.is_set()
+def request():
+    return _request.is_set()
 
 
-def controlla():
-    if _richiesta.is_set():
-        raise Interrotto("fermato su tua richiesta")
+def check():
+    if _request.is_set():
+        raise Interrupted("fermato su tua richiesta")
 
 
-def attendi(secondi):
+def wait_for(seconds):
     """Like time.sleep, but stops at once if a stop is requested. Waits in short steps: on Windows a long wait on
     an Event would not let Ctrl+C through until the end."""
-    fine = time.monotonic() + max(0.0, secondi)
+    end = time.monotonic() + max(0.0, seconds)
     while True:
-        resto = fine - time.monotonic()
-        if resto <= 0:
+        rest = end - time.monotonic()
+        if rest <= 0:
             return
-        if _richiesta.wait(min(resto, 0.2)):
-            raise Interrotto("fermato su tua richiesta")
+        if _request.wait(min(rest, 0.2)):
+            raise Interrupted("fermato su tua richiesta")

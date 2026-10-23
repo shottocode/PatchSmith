@@ -4,8 +4,8 @@ XUnity's "CustomTranslate" endpoint (GET /translate?from=en&to=it&text=... -> on
 All the lines the game shows during play that are not already translated (e.g. "Hold RMB {{A}}s to leap up to
 {{B}} m": XUnity removes the numbers and puts them back afterwards) go through here, whatever translator was chosen:
 the game's translation memory and the shared one apply, as do the checks on translations and the pauses of the online
-translators (PatchSmith does not insist with a service that has blocked it and does not wait more than MAX_ATTESA for
-its cautious margins). The translators are tried in a row (traduttori_previsti): the local translator if it is
+translators (PatchSmith does not insist with a service that has blocked it and does not wait more than MAX_WAIT for
+its cautious margins). The translators are tried in a row (expected_translators): the local translator if it is
 installed (the Fast model, if present: the graphics card is needed by the game too), then the chosen online one
 (DeepL with the key, MyMemory), then free Google if it is not paused.
 
@@ -15,9 +15,9 @@ language ("rilassata"), otherwise the original ("rifiutata"); a line that an onl
 later ("rinviata") also gets the original. Error (500) only if no translator answers, 503 while the game is closing
 (no translation with the translator that is shutting down).
 
-Every requested line ends up in the journal memory/<gioco>.richieste.jsonl (see percorso_diario): a JSON line with ts,
-testo, da, a, esito (ESITI_DIARIO), backend, motivo and risposta. Lines with an outcome other than "ok" are not in the
-translation memory: they can be re-translated with the game closed and fixed in XUnity's cache.
+Every requested line ends up in the journal memory/<gioco>.requests.jsonl (see journal_path): a JSON line with ts,
+testo, da, a, esito (JOURNAL_OUTCOMES), backend, motivo and risposta. Lines with an outcome other than "ok" are not in
+the translation memory: they can be re-translated with the game closed and fixed in XUnity's cache.
 
 PatchSmith's plugin starts it when the game starts (BepInEx/plugins/Patchsmith) and it closes by itself when the
 game closes, freeing the graphics card."""
@@ -35,186 +35,186 @@ import urllib.parse
 import urllib.request
 import zlib
 
-from . import shared_file as file_condiviso, interruption as interruzione, language as lingua
-from .backend import ErroreBackend, _uguale, problemi_traduzione
-from .project import Progetto, _da_tradurre, cartella_dati, maiuscola_come
-from .text import ricomponi_righe, ripristina_segnaposto
+from . import shared_file, interruption, language
+from .backend import BackendError, _unchanged, translation_problems
+from .project import Project, _to_translate, data_folder, capitalize_like
+from .text import reassemble_lines, restore_placeholders
 
-PERCORSO = "/translate"
-PERCORSO_GRUPPO = "/traduci-gruppo"  # several lines together (live translation of web games)
-MAX_GRUPPO = 60
-MAX_CORPO = 1_000_000
-CONTROLLO_GIOCO = 3.0  # seconds between one check of the game's process and the next
-MAX_ATTESA = 60.0  # seconds: XUnity waits at most 150 s for an answer, the online translators sometimes longer
-MAX_AVVIO = 140.0  # seconds of waiting for translators that are starting, then the line is postponed
-MAX_CHIUSURA = 180.0  # seconds: on closing, a translation in progress (even with the online waits) finishes first
-MAX_DIARIO = 2_000_000  # bytes: then the journal becomes <nome>.richieste.jsonl.1 and a new one is started
+URL_PATH = "/translate"
+GROUP_URL_PATH = "/traduci-gruppo"  # several lines together (live translation of web games)
+MAX_GROUP = 60
+MAX_BODY = 1_000_000
+GAME_CHECK = 3.0  # seconds between one check of the game's process and the next
+MAX_WAIT = 60.0  # seconds: XUnity waits at most 150 s for an answer, the online translators sometimes longer
+MAX_STARTUP = 140.0  # seconds of waiting for translators that are starting, then the line is postponed
+MAX_CLOSING = 180.0  # seconds: on closing, a translation in progress (even with the online waits) finishes first
+MAX_JOURNAL = 2_000_000  # bytes: then the journal becomes <nome>.requests.jsonl.1 and a new one is started
 # outcomes in the journal: translated (and saved in the translation memory); fallback answer (not in the translation
 # memory); original because rejected by all translators; original because the online translators ask to wait too
 # long; no translator reachable (500); game closing (503)
-ESITI_DIARIO = ("ok", "rilassata", "rifiutata", "rinviata", "errore", "interrotta")
-NOMI = {"locale": "traduttore locale", "google": "Google", "deepl": "DeepL", "mymemory": "MyMemory",
+JOURNAL_OUTCOMES = ("ok", "rilassata", "rifiutata", "rinviata", "errore", "interrotta")
+NAMES = {"locale": "traduttore locale", "google": "Google", "deepl": "DeepL", "mymemory": "MyMemory",
         "finto": "traduttore di prova"}
 _XUNITY = re.compile(r"\{\{[^{}]*\}\}")  # XUnity's placeholders ({{A}}): they must all come back
-# problems (backend.problemi_traduzione) saying that the answer is not a translation in the target language
-_NON_TRADOTTA = {"vuota", "scrittura sbagliata", "lettere di un'altra lingua", "non tradotta", "rifiuto del modello"}
-# frequent words of the target language that in the lists of lingua._PAROLE are only among those of other languages:
-# in an Italian answer "se", "tu", "su", "no" do not mean that it is Spanish (see lingua.lingua_evidente)
-_ANCHE_DI_ARRIVO = lingua.ANCHE_DI
+# problems (backend.translation_problems) saying that the answer is not a translation in the target language
+_UNTRANSLATED = {"vuota", "scrittura sbagliata", "lettere di un'altra lingua", "non tradotta", "rifiuto del modello"}
+# frequent words of the target language that in the lists of language._WORDS are only among those of other languages:
+# in an Italian answer "se", "tu", "su", "no" do not mean that it is Spanish (see language.obvious_language)
+_ALSO_IN_TARGET = language.ALSO_IN
 
 
-def porta_per(nome_profilo):
+def port_for(profile_name):
     """Fixed port for each game (47000-47999): two games do not swap translations."""
-    return 47000 + zlib.crc32(nome_profilo.encode("utf-8")) % 1000
+    return 47000 + zlib.crc32(profile_name.encode("utf-8")) % 1000
 
 
-def indirizzo(porta):
-    return "http://127.0.0.1:%d%s" % (porta, PERCORSO)
+def address(port):
+    return "http://127.0.0.1:%d%s" % (port, URL_PATH)
 
 
-def acceso(nome_profilo, attesa=0.3):
+def is_on(profile_name, wait=0.3):
     """True if this game's translator is listening (the game is open and has started it)."""
     try:
-        with urllib.request.urlopen("http://127.0.0.1:%d/patchsmith" % porta_per(nome_profilo), timeout=attesa) as r:
-            return r.read().decode("utf-8", "replace") == "patchsmith " + nome_profilo
+        with urllib.request.urlopen("http://127.0.0.1:%d/patchsmith" % port_for(profile_name), timeout=wait) as r:
+            return r.read().decode("utf-8", "replace") == "patchsmith " + profile_name
     except (OSError, ValueError):
         return False
 
 
-def ferma(nome_profilo):
+def stop(profile_name):
     """Stops this game's translator (it restarts with the game). True if it was running."""
-    if not acceso(nome_profilo):
+    if not is_on(profile_name):
         return False
     try:
-        with urllib.request.urlopen("http://127.0.0.1:%d/ferma" % porta_per(nome_profilo), timeout=5) as r:
+        with urllib.request.urlopen("http://127.0.0.1:%d/ferma" % port_for(profile_name), timeout=5) as r:
             r.read()
         return True
     except (OSError, ValueError):
         return False
 
 
-def percorso_diario(nome_profilo):
+def journal_path(profile_name):
     """The journal of the lines requested during play (one JSON line per line of text), among the user's data."""
-    return cartella_dati("memory", "%s.richieste.jsonl" % nome_profilo)
+    return data_folder("memory", "%s.richieste.jsonl" % profile_name)
 
 
-def leggi_diario(nome_profilo):
+def read_journal(profile_name):
     """The journal's lines (the old one's too, .1), oldest first: [{ts, testo, esito, risposta...}]. Unreadable lines
     (e.g. half written by a game closed abruptly) are skipped."""
-    righe = []
-    for percorso in (percorso_diario(nome_profilo) + ".1", percorso_diario(nome_profilo)):
+    lines = []
+    for path in (journal_path(profile_name) + ".1", journal_path(profile_name)):
         try:
-            with open(percorso, encoding="utf-8", errors="replace") as f:
-                for riga in f:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
                     try:
-                        dati = json.loads(riga)
+                        data = json.loads(line)
                     except ValueError:
                         continue
-                    if isinstance(dati, dict) and isinstance(dati.get("testo"), str):
-                        righe.append(dati)
+                    if isinstance(data, dict) and isinstance(data.get("testo"), str):
+                        lines.append(data)
         except OSError:
             continue
-    return righe
+    return lines
 
 
-class Rinviata(ErroreBackend):
-    """An online translator asks to wait more than MAX_ATTESA to stay within the cautious margins: XUnity does not
+class Deferred(BackendError):
+    """An online translator asks to wait more than MAX_WAIT to stay within the cautious margins: XUnity does not
     wait that long, the line is postponed (answer with the original, in the journal as 'rinviata')."""
 
 
-def _attesa_breve(secondi):
+def _short_wait(seconds):
     """Instead of the limiter's wait (which can last minutes): a short one is waited, a long one is not."""
-    if secondi > MAX_ATTESA:
-        raise Rinviata("per restare nei margini prudenti la prossima richiesta potrebbe partire solo tra %d "
-                       "secondi" % secondi)
-    interruzione.attendi(secondi)
+    if seconds > MAX_WAIT:
+        raise Deferred("per restare nei margini prudenti la prossima richiesta potrebbe partire solo tra %d "
+                       "secondi" % seconds)
+    interruption.wait_for(seconds)
 
 
-def _impostazioni():
+def _settings():
     try:
-        with open(cartella_dati("settings.json"), encoding="utf-8") as f:
-            dati = json.load(f)
+        with open(data_folder("settings.json"), encoding="utf-8") as f:
+            data = json.load(f)
     except (OSError, ValueError):
         return {}
-    return dati if isinstance(dati, dict) else {}
+    return data if isinstance(data, dict) else {}
 
 
-def _online_scelti(profilo):
+def _chosen_online(profile):
     """DeepL or MyMemory, if they are the translator chosen for the game or the one chosen in the interface."""
-    scelti = []
-    for nome in (profilo.get("backend"), _impostazioni().get("backend")):
-        if nome in ("deepl", "mymemory") and nome not in scelti:
-            scelti.append(nome)
-    return scelti
+    selected = []
+    for name in (profile.get("backend"), _settings().get("backend")):
+        if name in ("deepl", "mymemory") and name not in selected:
+            selected.append(name)
+    return selected
 
 
-def traduttori_previsti(profilo):
+def expected_translators(profile):
     """The translators the service would use now, in order: 'locale' if it is installed, the chosen online translator
     (DeepL only with the key) if it is not paused, 'google' if it is not paused. Empty list: none."""
     from . import ollama
-    from .backend import credenziali
-    from .limiter import Limitatore
-    nomi = []
+    from .backend import credentials
+    from .limiter import Limiter
+    names = []
     try:
-        if ollama.stato() == "pronto":
-            nomi.append("locale")
+        if ollama.state() == "pronto":
+            names.append("locale")
     except OSError:
         pass
-    for nome in _online_scelti(profilo):
-        if nome == "deepl" and not credenziali()["chiave_deepl"]:
+    for name in _chosen_online(profile):
+        if name == "deepl" and not credentials()["chiave_deepl"]:
             continue
-        if Limitatore(nome, log=None).pausa() is None:
-            nomi.append(nome)
-    if Limitatore("google", log=None).pausa() is None:
-        nomi.append("google")
-    return nomi
+        if Limiter(name, log=None).pause() is None:
+            names.append(name)
+    if Limiter("google", log=None).pause() is None:
+        names.append("google")
+    return names
 
 
-def crea_traduttore(nome, log=print):
+def create_translator(name, log=print):
     """A translator of the row, set up to translate during play: the Fast model (4B) if present, short waits for the
-    online translators (see _attesa_breve) and a single retry after a network error."""
+    online translators (see _short_wait) and a single retry after a network error."""
     from . import ollama
-    from .backend import Locale, crea_backend
-    if nome == "locale":
-        if ollama.stato() != "pronto":
-            raise ErroreBackend("Il traduttore locale non e' installato.")
-        return Locale("4b" if ollama.modello_presente("4b") else ollama.modello_predefinito(), log=log)
-    traduttore = crea_backend(nome, log)
-    if hasattr(traduttore, "limitatore"):
-        traduttore.limitatore.dormi = _attesa_breve
-    if hasattr(traduttore, "ATTESE_RETE"):  # Google
-        traduttore.ATTESE_RETE = (5,)
-    if hasattr(traduttore, "ATTESE"):  # DeepL: even when it asks to wait (Retry-After) it retries soon, only
-        traduttore.ATTESE = (5,)  # once, then it moves on to the next translator
-        traduttore.ATTESA_MASSIMA = 5.0
-    return traduttore
+    from .backend import Local, create_backend
+    if name == "locale":
+        if ollama.state() != "pronto":
+            raise BackendError("Il traduttore locale non e' installato.")
+        return Local("4b" if ollama.model_present("4b") else ollama.default_model(), log=log)
+    translator = create_backend(name, log)
+    if hasattr(translator, "limiter"):
+        translator.limiter.sleep = _short_wait
+    if hasattr(translator, "NETWORK_WAITS"):  # Google
+        translator.NETWORK_WAITS = (5,)
+    if hasattr(translator, "WAITS"):  # DeepL: even when it asks to wait (Retry-After) it retries soon, only
+        translator.WAITS = (5,)  # once, then it moves on to the next translator
+        translator.LONGEST_WAIT = 5.0
+    return translator
 
 
-def altra_lingua(originale, tradotto, origine, destinazione):
+def other_language(original, translated, origin, dest_lang):
     """True if 'tradotto' is not a translation in the target language: empty, equal to the original, refused by the
     model, with another script or letters of another language, or with the frequent words of another language."""
-    if set(problemi_traduzione(originale, tradotto, destinazione)) & _NON_TRADOTTA:
+    if set(translation_problems(original, translated, dest_lang)) & _UNTRANSLATED:
         return True
-    if _uguale(originale, tradotto) and re.search(r"[^\W\d_]", _XUNITY.sub(" ", originale)):
+    if _unchanged(original, translated) and re.search(r"[^\W\d_]", _XUNITY.sub(" ", original)):
         return True  # left equal to the original (even with a single frequent word: "Hold {{A}}s to leap")
-    return lingua.lingua_evidente(_XUNITY.sub(" ", tradotto), destinazione) is not None
+    return language.obvious_language(_XUNITY.sub(" ", translated), dest_lang) is not None
 
 
-class _SenzaChiusura:
-    """The translator stays on between one line and the next: Progetto would close it at the end of each translation
+class _NoClose:
+    """The translator stays on between one line and the next: Project would close it at the end of each translation
     (chiudi) and would make time estimates (stima), which are not needed for one line at a time. The service checks
     the pause before trying it."""
 
     def __init__(self, backend):
         self._backend = backend
 
-    def __getattr__(self, nome):
-        if nome in ("chiudi", "stima", "richieste", "pausa"):
-            raise AttributeError(nome)
-        return getattr(self._backend, nome)
+    def __getattr__(self, name):
+        if name in ("close", "estimate", "requests", "pause"):
+            raise AttributeError(name)
+        return getattr(self._backend, name)
 
 
-def processo_vivo(pid):
+def process_alive(pid):
     """True if the process still exists (Windows; if it cannot be checked it is considered alive)."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.OpenProcess.restype = ctypes.c_void_p
@@ -227,7 +227,7 @@ def processo_vivo(pid):
         kernel32.CloseHandle(ctypes.c_void_p(h))
 
 
-class _ServerHttp(http.server.ThreadingHTTPServer):
+class _HttpServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False  # on Windows it would let two servers take the same port
 
@@ -237,365 +237,365 @@ class _ServerHttp(http.server.ThreadingHTTPServer):
         super().server_bind()
 
 
-class _Gestore(http.server.BaseHTTPRequestHandler):
+class _Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         """POST /traduci-gruppo {"from", "to", "testi": [...]} -> {"traduzioni": {testo: traduzione}, "riprova": [...]}:
-        several lines together, for the live translation of web games (adapter_web_vivo)."""
-        servizio = self.server.servizio
-        if urllib.parse.urlsplit(self.path).path != PERCORSO_GRUPPO:
-            return self._rispondi(404, "")
+        several lines together, for the live translation of web games (adapter_web_live)."""
+        service = self.server.service
+        if urllib.parse.urlsplit(self.path).path != GROUP_URL_PATH:
+            return self._reply(404, "")
         try:
-            lunghezza = int(self.headers.get("Content-Length") or 0)
-            dati = json.loads(self.rfile.read(min(lunghezza, MAX_CORPO)).decode("utf-8"))
-            testi = [t for t in dati.get("testi", []) if isinstance(t, str)][:MAX_GRUPPO]
-            da, a = str(dati.get("from") or "en"), str(dati.get("to") or "it")
+            length = int(self.headers.get("Content-Length") or 0)
+            data = json.loads(self.rfile.read(min(length, MAX_BODY)).decode("utf-8"))
+            texts = [t for t in data.get("testi", []) if isinstance(t, str)][:MAX_GROUP]
+            src_lang, a = str(data.get("from") or "en"), str(data.get("to") or "it")
         except (ValueError, AttributeError, UnicodeDecodeError):
-            return self._rispondi(400, "richiesta non valida")
+            return self._reply(400, "richiesta non valida")
         try:
-            traduzioni, riprova = servizio.rispondi_gruppo(testi, da, a)
+            translations, to_retry = service.answer_group(texts, src_lang, a)
         except Exception as e:  # unexpected: the script retries later
-            servizio.log("! gruppo di %d frasi: %s: %s" % (len(testi), type(e).__name__, e))
-            traduzioni, riprova = {}, testi
-        corpo = json.dumps({"traduzioni": {t: servizio.adatta(v, a) for t, v in traduzioni.items()},
-                            "riprova": riprova}, ensure_ascii=False)
-        self._rispondi(200, corpo, "application/json; charset=utf-8")
+            service.log("! gruppo di %d frasi: %s: %s" % (len(texts), type(e).__name__, e))
+            translations, to_retry = {}, texts
+        body = json.dumps({"traduzioni": {t: service.adapt(v, a) for t, v in translations.items()},
+                            "riprova": to_retry}, ensure_ascii=False)
+        self._reply(200, body, "application/json; charset=utf-8")
 
     def do_GET(self):
-        servizio = self.server.servizio
+        service = self.server.service
         url = urllib.parse.urlsplit(self.path)
         q = urllib.parse.parse_qs(url.query, keep_blank_values=True)
         if url.path == "/patchsmith":
-            return self._rispondi(200, "patchsmith " + servizio.nome)
+            return self._reply(200, "patchsmith " + service.name)
         if url.path == "/ferma":  # "Stop the game translator" in PatchSmith's window
-            servizio.log("Fermato dalla finestra di PatchSmith (frasi tradotte: %d)" % servizio.tradotte)
-            servizio.chiusura.set()
-            threading.Thread(target=servizio.httpd.shutdown, daemon=True).start()
-            return self._rispondi(200, "ok")
+            service.log("Fermato dalla finestra di PatchSmith (frasi tradotte: %d)" % service.translated_count)
+            service.closing.set()
+            threading.Thread(target=service.httpd.shutdown, daemon=True).start()
+            return self._reply(200, "ok")
         if url.path == "/adotta":  # the game was reopened: from now on the new process is followed
             try:
-                servizio.pid = int(q["pid"][0])
+                service.pid = int(q["pid"][0])
             except (KeyError, ValueError):
-                return self._rispondi(400, "pid?")
-            servizio.log("Il gioco e' stato riaperto (processo %d): continuo" % servizio.pid)
-            return self._rispondi(200, "ok")
-        if url.path != PERCORSO:
-            return self._rispondi(404, "")
-        testo = q.get("text", [""])[0]
-        if not testo.strip():
-            return self._rispondi(200, testo)
-        da, a = q.get("from", ["en"])[0], q.get("to", ["it"])[0]
+                return self._reply(400, "pid?")
+            service.log("Il gioco e' stato riaperto (processo %d): continuo" % service.pid)
+            return self._reply(200, "ok")
+        if url.path != URL_PATH:
+            return self._reply(404, "")
+        text = q.get("text", [""])[0]
+        if not text.strip():
+            return self._reply(200, text)
+        src_lang, a = q.get("from", ["en"])[0], q.get("to", ["it"])[0]
         try:
-            codice, risposta = servizio.rispondi(testo, da, a)
-            if codice == 200:
-                risposta = servizio.adatta(risposta, a)
+            code, response = service.answer(text, src_lang, a)
+            if code == 200:
+                response = service.adapt(response, a)
         except Exception as e:  # unexpected: XUnity retries the line later
-            servizio.log("! %r: %s: %s" % (testo[:80], type(e).__name__, e))
-            servizio.annota(testo, da, a, "errore", motivo="%s: %s" % (type(e).__name__, e))
-            codice, risposta = 500, "non tradotto"
-        self._rispondi(codice, risposta)
+            service.log("! %r: %s: %s" % (text[:80], type(e).__name__, e))
+            service.record(text, src_lang, a, "errore", reason="%s: %s" % (type(e).__name__, e))
+            code, response = 500, "non tradotto"
+        self._reply(code, response)
 
-    def _rispondi(self, codice, testo, tipo="text/plain; charset=utf-8"):
-        dati = testo.encode("utf-8")
-        self.send_response(codice)
-        self.send_header("Content-Type", tipo)
-        self.send_header("Content-Length", str(len(dati)))
+    def _reply(self, code, text, kind="text/plain; charset=utf-8"):
+        data = text.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(dati)
+        self.wfile.write(data)
 
-    def log_message(self, *argomenti):  # no lines for each request
+    def log_message(self, *arguments):  # no lines for each request
         pass
 
 
-class Servizio:
-    """porta=None: the game's port (porta_per). backend: for the tests, a ready translator or a list of
-    (nome, traduttore) to try in a row; None = the row of traduttori_previsti. pid: the game's process to
+class Service:
+    """porta=None: the game's port (port_for). backend: for the tests, a ready translator or a list of
+    (nome, traduttore) to try in a row; None = the row of expected_translators. pid: the game's process to
     follow (when it closes the service stops)."""
 
-    def __init__(self, percorso_profilo, porta=None, pid=None, log=print, backend=None, prova=False):
-        self.progetto = Progetto(percorso_profilo, log, prova=prova)
+    def __init__(self, profile_path, port=None, pid=None, log=print, backend=None, test=False):
+        self.project = Project(profile_path, log, test=test)
         # one line at a time during play: no second rounds (the other model would load the game's graphics card)
-        # and no problemi.json; the journal records the rejected lines and they are re-translated with the game closed
-        self.progetto.recupero = False
-        self.nome = self.progetto.profilo["nome"]
-        self.porta = porta or porta_per(self.nome)
+        # and no problems.json; the journal records the rejected lines and they are re-translated with the game closed
+        self.project.recovery = False
+        self.name = self.project.profile["nome"]
+        self.port = port or port_for(self.name)
         self.pid = pid
         self.log = log
         self._backend = backend
-        self.catena = []  # [(nome, traduttore)] ready, in the order they are tried
-        self._lucchetto = threading.Lock()
-        self._lucchetto_diario = threading.Lock()
-        self._pronto = threading.Event()
-        self.chiusura = threading.Event()  # the game is closing: no more translations (503)
-        self._errore = None
+        self.chain = []  # [(nome, traduttore)] ready, in the order they are tried
+        self._lock = threading.Lock()
+        self._journal_lock = threading.Lock()
+        self._ready = threading.Event()
+        self.closing = threading.Event()  # the game is closing: no more translations (503)
+        self._error = None
         self.httpd = None
-        self.tradotte = 0
-        self.diario = percorso_diario(self.nome)
+        self.translated_count = 0
+        self.journal = journal_path(self.name)
 
     # --- translators -------------------------------------------------------------------------------
 
-    def _prepara(self):
+    def _prepare(self):
         """Prepares the row of translators and loads the local model right away: the first line does not wait for the
         graphics card to start. A translator that does not start is skipped."""
         try:
             if self._backend is None:
-                catena = []
-                for nome in traduttori_previsti(self.progetto.profilo):
+                chain = []
+                for name in expected_translators(self.project.profile):
                     try:
-                        catena.append((nome, crea_traduttore(nome, self.log)))
-                    except (ErroreBackend, ValueError, OSError) as e:
-                        self.log("! %s non disponibile: %s" % (NOMI.get(nome, nome), e))
+                        chain.append((name, create_translator(name, self.log)))
+                    except (BackendError, ValueError, OSError) as e:
+                        self.log("! %s non disponibile: %s" % (NAMES.get(name, name), e))
             elif isinstance(self._backend, (list, tuple)):
-                catena = list(self._backend)
+                chain = list(self._backend)
             else:
-                catena = [(getattr(self._backend, "nome", "prova"), self._backend)]
-            pronti = []
-            for nome, traduttore in catena:
-                if hasattr(traduttore, "_assicura_server"):
+                chain = [(getattr(self._backend, "name", "prova"), self._backend)]
+            ready = []
+            for name, translator in chain:
+                if hasattr(translator, "_ensure_server"):
                     try:
-                        traduttore._assicura_server()
-                    except ErroreBackend as e:
-                        self.log("! %s non disponibile: %s" % (NOMI.get(nome, nome).capitalize(), e))
+                        translator._ensure_server()
+                    except BackendError as e:
+                        self.log("! %s non disponibile: %s" % (NAMES.get(name, name).capitalize(), e))
                         continue
-                if hasattr(traduttore, "scarti"):
-                    traduttore.scarti = {}  # the rejected proposals are needed for the fallback answer
-                pronti.append((nome, traduttore))
-            self.catena = pronti
-            self.log("Traduttori per le frasi nuove: %s" % (", ".join(NOMI.get(n, n) for n, _ in pronti) or
+                if hasattr(translator, "rejects"):
+                    translator.rejects = {}  # the rejected proposals are needed for the fallback answer
+                ready.append((name, translator))
+            self.chain = ready
+            self.log("Traduttori per le frasi nuove: %s" % (", ".join(NAMES.get(n, n) for n, _ in ready) or
                                                             "nessuno (le frasi nuove restano in originale)"))
         except Exception as e:
-            self._errore = e
+            self._error = e
             self.log("! Traduttori non pronti: %s: %s" % (type(e).__name__, e))
         finally:
-            self._pronto.set()
+            self._ready.set()
 
-    def rispondi(self, testo, da, a):
+    def answer(self, text, src_lang, a):
         """(HTTP code, answer text) for a line requested by XUnity. Every line ends up in the journal."""
-        if self.chiusura.is_set():
-            return self._in_chiusura(testo, da, a)
-        memoria = self.progetto.memoria
-        gia = memoria.get(testo)
-        if isinstance(gia, str) and gia:  # already translated: without waiting for the translators
-            self.annota(testo, da, a, "ok", "memoria", risposta=gia)
-            return 200, gia
-        if self._parte_di_traduzione(testo):
-            self.annota(testo, da, a, "ok", "gia' tradotta", risposta=testo)
-            return 200, testo
-        if not self._pronto.wait(MAX_AVVIO):
-            self.annota(testo, da, a, "rinviata", motivo="i traduttori si stanno ancora avviando", risposta=testo)
-            return 200, testo
-        with self._lucchetto:  # one line at a time (XUnity sends one at a time, but someone else might send more)
-            if self.chiusura.is_set():
-                return self._in_chiusura(testo, da, a)
-            gia = memoria.get(testo)
-            if isinstance(gia, str) and gia:
-                self.annota(testo, da, a, "ok", "memoria", risposta=gia)
-                return 200, gia
-            return self._traduci(testo, da, a)
+        if self.closing.is_set():
+            return self._while_closing(text, src_lang, a)
+        memory = self.project.memory
+        already = memory.get(text)
+        if isinstance(already, str) and already:  # already translated: without waiting for the translators
+            self.record(text, src_lang, a, "ok", "memoria", response=already)
+            return 200, already
+        if self._part_of_translation(text):
+            self.record(text, src_lang, a, "ok", "gia' tradotta", response=text)
+            return 200, text
+        if not self._ready.wait(MAX_STARTUP):
+            self.record(text, src_lang, a, "rinviata", reason="i traduttori si stanno ancora avviando", response=text)
+            return 200, text
+        with self._lock:  # one line at a time (XUnity sends one at a time, but someone else might send more)
+            if self.closing.is_set():
+                return self._while_closing(text, src_lang, a)
+            already = memory.get(text)
+            if isinstance(already, str) and already:
+                self.record(text, src_lang, a, "ok", "memoria", response=already)
+                return 200, already
+            return self._translate(text, src_lang, a)
 
-    def _parte_di_traduzione(self, testo):
+    def _part_of_translation(self, text):
         """True if the text is (a piece of) a translation already made: the game already shows the Italian (e.g. the
         translated text tables in the bundles, which XUnity splits at the colors and requests as if they were
         English). Re-translating it from English would ruin it."""
-        pezzo = testo.strip()
-        memoria = self.progetto.memoria
-        if len(pezzo) < 4 or pezzo in memoria:
+        piece = text.strip()
+        memory = self.project.memory
+        if len(piece) < 4 or piece in memory:
             return False
-        if getattr(self, "_tradotte_n", -1) != len(memoria):
-            self._tradotte = "\n".join(v for v in memoria.values() if isinstance(v, str))
-            self._tradotte_n = len(memoria)
-        return pezzo in self._tradotte
+        if getattr(self, "_translated_n", -1) != len(memory):
+            self._translated = "\n".join(v for v in memory.values() if isinstance(v, str))
+            self._translated_n = len(memory)
+        return piece in self._translated
 
-    def rispondi_gruppo(self, testi, da, a):
+    def answer_group(self, texts, src_lang, a):
         """({testo: traduzione}, [texts to request later]) for several lines together: those already in the
         translation memory right away, the others with a single group translation per translator (the local
         translator does more than one at a time on the graphics card); those the group does not translate go one at a
-        time, like rispondi()."""
-        traduzioni, riprova, mancanti = {}, [], []
-        memoria = self.progetto.memoria
-        for t in dict.fromkeys(testi):
+        time, like answer()."""
+        translations, to_retry, missing = {}, [], []
+        memory = self.project.memory
+        for t in dict.fromkeys(texts):
             if not t.strip():
                 continue
-            if self.chiusura.is_set():
-                riprova.append(t)
+            if self.closing.is_set():
+                to_retry.append(t)
                 continue
-            gia = memoria.get(t)
-            if isinstance(gia, str) and gia:
-                self.annota(t, da, a, "ok", "memoria", risposta=gia)
-                traduzioni[t] = gia
-            elif self._parte_di_traduzione(t):
-                self.annota(t, da, a, "ok", "gia' tradotta", risposta=t)
+            already = memory.get(t)
+            if isinstance(already, str) and already:
+                self.record(t, src_lang, a, "ok", "memoria", response=already)
+                translations[t] = already
+            elif self._part_of_translation(t):
+                self.record(t, src_lang, a, "ok", "gia' tradotta", response=t)
             else:
-                mancanti.append(t)
-        if not mancanti:
-            return traduzioni, riprova
-        if not self._pronto.wait(MAX_AVVIO):
-            return traduzioni, riprova + mancanti
-        with self._lucchetto:
-            p = self.progetto
-            for nome, traduttore in self.catena:
-                rimasti = [t for t in mancanti if t not in traduzioni]
-                if not rimasti or self.chiusura.is_set():
+                missing.append(t)
+        if not missing:
+            return translations, to_retry
+        if not self._ready.wait(MAX_STARTUP):
+            return translations, to_retry + missing
+        with self._lock:
+            p = self.project
+            for name, translator in self.chain:
+                remaining = [t for t in missing if t not in translations]
+                if not remaining or self.closing.is_set():
                     break
-                if hasattr(traduttore, "pausa") and traduttore.pausa():
+                if hasattr(translator, "pause") and translator.pause():
                     continue
-                p.esito_traduzione, p.ultimo_errore, p.ultimo_gruppo = None, None, None
-                p.traduci_testi(rimasti, _SenzaChiusura(traduttore), da, a)
-                for t in rimasti:
-                    v = memoria.get(t)
+                p.translation_outcome, p.last_error, p.last_group = None, None, None
+                p.translate_texts(remaining, _NoClose(translator), src_lang, a)
+                for t in remaining:
+                    v = memory.get(t)
                     if isinstance(v, str) and v:
-                        self.tradotte += 1
-                        self.annota(t, da, a, "ok", nome if p.ultimo_gruppo is not None else "comune", risposta=v)
-                        traduzioni[t] = v
-                if isinstance(p.ultimo_errore, Rinviata) or p.esito_traduzione == "TRADUTTORE_BLOCCATO":
+                        self.translated_count += 1
+                        self.record(t, src_lang, a, "ok", name if p.last_group is not None else "comune", response=v)
+                        translations[t] = v
+                if isinstance(p.last_error, Deferred) or p.translation_outcome == "TRADUTTORE_BLOCCATO":
                     continue
-        for t in [t for t in mancanti if t not in traduzioni]:  # one at a time: fallback, rejects and journal
-            if self.chiusura.is_set():
-                riprova.append(t)
+        for t in [t for t in missing if t not in translations]:  # one at a time: fallback, rejects and journal
+            if self.closing.is_set():
+                to_retry.append(t)
                 continue
-            with self._lucchetto:
-                codice, risposta = self._traduci(t, da, a)
-            if codice == 200 and risposta != t:
-                traduzioni[t] = risposta
+            with self._lock:
+                code, response = self._translate(t, src_lang, a)
+            if code == 200 and response != t:
+                translations[t] = response
             else:  # left untranslated or translators stopped: the script requests it again later (a few times)
-                riprova.append(t)
-        return traduzioni, riprova
+                to_retry.append(t)
+        return translations, to_retry
 
-    def _in_chiusura(self, testo, da, a):
-        self.annota(testo, da, a, "interrotta", motivo="il gioco si sta chiudendo")
+    def _while_closing(self, text, src_lang, a):
+        self.record(text, src_lang, a, "interrotta", reason="il gioco si sta chiudendo")
         return 503, "in chiusura"
 
-    def adatta(self, risposta, a):
+    def adapt(self, response, a):
         """The answer for XUnity without the characters the game's fonts cannot draw (profilo
         ["caratteri_mancanti"], found by the after-play check): è -> e'. The translation memory and the journal keep
         the real translation."""
-        from .characters import adatta_senza
-        esclusi = self.progetto.profilo.get("caratteri_mancanti")
-        return (adatta_senza(risposta, set(esclusi), a) or risposta) if esclusi else risposta
+        from .characters import adapt_without
+        excluded = self.project.profile.get("caratteri_mancanti")
+        return (adapt_without(response, set(excluded), a) or response) if excluded else response
 
-    def _traduci(self, testo, da, a):
+    def _translate(self, text, src_lang, a):
         """Tries the translators in a row; if they all reject the line, the fallback answer (see _rilassata)."""
-        memoria, p = self.progetto.memoria, self.progetto
-        raggiunti, rinviati, errori = [], [], []
-        for _, traduttore in self.catena:
-            if getattr(traduttore, "scarti", None) is not None:
-                traduttore.scarti.clear()
-        for nome, traduttore in self.catena:
-            pausa = traduttore.pausa() if hasattr(traduttore, "pausa") else None
-            if pausa:  # paused because of a block (even one that arrived during play): no insisting
-                errori.append((nome, pausa))
+        memory, p = self.project.memory, self.project
+        answered, deferred, errors = [], [], []
+        for _, translator in self.chain:
+            if getattr(translator, "rejects", None) is not None:
+                translator.rejects.clear()
+        for name, translator in self.chain:
+            pause = translator.pause() if hasattr(translator, "pause") else None
+            if pause:  # paused because of a block (even one that arrived during play): no insisting
+                errors.append((name, pause))
                 continue
-            p.esito_traduzione, p.ultimo_errore, p.ultimo_gruppo = None, None, None
-            p.traduci_testi([testo], _SenzaChiusura(traduttore), da, a)
-            tradotto = memoria.get(testo)
-            if isinstance(tradotto, str) and tradotto:
-                self.tradotte += 1
-                self.annota(testo, da, a, "ok", nome if p.ultimo_gruppo is not None else "comune",
-                            risposta=tradotto)
-                return 200, tradotto
-            if isinstance(p.ultimo_errore, Rinviata):
-                rinviati.append((nome, str(p.ultimo_errore)))
-            elif p.ultimo_errore is not None or p.esito_traduzione == "TRADUTTORE_BLOCCATO":
-                errori.append((nome, str(p.ultimo_errore or p.motivo_traduzione)))
+            p.translation_outcome, p.last_error, p.last_group = None, None, None
+            p.translate_texts([text], _NoClose(translator), src_lang, a)
+            translated = memory.get(text)
+            if isinstance(translated, str) and translated:
+                self.translated_count += 1
+                self.record(text, src_lang, a, "ok", name if p.last_group is not None else "comune",
+                            response=translated)
+                return 200, translated
+            if isinstance(p.last_error, Deferred):
+                deferred.append((name, str(p.last_error)))
+            elif p.last_error is not None or p.translation_outcome == "TRADUTTORE_BLOCCATO":
+                errors.append((name, str(p.last_error or p.translation_reason)))
             else:  # it answered, but the translation did not pass the checks
-                raggiunti.append((nome, traduttore, p.ultimo_gruppo))
-        motivi = ["%s: %s" % (NOMI.get(n, n), m) for n, m in errori + rinviati]
-        if raggiunti:
-            nome, traduttore, gruppo = raggiunti[0]
-            scartata = "scartata dai controlli (%s)" % ", ".join(NOMI.get(n, n) for n, _, _ in raggiunti)
-            motivo = "; ".join([scartata] + motivi)
-            rilassata = self._rilassata(traduttore, gruppo, testo, da, a)
-            if rilassata:
-                self.log("  ~ frase tradotta senza tutti i controlli (da ricontrollare): %r" % testo[:80])
-                self.annota(testo, da, a, "rilassata", nome, motivo, risposta=rilassata)
-                return 200, rilassata
-            self.log("  ! frase lasciata in originale (nessuna traduzione accettabile): %r" % testo[:80])
-            self.annota(testo, da, a, "rifiutata", nome, motivo, risposta=testo)
-            return 200, testo
-        if rinviati:
-            self.annota(testo, da, a, "rinviata", rinviati[0][0], "; ".join(motivi), risposta=testo)
-            return 200, testo
-        motivo = "; ".join(motivi) or ("traduttori non pronti (%s)" % self._errore if self._errore else
+                answered.append((name, translator, p.last_group))
+        reasons = ["%s: %s" % (NAMES.get(n, n), m) for n, m in errors + deferred]
+        if answered:
+            name, translator, group = answered[0]
+            rejected_note = "scartata dai controlli (%s)" % ", ".join(NAMES.get(n, n) for n, _, _ in answered)
+            reason = "; ".join([rejected_note] + reasons)
+            relaxed = self._relaxed(translator, group, text, src_lang, a)
+            if relaxed:
+                self.log("  ~ frase tradotta senza tutti i controlli (da ricontrollare): %r" % text[:80])
+                self.record(text, src_lang, a, "rilassata", name, reason, response=relaxed)
+                return 200, relaxed
+            self.log("  ! frase lasciata in originale (nessuna traduzione accettabile): %r" % text[:80])
+            self.record(text, src_lang, a, "rifiutata", name, reason, response=text)
+            return 200, text
+        if deferred:
+            self.record(text, src_lang, a, "rinviata", deferred[0][0], "; ".join(reasons), response=text)
+            return 200, text
+        reason = "; ".join(reasons) or ("traduttori non pronti (%s)" % self._error if self._error else
                                        "nessun traduttore disponibile")
-        self.log("! %r non tradotta: %s" % (testo[:80], motivo))
-        self.annota(testo, da, a, "errore", motivo=motivo)
+        self.log("! %r non tradotta: %s" % (text[:80], reason))
+        self.record(text, src_lang, a, "errore", reason=reason)
         return 500, "non tradotto"
 
-    def _rilassata(self, traduttore, gruppo, testo, da, a):
+    def _relaxed(self, translator, group, text, src_lang, a):
         """The fallback answer for a line that all translators rejected: the pieces between the placeholders
         translated separately (only once, only where it has not been done already) and, for the lines still without a
         translation, the local translator's rejected proposal. None if an XUnity {{A}} placeholder is missing or if
         the answer is not in the target language: then the answer is the original."""
-        if not gruppo or testo not in gruppo["divisi"]:
+        if not group or text not in group["divisi"]:
             return None
-        parti, protetti, mappa = gruppo["divisi"][testo], gruppo["protetti"], dict(gruppo["mappa"])
-        mancanti = [n for _, n, _ in parti if n and _da_tradurre(n) and n not in mappa]
-        a_pezzi = [n for n in mancanti if protetti[n][1] and n not in gruppo.get("ripiegati", ())]
-        if a_pezzi:
+        parts, protected, mapping = group["divisi"][text], group["protetti"], dict(group["mappa"])
+        missing = [n for _, n, _ in parts if n and _to_translate(n) and n not in mapping]
+        in_pieces = [n for n in missing if protected[n][1] and n not in group.get("ripiegati", ())]
+        if in_pieces:
             try:
-                for n, r in self.progetto._traduci_a_pezzi(_SenzaChiusura(traduttore), a_pezzi, da, a).items():
+                for n, r in self.project._translate_in_pieces(_NoClose(translator), in_pieces, src_lang, a).items():
                     if r:
-                        mappa[n] = maiuscola_come(n, r)
+                        mapping[n] = capitalize_like(n, r)
             except Exception as e:  # noqa: BLE001 - the fallback is optional
                 self.log("  ! ripiego a pezzi non riuscito (%s: %s)" % (type(e).__name__, e))
-        scarti = getattr(traduttore, "scarti", None) or {}
-        for n in mancanti:
-            if n in mappa:
+        rejects = getattr(translator, "rejects", None) or {}
+        for n in missing:
+            if n in mapping:
                 continue
-            proposta = scarti.get(protetti[n][0])
-            ripristinata = ripristina_segnaposto(proposta[0], protetti[n][1]) if proposta else None
-            if not ripristinata:
+            proposal = rejects.get(protected[n][0])
+            restored = restore_placeholders(proposal[0], protected[n][1]) if proposal else None
+            if not restored:
                 return None
-            mappa[n] = maiuscola_come(n, ripristinata)
-        risposta = ricomponi_righe(parti, mappa)
-        if collections.Counter(_XUNITY.findall(testo)) != collections.Counter(_XUNITY.findall(risposta)):
+            mapping[n] = capitalize_like(n, restored)
+        response = reassemble_lines(parts, mapping)
+        if collections.Counter(_XUNITY.findall(text)) != collections.Counter(_XUNITY.findall(response)):
             return None
-        if altra_lingua(testo, risposta, da, a):
+        if other_language(text, response, src_lang, a):
             return None
-        return risposta
+        return response
 
     # --- journal -----------------------------------------------------------------------------------
 
-    def annota(self, testo, da, a, esito, backend=None, motivo="", risposta=None):
+    def record(self, text, src_lang, a, outcome, backend=None, reason="", response=None):
         """A line in the journal of the requested lines (see percorso_diario)."""
-        riga = {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "testo": testo, "da": da, "a": a,
-                "esito": esito, "backend": backend, "motivo": motivo}
-        if risposta is not None:
-            riga["risposta"] = risposta
-        dati = (json.dumps(riga, ensure_ascii=False) + "\n").encode("utf-8")
-        with self._lucchetto_diario:
+        line = {"ts": datetime.datetime.now().isoformat(timespec="seconds"), "testo": text, "da": src_lang, "a": a,
+                "esito": outcome, "backend": backend, "motivo": reason}
+        if response is not None:
+            line["risposta"] = response
+        data = (json.dumps(line, ensure_ascii=False) + "\n").encode("utf-8")
+        with self._journal_lock:
             try:
-                os.makedirs(os.path.dirname(self.diario), exist_ok=True)
+                os.makedirs(os.path.dirname(self.journal), exist_ok=True)
                 try:
-                    if os.path.getsize(self.diario) > MAX_DIARIO:
-                        os.replace(self.diario, self.diario + ".1")
+                    if os.path.getsize(self.journal) > MAX_JOURNAL:
+                        os.replace(self.journal, self.journal + ".1")
                 except OSError:
                     pass
-                with open(self.diario, "ab") as f:
-                    f.write(dati)
+                with open(self.journal, "ab") as f:
+                    f.write(data)
             except OSError as e:
                 self.log("! Diario delle frasi non scritto (%s)" % e)
 
     # --- service lifetime --------------------------------------------------------------------------
 
-    def _segui_gioco(self):
-        while not self.chiusura.is_set():
-            time.sleep(CONTROLLO_GIOCO)
-            if self.pid and not processo_vivo(self.pid):
-                self.log("Il gioco si e' chiuso (frasi tradotte: %d): chiudo il traduttore" % self.tradotte)
-                self.chiusura.set()  # from now on lines get 503: no translation with the translator off
+    def _watch_game(self):
+        while not self.closing.is_set():
+            time.sleep(GAME_CHECK)
+            if self.pid and not process_alive(self.pid):
+                self.log("Il gioco si e' chiuso (frasi tradotte: %d): chiudo il traduttore" % self.translated_count)
+                self.closing.set()  # from now on lines get 503: no translation with the translator off
                 # stop listening right away, without waiting for a translation in progress (with an online translator
                 # it can take a minute): the port is freed and a game reopened right away starts its own translator
                 # instead of relying on this one, which is closing. The translation in progress finishes and is saved
-                # anyway: avvia() waits for it before closing the translators
+                # anyway: launch() waits for it before closing the translators
                 self.httpd.shutdown()
                 return
 
-    def _adotta(self):
+    def _adopt(self):
         """Port already in use: if it is a PatchSmith service for this game, it hands it the new process."""
-        base = "http://127.0.0.1:%d" % self.porta
+        base = "http://127.0.0.1:%d" % self.port
         try:
             with urllib.request.urlopen(base + "/patchsmith", timeout=5) as r:
-                if r.read().decode("utf-8", "replace") != "patchsmith " + self.nome:
+                if r.read().decode("utf-8", "replace") != "patchsmith " + self.name:
                     return False
             if self.pid:
                 with urllib.request.urlopen(base + "/adotta?pid=%d" % self.pid, timeout=5) as r:
@@ -604,41 +604,41 @@ class Servizio:
         except (OSError, ValueError):
             return False
 
-    def avvia(self):
+    def launch(self):
         """Listens until the game closes (or Ctrl+C). 0 if everything went well."""
         try:
-            self.httpd = _ServerHttp(("127.0.0.1", self.porta), _Gestore)
+            self.httpd = _HttpServer(("127.0.0.1", self.port), _Handler)
         except OSError as e:
-            if self._adotta():
+            if self._adopt():
                 self.log("Il traduttore di questo gioco e' gia' attivo: continua quello")
                 return 0
-            self.log("! La porta %d e' occupata da un altro programma (%s): traduttore non avviato" % (self.porta, e))
+            self.log("! La porta %d e' occupata da un altro programma (%s): traduttore non avviato" % (self.port, e))
             return 1
-        self.httpd.servizio = self
-        tolti = file_condiviso.pulisci_temporanei(os.path.dirname(self.progetto.percorso_memoria))
-        if tolti:
-            self.log("Tolti %d file temporanei rimasti da un salvataggio interrotto" % tolti)
-        self.log("Traduttore per XUnity in ascolto su %s (gioco: %s)" % (indirizzo(self.porta), self.nome))
-        threading.Thread(target=self._prepara, daemon=True).start()
+        self.httpd.service = self
+        dropped = shared_file.clean_temp_files(os.path.dirname(self.project.memory_path))
+        if dropped:
+            self.log("Tolti %d file temporanei rimasti da un salvataggio interrotto" % dropped)
+        self.log("Traduttore per XUnity in ascolto su %s (gioco: %s)" % (address(self.port), self.name))
+        threading.Thread(target=self._prepare, daemon=True).start()
         if self.pid:
-            threading.Thread(target=self._segui_gioco, daemon=True).start()
+            threading.Thread(target=self._watch_game, daemon=True).start()
         try:
             self.httpd.serve_forever(poll_interval=0.5)
         except KeyboardInterrupt:
             pass
         finally:
-            self.chiusura.set()
+            self.closing.set()
             self.httpd.server_close()
-            self._pronto.wait(timeout=300)  # if the translators are still starting, they are closed afterwards
-            preso = self._lucchetto.acquire(timeout=MAX_CHIUSURA)  # a translation in progress finishes first
+            self._ready.wait(timeout=300)  # if the translators are still starting, they are closed afterwards
+            acquired = self._lock.acquire(timeout=MAX_CLOSING)  # a translation in progress finishes first
             try:
-                for nome, traduttore in self.catena:
-                    if hasattr(traduttore, "chiudi"):
+                for name, translator in self.chain:
+                    if hasattr(translator, "close"):
                         try:
-                            traduttore.chiudi()
+                            translator.close()
                         except Exception as e:  # noqa: BLE001 - the others are closed anyway
-                            self.log("! %s non chiuso bene (%s)" % (NOMI.get(nome, nome), e))
+                            self.log("! %s non chiuso bene (%s)" % (NAMES.get(name, name), e))
             finally:
-                if preso:
-                    self._lucchetto.release()
+                if acquired:
+                    self._lock.release()
         return 0

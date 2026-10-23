@@ -2,7 +2,7 @@
 
 Usage: python -I test/test_gamemaker_json.py <empty_temp_folder>
 Fake game: local/english.json + official translations, with Forager's conventions ('*' = line break, "U " =
-symbol at the start of a paragraph), data.win with an accented Latin font and ASCII-only fonts (chat, numbers).
+symbol at the start of a paragraph), date.win with an accented Latin font and ASCII-only fonts (chat, numbers).
 Writes only to the temporary folder; no network (fake translator, simulated HTTP requests).
 """
 import hashlib
@@ -13,25 +13,25 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from patchsmith import (adapter_gamemaker, auto as automatico, backend, interruption as interruzione,
-                        official_language as lingua_ufficiale, project as progetto, steam)
-import test_gamemaker  # noqa: E402  (data.win builder)
+from patchsmith import (adapter_gamemaker, auto as automatic, backend, interruption,
+                        official_language, project, steam)
+import test_gamemaker  # noqa: E402  (date.win builder)
 
-ESITI = []
-
-
-def controlla(nome, condizione):
-    ESITI.append((nome, bool(condizione)))
-    print(("OK    " if condizione else "ERRORE") + "  " + nome)
+OUTCOMES = []
 
 
-def silenzio(_):
+def check(name, condition):
+    OUTCOMES.append((name, bool(condition)))
+    print(("OK    " if condition else "ERRORE") + "  " + name)
+
+
+def silent(_):
     pass
 
 
-def impronte(cartella):
-    return {n: hashlib.sha256(open(os.path.join(cartella, n), "rb").read()).hexdigest()
-            for n in sorted(os.listdir(cartella)) if "patchsmith" not in n}
+def fingerprints(folder):
+    return {n: hashlib.sha256(open(os.path.join(folder, n), "rb").read()).hexdigest()
+            for n in sorted(os.listdir(folder)) if "patchsmith" not in n}
 
 
 EN = {"itemName0": "wood", "itemName1": "iron*ore", "itemName2": "bottled*torchbug", "itemName3": "demon*horn",
@@ -56,7 +56,7 @@ FR.update({"extra%d" % i: "texte simple numéro %d" % i for i in range(20)})
 ES = {k: v.replace("débloque", "desbloquea").replace("é", "é") for k, v in FR.items()}
 DE = {k: v.replace("U débloque", "Schaltet").replace("*", " ") for k, v in FR.items()}  # German: without '*' or U
 
-ITALIANO = {"wood": "legno", "iron ore": "minerale di ferro", "bottled torchbug": "lucciola in bottiglia",
+ITALIAN = {"wood": "legno", "iron ore": "minerale di ferro", "bottled torchbug": "lucciola in bottiglia",
             "demon horn": "corno di demone", "royal steel": "acciaio reale", "golden egg": "uovo d'oro",
             "coal": "carbone", "unlocks steel": "sblocca l'acciaio", "unlocks glass": "sblocca il vetro",
             "gain EP when building structures": "ottieni PE quando costruisci strutture",
@@ -67,20 +67,20 @@ ITALIANO = {"wood": "legno", "iron ore": "minerale di ferro", "bottled torchbug"
             "unlocks the forge": "sblocca la forgia", "faster smelting": "fusione più veloce"}
 
 
-class Traduttore(backend.Backend):
+class Translator(backend.Backend):
     """Fake translator: a small dictionary, the rest "[it] ..."."""
-    nome = "dizionario"
+    name = "dizionario"
 
-    def __init__(self, ferma_dopo=None):
-        self.chiamate = 0
-        self.ferma_dopo = ferma_dopo
+    def __init__(self, stop_after=None):
+        self.calls = 0
+        self.stop_after = stop_after
 
-    def traduci_righe(self, righe, origine, destinazione):
-        interruzione.controlla()
-        self.chiamate += 1
-        if self.ferma_dopo and self.chiamate >= self.ferma_dopo:
-            interruzione.richiedi()  # like the "Stop" button pressed while translating
-        return [ITALIANO.get(r, "[it] " + r) for r in righe]
+    def translate_lines(self, lines, origin, dest_lang):
+        interruption.check()
+        self.calls += 1
+        if self.stop_after and self.calls >= self.stop_after:
+            interruption.request_stop()  # like the "Stop" button pressed while translating
+        return [ITALIAN.get(r, "[it] " + r) for r in lines]
 
 
 def main(base):
@@ -88,229 +88,233 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
-    progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
-    automatico.CARTELLA_PROFILI = os.path.join(base, "patchsmith", "profiles")
-    os.makedirs(automatico.CARTELLA_PROFILI)
+    project.PROJECT_FOLDER = os.path.join(base, "patchsmith")
+    project.DATA_ROOT = project.PROJECT_FOLDER  # the user's data here too
+    automatic.PROFILES_FOLDER = os.path.join(base, "patchsmith", "profiles")
+    os.makedirs(automatic.PROFILES_FOLDER)
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
-    steam.cartella_steam = lambda: None
+    steam.steam_folder = lambda: None
 
-    gioco = os.path.join(base, "Forager finto")
-    local = os.path.join(gioco, "local")
+    game = os.path.join(base, "Forager finto")
+    local = os.path.join(game, "local")
     os.makedirs(local)
-    for nome, dati in (("english", EN), ("french", FR), ("spanish", ES), ("german", DE)):
-        with open(os.path.join(local, nome + ".json"), "w", encoding="utf-8") as f:
-            json.dump(dati, f, ensure_ascii=False, indent=2)
-    latino = set(chr(c) for c in range(32, 127)) | set("àèéìíòóùÀÈÉÌÒÙçâêôûœëïüö")
+    for name, data in (("english", EN), ("french", FR), ("spanish", ES), ("german", DE)):
+        with open(os.path.join(local, name + ".json"), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    latin = set(chr(c) for c in range(32, 127)) | set("àèéìíòóùÀÈÉÌÒÙçâêôûœëïüö")
     ascii_ = set(chr(c) for c in range(32, 127))
-    with open(os.path.join(gioco, "data.win"), "wb") as f:
-        f.write(test_gamemaker.data_win([("fntText", latino), ("fntChat", ascii_), ("fnt_game", ascii_)]))
-    open(os.path.join(gioco, "Forager.exe"), "wb").write(b"MZ")
-    prima = impronte(local)
+    with open(os.path.join(game, "data.win"), "wb") as f:
+        f.write(test_gamemaker.data_win([("fntText", latin), ("fntChat", ascii_), ("fnt_game", ascii_)]))
+    open(os.path.join(game, "Forager.exe"), "wb").write(b"MZ")
+    before = fingerprints(local)
 
     # --- recognition
-    trovati = adapter_gamemaker.file_json_lingue(gioco)
-    controlla("file JSON per lingua riconosciuti", sorted(trovati.values()) == ["de", "en", "es", "fr"])
-    controlla("lingua dal nome: cinese tradizionale e thai",
-              adapter_gamemaker.lingua_del_percorso("local/chinese_traditional.json") == "zh-TW"
-              and adapter_gamemaker.lingua_del_percorso("local/thai.json") == "th"
-              and adapter_gamemaker.lingua_del_percorso("local/chinese.json") == "zh")
-    altri = [FR, ES, DE]
-    controlla("convenzioni confermate dalle traduzioni ufficiali: '*' a capo, 'U' simbolo",
-              adapter_gamemaker.markup(EN, altri) == {"a_capo": "*", "punto_elenco": "U"})
-    articoli = {"k%d" % i: "A cat number %d**A dog" % i for i in range(20)}
-    controlla("un articolo ('A cat') non e' un simbolo a inizio paragrafo",
-              adapter_gamemaker.markup(articoli, [{k: "Un chat**Un chien" for k in articoli}])["punto_elenco"] is None)
-    controlla("nei file di localizzazione anche le parole sole sono testo, gli identificativi no",
-              adapter_gamemaker.testo_localizzazione("wood") and
-              not adapter_gamemaker.testo_localizzazione("Structure.NuclearFurnace")
-              and not adapter_gamemaker.testo_localizzazione("menu_title_2"))
-    controlla("normalizzazione: frase intera, paragrafi su righe, simbolo tolto",
-              adapter_gamemaker.normalizza_a_capo(EN["skillDesc1"], "*", "U")
+    found = adapter_gamemaker.language_json_files(game)
+    check("file JSON per lingua riconosciuti", sorted(found.values()) == ["de", "en", "es", "fr"])
+    check("lingua dal nome: cinese tradizionale e thai",
+              adapter_gamemaker.path_language("local/chinese_traditional.json") == "zh-TW"
+              and adapter_gamemaker.path_language("local/thai.json") == "th"
+              and adapter_gamemaker.path_language("local/chinese.json") == "zh")
+    others = [FR, ES, DE]
+    check("convenzioni confermate dalle traduzioni ufficiali: '*' a capo, 'U' simbolo",
+              adapter_gamemaker.markup(EN, others) == {"a_capo": "*", "punto_elenco": "U"})
+    articles = {"k%d" % i: "A cat number %d**A dog" % i for i in range(20)}
+    check("un articolo ('A cat') non e' un simbolo a inizio paragrafo",
+              adapter_gamemaker.markup(articles, [{k: "Un chat**Un chien" for k in articles}])["punto_elenco"] is None)
+    check("nei file di localizzazione anche le parole sole sono testo, gli identificativi no",
+              adapter_gamemaker.localization_text("wood") and
+              not adapter_gamemaker.localization_text("Structure.NuclearFurnace")
+              and not adapter_gamemaker.localization_text("menu_title_2"))
+    check("normalizzazione: frase intera, paragrafi su righe, simbolo tolto",
+              adapter_gamemaker.normalize_line_breaks(EN["skillDesc1"], "*", "U")
               == "unlocks carpentry stations\n\nstructures cost 25% less wood")
-    controlla("ricomposizione: a capo bilanciati, simboli e paragrafi rimessi",
-              adapter_gamemaker.ricomponi_a_capo("iron*ore", "minerale di ferro", "*", "U") == "minerale di*ferro"
-              and adapter_gamemaker.ricomponi_a_capo("wood", "legno", "*", "U") == "legno"
-              and adapter_gamemaker.ricomponi_a_capo(EN["skillDesc0"], "a\n\nb c\n\nd", "*", "U")
+    check("ricomposizione: a capo bilanciati, simboli e paragrafi rimessi",
+              adapter_gamemaker.reassemble_line_breaks("iron*ore", "minerale di ferro", "*", "U") == "minerale di*ferro"
+              and adapter_gamemaker.reassemble_line_breaks("wood", "legno", "*", "U") == "legno"
+              and adapter_gamemaker.reassemble_line_breaks(EN["skillDesc0"], "a\n\nb c\n\nd", "*", "U")
               == "U a**U b c**U d")
-    spezzata = "U gain EP when selling items**U items discarded from your**inventory are instantly**sold instead"
-    controlla("frase spezzata da '**' (senza simbolo, minuscola, senza punto prima): tradotta intera, poi rimessa "
+    wrapped = "U gain EP when selling items**U items discarded from your**inventory are instantly**sold instead"
+    check("frase spezzata da '**' (senza simbolo, minuscola, senza punto prima): tradotta intera, poi rimessa "
               "sulle stesse righe",
-              adapter_gamemaker.normalizza_a_capo(spezzata, "*", "U")
+              adapter_gamemaker.normalize_line_breaks(wrapped, "*", "U")
               == "gain EP when selling items\n\nitems discarded from your inventory are instantly sold instead"
-              and adapter_gamemaker.ricomponi_a_capo(spezzata, "a b c\n\nd e f g h i", "*", "U")
+              and adapter_gamemaker.reassemble_line_breaks(wrapped, "a b c\n\nd e f g h i", "*", "U")
               == "U a b c**U d e f**g h**i"
-              and adapter_gamemaker.normalizza_a_capo("**awarded only to those**who beat the tomb!", "*", "U")
+              and adapter_gamemaker.normalize_line_breaks("**awarded only to those**who beat the tomb!", "*", "U")
               == "\n\nawarded only to those who beat the tomb!"
-              and adapter_gamemaker.normalizza_a_capo("U unlocks steel.**then glass**U Gain more", "*", "U")
+              and adapter_gamemaker.normalize_line_breaks("U unlocks steel.**then glass**U Gain more", "*", "U")
               == "unlocks steel.\n\nthen glass\n\nGain more"
-              and adapter_gamemaker.ricomponi_a_capo("U gain a**bunch of food", "ottieni", "*", "U") == "U ottieni")
-    controlla("titoli ed elenchi senza simbolo non si uniscono; '* *' (riga vuota con uno spazio) resta un a capo solo",
-              adapter_gamemaker.normalizza_a_capo("Controls**move with WASD", "*", "U") == "Controls\n\nmove with WASD"
-              and adapter_gamemaker.normalizza_a_capo("wood**stone**iron ore", "*", "U") == "wood\n\nstone\n\niron ore"
-              and adapter_gamemaker.ricomponi_a_capo("Welcome to the game!* *Press start to begin",
+              and adapter_gamemaker.reassemble_line_breaks("U gain a**bunch of food", "ottieni", "*", "U")
+              == "U ottieni")
+    check("titoli ed elenchi senza simbolo non si uniscono; '* *' (riga vuota con uno spazio) resta un a capo solo",
+              adapter_gamemaker.normalize_line_breaks("Controls**move with WASD", "*", "U")
+              == "Controls\n\nmove with WASD"
+              and adapter_gamemaker.normalize_line_breaks("wood**stone**iron ore", "*", "U")
+              == "wood\n\nstone\n\niron ore"
+              and adapter_gamemaker.reassemble_line_breaks("Welcome to the game!* *Press start to begin",
                                                      "Benvenuto nel gioco! Premi start per iniziare", "*", "U")
               == "Benvenuto nel gioco!* *Premi start per iniziare")
-    controlla("ricomposizione impossibile (paragrafi diversi o '*' lasciato dal traduttore) -> resta l'originale",
-              adapter_gamemaker.ricomponi_a_capo(EN["skillDesc0"], "a\n\nb", "*", "U") is None
-              and adapter_gamemaker.ricomponi_a_capo("iron*ore", "ferro*minerale", "*", "U") is None)
-    uff = adapter_gamemaker.lettere_ufficiali(gioco, trovati, ["local/english.json"])
-    font = adapter_gamemaker.caratteri_font(gioco, None, uff)
-    controlla("font: quelli solo ASCII (chat, numeri) non contano se le traduzioni ufficiali usano accenti",
+    check("ricomposizione impossibile (paragrafi diversi o '*' lasciato dal traduttore) -> resta l'originale",
+              adapter_gamemaker.reassemble_line_breaks(EN["skillDesc0"], "a\n\nb", "*", "U") is None
+              and adapter_gamemaker.reassemble_line_breaks("iron*ore", "ferro*minerale", "*", "U") is None)
+    official_found = adapter_gamemaker.official_letters(game, found, ["local/english.json"])
+    font = adapter_gamemaker.font_chars(game, None, official_found)
+    check("font: quelli solo ASCII (chat, numeri) non contano se le traduzioni ufficiali usano accenti",
               font is not None and "ò" in font and "ì" in font
-              and adapter_gamemaker.caratteri_font(gioco) == ascii_)
+              and adapter_gamemaker.font_chars(game) == ascii_)
 
     # --- full translation (only english.json, with backup) and restore
-    automatico.crea_backend = lambda nome, log=print: Traduttore()
-    percorso, completato, esito = automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
-    profilo = json.load(open(percorso, encoding="utf-8"))
-    controlla("profilo: solo english.json, con convenzioni e lettere ufficiali",
-              [v["percorso"] for v in profilo["file"]] == ["local/english.json"]
-              and profilo["file"][0]["a_capo"] == "*" and profilo["file"][0]["punto_elenco"] == "U"
-              and "é" in profilo["lettere_ufficiali"])
-    tradotto = json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))
-    controlla("tradotti: nomi con a capo bilanciato, paragrafi con simbolo, segnaposto, accenti",
-              tradotto["itemName0"] == "legno" and tradotto["itemName1"] == "minerale di*ferro"
-              and tradotto["skillDesc0"] == "U sblocca l'acciaio**U sblocca il vetro**U ottieni PE quando costruisci "
+    automatic.create_backend = lambda name, log=print: Translator()
+    path, completed, outcome = automatic.analyze_and_translate(game, "auto", "it", "dizionario", silent)
+    profile = json.load(open(path, encoding="utf-8"))
+    check("profilo: solo english.json, con convenzioni e lettere ufficiali",
+              [v["percorso"] for v in profile["file"]] == ["local/english.json"]
+              and profile["file"][0]["a_capo"] == "*" and profile["file"][0]["punto_elenco"] == "U"
+              and "é" in profile["lettere_ufficiali"])
+    translated = json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))
+    check("tradotti: nomi con a capo bilanciato, paragrafi con simbolo, segnaposto, accenti",
+              translated["itemName0"] == "legno" and translated["itemName1"] == "minerale di*ferro"
+              and translated["skillDesc0"] == "U sblocca l'acciaio**U sblocca il vetro**U ottieni PE quando costruisci "
                                             "strutture"
-              and tradotto["playing"] == "Sta giocando a {game mode}"
-              and "Così sarà più" in tradotto["warning"])
-    controlla("tradotti: 25%*less -> a capo dentro la frase, nessun '*' doppio inventato",
-              tradotto["skillDesc1"].startswith("U sblocca le falegnamerie**U ")
-              and tradotto["skillDesc1"].count("*") == EN["skillDesc1"].count("*"))
-    controlla("identificativo rimasto al posto di un testo: non tradotto",
-              tradotto["structureDesc9"] == "Structure.NuclearFurnace")
-    cambiati = [n for n in prima if impronte(local)[n] != prima[n]]
-    controlla("solo english.json cambiato, le traduzioni ufficiali intatte", cambiati == ["english.json"])
-    automatico.ripristina(gioco, silenzio)
-    controlla("ripristino identico", impronte(local) == prima)
+              and translated["playing"] == "Sta giocando a {game mode}"
+              and "Così sarà più" in translated["warning"])
+    check("tradotti: 25%*less -> a capo dentro la frase, nessun '*' doppio inventato",
+              translated["skillDesc1"].startswith("U sblocca le falegnamerie**U ")
+              and translated["skillDesc1"].count("*") == EN["skillDesc1"].count("*"))
+    check("identificativo rimasto al posto di un testo: non tradotto",
+              translated["structureDesc9"] == "Structure.NuclearFurnace")
+    changed_files = [n for n in before if fingerprints(local)[n] != before[n]]
+    check("solo english.json cambiato, le traduzioni ufficiali intatte", changed_files == ["english.json"])
+    automatic.restore(game, silent)
+    check("ripristino identico", fingerprints(local) == before)
 
     # --- generic search: among per-language files (same family) only the original language is kept
     web = os.path.join(base, "gioco web")
-    testi = {"english": ["The castle is dark and the door is closed", "You have found a key in the room"],
+    texts = {"english": ["The castle is dark and the door is closed", "You have found a key in the room"],
              "french": ["Le château est sombre et la porte est fermée", "Vous avez trouvé une clé dans la salle"],
              "german": ["Das Schloss ist dunkel und die Tür ist zu", "Du hast einen Schlüssel im Raum gefunden"],
              "italian": ["Il castello è buio e la porta è chiusa", "Hai trovato una chiave nella stanza"]}
-    for cartella_rel, nomi in (("locales", ("english", "french", "german")), ("lang/en", ("ui",)),
+    for rel_folder, names in (("locales", ("english", "french", "german")), ("lang/en", ("ui",)),
                                ("lang/fr", ("ui",)), ("data", ("items",)), ("nazioni", ("english", "french"))):
-        os.makedirs(os.path.join(web, cartella_rel), exist_ok=True)
-        for n in nomi:
-            lingua_testi = "french" if cartella_rel == "lang/fr" else n if n in testi else "english"
-            if cartella_rel == "nazioni":
-                lingua_testi = "english"  # language names in the file name, but the texts are all English
-            with open(os.path.join(web, cartella_rel, n + ".json"), "w", encoding="utf-8") as f:
-                json.dump({"t%d" % i: t for i, t in enumerate(testi[lingua_testi] * 5)}, f, ensure_ascii=False)
+        os.makedirs(os.path.join(web, rel_folder), exist_ok=True)
+        for n in names:
+            texts_language = "french" if rel_folder == "lang/fr" else n if n in texts else "english"
+            if rel_folder == "nazioni":
+                texts_language = "english"  # language names in the file name, but the texts are all English
+            with open(os.path.join(web, rel_folder, n + ".json"), "w", encoding="utf-8") as f:
+                json.dump({"t%d" % i: t for i, t in enumerate(texts[texts_language] * 5)}, f, ensure_ascii=False)
 
     def cand(rel, n=10):
         return {"percorso": rel, "stringhe_leggibili": n}
-    candidati = [cand("locales/english.json"), cand("locales/french.json"), cand("locales/german.json"),
+    candidates = [cand("locales/english.json"), cand("locales/french.json"), cand("locales/german.json"),
                  cand("lang/en/ui.json"), cand("lang/fr/ui.json"), cand("data/items.json"),
                  cand("nazioni/english.json"), cand("nazioni/french.json")]
-    tenuti, tolti, arrivo = automatico._solo_lingua_originale(candidati, web, "auto", "it", silenzio)
-    controlla("ricerca generica: delle famiglie di lingue resta solo l'inglese (anche lang/{L}/ui.json)",
-              sorted(tolti) == ["lang/fr/ui.json", "locales/french.json", "locales/german.json"] and not arrivo)
-    controlla("ricerca generica: un file col nome di una lingua ma testi inglesi non viene tolto",
-              "nazioni/french.json" in [c["percorso"] for c in tenuti])
-    _, tolti, _ = automatico._solo_lingua_originale(
-        [cand("locales/english.json", 2), cand("locales/french.json", 10)], web, "auto", "it", silenzio)
-    controlla("ricerca generica: un inglese molto piu' piccolo (parziale) non fa togliere le altre lingue", not tolti)
+    kept_items, dropped, target_files = automatic._original_language_only(candidates, web, "auto", "it", silent)
+    check("ricerca generica: delle famiglie di lingue resta solo l'inglese (anche lang/{L}/ui.json)",
+              sorted(dropped) == ["lang/fr/ui.json", "locales/french.json", "locales/german.json"] and not target_files)
+    check("ricerca generica: un file col nome di una lingua ma testi inglesi non viene tolto",
+              "nazioni/french.json" in [c["percorso"] for c in kept_items])
+    _, dropped, _ = automatic._original_language_only(
+        [cand("locales/english.json", 2), cand("locales/french.json", 10)], web, "auto", "it", silent)
+    check("ricerca generica: un inglese molto piu' piccolo (parziale) non fa togliere le altre lingue", not dropped)
     with open(os.path.join(web, "locales", "italian.json"), "w", encoding="utf-8") as f:
-        json.dump({"t%d" % i: t for i, t in enumerate(testi["italian"] * 5)}, f, ensure_ascii=False)
-    _, _, arrivo = automatico._solo_lingua_originale(candidati + [cand("locales/italian.json")], web, "auto", "it",
-                                                     silenzio)
-    controlla("ricerca generica: c'e' gia' italian.json -> segnalato (lingua ufficiale)",
-              arrivo == ["locales/italian.json"])
-    controlla("famiglie: english_credits.json da solo non e' un file di localizzazione",
-              adapter_gamemaker.famiglia("english_credits.json") != adapter_gamemaker.famiglia("english.json")
-              and adapter_gamemaker.lingua_del_percorso("data/merchant.json") is None)
-    controlla("ricomposizione: '*' e spazi in testa e in coda restano fermi",
-              adapter_gamemaker.ricomponi_a_capo("*attacks burn!", "gli attacchi bruciano!", "*", "U")
+        json.dump({"t%d" % i: t for i, t in enumerate(texts["italian"] * 5)}, f, ensure_ascii=False)
+    _, _, target_files = automatic._original_language_only(
+        candidates + [cand("locales/italian.json")], web, "auto", "it", silent)
+    check("ricerca generica: c'e' gia' italian.json -> segnalato (lingua ufficiale)",
+              target_files == ["locales/italian.json"])
+    check("famiglie: english_credits.json da solo non e' un file di localizzazione",
+              adapter_gamemaker.family("english_credits.json") != adapter_gamemaker.family("english.json")
+              and adapter_gamemaker.path_language("data/merchant.json") is None)
+    check("ricomposizione: '*' e spazi in testa e in coda restano fermi",
+              adapter_gamemaker.reassemble_line_breaks("*attacks burn!", "gli attacchi bruciano!", "*", "U")
               == "*gli attacchi bruciano!"
-              and adapter_gamemaker.ricomponi_a_capo("your time: ", "il tuo tempo:", "*", "U") == "il tuo tempo: ")
+              and adapter_gamemaker.reassemble_line_breaks("your time: ", "il tuo tempo:", "*", "U")
+              == "il tuo tempo: ")
 
     # --- official language in the JSON files
     with open(os.path.join(local, "italian.json"), "w", encoding="utf-8") as f:
         json.dump({k: "it " + v for k, v in EN.items()}, f)
-    r = lingua_ufficiale.rileva(gioco, "it", "GameMaker")
-    controlla("italian.json presente -> lingua ufficiale", r["presente"] is True)
+    r = official_language.detect(game, "it", "GameMaker")
+    check("italian.json presente -> lingua ufficiale", r["presente"] is True)
     os.remove(os.path.join(local, "italian.json"))
 
     # --- Stop button during the translation: nothing written to the game, translations made so far saved
-    progetto.TESTI_PER_GRUPPO = 5
-    memoria = os.path.join(base, "patchsmith", "memory")
-    for f in os.listdir(memoria):
-        os.remove(os.path.join(memoria, f))
-    automatico.crea_backend = lambda nome, log=print: Traduttore(ferma_dopo=2)
-    interruzione.azzera()
+    project.TEXTS_PER_GROUP = 5
+    memory = os.path.join(base, "patchsmith", "memory")
+    for f in os.listdir(memory):
+        os.remove(os.path.join(memory, f))
+    automatic.create_backend = lambda name, log=print: Translator(stop_after=2)
+    interruption.reset()
     try:
-        automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
-        fermato = False
-    except interruzione.Interrotto:
-        fermato = True
-    interruzione.azzera()
-    salvate = sum(len(json.load(open(os.path.join(memoria, f), encoding="utf-8"))) for f in os.listdir(memoria))
-    controlla("Ferma durante la traduzione: si ferma, gioco non toccato, traduzioni fatte salvate",
-              fermato and impronte(local) == prima and 0 < salvate < len(EN))
-    automatico.crea_backend = lambda nome, log=print: Traduttore()
-    automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
-    controlla("dopo Ferma si riparte da dove ci si era fermati e si completa",
+        automatic.analyze_and_translate(game, "auto", "it", "dizionario", silent)
+        stopped = False
+    except interruption.Interrupted:
+        stopped = True
+    interruption.reset()
+    saved_count = sum(len(json.load(open(os.path.join(memory, f), encoding="utf-8"))) for f in os.listdir(memory))
+    check("Ferma durante la traduzione: si ferma, gioco non toccato, traduzioni fatte salvate",
+              stopped and fingerprints(local) == before and 0 < saved_count < len(EN))
+    automatic.create_backend = lambda name, log=print: Translator()
+    automatic.analyze_and_translate(game, "auto", "it", "dizionario", silent)
+    check("dopo Ferma si riparte da dove ci si era fermati e si completa",
               json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))["itemName0"] == "legno")
     # Stop pressed when the translation memory is already complete: nothing is written to the game anyway
-    automatico.ripristina(gioco, silenzio)
-    interruzione.richiedi()
+    automatic.restore(game, silent)
+    interruption.request_stop()
     try:
-        automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
-        fermato = False
-    except interruzione.Interrotto:
-        fermato = True
-    interruzione.azzera()
-    controlla("Ferma con le traduzioni gia' tutte in memoria: si ferma prima di scrivere", fermato
-              and impronte(local) == prima)
+        automatic.analyze_and_translate(game, "auto", "it", "dizionario", silent)
+        stopped = False
+    except interruption.Interrupted:
+        stopped = True
+    interruption.reset()
+    check("Ferma con le traduzioni gia' tutte in memoria: si ferma prima di scrivere", stopped
+              and fingerprints(local) == before)
 
     # file fixed by hand after the translation (with letters adapted to the fonts): it is not a game update
-    automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", silenzio)
-    tradotto = json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))
-    tradotto["itemName6"] = "carbone fossile"
+    automatic.analyze_and_translate(game, "auto", "it", "dizionario", silent)
+    translated = json.load(open(os.path.join(local, "english.json"), encoding="utf-8"))
+    translated["itemName6"] = "carbone fossile"
     with open(os.path.join(local, "english.json"), "w", encoding="utf-8") as f:
-        json.dump(tradotto, f, ensure_ascii=False, indent=2)
-    messaggi = []
-    automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", messaggi.append)
-    controlla("file tradotto e poi corretto a mano: riconosciuto (non scambiato per un aggiornamento)",
-              any("modificato a mano" in m for m in messaggi) and not any("nuovo originale" in m for m in messaggi))
-    automatico.ripristina(gioco, silenzio)
-    controlla("... e il ripristino rimette l'inglese originale", impronte(local) == prima)
+        json.dump(translated, f, ensure_ascii=False, indent=2)
+    messages = []
+    automatic.analyze_and_translate(game, "auto", "it", "dizionario", messages.append)
+    check("file tradotto e poi corretto a mano: riconosciuto (non scambiato per un aggiornamento)",
+              any("modificato a mano" in m for m in messages) and not any("nuovo originale" in m for m in messages))
+    automatic.restore(game, silent)
+    check("... e il ripristino rimette l'inglese originale", fingerprints(local) == before)
 
     # old experimental game profile that had also translated french.json: replaced, french.json goes back to the
     # original
     import shutil
-    francese = os.path.join(local, "french.json")
-    shutil.copyfile(francese, francese + ".orig-test")
-    progetto.crea_backup(francese)
-    info = progetto.leggi_info(francese)
-    with open(francese, "w", encoding="utf-8") as f:
+    french = os.path.join(local, "french.json")
+    shutil.copyfile(french, french + ".orig-test")
+    project.create_backup(french)
+    info = project.read_info(french)
+    with open(french, "w", encoding="utf-8") as f:
         json.dump({k: "[it] " + v for k, v in FR.items()}, f, ensure_ascii=False)
-    info["hash_scritti"] = [hashlib.sha256(open(francese, "rb").read()).hexdigest()]
-    progetto.salva_info(francese, info)
-    profilo_vecchio = automatico.trova_profilo(gioco)
-    vecchio = json.load(open(profilo_vecchio, encoding="utf-8"))
-    vecchio["file"].append({"percorso": "local/french.json", "formato": "json", "includi": list(FR), "escludi": []})
-    with open(profilo_vecchio, "w", encoding="utf-8") as f:
-        json.dump(vecchio, f)
-    messaggi = []
-    automatico.analizza_e_traduci(gioco, "auto", "it", "dizionario", messaggi.append)
-    controlla("profilo precedente con french.json tradotto: rimesso l'originale, non piu' nel profilo",
-              open(francese, "rb").read() == open(francese + ".orig-test", "rb").read()
-              and any("rimesso l'originale" in m for m in messaggi)
-              and [v["percorso"] for v in json.load(open(profilo_vecchio, encoding="utf-8"))["file"]]
+    info["hash_scritti"] = [hashlib.sha256(open(french, "rb").read()).hexdigest()]
+    project.save_info(french, info)
+    old_profile = automatic.find_profile(game)
+    old = json.load(open(old_profile, encoding="utf-8"))
+    old["file"].append({"percorso": "local/french.json", "formato": "json", "includi": list(FR), "escludi": []})
+    with open(old_profile, "w", encoding="utf-8") as f:
+        json.dump(old, f)
+    messages = []
+    automatic.analyze_and_translate(game, "auto", "it", "dizionario", messages.append)
+    check("profilo precedente con french.json tradotto: rimesso l'originale, non piu' nel profilo",
+              open(french, "rb").read() == open(french + ".orig-test", "rb").read()
+              and any("rimesso l'originale" in m for m in messages)
+              and [v["percorso"] for v in json.load(open(old_profile, encoding="utf-8"))["file"]]
               == ["local/english.json"])
-    os.remove(francese + ".orig-test")
-    automatico.ripristina(gioco, silenzio)
+    os.remove(french + ".orig-test")
+    automatic.restore(game, silent)
 
     # (Google's behavior on 429 and the interruptible waits are in test/test_limiter.py)
 
-    falliti = [n for n, ok in ESITI if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(ESITI) - len(falliti), len(ESITI)))
-    return not falliti
+    failed = [n for n, ok in OUTCOMES if not ok]
+    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    return not failed
 
 
 if __name__ == "__main__":

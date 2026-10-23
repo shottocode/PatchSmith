@@ -1,6 +1,6 @@
-"""Reading GameMaker's data.win (read-only, standard library): chunks, strings, fonts.
+"""Reading GameMaker's date.win (read-only, standard library): chunks, strings, fonts.
 
-data.win = "FORM" + size + chunks ("GEN8", "STRG", "FONT", ...), each one name + size + content.
+date.win = "FORM" + size + chunks ("GEN8", "STRG", "FONT", ...), each one name + size + content.
 References between chunks are absolute offsets in the file; strings are length (uint32) + UTF-8 + 0,
 and references point to the text (that is, to the length + 4).
 
@@ -11,288 +11,289 @@ import os
 import re
 import struct
 
-NOMI_DATI = ("data.win", "game.unx", "game.ios", "game.droid")
+DATA_NAMES = ("data.win", "game.unx", "game.ios", "game.droid")
 
 
-class ErroreGameMaker(ValueError):
+class GameMakerError(ValueError):
     pass
 
 
-def pezzi(dati):
+def pieces(data):
     """{nome: (content start, size)} of the chunks of a data.win."""
-    if len(dati) < 8 or dati[:4] != b"FORM":
-        raise ErroreGameMaker("non e' un data.win di GameMaker (manca FORM)")
-    fine = 8 + struct.unpack_from("<I", dati, 4)[0]
-    if fine > len(dati):
-        raise ErroreGameMaker("data.win troncato")
-    uscita, p = {}, 8
-    while p + 8 <= fine:
-        nome = dati[p:p + 4].decode("ascii", "replace")
-        dim = struct.unpack_from("<I", dati, p + 4)[0]
-        if p + 8 + dim > fine:
-            raise ErroreGameMaker("pezzo %s oltre la fine del file" % nome)
-        uscita[nome] = (p + 8, dim)
+    if len(data) < 8 or data[:4] != b"FORM":
+        raise GameMakerError("non e' un data.win di GameMaker (manca FORM)")
+    end = 8 + struct.unpack_from("<I", data, 4)[0]
+    if end > len(data):
+        raise GameMakerError("data.win troncato")
+    output, p = {}, 8
+    while p + 8 <= end:
+        name = data[p:p + 4].decode("ascii", "replace")
+        dim = struct.unpack_from("<I", data, p + 4)[0]
+        if p + 8 + dim > end:
+            raise GameMakerError("pezzo %s oltre la fine del file" % name)
+        output[name] = (p + 8, dim)
         p += 8 + dim
-    return uscita
+    return output
 
 
-def stringa(dati, puntatore):
+def read_string(data, pointer):
     """GameMaker string from its reference (which points to the text, preceded by the length)."""
-    if not 4 <= puntatore <= len(dati) - 1:
-        raise ErroreGameMaker("riferimento a stringa non valido")
-    n = struct.unpack_from("<I", dati, puntatore - 4)[0]
-    if puntatore + n >= len(dati) or dati[puntatore + n] != 0:
-        raise ErroreGameMaker("stringa non valida")
-    return dati[puntatore:puntatore + n].decode("utf-8", "replace")
+    if not 4 <= pointer <= len(data) - 1:
+        raise GameMakerError("riferimento a stringa non valido")
+    n = struct.unpack_from("<I", data, pointer - 4)[0]
+    if pointer + n >= len(data) or data[pointer + n] != 0:
+        raise GameMakerError("stringa non valida")
+    return data[pointer:pointer + n].decode("utf-8", "replace")
 
 
-def _glifi(dati, inizio, fine, p):
+def _glyphs(data, start, end, p):
     """Tries to read a list of glyph pointers at p; returns the characters or None.
 
     The list is valid only if the glyphs start right after the pointers, in increasing order."""
-    if p + 4 > fine:
+    if p + 4 > end:
         return None
-    n = struct.unpack_from("<I", dati, p)[0]
-    if not 0 < n <= 70000 or p + 4 + 4 * n > fine:
+    n = struct.unpack_from("<I", data, p)[0]
+    if not 0 < n <= 70000 or p + 4 + 4 * n > end:
         return None
-    puntatori = struct.unpack_from("<%dI" % n, dati, p + 4)
-    if puntatori[0] != p + 4 + 4 * n:
+    pointers = struct.unpack_from("<%dI" % n, data, p + 4)
+    if pointers[0] != p + 4 + 4 * n:
         return None
-    caratteri, precedente, ultimo = [], -1, 0
-    for q in puntatori:
-        if not inizio <= q <= fine - 16 or q <= ultimo:
+    chars, previous, last = [], -1, 0
+    for q in pointers:
+        if not start <= q <= end - 16 or q <= last:
             return None
-        c, x, y, w, h = struct.unpack_from("<HHHHH", dati, q)
-        if w > 4096 or h > 4096 or c <= precedente:  # glyphs are in character order
+        c, x, y, w, h = struct.unpack_from("<HHHHH", data, q)
+        if w > 4096 or h > 4096 or c <= previous:  # glyphs are in character order
             return None
-        caratteri.append(chr(c))
-        precedente, ultimo = c, q
-    return caratteri
+        chars.append(chr(c))
+        previous, last = c, q
+    return chars
 
 
-def font(dati):
+def font(data):
     """([{'nome', 'caratteri'}], how many fonts could not be read)."""
-    tabella = pezzi(dati)
-    if "FONT" not in tabella:
+    table = pieces(data)
+    if "FONT" not in table:
         return [], 0
-    inizio, dim = tabella["FONT"]
-    fine = inizio + dim
+    start, dim = table["FONT"]
+    end = start + dim
     if dim < 4:
-        raise ErroreGameMaker("pezzo FONT non valido")
-    n = struct.unpack_from("<I", dati, inizio)[0]
+        raise GameMakerError("pezzo FONT non valido")
+    n = struct.unpack_from("<I", data, start)[0]
     if n > 10000 or dim < 4 + 4 * n:
-        raise ErroreGameMaker("pezzo FONT non valido")
-    uscita, illeggibili = [], 0
+        raise GameMakerError("pezzo FONT non valido")
+    output, unreadable = [], 0
     for k in range(n):
-        p = struct.unpack_from("<I", dati, inizio + 4 + 4 * k)[0]
+        p = struct.unpack_from("<I", data, start + 4 + 4 * k)[0]
         try:
-            if not inizio <= p < fine - 4:
-                raise ErroreGameMaker("font fuori dal pezzo FONT")
-            nome = stringa(dati, struct.unpack_from("<I", dati, p)[0])
-        except (ErroreGameMaker, struct.error):
-            illeggibili += 1
+            if not start <= p < end - 4:
+                raise GameMakerError("font fuori dal pezzo FONT")
+            name = read_string(data, struct.unpack_from("<I", data, p)[0])
+        except (GameMakerError, struct.error):
+            unreadable += 1
             continue
         # the fields after the name change with the GameMaker version: look for the glyph list
-        for spostamento in range(40, 96, 4):
-            caratteri = _glifi(dati, inizio, fine, p + spostamento)
-            if caratteri:
-                uscita.append({"nome": nome, "caratteri": caratteri})
+        for shift in range(40, 96, 4):
+            chars = _glyphs(data, start, end, p + shift)
+            if chars:
+                output.append({"nome": name, "caratteri": chars})
                 break
         else:
-            illeggibili += 1
-    return uscita, illeggibili
+            unreadable += 1
+    return output, unreadable
 
 
-def leggi(percorso):
-    with open(percorso, "rb") as f:
+def read_file(path):
+    with open(path, "rb") as f:
         return f.read()
 
 
-def e_dati(percorso):
+def is_data(path):
     """True if the file is a GameMaker data.win (or game.unx...)."""
     try:
-        with open(percorso, "rb") as f:
+        with open(path, "rb") as f:
             return f.read(4) == b"FORM"
     except OSError:
         return False
 
 
-def radici(cartella, profondita=2):
+def roots(folder, depth=2):
     """Folders (up to 'profondita' levels below the chosen one) that contain a GameMaker data.win."""
-    trovate = []
-    base = os.path.abspath(cartella)
-    for radice, dirs, files in os.walk(base):
-        livello = os.path.relpath(radice, base).count(os.sep) + (0 if radice == base else 1)
-        if livello >= profondita:
+    matches = []
+    base = os.path.abspath(folder)
+    for root, dirs, files in os.walk(base):
+        level = os.path.relpath(root, base).count(os.sep) + (0 if root == base else 1)
+        if level >= depth:
             dirs[:] = []
         dirs.sort()
-        if any(f.lower() in NOMI_DATI and e_dati(os.path.join(radice, f)) for f in files):
-            trovate.append(radice)
-    return trovate
+        if any(f.lower() in DATA_NAMES and is_data(os.path.join(root, f)) for f in files):
+            matches.append(root)
+    return matches
 
 
-def sprite(dati):
+def sprite(data):
     """[{'nome', 'fotogrammi'}] of the sprites (SPRT chunk). GameMaker Studio 1 and 2 format (with the -1 marker
     after the 14 fixed fields); sprites that cannot be read are skipped."""
-    tabella = pezzi(dati)
-    if "SPRT" not in tabella:
+    table = pieces(data)
+    if "SPRT" not in table:
         return []
-    inizio, dim = tabella["SPRT"]
-    fine = inizio + dim
-    n = struct.unpack_from("<I", dati, inizio)[0]
+    start, dim = table["SPRT"]
+    end = start + dim
+    n = struct.unpack_from("<I", data, start)[0]
     if n > 100000 or dim < 4 + 4 * n:
-        raise ErroreGameMaker("pezzo SPRT non valido")
-    uscita = []
+        raise GameMakerError("pezzo SPRT non valido")
+    output = []
     for k in range(n):
-        p = struct.unpack_from("<I", dati, inizio + 4 + 4 * k)[0]
-        if not inizio <= p <= fine - 64:
+        p = struct.unpack_from("<I", data, start + 4 + 4 * k)[0]
+        if not start <= p <= end - 64:
             continue
         try:
-            nome = stringa(dati, struct.unpack_from("<I", dati, p)[0])
+            name = read_string(data, struct.unpack_from("<I", data, p)[0])
             q = p + 56
-            segno = struct.unpack_from("<i", dati, q)[0]
-            if segno == -1:  # GameMaker Studio 2: version, type, speed, [version fields], frames
-                versione, tipo = struct.unpack_from("<II", dati, q + 4)
-                if tipo != 0:  # vector or Spine sprites: no normal frames
+            marker = struct.unpack_from("<i", data, q)[0]
+            if marker == -1:  # GameMaker Studio 2: version, type, speed, [version fields], frames
+                version, kind = struct.unpack_from("<II", data, q + 4)
+                if kind != 0:  # vector or Spine sprites: no normal frames
                     continue
-                q += 20 + (4 if versione >= 2 else 0) + (4 if versione >= 3 else 0)
-                fotogrammi = struct.unpack_from("<I", dati, q)[0]
+                q += 20 + (4 if version >= 2 else 0) + (4 if version >= 3 else 0)
+                frames = struct.unpack_from("<I", data, q)[0]
             else:
-                fotogrammi = segno
-            if 0 <= fotogrammi <= 10000:
-                uscita.append({"nome": nome, "fotogrammi": fotogrammi})
-        except (ErroreGameMaker, struct.error):
+                frames = marker
+            if 0 <= frames <= 10000:
+                output.append({"nome": name, "fotogrammi": frames})
+        except (GameMakerError, struct.error):
             continue
-    return uscita
+    return output
 
 
-def nomi_del_gioco(dati):
+def names_of_game(data):
     """Names of the game written in GEN8 (file name, name, display name): they are used to find the save folder
     in %LOCALAPPDATA%."""
-    tabella = pezzi(dati)
-    if "GEN8" not in tabella:
+    table = pieces(data)
+    if "GEN8" not in table:
         return []
-    inizio, dim = tabella["GEN8"]
-    nomi = []
-    for spostamento in (4, 40):
+    start, dim = table["GEN8"]
+    names = []
+    for shift in (4, 40):
         try:
-            nomi.append(stringa(dati, struct.unpack_from("<I", dati, inizio + spostamento)[0]))
-        except (ErroreGameMaker, struct.error):
+            names.append(read_string(data, struct.unpack_from("<I", data, start + shift)[0]))
+        except (GameMakerError, struct.error):
             continue
-    return [x for x in dict.fromkeys(nomi) if x]
+    return [x for x in dict.fromkeys(names) if x]
 
 
-def stringhe(dati):
+def strings(data):
     """All the strings of the STRG chunk (games compiled for the virtual machine)."""
-    tabella = pezzi(dati)
-    if "STRG" not in tabella:
+    table = pieces(data)
+    if "STRG" not in table:
         return []
-    inizio, dim = tabella["STRG"]
-    n = struct.unpack_from("<I", dati, inizio)[0]
+    start, dim = table["STRG"]
+    n = struct.unpack_from("<I", data, start)[0]
     if n > 1000000 or dim < 4 + 4 * n:
-        raise ErroreGameMaker("pezzo STRG non valido")
-    uscita = []
+        raise GameMakerError("pezzo STRG non valido")
+    output = []
     for k in range(n):
-        p = struct.unpack_from("<I", dati, inizio + 4 + 4 * k)[0]
+        p = struct.unpack_from("<I", data, start + 4 + 4 * k)[0]
         try:
-            uscita.append(stringa(dati, p + 4))
-        except (ErroreGameMaker, struct.error):
+            output.append(read_string(data, p + 4))
+        except (GameMakerError, struct.error):
             continue
-    return uscita
+    return output
 
 
-def compilato_yyc(dati):
-    """True if the game is compiled to native code (YYC): data.win does not have the code (CODE chunk), which is
+def yyc_compiled(data):
+    """True if the game is compiled to native code (YYC): date.win does not have the code (CODE chunk), which is
     in the executable together with the strings it uses."""
-    return "CODE" not in pezzi(dati)
+    return "CODE" not in pieces(data)
 
 
-def eseguibili(cartella):
+def executables(folder):
     """The game's .exe files in the data.win folder (without uninstallers and the like)."""
     try:
-        nomi = sorted(os.listdir(cartella))
+        names = sorted(os.listdir(folder))
     except OSError:
         return []
-    return [os.path.join(cartella, n) for n in nomi if n.lower().endswith(".exe")
+    return [os.path.join(folder, n) for n in names if n.lower().endswith(".exe")
             and not re.match(r"(?i)unins|setup|install|crash|launcher|redist|vc_?redist", n)]
 
 
-_PEZZO_TESTO = re.compile(rb"(?<=\x00)[^\x00]{20,2400}(?=\x00)")
+_TEXT_PIECE = re.compile(rb"(?<=\x00)[^\x00]{20,2400}(?=\x00)")
 
 
-def _candidate(testi, lunghezze):
+def _candidates(texts, lengths):
     """The strings that can be the map of a sprite font: as many characters as the frames of a sprite with 'font'
     in its name, all different, with at least 20 letters a-z in alphabetical order."""
-    uscita = []
-    for t in testi:
-        if len(t) not in lunghezze or len(set(t)) != len(t):
+    output = []
+    for t in texts:
+        if len(t) not in lengths or len(set(t)) != len(t):
             continue
-        lettere = [c for c in t if "a" <= c <= "z"]
-        if len(lettere) >= 20 and lettere == sorted(lettere):
-            uscita.append(t)
-    return uscita
+        letters = [c for c in t if "a" <= c <= "z"]
+        if len(letters) >= 20 and letters == sorted(letters):
+            output.append(t)
+    return output
 
 
-def mappe_font_sprite(cartella, dati=None):
+def font_sprite_maps(folder, data=None):
     """[(sprite name, character map)] of the sprite fonts (font_add_sprite_ext): games that draw text with images
     of letters instead of a font. The map is a string with one character per frame: in games compiled for the
     virtual machine it is in the STRG chunk, in YYC ones in the executable."""
-    if dati is None:
-        percorso = next((os.path.join(cartella, n) for n in NOMI_DATI if os.path.exists(os.path.join(cartella, n))),
+    if data is None:
+        path = next((os.path.join(folder, n) for n in DATA_NAMES if os.path.exists(os.path.join(folder, n))),
                         None)
-        if not percorso:
+        if not path:
             return []
-        dati = leggi(percorso)
-    per_lunghezza = {}
-    for sp in sprite(dati):
+        data = read_file(path)
+    by_length = {}
+    for sp in sprite(data):
         if "font" in sp["nome"].lower() and sp["fotogrammi"] >= 20:
-            per_lunghezza.setdefault(sp["fotogrammi"], []).append(sp["nome"])
-    if not per_lunghezza:
+            by_length.setdefault(sp["fotogrammi"], []).append(sp["nome"])
+    if not by_length:
         return []
-    testi = stringhe(dati)
-    if compilato_yyc(dati):
-        for exe in eseguibili(cartella):
+    texts = strings(data)
+    if yyc_compiled(data):
+        for exe in executables(folder):
             try:
                 with open(exe, "rb") as f:
-                    contenuto = f.read()
+                    content = f.read()
             except OSError:
                 continue
-            for m in _PEZZO_TESTO.finditer(contenuto):
+            for m in _TEXT_PIECE.finditer(content):
                 try:
-                    testi.append(m.group().decode("utf-8"))
+                    texts.append(m.group().decode("utf-8"))
                 except UnicodeDecodeError:
                     continue
-    trovate = []
-    for mappa in dict.fromkeys(_candidate(testi, per_lunghezza)):
-        for nome in per_lunghezza[len(mappa)]:
-            trovate.append((nome, mappa))
-    return trovate
+    matches = []
+    for mapping in dict.fromkeys(_candidates(texts, by_length)):
+        for name in by_length[len(mapping)]:
+            matches.append((name, mapping))
+    return matches
 
 
-def cartella_maschera(cartella, relativa, estensione, dati=None):
+def folder_mask(folder, relative_path, extension, data=None):
     """True if the game looks for the '<relativa>/*<estensione>' files by itself (e.g. 'local/*.json'): then a new
     language file put there becomes a selectable language in the game. The mask is searched among the game's
     strings (STRG chunk, or the executable if it is compiled with YYC)."""
-    maschere = {("%s/*%s" % (relativa, estensione)).encode("utf-8"), ("%s\\*%s" % (relativa, estensione)).encode("utf-8")}
-    if dati is None:
-        percorso = next((os.path.join(cartella, n) for n in NOMI_DATI if os.path.exists(os.path.join(cartella, n))),
+    masks = {("%s/*%s" % (relative_path, extension)).encode("utf-8"),
+             ("%s\\*%s" % (relative_path, extension)).encode("utf-8")}
+    if data is None:
+        path = next((os.path.join(folder, n) for n in DATA_NAMES if os.path.exists(os.path.join(folder, n))),
                         None)
-        if not percorso:
+        if not path:
             return False
-        dati = leggi(percorso)
+        data = read_file(path)
     try:
-        if any(m.decode("utf-8") in stringhe(dati) for m in maschere):
+        if any(m.decode("utf-8") in strings(data) for m in masks):
             return True
-        if not compilato_yyc(dati):
+        if not yyc_compiled(data):
             return False
-    except (ErroreGameMaker, struct.error):
+    except (GameMakerError, struct.error):
         return False
-    for exe in eseguibili(cartella):
+    for exe in executables(folder):
         try:
             with open(exe, "rb") as f:
-                contenuto = f.read()
+                content = f.read()
         except OSError:
             continue
-        if any(b"\x00" + m + b"\x00" in contenuto for m in maschere):
+        if any(b"\x00" + m + b"\x00" in content for m in masks):
             return True
     return False

@@ -6,14 +6,15 @@ Thanks for your interest! Bug reports, games that do not work, translations of t
 - **Questions:** [Discussions](https://github.com/shottocode/PatchSmith/discussions).
 - **Security problems:** privately, with [Report a vulnerability](https://github.com/shottocode/PatchSmith/security/advisories/new).
 
-## Italian names in the code
+## Italian left in the code
 
-File names, the command line, the documentation, comments and docstrings are in English. **The names inside the code (functions, variables, classes) are still in Italian**: PatchSmith started as a personal project. The [glossary](#glossary) below covers the words you will meet most often.
+Names, comments, docstrings, file names, the command line and the documentation are in English. PatchSmith started as a personal Italian project, so a few things are still in Italian (the [glossary](#glossary) below covers the words you will meet most often):
 
-- Imports use the English file name with the Italian name the code uses: `from . import text as testo`, `from . import project as progetto`.
-- The interface texts are written in Italian in the code. The English interface comes from `patchsmith/ui_language/en.json` (Italian text → English text).
-- The keys saved in user files (settings, profiles, translation memory: `"cartella_gioco"`, `"non_tradurre"`, `"lingua_destinazione"`...) are in Italian too. They are a file format: do not rename them.
-- When you add code, match the names of the file you are working in, and write comments and docstrings in English.
+- **The interface texts** are written in Italian in the code. The English interface comes from `patchsmith/ui_language/en.json` (Italian text → English text).
+- **The keys saved in user files** (settings, profiles, translation memory: `"cartella_gioco"`, `"non_tradurre"`, `"lingua_destinazione"`...) and the codes stored in them (outcomes like `"GIOCO_APERTO"`, actions like `"riapplica"`). They are a file format: do not rename them.
+- **Markers written into games**, such as the first comment of `patchsmith/injector_live.js` ("Patchsmith - traduzione dal vivo"): PatchSmith recognizes its own files by them, so they must never change.
+
+Write new names, comments and docstrings in English.
 
 Issues and pull requests can be in English or Italian.
 
@@ -67,7 +68,7 @@ Please add or update a test with every change, and run the whole suite before op
 
 ## Glossary
 
-The Italian words you will meet most often in names, data keys and messages.
+The Italian words you will meet most often in the data keys, the stored codes and the interface texts.
 
 | Italian | English | Notes |
 |---|---|---|
@@ -106,8 +107,6 @@ The Italian words you will meet most often in names, data keys and messages.
 | `stato`, `uscita`, `inizio`, `fine` | state/status, output/exit, start, end | |
 | `nuovo`, `vecchio`, `mancanti`, `trovati` | new, old, missing, found | |
 | `leggi`, `scrivi`, `salva`, `trova`, `crea` | read, write, save, find, create | |
-| `Errore...` | `...Error` | exceptions: `ErroreBackend` = `BackendError` |
-| `log` | log function | most functions take `log=print`: where they write what they do |
 
 ## License
 

@@ -1,11 +1,11 @@
 """Pieces of fake Unity games for the tests (no files from real games):
 - bundle(): UnityFS AssetBundle with the given internal files, uncompressed, LZ4 or LZMA, in blocks;
-- file_tabelle(): serialized file (version 22, with the type trees) with Unity Localization text tables
+- tables_file(): serialized file (version 22, with the type trees) with Unity Localization text tables
   (StringTable: name, m_LocaleId, m_Localized entries);
-- stringhe_serializzate(): bytes with "length + UTF-8" strings as in asset files;
-- catalogo(): Addressables catalog.json with the options (and the CRC) of each bundle;
+- serialized_strings(): bytes with "length + UTF-8" strings as in asset files;
+- catalog(): Addressables catalog.json with the options (and the CRC) of each bundle;
 - dll(): minimal .NET DLL with the code's strings (#US heap);
-- gioco_il2cpp(): Unity IL2CPP game with the bundles in StreamingAssets/aa/StandaloneWindows64.
+- il2cpp_game(): Unity IL2CPP game with the bundles in StreamingAssets/aa/StandaloneWindows64.
 """
 import base64
 import json
@@ -14,7 +14,7 @@ import os
 import struct
 
 # type tree of a StringTable (reduced: without metadata and managed references, which are at the end)
-_ALBERO_TABELLA = [
+_TABLE_TREE = [
     (0, "MonoBehaviour", "Base", -1, False),
     (1, "PPtr<GameObject>", "m_GameObject", 12, False),
     (2, "int", "m_FileID", 4, False),
@@ -44,60 +44,60 @@ _ALBERO_TABELLA = [
 ]
 
 
-def _stringa(testo):
-    b = testo.encode("utf-8")
+def _string(text):
+    b = text.encode("utf-8")
     return struct.pack("<i", len(b)) + b + b"\x00" * (-len(b) % 4)
 
 
-def stringhe_serializzate(testi, riempimento=b"\x07\x00\x00\x00"):
+def serialized_strings(texts, padding=b"\x07\x00\x00\x00"):
     """Bytes as in an asset file: each text with its length (4 bytes) and 4-byte alignment."""
-    return riempimento + b"".join(_stringa(t) + riempimento for t in testi)
+    return padding + b"".join(_string(t) + padding for t in texts)
 
 
-def _dati_tabella(nome, codice, voci):
-    b = struct.pack("<iq", 0, 0) + b"\x01\x00\x00\x00" + struct.pack("<iq", 0, 0) + _stringa(nome) + _stringa(codice)
-    b += struct.pack("<i", len(voci))
-    for k, testo in enumerate(voci):
-        b += struct.pack("<q", 1000 + k) + _stringa(testo)
+def _table_data(name, code, entries):
+    b = struct.pack("<iq", 0, 0) + b"\x01\x00\x00\x00" + struct.pack("<iq", 0, 0) + _string(name) + _string(code)
+    b += struct.pack("<i", len(entries))
+    for k, text in enumerate(entries):
+        b += struct.pack("<q", 1000 + k) + _string(text)
     return b
 
 
-def file_tabelle(tabelle, versione_unity="2022.3.62f2"):
+def tables_file(tables, unity_version="2022.3.62f2"):
     """Serialized file with the tables [(name, language code, [texts])]."""
-    buffer, posizioni = bytearray(), {}
+    buffer, positions = bytearray(), {}
 
-    def posizione(s):
-        if s not in posizioni:
-            posizioni[s] = len(buffer)
+    def position(s):
+        if s not in positions:
+            positions[s] = len(buffer)
             buffer.extend(s.encode("ascii") + b"\x00")
-        return posizioni[s]
-    righe = b""
-    for k, (livello, tipo, nome, dimensione, allinea) in enumerate(_ALBERO_TABELLA):
-        righe += struct.pack("<HBBIIiii", 1, livello, 0, posizione(tipo), posizione(nome), dimensione, k,
-                             0x4000 if allinea else 0) + struct.pack("<Q", 0)
-    tipo = struct.pack("<iBh", 114, 0, 0) + b"\x00" * 32 + struct.pack("<ii", len(_ALBERO_TABELLA), len(buffer))
-    tipo += righe + bytes(buffer) + struct.pack("<i", 0)
-    oggetti = [_dati_tabella(*t) for t in tabelle]
-    meta = versione_unity.encode("ascii") + b"\x00" + struct.pack("<i", 19) + b"\x01" + struct.pack("<i", 1) + tipo
-    meta += struct.pack("<i", len(oggetti))
-    corpo, voci = b"", []
-    for k, d in enumerate(oggetti):
-        corpo += b"\x00" * (-len(corpo) % 8)
-        voci.append((k + 1, len(corpo), len(d)))
-        corpo += d
-    for path_id, inizio, dimensione in voci:
-        meta += b"\x00" * (-(48 + len(meta)) % 4)
-        meta += struct.pack("<qqIi", path_id, inizio, dimensione, 0)
-    meta += struct.pack("<iii", 0, 0, 0) + b"\x00"
-    inizio_dati = 48 + len(meta)
-    inizio_dati += -inizio_dati % 16
-    totale = inizio_dati + len(corpo)
-    testa = struct.pack(">IIII", 0, 0, 22, 0) + b"\x00" * 4 + struct.pack(">IqqQ", len(meta), totale, inizio_dati, 0)
-    return testa + meta + b"\x00" * (inizio_dati - 48 - len(meta)) + corpo
+        return positions[s]
+    lines = b""
+    for k, (level, kind, name, size, align) in enumerate(_TABLE_TREE):
+        lines += struct.pack("<HBBIIiii", 1, level, 0, position(kind), position(name), size, k,
+                             0x4000 if align else 0) + struct.pack("<Q", 0)
+    kind = struct.pack("<iBh", 114, 0, 0) + b"\x00" * 32 + struct.pack("<ii", len(_TABLE_TREE), len(buffer))
+    kind += lines + bytes(buffer) + struct.pack("<i", 0)
+    objects = [_table_data(*t) for t in tables]
+    half = unity_version.encode("ascii") + b"\x00" + struct.pack("<i", 19) + b"\x01" + struct.pack("<i", 1) + kind
+    half += struct.pack("<i", len(objects))
+    body, entries = b"", []
+    for k, d in enumerate(objects):
+        body += b"\x00" * (-len(body) % 8)
+        entries.append((k + 1, len(body), len(d)))
+        body += d
+    for path_id, start, size in entries:
+        half += b"\x00" * (-(48 + len(half)) % 4)
+        half += struct.pack("<qqIi", path_id, start, size, 0)
+    half += struct.pack("<iii", 0, 0, 0) + b"\x00"
+    data_start = 48 + len(half)
+    data_start += -data_start % 16
+    total = data_start + len(body)
+    head = struct.pack(">IIII", 0, 0, 22, 0) + b"\x00" * 4 + struct.pack(">IqqQ", len(half), total, data_start, 0)
+    return head + half + b"\x00" * (data_start - 48 - len(half)) + body
 
 
 # type tree of a TextMeshPro font (TMP_FontAsset, reduced: name, atlas mode, character table)
-_ALBERO_FONT_TMP = _ALBERO_TABELLA[:12] + [
+_TMP_FONT_TREE = _TABLE_TREE[:12] + [
     (1, "int", "m_AtlasPopulationMode", 4, False),
     (1, "vector", "m_CharacterTable", -1, False),
     (2, "Array", "Array", -1, False),
@@ -109,7 +109,7 @@ _ALBERO_FONT_TMP = _ALBERO_TABELLA[:12] + [
     (4, "float", "m_Scale", 4, False),
 ]
 # reduced tree of a .ttf font (Font: name and the file's bytes)
-_ALBERO_FONT = [
+_FONT_TREE = [
     (0, "Font", "Base", -1, False),
     (1, "string", "m_Name", -1, False),
     (2, "Array", "Array", -1, True),
@@ -122,189 +122,189 @@ _ALBERO_FONT = [
 ]
 
 
-def dati_font_tmp(nome, caratteri, modo=0):
+def tmp_font_data(name, chars, mode=0):
     """The bytes of a TextMeshPro font: m_GameObject, m_Enabled, m_Script, m_Name, the atlas mode (0 static, 1
     dynamic) and the character table (type 1, code, glyph, scale 1.0)."""
-    codici = sorted({ord(c) for c in caratteri})
-    b = struct.pack("<iq", 0, 0) + b"\x01\x00\x00\x00" + struct.pack("<iq", 0, 0) + _stringa(nome)
-    b += struct.pack("<ii", modo, len(codici))
-    for k, c in enumerate(codici):
+    codes = sorted({ord(c) for c in chars})
+    b = struct.pack("<iq", 0, 0) + b"\x01\x00\x00\x00" + struct.pack("<iq", 0, 0) + _string(name)
+    b += struct.pack("<ii", mode, len(codes))
+    for k, c in enumerate(codes):
         b += struct.pack("<IIIf", 1, c, k + 1, 1.0)
     return b
 
 
-def ttf(caratteri):
+def ttf(chars):
     """A minimal TrueType font: only the cmap table (format 4) with these characters."""
-    codici = sorted({ord(c) for c in caratteri if ord(c) < 0xFFFF}) + [0xFFFF]
-    n = len(codici)
-    fine = b"".join(struct.pack(">H", c) for c in codici)
-    inizio = fine
+    codes = sorted({ord(c) for c in chars if ord(c) < 0xFFFF}) + [0xFFFF]
+    n = len(codes)
+    end = b"".join(struct.pack(">H", c) for c in codes)
+    start = end
     delta = b"".join(struct.pack(">H", ((k + 1) - c) & 0xFFFF) if c != 0xFFFF else struct.pack(">H", 1)
-                     for k, c in enumerate(codici))
-    sotto = struct.pack(">HHHHHHH", 4, 16 + 8 * n, 0, 2 * n, 0, 0, 0) + fine + b"\x00\x00" + inizio + delta + \
+                     for k, c in enumerate(codes))
+    subfolders = struct.pack(">HHHHHHH", 4, 16 + 8 * n, 0, 2 * n, 0, 0, 0) + end + b"\x00\x00" + start + delta + \
         b"\x00\x00" * n
-    cmap = struct.pack(">HH", 0, 1) + struct.pack(">HHI", 3, 1, 12) + sotto
+    cmap = struct.pack(">HH", 0, 1) + struct.pack(">HHI", 3, 1, 12) + subfolders
     return struct.pack(">IHHHH", 0x00010000, 1, 16, 0, 0) + struct.pack(">4sIII", b"cmap", 0, 28, len(cmap)) + cmap
 
 
-def dati_font(nome, byte_ttf):
-    return _stringa(nome) + struct.pack("<i", len(byte_ttf)) + byte_ttf + b"\x00" * (-len(byte_ttf) % 4)
+def font_data(name, ttf_bytes):
+    return _string(name) + struct.pack("<i", len(ttf_bytes)) + ttf_bytes + b"\x00" * (-len(ttf_bytes) % 4)
 
 
-def _tipo(classe, albero, alberi):
+def _kind(class_, tree, trees):
     """A type of the type table (version 22): class, (script), hash, type tree."""
-    t = struct.pack("<iBh", classe, 0, 0) + b"\x00" * (32 if classe == 114 else 16)
-    if not alberi:
+    t = struct.pack("<iBh", class_, 0, 0) + b"\x00" * (32 if class_ == 114 else 16)
+    if not trees:
         return t
-    buffer, posizioni = bytearray(), {}
+    buffer, positions = bytearray(), {}
 
-    def posizione(s):
-        if s not in posizioni:
-            posizioni[s] = len(buffer)
+    def position(s):
+        if s not in positions:
+            positions[s] = len(buffer)
             buffer.extend(s.encode("ascii") + b"\x00")
-        return posizioni[s]
-    righe = b""
-    for k, (livello, tipo, nome, dimensione, allinea) in enumerate(albero):
-        righe += struct.pack("<HBBIIiii", 1, livello, 0, posizione(tipo), posizione(nome), dimensione, k,
-                             0x4000 if allinea else 0) + struct.pack("<Q", 0)
-    return t + struct.pack("<ii", len(albero), len(buffer)) + righe + bytes(buffer) + struct.pack("<i", 0)
+        return positions[s]
+    lines = b""
+    for k, (level, kind, name, size, align) in enumerate(tree):
+        lines += struct.pack("<HBBIIiii", 1, level, 0, position(kind), position(name), size, k,
+                             0x4000 if align else 0) + struct.pack("<Q", 0)
+    return t + struct.pack("<ii", len(tree), len(buffer)) + lines + bytes(buffer) + struct.pack("<i", 0)
 
 
-def file_serializzato(oggetti, alberi=True, versione_unity="2022.3.62f2"):
+def serialized_file(objects, trees=True, unity_version="2022.3.62f2"):
     """Serialized file (version 22) with the objects [(classe, albero, byte)]: one type for each (classe, albero);
     alberi=False like the files of <gioco>_Data (without the type trees)."""
-    tipi, indici = [], {}
-    for classe, albero, _ in oggetti:
-        chiave = (classe, id(albero))
-        if chiave not in indici:
-            indici[chiave] = len(tipi)
-            tipi.append(_tipo(classe, albero, alberi))
-    meta = versione_unity.encode("ascii") + b"\x00" + struct.pack("<i", 19) + (b"\x01" if alberi else b"\x00")
-    meta += struct.pack("<i", len(tipi)) + b"".join(tipi) + struct.pack("<i", len(oggetti))
-    corpo, voci = b"", []
-    for k, (classe, albero, d) in enumerate(oggetti):
-        corpo += b"\x00" * (-len(corpo) % 8)
-        voci.append((k + 1, len(corpo), len(d), indici[(classe, id(albero))]))
-        corpo += d
-    for path_id, inizio, dimensione, tipo in voci:
-        meta += b"\x00" * (-(48 + len(meta)) % 4)
-        meta += struct.pack("<qqIi", path_id, inizio, dimensione, tipo)
-    meta += struct.pack("<iii", 0, 0, 0) + b"\x00"
-    inizio_dati = 48 + len(meta)
-    inizio_dati += -inizio_dati % 16
-    totale = inizio_dati + len(corpo)
-    testa = struct.pack(">IIII", 0, 0, 22, 0) + b"\x00" * 4 + struct.pack(">IqqQ", len(meta), totale, inizio_dati, 0)
-    return testa + meta + b"\x00" * (inizio_dati - 48 - len(meta)) + corpo
+    kinds, indices = [], {}
+    for class_, tree, _ in objects:
+        key = (class_, id(tree))
+        if key not in indices:
+            indices[key] = len(kinds)
+            kinds.append(_kind(class_, tree, trees))
+    half = unity_version.encode("ascii") + b"\x00" + struct.pack("<i", 19) + (b"\x01" if trees else b"\x00")
+    half += struct.pack("<i", len(kinds)) + b"".join(kinds) + struct.pack("<i", len(objects))
+    body, entries = b"", []
+    for k, (class_, tree, d) in enumerate(objects):
+        body += b"\x00" * (-len(body) % 8)
+        entries.append((k + 1, len(body), len(d), indices[(class_, id(tree))]))
+        body += d
+    for path_id, start, size, kind in entries:
+        half += b"\x00" * (-(48 + len(half)) % 4)
+        half += struct.pack("<qqIi", path_id, start, size, kind)
+    half += struct.pack("<iii", 0, 0, 0) + b"\x00"
+    data_start = 48 + len(half)
+    data_start += -data_start % 16
+    total = data_start + len(body)
+    head = struct.pack(">IIII", 0, 0, 22, 0) + b"\x00" * 4 + struct.pack(">IqqQ", len(half), total, data_start, 0)
+    return head + half + b"\x00" * (data_start - 48 - len(half)) + body
 
 
-def file_font(font_tmp=(), font_ttf=(), alberi=True):
+def font_file(font_tmp=(), font_ttf=(), trees=True):
     """Serialized file with the TextMeshPro fonts [(nome, caratteri, modo)] and the .ttf fonts [(nome, caratteri)]."""
-    oggetti = [(114, _ALBERO_FONT_TMP, dati_font_tmp(*f)) for f in font_tmp]
-    oggetti += [(128, _ALBERO_FONT, dati_font(nome, ttf(caratteri))) for nome, caratteri in font_ttf]
-    return file_serializzato(oggetti, alberi)
+    objects = [(114, _TMP_FONT_TREE, tmp_font_data(*f)) for f in font_tmp]
+    objects += [(128, _FONT_TREE, font_data(name, ttf(chars))) for name, chars in font_ttf]
+    return serialized_file(objects, trees)
 
 
-def _lz4_letterali(b):
+def _lz4_literals(b):
     """A valid LZ4 block made only of literals."""
     n = len(b)
     if n < 15:
         return bytes([n << 4]) + b
-    uscita, resto = bytearray([0xF0]), n - 15
-    while resto >= 255:
-        uscita.append(255)
-        resto -= 255
-    uscita.append(resto)
-    return bytes(uscita) + b
+    output, rest = bytearray([0xF0]), n - 15
+    while rest >= 255:
+        output.append(255)
+        rest -= 255
+    output.append(rest)
+    return bytes(output) + b
 
 
 def _lzma(b):
-    filtri = [{"id": lzma.FILTER_LZMA1, "dict_size": 1 << 20, "lc": 3, "lp": 0, "pb": 2}]
+    filters = [{"id": lzma.FILTER_LZMA1, "dict_size": 1 << 20, "lc": 3, "lp": 0, "pb": 2}]
     return bytes([(2 * 5 + 0) * 9 + 3]) + struct.pack("<I", 1 << 20) + lzma.compress(
-        b, format=lzma.FORMAT_RAW, filters=filtri)
+        b, format=lzma.FORMAT_RAW, filters=filters)
 
 
-def bundle(nodi, compressione=None, blocco=1 << 17, versione_unity="2022.3.62f2"):
+def bundle(nodes, compression=None, block=1 << 17, unity_version="2022.3.62f2"):
     """UnityFS AssetBundle (version 7) with the internal files [(nome, byte)]; compression None, 'lz4' or 'lzma'."""
-    dati = b"".join(b for _, b in nodi)
-    blocchi, corpo = [], b""
-    for i in range(0, max(len(dati), 1), blocco):
-        pezzo = dati[i:i + blocco]
-        if compressione == "lz4":
-            c, tipo = _lz4_letterali(pezzo), 2
-        elif compressione == "lzma":
-            c, tipo = _lzma(pezzo), 1
+    data = b"".join(b for _, b in nodes)
+    blocks, body = [], b""
+    for i in range(0, max(len(data), 1), block):
+        piece = data[i:i + block]
+        if compression == "lz4":
+            c, kind = _lz4_literals(piece), 2
+        elif compression == "lzma":
+            c, kind = _lzma(piece), 1
         else:
-            c, tipo = pezzo, 0
-        blocchi.append((len(pezzo), len(c), tipo))
-        corpo += c
-    info = b"\x00" * 16 + struct.pack(">i", len(blocchi)) + b"".join(struct.pack(">IIH", *b) for b in blocchi)
-    info += struct.pack(">i", len(nodi))
-    posizione = 0
-    for nome, b in nodi:
-        info += struct.pack(">qqI", posizione, len(b), 4 if not nome.endswith((".resS", ".resource")) else 0)
-        info += nome.encode("utf-8") + b"\x00"
-        posizione += len(b)
-    testa = b"UnityFS\x00" + struct.pack(">I", 7) + b"5.x.x\x00" + versione_unity.encode("ascii") + b"\x00"
-    lunghezza = len(testa) + 20
-    lunghezza += -lunghezza % 16
-    testa += struct.pack(">qIII", lunghezza + len(info) + len(corpo), len(info), len(info), 0x40)
-    return testa + b"\x00" * (lunghezza - len(testa)) + info + corpo
+            c, kind = piece, 0
+        blocks.append((len(piece), len(c), kind))
+        body += c
+    info = b"\x00" * 16 + struct.pack(">i", len(blocks)) + b"".join(struct.pack(">IIH", *b) for b in blocks)
+    info += struct.pack(">i", len(nodes))
+    position = 0
+    for name, b in nodes:
+        info += struct.pack(">qqI", position, len(b), 4 if not name.endswith((".resS", ".resource")) else 0)
+        info += name.encode("utf-8") + b"\x00"
+        position += len(b)
+    head = b"UnityFS\x00" + struct.pack(">I", 7) + b"5.x.x\x00" + unity_version.encode("ascii") + b"\x00"
+    length = len(head) + 20
+    length += -length % 16
+    head += struct.pack(">qIII", length + len(info) + len(body), len(info), len(info), 0x40)
+    return head + b"\x00" * (length - len(head)) + info + body
 
 
-def bundle_tabelle(tabelle, **opzioni):
-    return bundle([("CAB-%08x" % (hash(str(tabelle)) & 0xFFFFFFFF), file_tabelle(tabelle))], **opzioni)
+def table_bundles(tables, **options):
+    return bundle([("CAB-%08x" % (hash(str(tables)) & 0xFFFFFFFF), tables_file(tables))], **options)
 
 
 _RUNTIME = "{UnityEngine.AddressableAssets.Addressables.RuntimePath}\\StandaloneWindows64\\"
 
 
-def catalogo(bundle_crc, utf8=False):
+def catalog(bundle_crc, utf8=False):
     """Bytes of an Addressables catalog.json: for each (bundle file name, crc) its options
     (AssetBundleRequestOptions in JSON, UTF-16 as Unity writes them), plus an asset without options."""
-    ids, extra, voci = ["Assets/Localization/Locales/English (en).asset"], bytearray(), [(0, 1, -1, 0, -1, 0, 0)]
+    ids, extra, entries = ["Assets/Localization/Locales/English (en).asset"], bytearray(), [(0, 1, -1, 0, -1, 0, 0)]
     assembly = b"Unity.ResourceManager, Version=0.0.0.0, Culture=neutral, PublicKeyToken=null"
-    classe = b"UnityEngine.ResourceManagement.ResourceProviders.AssetBundleRequestOptions"
-    for k, (nome, crc) in enumerate(bundle_crc):
-        ids.append(("0#\\" if k % 2 else _RUNTIME) + nome)  # also with the shortened prefix (m_InternalIdPrefixes)
-        testo = json.dumps({"m_Hash": "%032x" % (k + 1), "m_Crc": crc, "m_Timeout": 0, "m_ChunkedTransfer": False,
+    class_ = b"UnityEngine.ResourceManagement.ResourceProviders.AssetBundleRequestOptions"
+    for k, (name, crc) in enumerate(bundle_crc):
+        ids.append(("0#\\" if k % 2 else _RUNTIME) + name)  # also with the shortened prefix (m_InternalIdPrefixes)
+        text = json.dumps({"m_Hash": "%032x" % (k + 1), "m_Crc": crc, "m_Timeout": 0, "m_ChunkedTransfer": False,
                             "m_BundleName": "%032x" % (k + 99), "m_BundleSize": 1234 + k},
                            separators=(",", ":")).encode("utf-8" if utf8 else "utf-16-le")
-        indice = len(extra)
-        extra += bytes([7, len(assembly)]) + assembly + bytes([len(classe)]) + classe
-        extra += struct.pack("<i", len(testo)) + testo
-        voci.append((len(ids) - 1, 0, -1, 0, indice, 0, 0))
-    voci_byte = struct.pack("<i", len(voci)) + b"".join(struct.pack("<7i", *v) for v in voci)
-    dati = {"m_LocatorId": "AddressablesMainContentCatalog", "m_InternalIdPrefixes": [_RUNTIME.rstrip("\\")],
+        idx = len(extra)
+        extra += bytes([7, len(assembly)]) + assembly + bytes([len(class_)]) + class_
+        extra += struct.pack("<i", len(text)) + text
+        entries.append((len(ids) - 1, 0, -1, 0, idx, 0, 0))
+    entry_bytes = struct.pack("<i", len(entries)) + b"".join(struct.pack("<7i", *v) for v in entries)
+    data = {"m_LocatorId": "AddressablesMainContentCatalog", "m_InternalIdPrefixes": [_RUNTIME.rstrip("\\")],
             "m_InternalIds": ids, "m_KeyDataString": "AAAAAA==",
-            "m_EntryDataString": base64.b64encode(voci_byte).decode("ascii"),
+            "m_EntryDataString": base64.b64encode(entry_bytes).decode("ascii"),
             "m_ExtraDataString": base64.b64encode(bytes(extra)).decode("ascii")}
-    return json.dumps(dati, separators=(",", ":")).encode("utf-8")
+    return json.dumps(data, separators=(",", ":")).encode("utf-8")
 
 
-def crc_nel_catalogo(byte_catalogo):
+def catalog_crc(catalog_bytes):
     """{bundle file name: crc} read from the catalog (to check the tests)."""
-    dati = json.loads(byte_catalogo.decode("utf-8-sig"))
-    extra = base64.b64decode(dati["m_ExtraDataString"])
-    voci = base64.b64decode(dati["m_EntryDataString"])
-    uscita = {}
-    for k in range(struct.unpack_from("<i", voci, 0)[0]):
-        interno, _, _, _, indice, _, _ = struct.unpack_from("<7i", voci, 4 + 28 * k)
-        if indice < 0:
+    data = json.loads(catalog_bytes.decode("utf-8-sig"))
+    extra = base64.b64decode(data["m_ExtraDataString"])
+    entries = base64.b64decode(data["m_EntryDataString"])
+    output = {}
+    for k in range(struct.unpack_from("<i", entries, 0)[0]):
+        inner, _, _, _, idx, _, _ = struct.unpack_from("<7i", entries, 4 + 28 * k)
+        if idx < 0:
             continue
-        q = indice + 1
+        q = idx + 1
         q += 1 + extra[q]
         q += 1 + extra[q]
         n = struct.unpack_from("<i", extra, q)[0]
-        testo = extra[q + 4:q + 4 + n]
-        testo = testo.decode("utf-16-le" if testo.startswith(b"{\x00") else "utf-8")
-        uscita[dati["m_InternalIds"][interno].replace("#", "\\").split("\\")[-1]] = json.loads(testo)["m_Crc"]
-    return uscita
+        text = extra[q + 4:q + 4 + n]
+        text = text.decode("utf-16-le" if text.startswith(b"{\x00") else "utf-8")
+        output[data["m_InternalIds"][inner].replace("#", "\\").split("\\")[-1]] = json.loads(text)["m_Crc"]
+    return output
 
 
-def dll(stringhe):
+def dll(strings):
     """A minimal .NET DLL: MZ header and metadata (BSJB) with the code's strings in the #US heap."""
     heap = bytearray(b"\x00")
-    for s in stringhe:
+    for s in strings:
         b = s.encode("utf-16-le") + b"\x00"
         n = len(b)
         if n < 0x80:
@@ -315,21 +315,21 @@ def dll(stringhe):
             heap += bytes([0xC0 | (n >> 24), (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF])
         heap += b
     heap += b"\x00" * (-len(heap) % 4)
-    versione = b"v4.0.30319\x00\x00"
-    nome = b"#US\x00"
-    testa = b"BSJB" + struct.pack("<HHI", 1, 1, 0) + struct.pack("<I", len(versione)) + versione
-    testa += struct.pack("<HH", 0, 1)
-    testa += struct.pack("<II", len(testa) + 8 + len(nome), len(heap)) + nome
-    return b"MZ" + b"\x00" * 62 + testa + bytes(heap)
+    version = b"v4.0.30319\x00\x00"
+    name = b"#US\x00"
+    head = b"BSJB" + struct.pack("<HHI", 1, 1, 0) + struct.pack("<I", len(version)) + version
+    head += struct.pack("<HH", 0, 1)
+    head += struct.pack("<II", len(head) + 8 + len(name), len(heap)) + name
+    return b"MZ" + b"\x00" * 62 + head + bytes(heap)
 
 
-def _scrivi(percorso, byte):
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    with open(percorso, "wb") as f:
+def _write(path, byte):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
         f.write(byte)
 
 
-def eseguibile_x64():
+def x64_executable():
     pe = bytearray(512)
     pe[0:2] = b"MZ"
     struct.pack_into("<I", pe, 0x3C, 0x80)
@@ -338,24 +338,24 @@ def eseguibile_x64():
     return bytes(pe)
 
 
-def gioco_il2cpp(cartella, bundle_aa, catalogo_aa=None, extra=None):
+def il2cpp_game(folder, bundle_aa, aa_catalog=None, extra=None):
     """Fake Unity IL2CPP game. bundle_aa: {file name: bytes} in StreamingAssets/aa/StandaloneWindows64;
-    catalogo_aa: (name, bytes) of the catalog in aa (catalog.json or catalog.bin); extra: {relative path: bytes}.
+    aa_catalog: (name, bytes) of the catalog in aa (catalog.json or catalog.bin); extra: {relative path: bytes}.
     Returns the bundle folder."""
-    _scrivi(os.path.join(cartella, "Gioco.exe"), eseguibile_x64())
-    _scrivi(os.path.join(cartella, "UnityPlayer.dll"), b"finto")
-    _scrivi(os.path.join(cartella, "GameAssembly.dll"), b"finto")
-    dati = os.path.join(cartella, "Gioco_Data")
-    _scrivi(os.path.join(dati, "globalgamemanagers"), b"\x00" * 48 + b"2022.3.62f2\x00")
-    _scrivi(os.path.join(dati, "il2cpp_data", "Metadata", "global-metadata.dat"), b"\xaf\x1b\xb1\xfa finto")
-    _scrivi(os.path.join(dati, "app.info"), b"Studio Finto\nGioco Finto")
-    aa = os.path.join(dati, "StreamingAssets", "aa")
-    cartella_bundle = os.path.join(aa, "StandaloneWindows64")
-    os.makedirs(cartella_bundle, exist_ok=True)
-    for nome, byte in bundle_aa.items():
-        _scrivi(os.path.join(cartella_bundle, nome), byte)
-    if catalogo_aa:
-        _scrivi(os.path.join(aa, catalogo_aa[0]), catalogo_aa[1])
+    _write(os.path.join(folder, "Gioco.exe"), x64_executable())
+    _write(os.path.join(folder, "UnityPlayer.dll"), b"finto")
+    _write(os.path.join(folder, "GameAssembly.dll"), b"finto")
+    data = os.path.join(folder, "Gioco_Data")
+    _write(os.path.join(data, "globalgamemanagers"), b"\x00" * 48 + b"2022.3.62f2\x00")
+    _write(os.path.join(data, "il2cpp_data", "Metadata", "global-metadata.dat"), b"\xaf\x1b\xb1\xfa finto")
+    _write(os.path.join(data, "app.info"), b"Studio Finto\nGioco Finto")
+    aa = os.path.join(data, "StreamingAssets", "aa")
+    bundle_folder = os.path.join(aa, "StandaloneWindows64")
+    os.makedirs(bundle_folder, exist_ok=True)
+    for name, byte in bundle_aa.items():
+        _write(os.path.join(bundle_folder, name), byte)
+    if aa_catalog:
+        _write(os.path.join(aa, aa_catalog[0]), aa_catalog[1])
     for rel, byte in (extra or {}).items():
-        _scrivi(os.path.join(cartella, *rel.split("/")), byte)
-    return cartella_bundle
+        _write(os.path.join(folder, *rel.split("/")), byte)
+    return bundle_folder

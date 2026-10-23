@@ -15,50 +15,51 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
-class Gestore(BaseHTTPRequestHandler):
+class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
-    def _rispondi(self, dati, codice=200):
-        corpo = json.dumps(dati).encode()
-        self.send_response(codice)
+    def _reply(self, data, code=200):
+        body = json.dumps(data).encode()
+        self.send_response(code)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(corpo)))
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(corpo)
+        self.wfile.write(body)
 
     def do_GET(self):
         if self.path == "/api/version":
-            self._rispondi({"version": "0.40.4"})
+            self._reply({"version": "0.40.4"})
         elif self.path == "/api/tags":
-            self._rispondi({"models": [{"name": "translategemma:4b-it-q4_K_M", "digest": "c49d986b0764aa"}]})
+            self._reply({"models": [{"name": "translategemma:4b-it-q4_K_M", "digest": "c49d986b0764aa"}]})
         elif self.path == "/api/ps":
-            self._rispondi({"models": [{"name": "translategemma:4b-it-q4_K_M", "size": 100, "size_vram": 100}]})
+            self._reply({"models": [{"name": "translategemma:4b-it-q4_K_M", "size": 100, "size_vram": 100}]})
         else:
-            self._rispondi({"error": "not found"}, 404)
+            self._reply({"error": "not found"}, 404)
 
     def do_POST(self):
-        dati = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
         if self.path == "/api/chat":
-            testo = dati["messages"][0]["content"].split("\n\n\n", 1)[1]
-            opzioni = dati.get("options") or {}
+            text = data["messages"][0]["content"].split("\n\n\n", 1)[1]
+            options = data.get("options") or {}
             if os.environ.get("PATCHSMITH_FINTO_RICHIESTE"):
                 with open(os.environ["PATCHSMITH_FINTO_RICHIESTE"], "a", encoding="utf-8") as f:
-                    f.write(json.dumps({"testo": testo, "seed": opzioni.get("seed"),
-                                        "temperature": opzioni.get("temperature"), "model": dati.get("model")}) + "\n")
-            sbagliati = {int(s) for s in os.environ.get("PATCHSMITH_FINTO_SEMI_SBAGLIATI", "").split(",") if s.strip()}
-            risposta = testo if opzioni.get("seed") in sbagliati else "IT: " + testo
-            self._rispondi({"message": {"content": risposta}, "done_reason": "stop", "eval_count": 10,
+                    f.write(json.dumps({"testo": text, "seed": options.get("seed"),
+                                        "temperature": options.get("temperature"), "model": data.get("model")}) + "\n")
+            wrong_seeds = {int(s) for s in os.environ.get("PATCHSMITH_FINTO_SEMI_SBAGLIATI", "").split(",")
+                           if s.strip()}
+            response = text if options.get("seed") in wrong_seeds else "IT: " + text
+            self._reply({"message": {"content": response}, "done_reason": "stop", "eval_count": 10,
                             "eval_duration": 100_000_000, "prompt_eval_count": 50})
         elif self.path == "/api/pull":
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson")
             self.end_headers()
-            for riga in ({"status": "pulling manifest"}, {"status": "x", "digest": "a", "total": 100, "completed": 50},
+            for line in ({"status": "pulling manifest"}, {"status": "x", "digest": "a", "total": 100, "completed": 50},
                          {"status": "x", "digest": "a", "total": 100, "completed": 100}, {"status": "success"}):
-                self.wfile.write((json.dumps(riga) + "\n").encode())
+                self.wfile.write((json.dumps(line) + "\n").encode())
         else:
-            self._rispondi({})
+            self._reply({})
 
 
 if __name__ == "__main__":
@@ -71,5 +72,5 @@ if __name__ == "__main__":
     if os.environ.get("PATCHSMITH_FINTO_AMBIENTE"):
         with open(os.environ["PATCHSMITH_FINTO_AMBIENTE"], "w", encoding="utf-8") as f:
             json.dump({k: v for k, v in os.environ.items() if k.upper().startswith(("OLLAMA", "TEMP", "TMP"))}, f)
-    host, porta = os.environ["OLLAMA_HOST"].rsplit(":", 1)
-    ThreadingHTTPServer((host, int(porta)), Gestore).serve_forever()
+    host, port = os.environ["OLLAMA_HOST"].rsplit(":", 1)
+    ThreadingHTTPServer((host, int(port)), Handler).serve_forever()

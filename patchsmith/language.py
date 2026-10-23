@@ -11,7 +11,7 @@ import sys
 AUTO = "auto"
 
 # Google Translate codes with their Italian name.
-NOMI = {
+NAMES = {
     "en": "Inglese", "it": "Italiano", "ja": "Giapponese", "zh-CN": "Cinese semplificato",
     "zh-TW": "Cinese tradizionale", "ko": "Coreano", "fr": "Francese", "de": "Tedesco", "es": "Spagnolo",
     "pt": "Portoghese", "ru": "Russo", "pl": "Polacco", "tr": "Turco", "nl": "Olandese", "sv": "Svedese",
@@ -19,10 +19,10 @@ NOMI = {
     "el": "Greco", "uk": "Ucraino", "ar": "Arabo", "he": "Ebraico", "th": "Thailandese", "vi": "Vietnamita",
     "id": "Indonesiano", "hi": "Hindi",
 }
-ETICHETTA_AUTO = "Rileva automaticamente"
+AUTO_LABEL = "Rileva automaticamente"
 
 # Language names written in their own language: in language selection menus they must not be translated.
-ENDONIMI = {
+ENDONYMS = {
     "English", "Español", "Español (Latinoamérica)", "Español - Latinoamérica", "Français", "Deutsch", "Italiano",
     "Português", "Português - Brasil", "Português (Brasil)", "Português Brasileiro", "Русский", "Українська",
     "Polski", "Türkçe", "Nederlands", "Svenska", "Dansk", "Norsk", "Suomi", "Čeština", "Magyar", "Română",
@@ -32,7 +32,7 @@ ENDONIMI = {
 
 
 # Name of each language in the language itself (for the language menu entry that now shows the translation).
-ENDONIMO = {
+ENDONYM = {
     "en": "English", "it": "Italiano", "fr": "Français", "de": "Deutsch", "es": "Español", "pt": "Português",
     "ru": "Русский", "pl": "Polski", "ja": "日本語", "ko": "한국어", "zh-CN": "简体中文", "zh-TW": "繁體中文",
     "nl": "Nederlands", "tr": "Türkçe", "sv": "Svenska", "da": "Dansk", "no": "Norsk", "fi": "Suomi",
@@ -40,11 +40,11 @@ ENDONIMO = {
 }
 
 
-def chiave_confronto(codice):
+def comparison_key(code):
     """Key to compare two languages: the base language ('pt-BR' -> 'pt'), but Chinese by script
     ('zh-TW', 'zh-HK', 'zh-Hant' -> 'zh-hant'; 'zh-CN', 'zh-SG', 'zh-Hans', 'zh' -> 'zh-hans'):
     traditional and simplified are different written languages and are not interchangeable."""
-    c = (codice or "").strip().replace("_", "-").lower()
+    c = (code or "").strip().replace("_", "-").lower()
     base = c.split("-")[0]
     if base in ("zh", "chinese", "schinese", "tchinese"):
         if c == "tchinese" or any(p in ("tw", "hk", "mo", "hant") for p in c.split("-")[1:]):
@@ -53,80 +53,80 @@ def chiave_confronto(codice):
     return base
 
 
-def stessa_lingua(a, b):
-    return chiave_confronto(a) == chiave_confronto(b)
+def same_language(a, b):
+    return comparison_key(a) == comparison_key(b)
 
 
-def migliore(candidati, destinazione):
+def best(candidates, dest_lang):
     """The code among 'candidati' that best matches 'destinazione': the same code, then the language without a
     region ('it', 'zh-Hans'), then another variant of the same language (never the other Chinese script).
     None if none matches."""
-    dest = (destinazione or "").strip().replace("_", "-").lower()
-    chiave = chiave_confronto(dest)
-    voti = []
-    for c in candidati:
+    dest = (dest_lang or "").strip().replace("_", "-").lower()
+    key = comparison_key(dest)
+    votes = []
+    for c in candidates:
         n = (c or "").strip().replace("_", "-").lower()
-        if not n or chiave_confronto(n) != chiave:
+        if not n or comparison_key(n) != key:
             continue
-        rango = 0 if n == dest else 1 if n in (chiave, dest.split("-")[0]) else 2
-        voti.append((rango, n, c))
-    return min(voti)[2] if voti else None
+        rank = 0 if n == dest else 1 if n in (key, dest.split("-")[0]) else 2
+        votes.append((rank, n, c))
+    return min(votes)[2] if votes else None
 
 
-def endonimo(codice):
-    return ENDONIMO.get(codice) or ENDONIMO.get((codice or "").split("-")[0])
+def endonym(code):
+    return ENDONYM.get(code) or ENDONYM.get((code or "").split("-")[0])
 
 
-def etichetta(codice):
+def label(code):
     """'Italiano (it)'; 'Detect automatically' for auto; the code itself if unknown."""
-    if codice == AUTO:
-        return ETICHETTA_AUTO
-    return "%s (%s)" % (NOMI[codice], codice) if codice in NOMI else codice
+    if code == AUTO:
+        return AUTO_LABEL
+    return "%s (%s)" % (NAMES[code], code) if code in NAMES else code
 
 
-def etichette(con_auto=False):
-    principali = ["en", "it", "ja", "zh-CN", "ko", "fr", "de", "es", "pt", "ru"]
-    altre = sorted((c for c in NOMI if c not in principali), key=lambda c: NOMI[c])
-    return ([ETICHETTA_AUTO] if con_auto else []) + [etichetta(c) for c in principali + altre]
+def labels(with_auto=False):
+    main_languages = ["en", "it", "ja", "zh-CN", "ko", "fr", "de", "es", "pt", "ru"]
+    other_ones = sorted((c for c in NAMES if c not in main_languages), key=lambda c: NAMES[c])
+    return ([AUTO_LABEL] if with_auto else []) + [label(c) for c in main_languages + other_ones]
 
 
-def codice(testo):
+def code(text):
     """From a label ('Italiano (it)'), name ('italiano') or code ('it') to the code."""
-    t = (testo or "").strip()
-    if not t or t.lower() in (ETICHETTA_AUTO.lower(), AUTO):
+    t = (text or "").strip()
+    if not t or t.lower() in (AUTO_LABEL.lower(), AUTO):
         return AUTO
     m = re.search(r"\(([A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?)\)\s*$", t)
     if m:
         return m.group(1)
-    for c, nome in NOMI.items():
-        if t.lower() in (nome.lower(), c.lower()):
+    for c, name in NAMES.items():
+        if t.lower() in (name.lower(), c.lower()):
             return c
     return t
 
 
-def lingua_di_windows(predefinita="it"):
+def windows_language(default_language="it"):
     """Code of the Windows interface language (or of the system), e.g. 'it'."""
-    nome = None
+    name = None
     if sys.platform.startswith("win"):
         try:
             import ctypes
-            nome = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+            name = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
         except (AttributeError, OSError):
-            nome = None
-    if not nome:
-        nome = (locale.getlocale()[0] or "")
-    nome = nome.replace("-", "_")
-    if nome.lower().startswith("zh"):
-        return "zh-TW" if nome.upper().endswith(("TW", "HK", "MO")) else "zh-CN"
-    primario = nome.split("_")[0].lower()
-    if primario == "nb" or primario == "nn":
-        primario = "no"
-    return primario if primario in NOMI else predefinita
+            name = None
+    if not name:
+        name = (locale.getlocale()[0] or "")
+    name = name.replace("-", "_")
+    if name.lower().startswith("zh"):
+        return "zh-TW" if name.upper().endswith(("TW", "HK", "MO")) else "zh-CN"
+    primary = name.split("_")[0].lower()
+    if primary == "nb" or primary == "nn":
+        primary = "no"
+    return primary if primary in NAMES else default_language
 
 
 # --- detection ----------------------------------------------------------------------------------
 
-_SCRITTURE = [  # (language, character ranges)
+_WRITING_SYSTEMS = [  # (language, character ranges)
     ("ko", [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)]),
     ("kana", [(0x3040, 0x30FF), (0x31F0, 0x31FF)]),
     ("han", [(0x4E00, 0x9FFF), (0x3400, 0x4DBF)]),
@@ -138,7 +138,7 @@ _SCRITTURE = [  # (language, character ranges)
     ("hi", [(0x0900, 0x097F)]),
 ]
 
-_PAROLE = {
+_WORDS = {
     "en": "the and of to a in is you that it for on with as are this be your or not can will have from at by "
           "all an if no was what into out up",
     "it": "il di che e la per un una non è in del della le si con sono al alla gli lo da ma come più questo "
@@ -154,69 +154,69 @@ _PAROLE = {
     "tr": "ve bir bu da de için ile ne çok değil gibi olarak daha mi",
     "sv": "och att det som en är på för med inte har till av den om",
 }
-_PAROLE = {k: set(v.split()) for k, v in _PAROLE.items()}
-# frequent words of a language that in the _PAROLE lists appear only among those of other languages: in an Italian
+_WORDS = {k: set(v.split()) for k, v in _WORDS.items()}
+# frequent words of a language that in the _WORDS lists appear only among those of other languages: in an Italian
 # text "se", "tu", "su", "no" do not mean that it is Spanish
-ANCHE_DI = {"it": {"a", "o", "i", "no", "se", "su", "tu", "ne", "te", "mi", "ce", "sua", "do", "po", "ve", "qui"}}
+ALSO_IN = {"it": {"a", "o", "i", "no", "se", "su", "tu", "ne", "te", "mi", "ce", "sua", "do", "po", "ve", "qui"}}
 
 
-def lingua_evidente(testo, attesa):
-    """The language (a _PAROLE code) whose frequent words the text clearly has instead of those of the 'attesa'
+def obvious_language(text, wait):
+    """The language (a _WORDS code) whose frequent words the text clearly has instead of those of the 'attesa'
     language: at least 2, and more than those of 'attesa'. None if no other language shows (also for short texts
     without frequent words: doubt is not enough). A word that also belongs to the expected language ("la", "in", "se")
     counts only for it."""
-    parole = re.findall(r"[^\W\d_]+", testo.lower())
-    arrivo = attesa.split("-")[0]
-    proprie = _PAROLE.get(arrivo, set()) | ANCHE_DI.get(arrivo, set())
-    punti = {codice: sum(1 for p in parole if p in insieme and (codice == arrivo or p not in proprie))
-             for codice, insieme in _PAROLE.items()}
-    migliore = max(punti, key=punti.get)
-    if migliore != arrivo and punti[migliore] >= 2 and punti[migliore] > punti.get(arrivo, 0):
-        return migliore
+    words = re.findall(r"[^\W\d_]+", text.lower())
+    target_files = wait.split("-")[0]
+    own_letters = _WORDS.get(target_files, set()) | ALSO_IN.get(target_files, set())
+    periods = {code: sum(1 for p in words if p in item_set and (code == target_files or p not in own_letters))
+             for code, item_set in _WORDS.items()}
+    best = max(periods, key=periods.get)
+    if best != target_files and periods[best] >= 2 and periods[best] > periods.get(target_files, 0):
+        return best
     return None
 
 
-def _scrittura(c):
+def _writing_system(c):
     o = ord(c)
-    for nome, intervalli in _SCRITTURE:
-        for a, b in intervalli:
+    for name, ranges in _WRITING_SYSTEMS:
+        for a, b in ranges:
             if a <= o <= b:
-                return nome
+                return name
     return "latino" if c.isalpha() else None
 
 
-def rileva(testi, massimo=200_000):
+def detect(texts, maximum=200_000):
     """(codice, descrizione) of the prevailing language in the texts. ('en', ...) if it cannot be told."""
-    campione = "\n".join(testi)[:massimo]
-    conteggi = {}
-    for c in campione:
-        s = _scrittura(c)
+    sample = "\n".join(texts)[:maximum]
+    counts = {}
+    for c in sample:
+        s = _writing_system(c)
         if s:
-            conteggi[s] = conteggi.get(s, 0) + 1
-    lettere = sum(conteggi.values())
-    if not lettere:
+            counts[s] = counts.get(s, 0) + 1
+    letters = sum(counts.values())
+    if not letters:
         return "en", "nessun testo: uso l'inglese"
 
-    kana, han = conteggi.get("kana", 0), conteggi.get("han", 0)
-    if (kana + han) / lettere > 0.3:
+    kana, han = counts.get("kana", 0), counts.get("han", 0)
+    if (kana + han) / letters > 0.3:
         if kana > 0.05 * (kana + han):
             return "ja", "caratteri giapponesi (kana)"
         return "zh-CN", "ideogrammi cinesi"
-    for lingua in ("ko", "el", "ar", "he", "th", "hi"):
-        if conteggi.get(lingua, 0) / lettere > 0.3:
-            return lingua, "alfabeto"
-    if conteggi.get("cirillico", 0) / lettere > 0.3:
-        ucraino = sum(campione.count(c) for c in "ієїґІЄЇҐ")
-        return ("uk" if ucraino > 0.005 * conteggi["cirillico"] else "ru"), "alfabeto cirillico"
+    for language in ("ko", "el", "ar", "he", "th", "hi"):
+        if counts.get(language, 0) / letters > 0.3:
+            return language, "alfabeto"
+    if counts.get("cirillico", 0) / letters > 0.3:
+        ukrainian = sum(sample.count(c) for c in "ієїґІЄЇҐ")
+        return ("uk" if ukrainian > 0.005 * counts["cirillico"] else "ru"), "alfabeto cirillico"
 
-    parole = re.findall(r"[^\W\d_]+", campione.lower())
-    if not parole:
+    words = re.findall(r"[^\W\d_]+", sample.lower())
+    if not words:
         return "en", "testo non riconosciuto: uso l'inglese"
-    punteggi = {lingua: sum(1 for p in parole if p in insieme) for lingua, insieme in _PAROLE.items()}
-    migliore = max(punteggi, key=punteggi.get)
-    quota = punteggi[migliore] / len(parole)
+    scores = {language: sum(1 for p in words if p in item_set) for language, item_set in _WORDS.items()}
+    best = max(scores, key=scores.get)
+    quota = scores[best] / len(words)
     if quota < 0.03:
         return "en", "parole non riconosciute: uso l'inglese"
-    secondo = sorted(punteggi.values())[-2]
-    sicurezza = "alta" if punteggi[migliore] > 1.5 * max(secondo, 1) else "media"
-    return migliore, "parole frequenti (affidabilità %s)" % sicurezza
+    second = sorted(scores.values())[-2]
+    confidence = "alta" if scores[best] > 1.5 * max(second, 1) else "media"
+    return best, "parole frequenti (affidabilità %s)" % confidence

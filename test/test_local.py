@@ -1,7 +1,7 @@
 """Test of the local translator (Ollama + TranslateGemma) without network and without a graphics card.
 
 Usage: python -I test/test_local.py <empty_temp_folder>
-- level 1: Locale backend with an in-memory simulated server (scripted answers);
+- level 1: Local backend with an in-memory simulated server (scripted answers);
 - level 2: ollama.Server that starts and closes a simulated Ollama (test/fake_ollama.py) on 127.0.0.1.
 """
 import json
@@ -11,70 +11,70 @@ import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from patchsmith import backend, interruption as interruzione, ollama, project as progetto  # noqa: E402
-from patchsmith.project import Progetto  # noqa: E402
+from patchsmith import backend, interruption, ollama, project  # noqa: E402
+from patchsmith.project import Project  # noqa: E402
 
-ESITI = []
-QUI = os.path.dirname(os.path.abspath(__file__))
-
-
-def controlla(nome, condizione):
-    ESITI.append((nome, bool(condizione)))
-    print(("OK    " if condizione else "ERRORE") + "  " + nome)
+OUTCOMES = []
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def silenzio(_):
+def check(name, condition):
+    OUTCOMES.append((name, bool(condition)))
+    print(("OK    " if condition else "ERRORE") + "  " + name)
+
+
+def silent(_):
     pass
 
 
-class ServerFinto:
+class FakeServer:
     """Instead of ollama.Server: answers /api/chat with the function 'traduci(testo, opzioni)'."""
 
-    def __init__(self, traduci, errore=None):
-        self.traduci = traduci
-        self.errore = errore
-        self.richieste = []
-        self.chiuso = False
-        self.scaricato = False  # model removed from the graphics card (keep_alive 0)
-        self.attivo = False
+    def __init__(self, translate, error=None):
+        self.translate = translate
+        self.error = error
+        self.requests = []
+        self.closed = False
+        self.unloaded = False  # model removed from the graphics card (keep_alive 0)
+        self.active = False
 
-    def avvia(self):
-        self.attivo = True
+    def launch(self):
+        self.active = True
 
-    def chiama(self, percorso, dati=None, timeout=180):
-        if self.errore:
-            raise self.errore
-        if percorso == "/api/chat":
-            testo = dati["messages"][0]["content"].split("\n\n\n", 1)[1]
-            self.richieste.append((testo, dati))
-            risposta = self.traduci(testo, dati["options"])
-            if isinstance(risposta, BaseException):
-                raise risposta
-            if isinstance(risposta, tuple):
-                contenuto, fine = risposta
+    def call(self, path, data=None, timeout=180):
+        if self.error:
+            raise self.error
+        if path == "/api/chat":
+            text = data["messages"][0]["content"].split("\n\n\n", 1)[1]
+            self.requests.append((text, data))
+            response = self.translate(text, data["options"])
+            if isinstance(response, BaseException):
+                raise response
+            if isinstance(response, tuple):
+                content, end = response
             else:
-                contenuto, fine = risposta, "stop"
-            return {"message": {"content": contenuto}, "done_reason": fine, "eval_count": 20,
+                content, end = response, "stop"
+            return {"message": {"content": content}, "done_reason": end, "eval_count": 20,
                     "eval_duration": 500_000_000, "prompt_eval_count": 60}
-        if percorso == "/api/generate" and dati.get("keep_alive") == 0:
-            self.scaricato = True
-        if percorso == "/api/ps":
+        if path == "/api/generate" and data.get("keep_alive") == 0:
+            self.unloaded = True
+        if path == "/api/ps":
             return {"models": [{"name": "translategemma:4b-it-q4_K_M", "size": 100, "size_vram": 100}]}
         return {}
 
-    def chiudi(self):
-        self.chiuso = True
+    def close(self):
+        self.closed = True
 
 
-def errore_http(codice, corpo):
+def http_error(code, body):
     import io
     import urllib.error
-    return urllib.error.HTTPError("http://127.0.0.1", codice, "x", {}, io.BytesIO(corpo))
+    return urllib.error.HTTPError("http://127.0.0.1", code, "x", {}, io.BytesIO(body))
 
 
-def locale(traduci, errore=None):
-    server = ServerFinto(traduci, errore)
-    b = backend.Locale("4b", log=silenzio, server=server)
+def local(translate, error=None):
+    server = FakeServer(translate, error)
+    b = backend.Local("4b", log=silent, server=server)
     return b, server
 
 
@@ -83,22 +83,22 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("La cartella di prova deve essere vuota: %s" % base)
     os.makedirs(base)
-    progetto.CARTELLA_PROGETTO = os.path.join(base, "patchsmith")
-    progetto.RADICE_DATI = progetto.CARTELLA_PROGETTO  # the user's data here too
-    os.makedirs(os.path.join(progetto.CARTELLA_PROGETTO, "memory"))
+    project.PROJECT_FOLDER = os.path.join(base, "patchsmith")
+    project.DATA_ROOT = project.PROJECT_FOLDER  # the user's data here too
+    os.makedirs(os.path.join(project.PROJECT_FOLDER, "memory"))
 
     # --- 1. normal translation: one request per line, TranslateGemma's official prompt
-    b, server = locale(lambda t, o: "IT " + t)
-    esito = b.traduci_righe(["Start game", "Quit"], "en", "it")
-    testo, dati = server.richieste[0]
-    controlla("una richiesta per riga, prompt ufficiale (English (en) to Italian (it)), temperatura 0",
-              esito == ["IT Start game", "IT Quit"] and len(server.richieste) == 2
-              and "English (en) to Italian (it) translator" in dati["messages"][0]["content"]
-              and dati["options"]["temperature"] == 0 and dati["options"]["num_ctx"] == 2048
-              and dati["stream"] is False)
+    b, server = local(lambda t, o: "IT " + t)
+    outcome = b.translate_lines(["Start game", "Quit"], "en", "it")
+    text, data = server.requests[0]
+    check("una richiesta per riga, prompt ufficiale (English (en) to Italian (it)), temperatura 0",
+              outcome == ["IT Start game", "IT Quit"] and len(server.requests) == 2
+              and "English (en) to Italian (it) translator" in data["messages"][0]["content"]
+              and data["options"]["temperature"] == 0 and data["options"]["num_ctx"] == 2048
+              and data["stream"] is False)
 
     # --- 2. checks and second attempt
-    casi = {
+    cases = {
         "testo di contorno": (lambda t, o: "Translation: Inizia" if o["temperature"] == 0 else "Inizia", "Inizia"),
         "scrittura sbagliata": (lambda t, o: "开始游戏", ""),
         "rifiuto del modello": (lambda t, o: "I cannot translate this.", ""),
@@ -106,30 +106,31 @@ def main(base):
         "a capo aggiunto": (lambda t, o: "Inizia\nla partita", "Inizia la partita"),
         "non tradotta": (lambda t, o: t, ""),
     }
-    for nome, (traduci, atteso) in casi.items():
-        b, server = locale(traduci)
-        originale = {"numeri diversi": "Deal 50 damage", "non tradotta": "Start the game with your friends"}.get(
-            nome, "Start the game")
-        controlla("controllo '%s': %s" % (nome, "risposta usata (corretta o ritentata)" if atteso
+    for name, (translate, expected) in cases.items():
+        b, server = local(translate)
+        original = {"numeri diversi": "Deal 50 damage", "non tradotta": "Start the game with your friends"}.get(
+            name, "Start the game")
+        check("controllo '%s': %s" % (name, "risposta usata (corretta o ritentata)" if expected
                                            else "resta in originale"),
-                  b.traduci_righe([originale], "en", "it") == [atteso])
-    risposte = iter(["Infliggi 5 danni", "Infliggi 50 danni"])
-    b, server = locale(lambda t, o: next(risposte))
-    numeri = b.traduci_righe(["Deal 50 damage"], "en", "it")
-    controlla("numeri cambiati dal modello: secondo tentativo con la correzione sui numeri nel prompt",
-              numeri == ["Infliggi 50 danni"] and backend.CORREZIONE_NUMERI in server.richieste[1][1]["messages"][0]["content"]
-              and backend.CORREZIONE_NUMERI not in server.richieste[0][1]["messages"][0]["content"])
-    controlla("numeri scritti in lettere: '1 or more' -> 'uno o piu'' accettato; 'un', 'sei' (ambigui) no",
-              not backend.problemi_traduzione("You have 1 or more mods", "Hai uno o più mod", "it")
-              and backend.problemi_traduzione("lose 1 max H", "perdi un po' di salute", "it")
-              and backend.problemi_traduzione("gain 6 slots", "sei più forte", "it"))
-    b, server = locale(lambda t, o: ("Inizia la parti", "length") if o["num_predict"] < 100 else "Inizia la partita")
-    esito = b.traduci_righe(["Start the game"], "en", "it")
-    controlla("risposta troncata (done_reason 'length'): ritenta con piu' spazio",
-              esito == ["Inizia la partita"] and server.richieste[-1][1]["options"]["num_predict"] >= 100)
-    b, server = locale(lambda t, o: '"Inizia"')
-    controlla("virgolette aggiunte dal modello tolte", b.traduci_righe(["Start"], "en", "it") == ["Inizia"])
-    pulizie = [("building", "edificio; costruzione; costruire.", "edificio"),
+                  b.translate_lines([original], "en", "it") == [expected])
+    responses = iter(["Infliggi 5 danni", "Infliggi 50 danni"])
+    b, server = local(lambda t, o: next(responses))
+    numbers = b.translate_lines(["Deal 50 damage"], "en", "it")
+    check("numeri cambiati dal modello: secondo tentativo con la correzione sui numeri nel prompt",
+              numbers == ["Infliggi 50 danni"]
+              and backend.NUMBERS_FIX in server.requests[1][1]["messages"][0]["content"]
+              and backend.NUMBERS_FIX not in server.requests[0][1]["messages"][0]["content"])
+    check("numeri scritti in lettere: '1 or more' -> 'uno o piu'' accettato; 'un', 'sei' (ambigui) no",
+              not backend.translation_problems("You have 1 or more mods", "Hai uno o più mod", "it")
+              and backend.translation_problems("lose 1 max H", "perdi un po' di salute", "it")
+              and backend.translation_problems("gain 6 slots", "sei più forte", "it"))
+    b, server = local(lambda t, o: ("Inizia la parti", "length") if o["num_predict"] < 100 else "Inizia la partita")
+    outcome = b.translate_lines(["Start the game"], "en", "it")
+    check("risposta troncata (done_reason 'length'): ritenta con piu' spazio",
+              outcome == ["Inizia la partita"] and server.requests[-1][1]["options"]["num_predict"] >= 100)
+    b, server = local(lambda t, o: '"Inizia"')
+    check("virgolette aggiunte dal modello tolte", b.translate_lines(["Start"], "en", "it") == ["Inizia"])
+    cleanup_cases = [("building", "edificio; costruzione; costruire.", "edificio"),
                ("spellbind", "incantare, affascinare, rapire.", "incantare"),
                ("swords and stuff", "spade, scudi, ecc.", "spade, scudi, ecc."),
                ("antlers", "corna (di cervo, alce, ecc.)", "corna"),
@@ -138,335 +139,337 @@ def main(base):
                ("why?!", "Perché?!", "perché?!"), ("uh oh!", "Oh, no!", "oh, no!"), ("Start", "Inizia.", "Inizia"),
                ("loading...", "caricamento...", "caricamento..."), ("U.S. army", "esercito U.S.A.", "esercito U.S.A."),
                ("Press (A) to jump.", "Premi (A) per saltare.", "Premi (A) per saltare.")]
-    b, server = locale(lambda t, o: "x")
-    sbagliate = [(o, b._pulisci(t, o)) for o, t, atteso in pulizie if b._pulisci(t, o) != atteso]
-    controlla("pulizia di quello che il modello aggiunge (alternative, note, punto, puntini, maiuscola) senza "
-              "toccare il resto%s" % (": %s" % sbagliate if sbagliate else ""), not sbagliate
-              and b._pulisci("Schwert", "sword", "de") == "Schwert")
+    b, server = local(lambda t, o: "x")
+    wrong = [(o, b._clean(t, o)) for o, t, expected in cleanup_cases if b._clean(t, o) != expected]
+    check("pulizia di quello che il modello aggiunge (alternative, note, punto, puntini, maiuscola) senza "
+              "toccare il resto%s" % (": %s" % wrong if wrong else ""), not wrong
+              and b._clean("Schwert", "sword", "de") == "Schwert")
 
     # --- 2b. no false rejections: ordinary sentences, Asian languages, numbers written in the local style, quotes
-    buone = [("Here, take this.", "Ecco, prendi questo.", "it"), ("Sorry, the shop is closed.",
+    good_ones = [("Here, take this.", "Ecco, prendi questo.", "it"), ("Sorry, the shop is closed.",
              "Mi dispiace, il negozio è chiuso.", "it"), ("Can't carry more!", "Non posso portarne altri!", "it"),
              ("Notes", "Note", "it"), ("Start the game with your friends", "与朋友一起开始游戏", "zh"),
              ("暴击率", "Probabilità di colpo critico", "it"), ("Costs 1000 gold", "Costa 1.000 monete d'oro", "it"),
              ("Costs 1,000 gold", "Costa 1000 monete", "it"), ("Reach level 10", "レベル１０に到達", "ja"),
              ("Level 1.5", "Livello 1,5", "it")]
-    scartate = [(o, backend.problemi_traduzione(o, t, d)) for o, t, d in buone if backend.problemi_traduzione(o, t, d)]
-    controlla("controlli: nessun falso scarto (Ecco/Mi dispiace, cinese e giapponese, 1.000, cifre larghe)%s"
-              % (": %s" % scartate if scartate else ""), not scartate)
-    b, server = locale(lambda t, o: "x")
-    tenute = [("\"Stay a while.\"", "«Resta un po'.»", "«Resta un po'.»"), ("你好朋友", "Ciao, amico", "Ciao, amico"),
+    rejected = [(o, backend.translation_problems(o, t, d)) for o, t, d in good_ones
+                if backend.translation_problems(o, t, d)]
+    check("controlli: nessun falso scarto (Ecco/Mi dispiace, cinese e giapponese, 1.000, cifre larghe)%s"
+              % (": %s" % rejected if rejected else ""), not rejected)
+    b, server = local(lambda t, o: "x")
+    kept = [("\"Stay a while.\"", "«Resta un po'.»", "«Resta un po'.»"), ("你好朋友", "Ciao, amico", "Ciao, amico"),
               ("攻撃力（ATK）", "Attacco (ATK)", "Attacco (ATK)"), ("「こんにちは。」", "\"Ciao.\"", "\"Ciao.\"")]
-    toccate = [(o, b._pulisci(t, o)) for o, t, atteso in tenute if b._pulisci(t, o) != atteso]
-    controlla("pulizia: virgolette di altro stile e testi cinesi/giapponesi lasciati intatti%s"
-              % (": %s" % toccate if toccate else ""), not toccate)
+    altered = [(o, b._clean(t, o)) for o, t, expected in kept if b._clean(t, o) != expected]
+    check("pulizia: virgolette di altro stile e testi cinesi/giapponesi lasciati intatti%s"
+              % (": %s" % altered if altered else ""), not altered)
 
     # --- 2c. text left unchanged: retried once; if it stays unchanged it is a name and it is kept
-    b, server = locale(lambda t, o: t if o["temperature"] == 0 else "Apri la porta")
-    primo = b.traduci_righe(["Open the door"], "en", "it")
-    b, server = locale(lambda t, o: t)
-    nome = b.traduci_righe(["Katherine"], "en", "it")
-    controlla("eco dell'originale: secondo tentativo; uguale due volte (un nome) si tiene",
-              primo == ["Apri la porta"] and nome == ["Katherine"] and len(server.richieste) == 2)
+    b, server = local(lambda t, o: t if o["temperature"] == 0 else "Apri la porta")
+    first = b.translate_lines(["Open the door"], "en", "it")
+    b, server = local(lambda t, o: t)
+    name = b.translate_lines(["Katherine"], "en", "it")
+    check("eco dell'originale: secondo tentativo; uguale due volte (un nome) si tiene",
+              first == ["Apri la porta"] and name == ["Katherine"] and len(server.requests) == 2)
 
     # --- 2d. a single line too slow (time runs out) but server alive: only that one is left untranslated
-    b, server = locale(lambda t, o: TimeoutError("timed out") if t == "Long dialogue" else "IT " + t)
-    righe = b.traduci_righe(["Alpha", "Long dialogue", "Omega"], "en", "it")
-    controlla("riga che va oltre il tempo massimo: resta in originale, le altre si traducono",
-              righe == ["IT Alpha", "", "IT Omega"])
-    b, server = locale(lambda t, o: "x", ConnectionResetError())
+    b, server = local(lambda t, o: TimeoutError("timed out") if t == "Long dialogue" else "IT " + t)
+    lines = b.translate_lines(["Alpha", "Long dialogue", "Omega"], "en", "it")
+    check("riga che va oltre il tempo massimo: resta in originale, le altre si traducono",
+              lines == ["IT Alpha", "", "IT Omega"])
+    b, server = local(lambda t, o: "x", ConnectionResetError())
     try:
-        b.traduci_righe(["Alpha"], "en", "it")
-        caduto = False
-    except backend.ErroreBackend:
-        caduto = True
-    controlla("server caduto: errore (la traduzione si ferma e riprende al prossimo avvio)", caduto)
+        b.translate_lines(["Alpha"], "en", "it")
+        went_down = False
+    except backend.BackendError:
+        went_down = True
+    check("server caduto: errore (la traduzione si ferma e riprende al prossimo avvio)", went_down)
 
     # --- 3. lost placeholders: the last attempt goes back to PatchSmith, which re-translates the pieces between codes
-    profilo = os.path.join(base, "profilo.json")
+    profile = os.path.join(base, "profilo.json")
     json.dump({"nome": "prova", "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
-               "file": []}, open(profilo, "w"))
-    p = Progetto(profilo, silenzio)
+               "file": []}, open(profile, "w"))
+    p = Project(profile, silent)
 
-    def perde(testo, opzioni):
-        return testo.replace("[[0]]", "").replace("Hello", "Ciao").replace("welcome", "benvenuto").strip()
-    b, server = locale(perde)
-    p.traduci_testi(["Hello {name}, welcome"], b, "en", "it")
-    controlla("segnaposto perso dal modello: la traduzione finale ha comunque {name}",
-              p.memoria.get("Hello {name}, welcome") == "Ciao {name}, benvenuto" and server.scaricato)
+    def loses(text, options):
+        return text.replace("[[0]]", "").replace("Hello", "Ciao").replace("welcome", "benvenuto").strip()
+    b, server = local(loses)
+    p.translate_texts(["Hello {name}, welcome"], b, "en", "it")
+    check("segnaposto perso dal modello: la traduzione finale ha comunque {name}",
+              p.memory.get("Hello {name}, welcome") == "Ciao {name}, benvenuto" and server.unloaded)
 
     # --- 3a. context per line: key (without number) and official translations, line by line if the lines match
-    b, server = locale(lambda t, o: "meteo" if t == "weather" else "IT " + t)
-    p.memoria = {}
-    contesti = {"weather": {"chiave": "configWeather", "riferimenti": {"fr": "météo", "es": "clima"}},
+    b, server = local(lambda t, o: "meteo" if t == "weather" else "IT " + t)
+    p.memory = {}
+    contexts = {"weather": {"chiave": "configWeather", "riferimenti": {"fr": "météo", "es": "clima"}},
                 "first line\nsecond line": {"chiave": "dialogue", "riferimenti": {"fr": "une seule ligne"}},
                 "a\nb": {"chiave": "x", "riferimenti": {"fr": "riga a\nriga b"}}}
-    p.traduci_testi(list(contesti), b, "en", "it", contesti)
-    prompt = {t: d["messages"][0]["content"] for t, d in server.richieste}
-    controlla("contesto nel prompt: chiave e traduzioni ufficiali; righe diverse -> nessun riferimento",
+    p.translate_texts(list(contexts), b, "en", "it", contexts)
+    prompt = {t: d["messages"][0]["content"] for t, d in server.requests}
+    check("contesto nel prompt: chiave e traduzioni ufficiali; righe diverse -> nessun riferimento",
               'identifier "configWeather"' in prompt["weather"] and "French: météo; Spanish: clima" in prompt["weather"]
               and "French" not in prompt["first line"] and 'identifier "dialogue"' in prompt["first line"]
-              and "French: riga a" in prompt["a"] and "French: riga b" in prompt["b"] and p.memoria["weather"] == "meteo")
-    b, server = locale(lambda t, o: "configWeather")
-    controlla("il modello scrive la chiave invece di tradurre -> scartato",
-              b.traduci_righe(["weather"], "en", "it", [{"chiave": "configWeather"}]) == [""])
-    prompt_visti = []
+              and "French: riga a" in prompt["a"] and "French: riga b" in prompt["b"]
+              and p.memory["weather"] == "meteo")
+    b, server = local(lambda t, o: "configWeather")
+    check("il modello scrive la chiave invece di tradurre -> scartato",
+              b.translate_lines(["weather"], "en", "it", [{"chiave": "configWeather"}]) == [""])
+    seen_prompts = []
 
-    class ServerPrompt(ServerFinto):
-        def chiama(self, percorso, dati=None, timeout=180):
-            if percorso == "/api/chat":
-                prompt_visti.append(dati["messages"][0]["content"])
-            return ServerFinto.chiama(self, percorso, dati, timeout)
+    class ServerPrompt(FakeServer):
+        def call(self, path, data=None, timeout=180):
+            if path == "/api/chat":
+                seen_prompts.append(data["messages"][0]["content"])
+            return FakeServer.call(self, path, data, timeout)
 
-    def secondo_prompt(risposte):
-        server = ServerPrompt(lambda t, o: risposte[min(len(prompt_visti), len(risposte)) - 1])
-        prompt_visti.clear()
-        return backend.Locale("4b", log=silenzio, server=server)
-    b = secondo_prompt(["saque", "saccheggio"])
-    copia = b.traduci_righe(["looting"], "en", "it", [{"chiave": "skillName", "riferimenti": {"pt": "saque"}}])
-    controlla("traduzione ufficiale copiata (es. dal portoghese): scartata, nuovo tentativo senza riferimenti",
-              copia == ["saccheggio"] and "saque" in prompt_visti[0] and "saque" not in prompt_visti[1])
-    b = secondo_prompt(["configWeather", "meteo"])
-    chiave = b.traduci_righe(["weather"], "en", "it", [{"chiave": "configWeather"}])
-    controlla("chiave copiata: nuovo tentativo senza la chiave nel prompt",
-              chiave == ["meteo"] and "configWeather" in prompt_visti[0] and "configWeather" not in prompt_visti[1])
-    b = secondo_prompt(["le monete valgono il doppio!", "coins are worth 200% more!", "valgono il triplo!"])
-    controlla("testo rimasto uguale solo all'ultimo tentativo (dopo uno scarto): resta da rifare, non e' una traduzione",
-              b.traduci_righe(["coins are worth 200% more!"], "en", "it") == [""])
-    b = secondo_prompt(["[[0]]Compagno Sigillo", "[[0]]Compagno[[1]] Sigillo"])
-    segni = b.traduci_righe(["[[0]]Companion[[1]] Seal"], "en", "it")
-    controlla("codici persi dal modello: secondo tentativo con l'istruzione sui codici",
-              segni == ["[[0]]Compagno[[1]] Sigillo"] and backend.CORREZIONE_SEGNAPOSTO in prompt_visti[1])
-    b, server = locale(lambda t, o: "[[0]] Attacchi [[1]] ti danno [[2]\u3015evitare [[3]\u3015 danni")
-    controlla("codici rovinati dal modello ('[[2]\u3015', '[0]'): rimessi; quelli scritti nell'originale no",
-              b.traduci_righe(["[[0]]Backstabs[[1]] grant [[2]]Evade[[3]] damage"], "en", "it")
+    def second_prompt(responses):
+        server = ServerPrompt(lambda t, o: responses[min(len(seen_prompts), len(responses)) - 1])
+        seen_prompts.clear()
+        return backend.Local("4b", log=silent, server=server)
+    b = second_prompt(["saque", "saccheggio"])
+    copy_dir = b.translate_lines(["looting"], "en", "it", [{"chiave": "skillName", "riferimenti": {"pt": "saque"}}])
+    check("traduzione ufficiale copiata (es. dal portoghese): scartata, nuovo tentativo senza riferimenti",
+              copy_dir == ["saccheggio"] and "saque" in seen_prompts[0] and "saque" not in seen_prompts[1])
+    b = second_prompt(["configWeather", "meteo"])
+    key = b.translate_lines(["weather"], "en", "it", [{"chiave": "configWeather"}])
+    check("chiave copiata: nuovo tentativo senza la chiave nel prompt",
+              key == ["meteo"] and "configWeather" in seen_prompts[0] and "configWeather" not in seen_prompts[1])
+    b = second_prompt(["le monete valgono il doppio!", "coins are worth 200% more!", "valgono il triplo!"])
+    check("testo rimasto uguale solo all'ultimo tentativo (dopo uno scarto): resta da rifare, non e' una traduzione",
+              b.translate_lines(["coins are worth 200% more!"], "en", "it") == [""])
+    b = second_prompt(["[[0]]Compagno Sigillo", "[[0]]Compagno[[1]] Sigillo"])
+    markers = b.translate_lines(["[[0]]Companion[[1]] Seal"], "en", "it")
+    check("codici persi dal modello: secondo tentativo con l'istruzione sui codici",
+              markers == ["[[0]]Compagno[[1]] Sigillo"] and backend.PLACEHOLDER_FIX in seen_prompts[1])
+    b, server = local(lambda t, o: "[[0]] Attacchi [[1]] ti danno [[2]\u3015evitare [[3]\u3015 danni")
+    check("codici rovinati dal modello ('[[2]\u3015', '[0]'): rimessi; quelli scritti nell'originale no",
+              b.translate_lines(["[[0]]Backstabs[[1]] grant [[2]]Evade[[3]] damage"], "en", "it")
               == ["[[0]] Attacchi [[1]] ti danno [[2]]evitare [[3]] danni"]
-              and b._pulisci("Premi [1] per saltare [[0]]", "Press [1] to jump [[0]]") == "Premi [1] per saltare [[0]]")
-    controlla("numeri: 'una' per 1 se l'originale non ha un articolo che la spieghi; cifra che traduce 'one'",
-              not backend.problemi_traduzione("appear 1 rarity higher", "appaiono con una rarità superiore", "it")
-              and backend.problemi_traduzione("deals 1 damage to a target", "infligge danni a una creatura", "it")
-              and not backend.problemi_traduzione("restore one [[7]] on hit", "ripristina 1 [[7]] al colpo", "it"))
-    controlla("lettere che non sono dell'italiano (es. 'crânio' dal portoghese): scartata",
-              "lettere di un'altra lingua" in backend.problemi_traduzione("great skull", "crânio grande", "it")
-              and not backend.problemi_traduzione("so is it", "così è", "it"))
+              and b._clean("Premi [1] per saltare [[0]]", "Press [1] to jump [[0]]") == "Premi [1] per saltare [[0]]")
+    check("numeri: 'una' per 1 se l'originale non ha un articolo che la spieghi; cifra che traduce 'one'",
+              not backend.translation_problems("appear 1 rarity higher", "appaiono con una rarità superiore", "it")
+              and backend.translation_problems("deals 1 damage to a target", "infligge danni a una creatura", "it")
+              and not backend.translation_problems("restore one [[7]] on hit", "ripristina 1 [[7]] al colpo", "it"))
+    check("lettere che non sono dell'italiano (es. 'crânio' dal portoghese): scartata",
+              "lettere di un'altra lingua" in backend.translation_problems("great skull", "crânio grande", "it")
+              and not backend.translation_problems("so is it", "così è", "it"))
 
     # --- 3b. Stop during the fallback: the good translations of the same group stay in the translation memory
-    def perde_e_ferma(testo, opzioni):
-        if "[[0]]" not in testo and testo in ("Hello", ", welcome"):  # we are in the fallback
-            interruzione.richiedi()
-        return perde(testo, opzioni) if "[[0]]" in testo else "IT " + testo
-    b, server = locale(perde_e_ferma)
-    p.memoria = {}
-    if os.path.exists(progetto.percorso_comune("en", "it")):  # short texts already seen in the earlier cases
-        os.remove(progetto.percorso_comune("en", "it"))
+    def loses_and_stops(text, options):
+        if "[[0]]" not in text and text in ("Hello", ", welcome"):  # we are in the fallback
+            interruption.request_stop()
+        return loses(text, options) if "[[0]]" in text else "IT " + text
+    b, server = local(loses_and_stops)
+    p.memory = {}
+    if os.path.exists(project.shared_path("en", "it")):  # short texts already seen in the earlier cases
+        os.remove(project.shared_path("en", "it"))
     try:
-        p.traduci_testi(["Start game", "Quit", "Hello {name}, welcome"], b, "en", "it")
-        fermato = False
-    except interruzione.Interrotto:
-        fermato = True
-    interruzione.azzera()
-    controlla("Ferma durante il ripiego dei segnaposto: le altre traduzioni del gruppo sono salvate",
-              fermato and p.memoria.get("Start game") == "IT Start game" and p.memoria.get("Quit") == "IT Quit")
+        p.translate_texts(["Start game", "Quit", "Hello {name}, welcome"], b, "en", "it")
+        stopped = False
+    except interruption.Interrupted:
+        stopped = True
+    interruption.reset()
+    check("Ferma durante il ripiego dei segnaposto: le altre traduzioni del gruppo sono salvate",
+              stopped and p.memory.get("Start game") == "IT Start game" and p.memory.get("Quit") == "IT Quit")
 
     # --- 3c. lines in parallel: same order of the lines; with Stop the lines already done stay
-    b, server = locale(lambda t, o: "IT " + t)
-    b.parallele = 3
-    righe = ["riga %d" % i for i in range(20)]
-    controlla("righe tradotte 3 alla volta: risultato nello stesso ordine", b.traduci_righe(righe, "en", "it")
-              == ["IT " + r for r in righe])
+    b, server = local(lambda t, o: "IT " + t)
+    b.parallel = 3
+    lines = ["riga %d" % i for i in range(20)]
+    check("righe tradotte 3 alla volta: risultato nello stesso ordine", b.translate_lines(lines, "en", "it")
+              == ["IT " + r for r in lines])
 
-    def ferma_al_quinto(testo, opzioni):
-        if testo == "riga 5":
-            interruzione.richiedi()
-        return "IT " + testo
-    b, server = locale(ferma_al_quinto)
-    b.parallele = 3
+    def stop_at_fifth(text, options):
+        if text == "riga 5":
+            interruption.request_stop()
+        return "IT " + text
+    b, server = local(stop_at_fifth)
+    b.parallel = 3
     try:
-        b.traduci_righe(righe, "en", "it")
-        parziali = None
-    except interruzione.Interrotto as e:
-        parziali = e.parziali
-    interruzione.azzera()
-    controlla("Ferma con le righe in parallelo: si ferma, le righe gia' tradotte restano al loro posto",
-              parziali is not None and len(parziali) == 20 and parziali[0] == "IT riga 0" and parziali[-1] == ""
-              and all(p in ("", "IT " + r) for p, r in zip(parziali, righe)))
+        b.translate_lines(lines, "en", "it")
+        partials = None
+    except interruption.Interrupted as e:
+        partials = e.partials
+    interruption.reset()
+    check("Ferma con le righe in parallelo: si ferma, le righe gia' tradotte restano al loro posto",
+              partials is not None and len(partials) == 20 and partials[0] == "IT riga 0" and partials[-1] == ""
+              and all(p in ("", "IT " + r) for p, r in zip(partials, lines)))
 
     # --- 3d. shared translation memory: the short texts translated for one game serve the others; so do hand fixes
-    def profilo_gioco(nome):
-        percorso = os.path.join(base, nome + ".json")
-        json.dump({"nome": nome, "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
-                   "file": []}, open(percorso, "w"))
-        return Progetto(percorso, silenzio)
-    primo = profilo_gioco("gioco-uno")
-    b, server = locale(lambda t, o: "IT " + t)
-    primo.traduci_testi(["options", "back", "a long sentence that only this game has"], b, "en", "it")
-    secondo = profilo_gioco("gioco-due")
-    b, server = locale(lambda t, o: "IT " + t)
-    secondo.traduci_testi(["options", "back", "new game"], b, "en", "it")
-    controlla("memoria comune: i testi brevi gia' tradotti per un altro gioco non si ritraducono (le frasi si')",
-              [t for t, _ in server.richieste] == ["new game"] and secondo.memoria["options"] == "IT options")
-    primo.memoria["options"] = "opzioni"  # as with 'Fix translations'
-    primo._salva_memoria()
-    primo = profilo_gioco("gioco-uno")
-    b, server = locale(lambda t, o: "IT " + t)
-    primo.traduci_testi(["options"], b, "en", "it")
-    terzo = profilo_gioco("gioco-tre")
-    b, server = locale(lambda t, o: "IT " + t)
-    terzo.traduci_testi(["options"], b, "en", "it")
-    controlla("correzione a mano di un testo breve: passa nella memoria comune e la usano i giochi successivi",
-              terzo.memoria["options"] == "opzioni" and not server.richieste)
+    def game_profile(name):
+        path = os.path.join(base, name + ".json")
+        json.dump({"nome": name, "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
+                   "file": []}, open(path, "w"))
+        return Project(path, silent)
+    first = game_profile("gioco-uno")
+    b, server = local(lambda t, o: "IT " + t)
+    first.translate_texts(["options", "back", "a long sentence that only this game has"], b, "en", "it")
+    second = game_profile("gioco-due")
+    b, server = local(lambda t, o: "IT " + t)
+    second.translate_texts(["options", "back", "new game"], b, "en", "it")
+    check("memoria comune: i testi brevi gia' tradotti per un altro gioco non si ritraducono (le frasi si')",
+              [t for t, _ in server.requests] == ["new game"] and second.memory["options"] == "IT options")
+    first.memory["options"] = "opzioni"  # as with 'Fix translations'
+    first._save_memory()
+    first = game_profile("gioco-uno")
+    b, server = local(lambda t, o: "IT " + t)
+    first.translate_texts(["options"], b, "en", "it")
+    third = game_profile("gioco-tre")
+    b, server = local(lambda t, o: "IT " + t)
+    third.translate_texts(["options"], b, "en", "it")
+    check("correzione a mano di un testo breve: passa nella memoria comune e la usano i giochi successivi",
+              third.memory["options"] == "opzioni" and not server.requests)
 
     # --- 4. understandable errors
-    for nome, errore, parola in (("modello mancante (404)", errore_http(404, b'{"error":"model not found"}'),
+    for name, error, word in (("modello mancante (404)", http_error(404, b'{"error":"model not found"}'),
                                   "non e' scaricato"),
-                                 ("memoria insufficiente", errore_http(500, b'{"error":"requires more system memory"}'),
+                                 ("memoria insufficiente", http_error(500, b'{"error":"requires more system memory"}'),
                                   "Memoria insufficiente")):
-        b, server = locale(lambda t, o: "x", errore)
+        b, server = local(lambda t, o: "x", error)
         try:
-            b.traduci_righe(["Start"], "en", "it")
-            messaggio = ""
-        except backend.ErroreBackend as e:
-            messaggio = str(e)
-        controlla("errore '%s' spiegato" % nome, parola in messaggio)
+            b.translate_lines(["Start"], "en", "it")
+            message = ""
+        except backend.BackendError as e:
+            message = str(e)
+        check("errore '%s' spiegato" % name, word in message)
 
     # --- 5. Stop halfway: lines already translated saved, server closed
-    conta = [0]
+    tally = [0]
 
-    def ferma_al_terzo(testo, opzioni):
-        conta[0] += 1
-        if conta[0] == 3:
-            interruzione.richiedi()
-        return "IT " + testo
-    b, server = locale(ferma_al_terzo)
-    p.memoria = {}
+    def stop_at_third(text, options):
+        tally[0] += 1
+        if tally[0] == 3:
+            interruption.request_stop()
+        return "IT " + text
+    b, server = local(stop_at_third)
+    p.memory = {}
     try:
-        p.traduci_testi(["uno", "due", "tre", "quattro", "cinque"], b, "en", "it")
-        fermato = False
-    except interruzione.Interrotto:
-        fermato = True
-    interruzione.azzera()
-    controlla("Ferma a meta': si ferma, le righe gia' tradotte restano, la scheda video viene liberata",
-              fermato and set(p.memoria) == {"uno", "due", "tre"} and server.scaricato)
+        p.translate_texts(["uno", "due", "tre", "quattro", "cinque"], b, "en", "it")
+        stopped = False
+    except interruption.Interrupted:
+        stopped = True
+    interruption.reset()
+    check("Ferma a meta': si ferma, le righe gia' tradotte restano, la scheda video viene liberata",
+              stopped and set(p.memory) == {"uno", "due", "tre"} and server.unloaded)
 
-    # --- 5b. server started by the translator itself: chiudi() shuts it down
-    b, server = locale(lambda t, o: "IT " + t)
-    b._proprio = True
-    b.traduci_righe(["Start"], "en", "it")
-    b.chiudi()
-    controlla("chiudi(): con il server avviato da PatchSmith, modello scaricato e server spento",
-              server.scaricato and server.chiuso and b._server is None)
+    # --- 5b. server started by the translator itself: close() shuts it down
+    b, server = local(lambda t, o: "IT " + t)
+    b._owned = True
+    b.translate_lines(["Start"], "en", "it")
+    b.close()
+    check("chiudi(): con il server avviato da PatchSmith, modello scaricato e server spento",
+              server.unloaded and server.closed and b._server is None)
 
     # --- 6. estimate from the measured speed
-    b, server = locale(lambda t, o: "IT " + t)
-    prima = b.stima([40] * 100)  # pace of the trials (0.25 s per text for the 4B) + 30 s of startup
-    b.traduci_righe(["Start"] * 12, "en", "it")  # fake server: instant
-    controlla("stima: prima delle prove circa un minuto per 100 testi col 4B, poi il ritmo misurato "
-              "su questo PC", 45 <= prima <= 65 and b.stima([40] * 100) < 5)
-    controlla("prompt: formato ufficiale di TranslateGemma con il contesto 'videogioco, del tu'",
-              "video game" in server.richieste[0][1]["messages"][0]["content"]
-              and server.richieste[0][1]["messages"][0]["content"].endswith("\n\n\nStart"))
+    b, server = local(lambda t, o: "IT " + t)
+    before = b.estimate([40] * 100)  # pace of the trials (0.25 s per text for the 4B) + 30 s of startup
+    b.translate_lines(["Start"] * 12, "en", "it")  # fake server: instant
+    check("stima: prima delle prove circa un minuto per 100 testi col 4B, poi il ritmo misurato "
+              "su questo PC", 45 <= before <= 65 and b.estimate([40] * 100) < 5)
+    check("prompt: formato ufficiale di TranslateGemma con il contesto 'videogioco, del tu'",
+              "video game" in server.requests[0][1]["messages"][0]["content"]
+              and server.requests[0][1]["messages"][0]["content"].endswith("\n\n\nStart"))
 
     # --- 7. simulated Ollama: startup, environment, closing, server that does not start
     os.environ["OLLAMA_ORIGINS"] = r"C:\non\usare"  # the user's configuration: it must not reach the server
-    ambiente = os.path.join(base, "ambiente.json")
-    os.environ["PATCHSMITH_FINTO_AMBIENTE"] = ambiente
-    comando = [sys.executable, "-I", os.path.join(QUI, "fake_ollama.py")]
-    server = ollama.Server(silenzio, comando=comando, attesa_avvio=20)
-    server.avvia()
-    versione = server.chiama("/api/version")
-    tradotto = backend.Locale("4b", log=silenzio, server=server).traduci_righe(["Start game"], "en", "it")
-    env = json.load(open(ambiente, encoding="utf-8"))
-    pid = server.processo.pid
-    server.chiudi()
+    environment = os.path.join(base, "ambiente.json")
+    os.environ["PATCHSMITH_FINTO_AMBIENTE"] = environment
+    command = [sys.executable, "-I", os.path.join(HERE, "fake_ollama.py")]
+    server = ollama.Server(silent, command=command, startup_wait=20)
+    server.launch()
+    version = server.call("/api/version")
+    translated = backend.Local("4b", log=silent, server=server).translate_lines(["Start game"], "en", "it")
+    env = json.load(open(environment, encoding="utf-8"))
+    pid = server.process.pid
+    server.close()
     import subprocess
-    vivo = str(pid).encode() in subprocess.run(["tasklist", "/FI", "PID eq %d" % pid], capture_output=True).stdout
-    controlla("Ollama simulato: avvio, traduzione, chiusura del processo",
-              versione.get("version") == "0.40.4" and tradotto == ["IT: Start game"] and not vivo)
-    controlla("ambiente del server: modelli nella cartella di PatchSmith, porta propria, niente variabili dell'utente",
-              env.get("OLLAMA_MODELS") == ollama.cartella_modelli() and env.get("OLLAMA_NO_CLOUD") == "1"
+    alive = str(pid).encode() in subprocess.run(["tasklist", "/FI", "PID eq %d" % pid], capture_output=True).stdout
+    check("Ollama simulato: avvio, traduzione, chiusura del processo",
+              version.get("version") == "0.40.4" and translated == ["IT: Start game"] and not alive)
+    check("ambiente del server: modelli nella cartella di PatchSmith, porta propria, niente variabili dell'utente",
+              env.get("OLLAMA_MODELS") == ollama.models_folder() and env.get("OLLAMA_NO_CLOUD") == "1"
               and env.get("OLLAMA_HOST", "").startswith("127.0.0.1:114") and "OLLAMA_ORIGINS" not in env
               and r"C:\non\usare" not in env.values())
     del os.environ["OLLAMA_ORIGINS"]
     os.environ["PATCHSMITH_FINTO_MUORI"] = "1"
     try:
-        ollama.Server(silenzio, comando=comando, attesa_avvio=20).avvia()
-        messaggio = ""
-    except ollama.ErroreLocale as e:
-        messaggio = str(e)
+        ollama.Server(silent, command=command, startup_wait=20).launch()
+        message = ""
+    except ollama.LocalError as e:
+        message = str(e)
     del os.environ["PATCHSMITH_FINTO_MUORI"]
-    controlla("server che non parte: errore con le ultime righe del suo registro",
-              "non si e' avviato" in messaggio and "errore simulato" in messaggio)
+    check("server che non parte: errore con le ultime righe del suo registro",
+              "non si e' avviato" in message and "errore simulato" in message)
 
     # Stop while the server is starting: the process just launched does not stay running
     import threading
-    pid_avviati = []
-    lega_vero = ollama._lega_al_job
-    ollama._lega_al_job = lambda pid: pid_avviati.append(pid) or lega_vero(pid)
+    started_pids = []
+    real_bind = ollama._bind_to_job
+    ollama._bind_to_job = lambda pid: started_pids.append(pid) or real_bind(pid)
     os.environ["PATCHSMITH_FINTO_LENTO"] = "8"
-    threading.Timer(1.0, interruzione.richiedi).start()
+    threading.Timer(1.0, interruption.request_stop).start()
     try:
-        with ollama.Server(silenzio, comando=comando, attesa_avvio=20):
+        with ollama.Server(silent, command=command, startup_wait=20):
             pass
-        fermato = False
-    except interruzione.Interrotto:
-        fermato = True
-    interruzione.azzera()
+        stopped = False
+    except interruption.Interrupted:
+        stopped = True
+    interruption.reset()
     del os.environ["PATCHSMITH_FINTO_LENTO"]
-    ollama._lega_al_job = lega_vero
-    vivo = bool(pid_avviati) and str(pid_avviati[0]).encode() in subprocess.run(
-        ["tasklist", "/FI", "PID eq %d" % pid_avviati[0]], capture_output=True).stdout
-    controlla("Ferma durante l'avvio del server: nessun server lasciato acceso", fermato and pid_avviati and not vivo)
+    ollama._bind_to_job = real_bind
+    alive = bool(started_pids) and str(started_pids[0]).encode() in subprocess.run(
+        ["tasklist", "/FI", "PID eq %d" % started_pids[0]], capture_output=True).stdout
+    check("Ferma durante l'avvio del server: nessun server lasciato acceso", stopped and started_pids and not alive)
 
     # a port already used by another program (even listening on 0.0.0.0) is not chosen
     import socket
-    occupante = socket.socket()
-    occupante.bind(("0.0.0.0", 0))
-    occupante.listen(1)
-    porta_altrui = occupante.getsockname()[1]
-    occupata = ollama._porta_occupata(porta_altrui)
-    occupante.close()
-    controlla("porta occupata da un altro programma riconosciuta", occupata and not ollama._porta_occupata(porta_altrui))
+    occupier = socket.socket()
+    occupier.bind(("0.0.0.0", 0))
+    occupier.listen(1)
+    other_port = occupier.getsockname()[1]
+    busy = ollama._port_busy(other_port)
+    occupier.close()
+    check("porta occupata da un altro programma riconosciuta", busy and not ollama._port_busy(other_port))
 
     # --- 8. installation: zip with dangerous paths rejected, status without installation
-    pericoloso = os.path.join(base, "pericoloso.zip")
-    with zipfile.ZipFile(pericoloso, "w") as z:
+    dangerous = os.path.join(base, "pericoloso.zip")
+    with zipfile.ZipFile(dangerous, "w") as z:
         z.writestr("../fuori.txt", "x")
     try:
-        ollama._estrai(pericoloso, os.path.join(base, "estratto"))
-        rifiutato = False
-    except ollama.ErroreLocale:
-        rifiutato = True
-    controlla("installazione: zip con percorsi fuori cartella rifiutato, nulla estratto",
-              rifiutato and not os.path.exists(os.path.join(base, "fuori.txt"))
+        ollama._extract(dangerous, os.path.join(base, "estratto"))
+        was_refused = False
+    except ollama.LocalError:
+        was_refused = True
+    check("installazione: zip con percorsi fuori cartella rifiutato, nulla estratto",
+              was_refused and not os.path.exists(os.path.join(base, "fuori.txt"))
               and not os.path.exists(os.path.join(base, "estratto")))
     # damaged installation (ollama.exe removed, e.g. by the antivirus): reinstalling replaces it
-    buono = os.path.join(base, "buono.zip")
-    with zipfile.ZipFile(buono, "w") as z:
+    good = os.path.join(base, "buono.zip")
+    with zipfile.ZipFile(good, "w") as z:
         z.writestr("ollama.exe", "nuovo")
         z.writestr("lib/ollama/x.dll", "x")
-    rovinata = os.path.join(base, "versione")
-    os.makedirs(os.path.join(rovinata, "lib", "ollama"))
-    open(os.path.join(rovinata, "lib", "ollama", "vecchio.dll"), "w").close()
-    ollama._estrai(buono, rovinata)
-    controlla("installazione rovinata: la cartella viene rifatta da zero",
-              open(os.path.join(rovinata, "ollama.exe")).read() == "nuovo"
-              and not os.path.exists(os.path.join(rovinata, "lib", "ollama", "vecchio.dll"))
-              and not os.path.exists(rovinata + ".tmp"))
+    corrupted = os.path.join(base, "versione")
+    os.makedirs(os.path.join(corrupted, "lib", "ollama"))
+    open(os.path.join(corrupted, "lib", "ollama", "vecchio.dll"), "w").close()
+    ollama._extract(good, corrupted)
+    check("installazione rovinata: la cartella viene rifatta da zero",
+              open(os.path.join(corrupted, "ollama.exe")).read() == "nuovo"
+              and not os.path.exists(os.path.join(corrupted, "lib", "ollama", "vecchio.dll"))
+              and not os.path.exists(corrupted + ".tmp"))
 
     # Ollama download: Stop or a dropped network do not throw away the part already downloaded, it resumes with Range
-    contenuto = bytes(range(256)) * 12  # 3072 bytes instead of 1.47 GB
-    richieste = []
+    content = bytes(range(256)) * 12  # 3072 bytes instead of 1.47 GB
+    requests = []
 
-    class Risposta:
-        def __init__(self, dati, stato, rompi_dopo=None):
-            self.dati, self.status, self.rompi, self.letti = dati, stato, rompi_dopo, 0
+    class Response:
+        def __init__(self, data, state, break_after=None):
+            self.data, self.status, self.break_at, self.read_items = data, state, break_after, 0
 
         def read(self, n):
-            if self.rompi is not None and self.letti >= self.rompi:
+            if self.break_at is not None and self.read_items >= self.break_at:
                 raise ConnectionResetError("rete interrotta")
-            blocco = self.dati[self.letti:self.letti + min(n, 1024)]
-            self.letti += len(blocco)
-            return blocco
+            block = self.data[self.read_items:self.read_items + min(n, 1024)]
+            self.read_items += len(block)
+            return block
 
         def __enter__(self):
             return self
@@ -474,455 +477,456 @@ def main(base):
         def __exit__(self, *_):
             return False
 
-    def urlopen_finto(req, timeout=None):
-        intervallo = req.get_header("Range")
-        richieste.append(intervallo)
-        if intervallo:
-            inizio = int(intervallo.split("=")[1].rstrip("-"))
-            return Risposta(contenuto[inizio:], 206)
-        return Risposta(contenuto, 200, rompi_dopo=1024)
-    originali = (ollama.DIMENSIONE_ZIP, ollama.urllib.request.urlopen)
-    ollama.DIMENSIONE_ZIP, ollama.urllib.request.urlopen = len(contenuto), urlopen_finto
-    parziale = os.path.join(base, "ollama.zip.scaricamento")
+    def fake_urlopen(req, timeout=None):
+        byte_range = req.get_header("Range")
+        requests.append(byte_range)
+        if byte_range:
+            start = int(byte_range.split("=")[1].rstrip("-"))
+            return Response(content[start:], 206)
+        return Response(content, 200, break_after=1024)
+    originals = (ollama.ZIP_SIZE, ollama.urllib.request.urlopen)
+    ollama.ZIP_SIZE, ollama.urllib.request.urlopen = len(content), fake_urlopen
+    partial = os.path.join(base, "ollama.zip.scaricamento")
     try:
         try:
-            ollama._scarica_zip(parziale, silenzio)
+            ollama._download_zip(partial, silent)
         except ConnectionResetError:
             pass
-        meta = os.path.getsize(parziale)
-        ollama._scarica_zip(parziale, silenzio)
+        half = os.path.getsize(partial)
+        ollama._download_zip(partial, silent)
     finally:
-        ollama.DIMENSIONE_ZIP, ollama.urllib.request.urlopen = originali
-    controlla("scaricamento interrotto: il pezzo resta e si riprende da li' (Range), file finale identico",
-              meta == 1024 and richieste == [None, "bytes=1024-"] and open(parziale, "rb").read() == contenuto)
-    controlla("stato senza installazione: 'non installato' e descrizione dei download con fonte e dimensione",
-              ollama.stato() == "non installato" and any("github.com" in r for r in ollama.descrizione_download(["4b"]))
-              and any("Gemma Terms" in r for r in ollama.descrizione_download(["4b"])))
+        ollama.ZIP_SIZE, ollama.urllib.request.urlopen = originals
+    check("scaricamento interrotto: il pezzo resta e si riprende da li' (Range), file finale identico",
+              half == 1024 and requests == [None, "bytes=1024-"] and open(partial, "rb").read() == content)
+    check("stato senza installazione: 'non installato' e descrizione dei download con fonte e dimensione",
+              ollama.state() == "non installato" and any("github.com" in r for r in ollama.download_description(["4b"]))
+              and any("Gemma Terms" in r for r in ollama.download_description(["4b"])))
     try:
-        backend.Locale("4b", log=silenzio).traduci_righe(["Start"], "en", "it")
-        messaggio = ""
-    except backend.ErroreBackend as e:
-        messaggio = str(e)
-    controlla("traduttore locale non installato: messaggio con cosa fare", "Installa" in messaggio)
+        backend.Local("4b", log=silent).translate_lines(["Start"], "en", "it")
+        message = ""
+    except backend.BackendError as e:
+        message = str(e)
+    check("traduttore locale non installato: messaggio con cosa fare", "Installa" in message)
     try:
-        backend.crea_backend("locale", silenzio)
-        messaggio, codice, comando = "", None, ""
-    except backend.ErroreBackend as e:
-        messaggio, codice, comando = str(e), e.codice, e.comando or ""
-    controlla("crea_backend('locale') senza installazione: errore subito (prima di toccare il gioco), il messaggio "
+        backend.create_backend("locale", silent)
+        message, code, command = "", None, ""
+    except backend.BackendError as e:
+        message, code, command = str(e), e.code, e.command or ""
+    check("crea_backend('locale') senza installazione: errore subito (prima di toccare il gioco), il messaggio "
               "parla del pulsante (niente comandi), il comando e' a parte per la riga di comando",
-              "Installa" in messaggio and "smith.py" not in messaggio and codice == "TRADUTTORE_ASSENTE"
-              and "smith.py local --install" in comando)
+              "Installa" in message and "smith.py" not in message and code == "TRADUTTORE_ASSENTE"
+              and "smith.py local --install" in command)
     # installed, but the chosen model (12B) is not downloaded: the one present (4B) is used
-    os.makedirs(os.path.join(ollama.cartella(), ollama.VERSIONE))
-    open(ollama.programma(), "w").close()
-    manifesto = os.path.join(ollama.cartella_modelli(), "manifests", "registry.ollama.ai", "library", "translategemma")
-    os.makedirs(manifesto)
-    open(os.path.join(manifesto, ollama.MODELLI["4b"]["nome"].split(":")[1]), "w").close()
-    json.dump({"modello_locale": "12b"}, open(os.path.join(progetto.CARTELLA_PROGETTO, "settings.json"), "w"))
-    righe = []
-    scelto = backend.crea_backend("locale", righe.append)
-    controlla("modello scelto non scaricato: si usa quello scaricato, e lo si dice",
-              scelto.chiave == "4b" and any("non e' scaricato" in r for r in righe))
+    os.makedirs(os.path.join(ollama.folder(), ollama.VERSION))
+    open(ollama.program(), "w").close()
+    manifest = os.path.join(ollama.models_folder(), "manifests", "registry.ollama.ai", "library", "translategemma")
+    os.makedirs(manifest)
+    open(os.path.join(manifest, ollama.MODELS["4b"]["nome"].split(":")[1]), "w").close()
+    json.dump({"modello_locale": "12b"}, open(os.path.join(project.PROJECT_FOLDER, "settings.json"), "w"))
+    lines = []
+    chosen = backend.create_backend("locale", lines.append)
+    check("modello scelto non scaricato: si usa quello scaricato, e lo si dice",
+              chosen.key == "4b" and any("non e' scaricato" in r for r in lines))
 
-    prova_recupero(base)
-    prova_memoria(base)
-    prova_applica(base)
-    prova_rifatte_limitate(base)
+    test_recovery(base)
+    test_memory(base)
+    test_apply(base)
+    test_limited_redos(base)
 
-    falliti = [n for n, ok in ESITI if not ok]
-    print("\nRISULTATO: %d/%d controlli superati" % (len(ESITI) - len(falliti), len(ESITI)))
-    return not falliti
+    failed = [n for n, ok in OUTCOMES if not ok]
+    print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
+    return not failed
 
 
-def profilo_di(base, nome, **altro):
+def profile_of(base, name, **other):
     """A test game profile (game in the base folder, English -> Italian), with the given extra fields."""
-    percorso = os.path.join(base, nome + ".json")
-    with open(percorso, "w", encoding="utf-8") as f:
-        json.dump(dict({"nome": nome, "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
-                        "file": []}, **altro), f)
-    return percorso
+    path = os.path.join(base, name + ".json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(dict({"nome": name, "cartella_gioco": base, "lingua_origine": "en", "lingua_destinazione": "it",
+                        "file": []}, **other), f)
+    return path
 
 
-def leggi_json(percorso):
-    with open(percorso, encoding="utf-8") as f:
+def read_json(path):
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
-def scrivi_json(percorso, dati):
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    with open(percorso, "w", encoding="utf-8") as f:
-        json.dump(dati, f, ensure_ascii=False)
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
 
 
-class ServerConPrompt(ServerFinto):
+class ServerWithPrompt(FakeServer):
     """Like ServerFinto, but remembers the prompt and the model of each request (the answer can depend on them)."""
 
-    def __init__(self, traduci):
-        ServerFinto.__init__(self, lambda t, o: traduci(t, o, self.prompt, self.modello))
-        self.prompt, self.modello, self.modelli = "", None, []
+    def __init__(self, translate):
+        FakeServer.__init__(self, lambda t, o: translate(t, o, self.prompt, self.model))
+        self.prompt, self.model, self.models = "", None, []
 
-    def chiama(self, percorso, dati=None, timeout=180):
-        if percorso == "/api/chat":
-            self.prompt, self.modello = dati["messages"][0]["content"], dati["model"]
-            self.modelli.append(dati["model"])
-        return ServerFinto.chiama(self, percorso, dati, timeout)
+    def call(self, path, data=None, timeout=180):
+        if path == "/api/chat":
+            self.prompt, self.model = data["messages"][0]["content"], data["model"]
+            self.models.append(data["model"])
+        return FakeServer.call(self, path, data, timeout)
 
 
-def prova_recupero(base):
+def test_recovery(base):
     """Texts rejected by the checks: new rounds right away (separate sentences, new seeds, the other model),
-    problemi.json and different seeds at each run (before, the same question was repeated with 42, 7, 11 and the
+    problems.json and different seeds at each run (before, the same question was repeated with 42, 7, 11 and the
     answer was the same)."""
-    from patchsmith import auto as automatico, outcome as esito
+    from patchsmith import auto as automatic, outcome
 
     # 9a. the translator gets it wrong with the seeds of the first round (42, 7, 11) and answers well with the others
-    visti = []
+    seen = []
 
-    def semi_fissi(testo, opzioni):
-        visti.append(opzioni["seed"])
-        return testo if opzioni["seed"] in (42, 7, 11) else "IT " + testo
-    p = Progetto(profilo_di(base, "recupero"), silenzio)
-    b, server = locale(semi_fissi)
-    falliti = p.traduci_testi(["Open the door to the castle"], b, "en", "it")
-    controlla("scartato con i semi del primo giro (42, 7, 11): tradotto nello stesso avvio, con un seme nuovo",
-              falliti == 0 and p.memoria.get("Open the door to the castle") == "IT Open the door to the castle"
-              and visti[:3] == [42, 7, 11] and len(visti) == 4 and visti[3] not in (42, 7, 11) and not p.problemi())
+    def fixed_seeds(text, options):
+        seen.append(options["seed"])
+        return text if options["seed"] in (42, 7, 11) else "IT " + text
+    p = Project(profile_of(base, "recupero"), silent)
+    b, server = local(fixed_seeds)
+    failed = p.translate_texts(["Open the door to the castle"], b, "en", "it")
+    check("scartato con i semi del primo giro (42, 7, 11): tradotto nello stesso avvio, con un seme nuovo",
+              failed == 0 and p.memory.get("Open the door to the castle") == "IT Open the door to the castle"
+              and seen[:3] == [42, 7, 11] and len(seen) == 4 and seen[3] not in (42, 7, 11) and not p.problems())
 
-    # 9b. a text always rejected: problemi.json, not in the translation memory; the second run uses all new seeds
-    testo = "Close the window of the house"
-    p = Progetto(profilo_di(base, "sempre-scartato"), silenzio)
-    b, server = locale(lambda t, o: t)
-    falliti = p.traduci_testi([testo], b, "en", "it")
-    semi_primo = [d["options"]["seed"] for _, d in server.richieste]
-    problemi = p.problemi()
-    controlla("testo sempre scartato: in problemi.json con il motivo e i passaggi fatti, non in memoria",
-              falliti == 1 and testo not in p.memoria and os.path.exists(p.percorso_problemi)
-              and problemi.get(testo, {}).get("dove") == "traduzione" and "non tradotta" in problemi[testo]["motivo"]
-              and problemi[testo]["tentativi"] == 2 and p.ultimi_falliti == [testo])
-    e = esito.Esito("PARZIALE", motore="web", scritto=True, tradotti=3, rimasti=1, esempi_rimasti=[testo],
-                    extra=automatico._extra_tentativi(p))
-    registro = []
-    automatico._dopo_i_tentativi({"esito": e}, registro.append)
-    finestra = esito.finestra(e)["testo"]
-    controlla("messaggio finale: niente 'rilancia'; dice cosa ha gia' provato da solo e nomina 'Correggi traduzioni'",
-              "Correggi traduzioni" in " ".join(registro) and "riprovato da solo" in finestra
-              and "Mostra i rimasti" in finestra and "rilancia" not in (" ".join(registro) + finestra).lower())
-    p = Progetto(profilo_di(base, "sempre-scartato"), silenzio)
-    b, server = locale(lambda t, o: t)
-    p.traduci_testi([testo], b, "en", "it")
-    semi_secondo = [d["options"]["seed"] for _, d in server.richieste]
-    controlla("secondo avvio: semi tutti diversi da quelli del primo (registro delle richieste), passaggi annotati",
-              len(semi_secondo) == 6 and not set(semi_primo) & set(semi_secondo)
-              and p.problemi()[testo]["tentativi"] == 4)
-    controlla("semi: stessi per lo stesso testo e tentativo (anche in un altro avvio), mai 42, 7, 11",
-              backend.seme_per(testo, 3) == backend.seme_per(testo, 3) != backend.seme_per(testo, 4)
-              and all(backend.seme_per("x%d" % i, i) >= 100 for i in range(200)))
+    # 9b. a text always rejected: problems.json, not in the translation memory; the second run uses all new seeds
+    text = "Close the window of the house"
+    p = Project(profile_of(base, "sempre-scartato"), silent)
+    b, server = local(lambda t, o: t)
+    failed = p.translate_texts([text], b, "en", "it")
+    first_seeds = [d["options"]["seed"] for _, d in server.requests]
+    problems = p.problems()
+    check("testo sempre scartato: in problemi.json con il motivo e i passaggi fatti, non in memoria",
+              failed == 1 and text not in p.memory and os.path.exists(p.problems_path)
+              and problems.get(text, {}).get("dove") == "traduzione" and "non tradotta" in problems[text]["motivo"]
+              and problems[text]["tentativi"] == 2 and p.last_failed == [text])
+    e = outcome.Outcome("PARZIALE", engine="web", written=True, translated_items=3, remaining=1,
+                        remaining_examples=[text], extra=automatic._extra_attempts(p))
+    log_file = []
+    automatic._after_attempts({"esito": e}, log_file.append)
+    window = outcome.window(e)["testo"]
+    check("messaggio finale: niente 'rilancia'; dice cosa ha gia' provato da solo e nomina 'Correggi traduzioni'",
+              "Correggi traduzioni" in " ".join(log_file) and "riprovato da solo" in window
+              and "Mostra i rimasti" in window and "rilancia" not in (" ".join(log_file) + window).lower())
+    p = Project(profile_of(base, "sempre-scartato"), silent)
+    b, server = local(lambda t, o: t)
+    p.translate_texts([text], b, "en", "it")
+    second_seeds = [d["options"]["seed"] for _, d in server.requests]
+    check("secondo avvio: semi tutti diversi da quelli del primo (registro delle richieste), passaggi annotati",
+              len(second_seeds) == 6 and not set(first_seeds) & set(second_seeds)
+              and p.problems()[text]["tentativi"] == 4)
+    check("semi: stessi per lo stesso testo e tentativo (anche in un altro avvio), mai 42, 7, 11",
+              backend.seed_for(text, 3) == backend.seed_for(text, 3) != backend.seed_for(text, 4)
+              and all(backend.seed_for("x%d" % i, i) >= 100 for i in range(200)))
 
     # 9c. the same with the real simulated Ollama (HTTP), which gets it wrong with seeds 42, 7, 11 and logs the requests
-    registro_richieste = os.path.join(base, "richieste-ollama.jsonl")
-    comando = [sys.executable, "-I", os.path.join(QUI, "fake_ollama.py")]
+    requests_log = os.path.join(base, "richieste-ollama.jsonl")
+    command = [sys.executable, "-I", os.path.join(HERE, "fake_ollama.py")]
     os.environ["PATCHSMITH_FINTO_SEMI_SBAGLIATI"] = "42,7,11"
-    os.environ["PATCHSMITH_FINTO_RICHIESTE"] = registro_richieste
+    os.environ["PATCHSMITH_FINTO_RICHIESTE"] = requests_log
     try:
-        server = ollama.Server(silenzio, comando=comando, attesa_avvio=20)
-        server.avvia()
+        server = ollama.Server(silent, command=command, startup_wait=20)
+        server.launch()
         try:
-            p = Progetto(profilo_di(base, "ollama-finto"), silenzio)
-            p.traduci_testi(["Find the key in the old house"], backend.Locale("4b", log=silenzio, server=server),
+            p = Project(profile_of(base, "ollama-finto"), silent)
+            p.translate_texts(["Find the key in the old house"], backend.Local("4b", log=silent, server=server),
                             "en", "it")
         finally:
-            server.chiudi()
+            server.close()
     finally:
         del os.environ["PATCHSMITH_FINTO_SEMI_SBAGLIATI"], os.environ["PATCHSMITH_FINTO_RICHIESTE"]
-    with open(registro_richieste, encoding="utf-8") as f:
-        semi = [json.loads(r)["seed"] for r in f]
-    controlla("Ollama simulato che sbaglia con 42, 7, 11: tradotto nello stesso avvio con un seme nuovo (dal suo "
+    with open(requests_log, encoding="utf-8") as f:
+        seeds = [json.loads(r)["seed"] for r in f]
+    check("Ollama simulato che sbaglia con 42, 7, 11: tradotto nello stesso avvio con un seme nuovo (dal suo "
               "registro delle richieste)",
-              p.memoria.get("Find the key in the old house") == "IT: Find the key in the old house"
-              and semi[:3] == [42, 7, 11] and len(semi) == 4 and semi[3] not in (42, 7, 11))
+              p.memory.get("Find the key in the old house") == "IT: Find the key in the old house"
+              and seeds[:3] == [42, 7, 11] and len(seeds) == 4 and seeds[3] not in (42, 7, 11))
 
     # 9d. rejected by the Fast model in the new rounds too: Quality (12B) is NOT loaded on its own, even if present
-    dodici = ollama.MODELLI["12b"]["nome"]
-    manifesto = os.path.join(ollama.cartella_modelli(), "manifests", "registry.ollama.ai", "library",
-                             "translategemma", dodici.split(":")[1])
-    os.makedirs(os.path.dirname(manifesto), exist_ok=True)
-    open(manifesto, "w").close()
+    twelve = ollama.MODELS["12b"]["nome"]
+    manifest = os.path.join(ollama.models_folder(), "manifests", "registry.ollama.ai", "library",
+                             "translategemma", twelve.split(":")[1])
+    os.makedirs(os.path.dirname(manifest), exist_ok=True)
+    open(manifest, "w").close()
     try:
-        server = ServerConPrompt(lambda t, o, prompt, modello: ("IT " + t) if modello == dodici else t)
-        p = Progetto(profilo_di(base, "altro-modello"), silenzio)
-        p.traduci_testi(["Talk to the guard at the gate"], backend.Locale("4b", log=silenzio, server=server),
+        server = ServerWithPrompt(lambda t, o, prompt, model: ("IT " + t) if model == twelve else t)
+        p = Project(profile_of(base, "altro-modello"), silent)
+        p.translate_texts(["Talk to the guard at the gate"], backend.Local("4b", log=silent, server=server),
                         "en", "it")
-        controlla("scartato dal modello Veloce anche nei nuovi giri: resta il modello scelto (niente 12B caricato da "
+        check("scartato dal modello Veloce anche nei nuovi giri: resta il modello scelto (niente 12B caricato da "
                   "solo), il testo va tra i problemi",
-                  "Talk to the guard at the gate" not in p.memoria and dodici not in server.modelli
-                  and "Talk to the guard at the gate" in p.problemi())
+                  "Talk to the guard at the gate" not in p.memory and twelve not in server.models
+                  and "Talk to the guard at the gate" in p.problems())
     finally:
-        os.remove(manifesto)
+        os.remove(manifest)
 
 
-def prova_memoria(base):
+def test_memory(base):
     """Game names protected, shared translation memory with the source, saved translations redone if they are wrong."""
-    from patchsmith import names as nomi
+    from patchsmith import names
 
     # 10a. game names: Unity's app.info and the version information of an executable
-    gioco = os.path.join(base, "gioco-nomi")
-    os.makedirs(os.path.join(gioco, "Gioco_Data"))
-    open(os.path.join(gioco, "Gioco_Data", "globalgamemanagers"), "wb").write(b"x")
-    with open(os.path.join(gioco, "Gioco_Data", "app.info"), "w", encoding="utf-8") as f:
+    game = os.path.join(base, "gioco-nomi")
+    os.makedirs(os.path.join(game, "Gioco_Data"))
+    open(os.path.join(game, "Gioco_Data", "globalgamemanagers"), "wb").write(b"x")
+    with open(os.path.join(game, "Gioco_Data", "app.info"), "w", encoding="utf-8") as f:
         f.write("Cup Dog Games\nRubinite")
-    trovati = nomi.nomi_del_gioco(gioco)
-    info = nomi.versione_exe(sys.executable)
-    controlla("nomi del gioco: azienda e prodotto da app.info; CompanyName dalle informazioni di un eseguibile",
-              trovati[:2] == ["Cup Dog Games", "Rubinite"] and info.get("CompanyName") == "Python Software Foundation")
-    controlla("nomi: anche senza la forma societaria ('LLC'); nomi generici e sigle corte scartati",
-              nomi._varianti("Cup Dog Games LLC") == ["Cup Dog Games LLC", "Cup Dog Games"]
-              and nomi._varianti("DefaultCompany") == [] and nomi._varianti("GM") == []
+    found = names.names_of_game(game)
+    info = names.exe_version(sys.executable)
+    check("nomi del gioco: azienda e prodotto da app.info; CompanyName dalle informazioni di un eseguibile",
+              found[:2] == ["Cup Dog Games", "Rubinite"] and info.get("CompanyName") == "Python Software Foundation")
+    check("nomi: anche senza la forma societaria ('LLC'); nomi generici e sigle corte scartati",
+              names._variants("Cup Dog Games LLC") == ["Cup Dog Games LLC", "Cup Dog Games"]
+              and names._variants("DefaultCompany") == [] and names._variants("GM") == []
               # several forms in a row; generic names also with the final period, and utility programs next to the game
-              and nomi._varianti("SQUARE ENIX CO., LTD.") == ["SQUARE ENIX CO., LTD", "SQUARE ENIX"]
-              and nomi._varianti("Epic Games, Inc.") == [] and nomi._varianti("Microsoft Game Launch Helper") == [])
-    comune = progetto.percorso_comune("en", "it")
-    vecchia = leggi_json(comune) if os.path.exists(comune) else {}
-    vecchia.update({"Cup Dog Games": "Giochi di cani da coppa", "Deal 5 damage": "Infliggi 50 danni",
+              and names._variants("SQUARE ENIX CO., LTD.") == ["SQUARE ENIX CO., LTD", "SQUARE ENIX"]
+              and names._variants("Epic Games, Inc.") == [] and names._variants("Microsoft Game Launch Helper") == [])
+    shared = project.shared_path("en", "it")
+    old_folder = read_json(shared) if os.path.exists(shared) else {}
+    old_folder.update({"Cup Dog Games": "Giochi di cani da coppa", "Deal 5 damage": "Infliggi 50 danni",
                     "Load game": "Carica partita"})  # entries from a previous version, without a source
-    scrivi_json(comune, vecchia)
-    b, server = locale(lambda t, o: t.replace("Cup Dog Games", "Giochi di cani da coppa").replace("Made by",
+    write_json(shared, old_folder)
+    b, server = local(lambda t, o: t.replace("Cup Dog Games", "Giochi di cani da coppa").replace("Made by",
                                                                                                    "Fatto da"))
-    p = Progetto(profilo_di(base, "rubinite", cartella_gioco=gioco, non_tradurre=trovati), silenzio)
-    p.traduci_testi(["Cup Dog Games", "Made by Cup Dog Games"], b, "en", "it")
-    chiesti = [t for t, _ in server.richieste]
-    controlla("app.info con 'Cup Dog Games': la traduzione e' uguale all'originale (nessuna richiesta; la memoria "
+    p = Project(profile_of(base, "rubinite", cartella_gioco=game, non_tradurre=found), silent)
+    p.translate_texts(["Cup Dog Games", "Made by Cup Dog Games"], b, "en", "it")
+    to_ask = [t for t, _ in server.requests]
+    check("app.info con 'Cup Dog Games': la traduzione e' uguale all'originale (nessuna richiesta; la memoria "
               "comune vecchia 'Giochi di cani da coppa' non vale), il nome resta anche dentro le frasi",
-              p.memoria.get("Cup Dog Games") == "Cup Dog Games" and chiesti == ["Made by [[0]]"]
-              and p.memoria.get("Made by Cup Dog Games") == "Fatto da Cup Dog Games")
-    controlla("nome di una sola parola che nei testi c'e' anche in minuscolo ('Control'): e' una parola, si traduce",
-              Progetto(profilo_di(base, "parola", non_tradurre=["Control"]), silenzio).nomi_attivi(
+              p.memory.get("Cup Dog Games") == "Cup Dog Games" and to_ask == ["Made by [[0]]"]
+              and p.memory.get("Made by Cup Dog Games") == "Fatto da Cup Dog Games")
+    check("nome di una sola parola che nei testi c'e' anche in minuscolo ('Control'): e' una parola, si traduce",
+              Project(profile_of(base, "parola", non_tradurre=["Control"]), silent).active_names(
                   ["Control", "Hold control to run"]) == ()
-              and Progetto(profilo_di(base, "nome", non_tradurre=["Rubinite"]), silenzio).nomi_attivi(
+              and Project(profile_of(base, "nome", non_tradurre=["Rubinite"]), silent).active_names(
                   ["Welcome to Rubinite"]) == ("Rubinite",))
 
     # 10b. shared translation memory: only the texts translated now go in, with their source; old entries without a
     # source that do not pass the checks are skipped (and replaced)
-    percorso = profilo_di(base, "comune-a")
-    scrivi_json(progetto.percorso_memoria({"nome": "comune-a", "lingua_destinazione": "it"}),
+    path = profile_of(base, "comune-a")
+    write_json(project.memory_path({"nome": "comune-a", "lingua_destinazione": "it"}),
                 {"Save game": "Salva partita"})  # old entry of the game
-    p = Progetto(percorso, silenzio)
-    b, server = locale(lambda t, o: {"Deal 5 damage": "Infliggi 5 danni", "New quest": "Nuova missione"}.get(
+    p = Project(path, silent)
+    b, server = local(lambda t, o: {"Deal 5 damage": "Infliggi 5 danni", "New quest": "Nuova missione"}.get(
         t, "IT " + t))
-    p.traduci_testi(["Deal 5 damage", "Load game", "New quest", "Save game"], b, "en", "it")
-    dopo = leggi_json(comune)
-    origine = leggi_json(progetto.percorso_origine_comune("en", "it"))
-    controlla("memoria comune: voce vecchia con i numeri sbagliati saltata e sostituita (con la provenienza: "
+    p.translate_texts(["Deal 5 damage", "Load game", "New quest", "Save game"], b, "en", "it")
+    after = read_json(shared)
+    origin = read_json(project.shared_origin_path("en", "it"))
+    check("memoria comune: voce vecchia con i numeri sbagliati saltata e sostituita (con la provenienza: "
               "traduttore, modello, versione); voce vecchia buona usata",
-              [t for t, _ in server.richieste] == ["Deal 5 damage", "New quest"]
-              and p.memoria["Load game"] == "Carica partita" and dopo["Deal 5 damage"] == "Infliggi 5 danni"
-              and origine["Deal 5 damage"]["backend"] == "locale" and "4b" in origine["Deal 5 damage"]["modello"]
-              and origine["Deal 5 damage"]["versione"])
-    controlla("memoria comune: le voci vecchie della memoria del gioco non ci entrano (solo quelle tradotte adesso)",
-              "Save game" not in dopo and dopo.get("New quest") == "Nuova missione")
-    p.memoria["New quest"] = "Missione nuova"  # as with 'Fix translations'
-    p._salva_memoria()
-    p = Progetto(percorso, silenzio)
-    b, server = locale(lambda t, o: "IT " + t)
-    p.traduci_testi(["New quest"], b, "en", "it")
-    dopo, origine = leggi_json(comune), leggi_json(progetto.percorso_origine_comune("en", "it"))
-    controlla("correzione a mano: va nella memoria comune (provenienza 'a mano'); in .automatiche.json resta la "
+              [t for t, _ in server.requests] == ["Deal 5 damage", "New quest"]
+              and p.memory["Load game"] == "Carica partita" and after["Deal 5 damage"] == "Infliggi 5 danni"
+              and origin["Deal 5 damage"]["backend"] == "locale" and "4b" in origin["Deal 5 damage"]["modello"]
+              and origin["Deal 5 damage"]["versione"])
+    check("memoria comune: le voci vecchie della memoria del gioco non ci entrano (solo quelle tradotte adesso)",
+              "Save game" not in after and after.get("New quest") == "Nuova missione")
+    p.memory["New quest"] = "Missione nuova"  # as with 'Fix translations'
+    p._save_memory()
+    p = Project(path, silent)
+    b, server = local(lambda t, o: "IT " + t)
+    p.translate_texts(["New quest"], b, "en", "it")
+    after, origin = read_json(shared), read_json(project.shared_origin_path("en", "it"))
+    check("correzione a mano: va nella memoria comune (provenienza 'a mano'); in .automatiche.json resta la "
               "traduzione automatica, cosi' la correzione si riconosce sempre",
-              dopo["New quest"] == "Missione nuova" and origine["New quest"].get("mano")
-              and leggi_json(p._percorso_automatiche())["New quest"] == "Nuova missione"
-              and p.memoria["New quest"] == "Missione nuova" and not server.richieste)
+              after["New quest"] == "Missione nuova" and origin["New quest"].get("mano")
+              and read_json(p._machine_path())["New quest"] == "Nuova missione"
+              and p.memory["New quest"] == "Missione nuova" and not server.requests)
 
     # 10c. saved translations redone: only the machine translations that do not pass the current checks
-    nome = "rivalida"
-    percorso = profilo_di(base, nome)
-    salvate = {"Collect 5 coins": "Raccogli 50 monete", "Find 3 gems": "Trova 30 gemme",
+    name = "rivalida"
+    path = profile_of(base, name)
+    saved_count = {"Collect 5 coins": "Raccogli 50 monete", "Find 3 gems": "Trova 30 gemme",
                "Open the chest of the house": "Abre el cofre de la casa y el mapa"}
-    scrivi_json(progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"}), salvate)
-    scrivi_json(progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"})[:-5] + ".automatiche.json",
-                dict(salvate, **{"Find 3 gems": "Trova 3 gemme"}))  # 'Trova 30 gemme' is a fix made by hand
-    p = Progetto(percorso, silenzio)
-    b, server = locale(lambda t, o: {"Collect 5 coins": "Raccogli 5 monete"}.get(t, t))
-    p.traduci_testi(list(salvate), b, "en", "it")
-    chiesti = {t for t, _ in server.richieste}
-    problema = p.problemi().get("Open the chest of the house", {})
-    controlla("traduzione automatica con i numeri sbagliati: rifatta; correzione a mano: non toccata",
-              p.memoria["Collect 5 coins"] == "Raccogli 5 monete" and "Find 3 gems" not in chiesti
-              and p.memoria["Find 3 gems"] == "Trova 30 gemme" and p.rifatte == 1)
-    controlla("traduzione automatica in un'altra lingua: se rifarla non riesce resta quella di prima, annotata",
-              p.memoria["Open the chest of the house"] == "Abre el cofre de la casa y el mapa"
-              and problema.get("dove") == "memoria" and "in un'altra lingua" in problema.get("motivo", ""))
-    p._problemi["Open the chest of the house"] = dict(problema, tentativi=progetto.MAX_TENTATIVI)
-    p._salva_problemi()
-    p = Progetto(percorso, silenzio)
-    b, server = locale(lambda t, o: t)
-    p.traduci_testi(list(salvate), b, "en", "it")
-    controlla("dopo %d passaggi una traduzione sospetta si lascia com'e' (non si ritraduce a ogni avvio)"
-              % progetto.MAX_TENTATIVI, not server.richieste)
-    from patchsmith import language as lingua
-    controlla("controlli: 'a capo diversi' (righe in piu' o in meno), 'a capo aggiunto' per un testo di una riga",
-              "a capo diversi" in backend.problemi_traduzione("NEW\n\nText", "NUOVO\n\n\nTesto")
-              and "a capo aggiunto" in backend.problemi_traduzione("Start", "Inizia\nora")
-              and not backend.problemi_traduzione("A\nB c", "A\nB d"))
-    controlla("lingua: niente falsi allarmi su 'Qui, qui!' o su titoli inglesi tra virgolette e tag",
-              not progetto.problemi_voce("Over here, over here!", "Qui, qui!", "it")
-              and not progetto.problemi_voce('Unlock the "Lambs to the Slaughter" Accolade',
+    write_json(project.memory_path({"nome": name, "lingua_destinazione": "it"}), saved_count)
+    write_json(project.memory_path({"nome": name, "lingua_destinazione": "it"})[:-5] + ".automatiche.json",
+                dict(saved_count, **{"Find 3 gems": "Trova 3 gemme"}))  # 'Trova 30 gemme' is a fix made by hand
+    p = Project(path, silent)
+    b, server = local(lambda t, o: {"Collect 5 coins": "Raccogli 5 monete"}.get(t, t))
+    p.translate_texts(list(saved_count), b, "en", "it")
+    to_ask = {t for t, _ in server.requests}
+    problem = p.problems().get("Open the chest of the house", {})
+    check("traduzione automatica con i numeri sbagliati: rifatta; correzione a mano: non toccata",
+              p.memory["Collect 5 coins"] == "Raccogli 5 monete" and "Find 3 gems" not in to_ask
+              and p.memory["Find 3 gems"] == "Trova 30 gemme" and p.redone == 1)
+    check("traduzione automatica in un'altra lingua: se rifarla non riesce resta quella di prima, annotata",
+              p.memory["Open the chest of the house"] == "Abre el cofre de la casa y el mapa"
+              and problem.get("dove") == "memoria" and "in un'altra lingua" in problem.get("motivo", ""))
+    p._problems["Open the chest of the house"] = dict(problem, tentativi=project.MAX_ATTEMPTS)
+    p._save_problems()
+    p = Project(path, silent)
+    b, server = local(lambda t, o: t)
+    p.translate_texts(list(saved_count), b, "en", "it")
+    check("dopo %d passaggi una traduzione sospetta si lascia com'e' (non si ritraduce a ogni avvio)"
+              % project.MAX_ATTEMPTS, not server.requests)
+    from patchsmith import language
+    check("controlli: 'a capo diversi' (righe in piu' o in meno), 'a capo aggiunto' per un testo di una riga",
+              "a capo diversi" in backend.translation_problems("NEW\n\nText", "NUOVO\n\n\nTesto")
+              and "a capo aggiunto" in backend.translation_problems("Start", "Inizia\nora")
+              and not backend.translation_problems("A\nB c", "A\nB d"))
+    check("lingua: niente falsi allarmi su 'Qui, qui!' o su titoli inglesi tra virgolette e tag",
+              not project.entry_problems("Over here, over here!", "Qui, qui!", "it")
+              and not project.entry_problems('Unlock the "Lambs to the Slaughter" Accolade',
                                              'Sblocca l\'insegna "Lambs to the Slaughter"', "it")
-              and not progetto.problemi_voce('Use <sprite="Crystal Shard" name="Crystal Shard"> to gain power',
+              and not project.entry_problems('Use <sprite="Crystal Shard" name="Crystal Shard"> to gain power',
                                              'Usa <sprite="Crystal Shard" name="Crystal Shard"> per avere potere',
                                              "it")
-              and lingua.lingua_evidente("Open the door of the castle", "it") == "en")
+              and language.obvious_language("Open the door of the castle", "it") == "en")
 
 
-def prova_applica(base):
-    """Translations that cannot be written to the game: in problemi.json; the machine translations are redone right away
+def test_apply(base):
+    """Translations that cannot be written to the game: in problems.json; the machine translations are redone right away
     with the right instruction, those fixed by hand stay."""
-    from patchsmith import auto as automatico
-    gioco = os.path.join(base, "gioco-righe")
-    os.makedirs(gioco)
-    with open(os.path.join(gioco, "english.txt"), "w", encoding="utf-8", newline="") as f:
+    from patchsmith import auto as automatic
+    game = os.path.join(base, "gioco-righe")
+    os.makedirs(game)
+    with open(os.path.join(game, "english.txt"), "w", encoding="utf-8", newline="") as f:
         f.write("0 Start a brand new game now\n1 Quit\n2 Options\n")  # long sentence: not in the shared memory
-    nome = "righe"
-    percorso = profilo_di(base, nome, cartella_gioco=gioco, motore="gamemaker",
+    name = "righe"
+    path = profile_of(base, name, cartella_gioco=game, motore="gamemaker",
                           file=[{"percorso": "english.txt", "formato": "righe"}])
-    memoria = progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"})
-    salvate = {"Start a brand new game now": "Inizia → partita", "Quit": "Esci ★", "Options": "Opzioni"}
-    scrivi_json(memoria, salvate)
-    scrivi_json(memoria[:-5] + ".automatiche.json", dict(salvate, Quit="Esci"))  # 'Esci ★' fixed by hand
-    server = ServerConPrompt(lambda t, o, prompt, modello: "Inizia la partita" if "do not use them: →" in prompt
+    memory = project.memory_path({"nome": name, "lingua_destinazione": "it"})
+    saved_count = {"Start a brand new game now": "Inizia → partita", "Quit": "Esci ★", "Options": "Opzioni"}
+    write_json(memory, saved_count)
+    write_json(memory[:-5] + ".automatiche.json", dict(saved_count, Quit="Esci"))  # 'Esci ★' fixed by hand
+    server = ServerWithPrompt(lambda t, o, prompt, model: "Inizia la partita" if "do not use them: →" in prompt
                              else "Inizia → partita")
-    p = Progetto(percorso, silenzio)
-    p.traduci(backend.Locale("4b", log=silenzio, server=server))
-    with open(os.path.join(gioco, "english.txt"), encoding="utf-8") as f:
-        scritto = f.read()
-    problemi = p.problemi()
-    controlla("traduzione automatica con un carattere che il font non ha: rifatta subito con l'istruzione di non "
+    p = Project(path, silent)
+    p.translate(backend.Local("4b", log=silent, server=server))
+    with open(os.path.join(game, "english.txt"), encoding="utf-8") as f:
+        written = f.read()
+    problems = p.problems()
+    check("traduzione automatica con un carattere che il font non ha: rifatta subito con l'istruzione di non "
               "usarlo, e scritta nel gioco",
-              "0 Inizia la partita" in scritto and p.memoria["Start a brand new game now"] == "Inizia la partita"
-              and "Start a brand new game now" not in problemi and len(server.richieste) == 1)
-    controlla("correzione a mano che il gioco non sa mostrare: resta in memoria e in originale nel gioco, annotata "
+              "0 Inizia la partita" in written and p.memory["Start a brand new game now"] == "Inizia la partita"
+              and "Start a brand new game now" not in problems and len(server.requests) == 1)
+    check("correzione a mano che il gioco non sa mostrare: resta in memoria e in originale nel gioco, annotata "
               "(motivo e caratteri) e detta nell'esito",
-              "1 Quit" in scritto and p.memoria["Quit"] == "Esci ★"
-              and problemi.get("Quit", {}).get("dove") == "gioco"
-              and problemi["Quit"].get("automatica") is False and "★" in problemi["Quit"]["motivo"]
-              and automatico._extra_tentativi(p).get("corrette_a_mano_scartate") == 1)
+              "1 Quit" in written and p.memory["Quit"] == "Esci ★"
+              and problems.get("Quit", {}).get("dove") == "gioco"
+              and problems["Quit"].get("automatica") is False and "★" in problems["Quit"]["motivo"]
+              and automatic._extra_attempts(p).get("corrette_a_mano_scartate") == 1)
     # 'Reapply' (no network): an unsuitable machine translation is recorded and redone at the next translation
-    p.memoria["Options"] = "Opzioni ★"
-    p._salva_memoria()
-    automatiche = leggi_json(p._percorso_automatiche())
-    automatiche["Options"] = "Opzioni ★"
-    scrivi_json(p._percorso_automatiche(), automatiche)
-    p = Progetto(percorso, silenzio)
-    p.applica()
-    controlla("riapplica: traduzione automatica non adatta annotata con i caratteri da non usare; si rifara' alla "
+    p.memory["Options"] = "Opzioni ★"
+    p._save_memory()
+    machine = read_json(p._machine_path())
+    machine["Options"] = "Opzioni ★"
+    write_json(p._machine_path(), machine)
+    p = Project(path, silent)
+    p.apply()
+    check("riapplica: traduzione automatica non adatta annotata con i caratteri da non usare; si rifara' alla "
               "prossima traduzione",
-              p.problemi().get("Options", {}).get("automatica") is True
-              and p.problemi()["Options"].get("non_usare") == "★"
-              and "Options" in p._da_rifare(["Options", "Quit"], "it") and "Quit" not in p._da_rifare(["Quit"], "it"))
+              p.problems().get("Options", {}).get("automatica") is True
+              and p.problems()["Options"].get("non_usare") == "★"
+              and "Options" in p._to_redo(["Options", "Quit"], "it") and "Quit" not in p._to_redo(["Quit"], "it"))
 
 
-def gioco_righe(base, nome, righe):
+def lines_game(base, name, lines):
     """A game with a line file ('0 testo') and its game profile; returns (folder, game profile, translation memory)."""
-    gioco = os.path.join(base, "gioco-" + nome)
-    os.makedirs(gioco)
-    with open(os.path.join(gioco, "english.txt"), "w", encoding="utf-8", newline="") as f:
-        f.write("".join("%d %s\n" % (i, r) for i, r in enumerate(righe)))
-    percorso = profilo_di(base, nome, cartella_gioco=gioco, file=[{"percorso": "english.txt", "formato": "righe"}])
-    return gioco, percorso, progetto.percorso_memoria({"nome": nome, "lingua_destinazione": "it"})
+    game = os.path.join(base, "gioco-" + name)
+    os.makedirs(game)
+    with open(os.path.join(game, "english.txt"), "w", encoding="utf-8", newline="") as f:
+        f.write("".join("%d %s\n" % (i, r) for i, r in enumerate(lines)))
+    path = profile_of(base, name, cartella_gioco=game, file=[{"percorso": "english.txt", "formato": "righe"}])
+    return game, path, project.memory_path({"nome": name, "lingua_destinazione": "it"})
 
 
-def prova_rifatte_limitate(base):
+def test_limited_redos(base):
     """Saved translations redone: a redone one that is still wrong counts as an attempt (before, it was redone at every
-    run, always with seeds 42, 7, 11, and writing the game removed it from problemi.json), the new rounds do not stop
+    run, always with seeds 42, 7, 11, and writing the game removed it from problems.json), the new rounds do not stop
     writing to the game, the shared translation memory does not take translations that fail the checks."""
-    sospetta = {"Open the chest of the house": "Abre el cofre de la casa y el mapa"}
+    suspect = {"Open the chest of the house": "Abre el cofre de la casa y el mapa"}
 
     # 11a. the local translator gives it back unchanged (it passes its own checks, not the language one): new seeds at
-    # every run, recorded in problemi.json, and after MAX_TENTATIVI it is left alone
-    percorso = profilo_di(base, "rifatta-uguale")
-    memoria = progetto.percorso_memoria({"nome": "rifatta-uguale", "lingua_destinazione": "it"})
-    scrivi_json(memoria, sospetta)
-    scrivi_json(memoria[:-5] + ".automatiche.json", sospetta)
-    semi = []
-    for _ in range(progetto.MAX_TENTATIVI + 2):
-        p = Progetto(percorso, silenzio)
-        b, server = locale(lambda t, o: "Abre el cofre de la casa y el mapa")
-        p.traduci_testi(list(sospetta), b, "en", "it")
-        semi.append([d["options"]["seed"] for _, d in server.richieste])
-    tutti = [s for giro in semi for s in giro]
-    problema = p.problemi().get("Open the chest of the house", {})
-    controlla("traduzione salvata rifatta uguale (non passa i controlli di adesso): semi nuovi a ogni avvio (mai 42, "
-              "7, 11), annotata come sospetta, lasciata dopo %d tentativi" % progetto.MAX_TENTATIVI,
-              tutti and not set(tutti) & {42, 7, 11} and len(set(tutti)) == len(tutti) and not semi[-1]
-              and problema.get("dove") == "memoria" and problema.get("tentativi", 0) >= progetto.MAX_TENTATIVI
-              and p.rifatte == 0)
+    # every run, recorded in problems.json, and after MAX_ATTEMPTS it is left alone
+    path = profile_of(base, "rifatta-uguale")
+    memory = project.memory_path({"nome": "rifatta-uguale", "lingua_destinazione": "it"})
+    write_json(memory, suspect)
+    write_json(memory[:-5] + ".automatiche.json", suspect)
+    seeds = []
+    for _ in range(project.MAX_ATTEMPTS + 2):
+        p = Project(path, silent)
+        b, server = local(lambda t, o: "Abre el cofre de la casa y el mapa")
+        p.translate_texts(list(suspect), b, "en", "it")
+        seeds.append([d["options"]["seed"] for _, d in server.requests])
+    all_ = [s for round_ in seeds for s in round_]
+    problem = p.problems().get("Open the chest of the house", {})
+    check("traduzione salvata rifatta uguale (non passa i controlli di adesso): semi nuovi a ogni avvio (mai 42, "
+              "7, 11), annotata come sospetta, lasciata dopo %d tentativi" % project.MAX_ATTEMPTS,
+              all_ and not set(all_) & {42, 7, 11} and len(set(all_)) == len(all_) and not seeds[-1]
+              and problem.get("dove") == "memoria" and problem.get("tentativi", 0) >= project.MAX_ATTEMPTS
+              and p.redone == 0)
 
-    # 11b. the same with a full 'Analyze and translate' (it writes to the game): the note in problemi.json stays, the
-    # attempts grow and after MAX_TENTATIVI nothing more is requested
-    gioco, percorso, memoria = gioco_righe(base, "rifatta-gioco", ["Open the chest of the house", "Quit"])
-    scrivi_json(memoria, dict(sospetta, Quit="Esci"))
-    scrivi_json(memoria[:-5] + ".automatiche.json", dict(sospetta, Quit="Esci"))
-    richieste, tentativi = [], []
+    # 11b. the same with a full 'Analyze and translate' (it writes to the game): the note in problems.json stays, the
+    # attempts grow and after MAX_ATTEMPTS nothing more is requested
+    game, path, memory = lines_game(base, "rifatta-gioco", ["Open the chest of the house", "Quit"])
+    write_json(memory, dict(suspect, Quit="Esci"))
+    write_json(memory[:-5] + ".automatiche.json", dict(suspect, Quit="Esci"))
+    requests, attempts = [], []
     for _ in range(5):
-        p = Progetto(percorso, silenzio)
-        b, server = locale(lambda t, o: t)  # redoing it never succeeds
-        p.traduci(b)
-        richieste.append(len(server.richieste))
-        tentativi.append(p.problemi().get("Open the chest of the house", {}).get("tentativi"))
-    with open(os.path.join(gioco, "english.txt"), encoding="utf-8") as f:
-        scritto = f.read()
-    controlla("con la scrittura nel gioco: la traduzione sospetta resta annotata (i tentativi crescono) e dopo %d "
-              "tentativi non si rifa' piu' (prima si rifaceva a ogni avvio)" % progetto.MAX_TENTATIVI,
-              richieste[0] > 0 and richieste[-1] == 0 and tentativi == sorted(tentativi) and tentativi[0]
-              and tentativi[-1] >= progetto.MAX_TENTATIVI and "0 Abre el cofre de la casa y el mapa" in scritto)
+        p = Project(path, silent)
+        b, server = local(lambda t, o: t)  # redoing it never succeeds
+        p.translate(b)
+        requests.append(len(server.requests))
+        attempts.append(p.problems().get("Open the chest of the house", {}).get("tentativi"))
+    with open(os.path.join(game, "english.txt"), encoding="utf-8") as f:
+        written = f.read()
+    check("con la scrittura nel gioco: la traduzione sospetta resta annotata (i tentativi crescono) e dopo %d "
+              "tentativi non si rifa' piu' (prima si rifaceva a ogni avvio)" % project.MAX_ATTEMPTS,
+              requests[0] > 0 and requests[-1] == 0 and attempts == sorted(attempts) and attempts[0]
+              and attempts[-1] >= project.MAX_ATTEMPTS and "0 Abre el cofre de la casa y el mapa" in written)
 
     # 11c. an unexpected error of the translator in the new rounds: the first round's translations are written anyway
-    gioco, percorso, memoria = gioco_righe(base, "giro-rotto", ["Light the lamp in the tower", "Close the gate of the house"])
+    game, path, memory = lines_game(base, "giro-rotto", ["Light the lamp in the tower", "Close the gate of the house"])
 
-    def rotto(testo, opzioni):
-        if opzioni["seed"] not in (42, 7, 11):
+    def broken(text, options):
+        if options["seed"] not in (42, 7, 11):
             return RuntimeError("guasto imprevisto")
-        return testo if testo == "Close the gate of the house" else "IT " + testo
-    p = Progetto(percorso, silenzio)
-    b, server = locale(rotto)
-    completato = p.traduci(b)
-    with open(os.path.join(gioco, "english.txt"), encoding="utf-8") as f:
-        scritto = f.read()
-    controlla("errore imprevisto nei nuovi giri: la traduzione non si ferma, il resto e' scritto nel gioco e il testo "
+        return text if text == "Close the gate of the house" else "IT " + text
+    p = Project(path, silent)
+    b, server = local(broken)
+    completed = p.translate(b)
+    with open(os.path.join(game, "english.txt"), encoding="utf-8") as f:
+        written = f.read()
+    check("errore imprevisto nei nuovi giri: la traduzione non si ferma, il resto e' scritto nel gioco e il testo "
               "rimasto va in problemi.json",
-              completato is False and "0 IT Light the lamp in the tower" in scritto and "1 Close the gate of the house" in scritto
-              and p.problemi().get("Close the gate of the house", {}).get("dove") == "traduzione")
+              completed is False and "0 IT Light the lamp in the tower" in written
+              and "1 Close the gate of the house" in written
+              and p.problems().get("Close the gate of the house", {}).get("dove") == "traduzione")
 
     # 11d. shared translation memory: a short text translated now that fails the current checks does not go in
-    comune = progetto.percorso_comune("en", "it")
-    p = Progetto(profilo_di(base, "comune-spagnolo"), silenzio)
-    b, server = locale(lambda t, o: {"Open the house chest": "Abre el cofre y el mapa",
+    shared = project.shared_path("en", "it")
+    p = Project(profile_of(base, "comune-spagnolo"), silent)
+    b, server = local(lambda t, o: {"Open the house chest": "Abre el cofre y el mapa",
                                      "Light the torch": "Accendi la torcia"}.get(t, t))
-    p.traduci_testi(["Open the house chest", "Light the torch"], b, "en", "it")
-    dopo = leggi_json(comune)
-    controlla("memoria comune: una traduzione nuova in un'altra lingua resta nel gioco ma non va agli altri giochi",
-              p.memoria.get("Open the house chest") == "Abre el cofre y el mapa" and "Open the house chest" not in dopo
-              and dopo.get("Light the torch") == "Accendi la torcia")
+    p.translate_texts(["Open the house chest", "Light the torch"], b, "en", "it")
+    after = read_json(shared)
+    check("memoria comune: una traduzione nuova in un'altra lingua resta nel gioco ma non va agli altri giochi",
+              p.memory.get("Open the house chest") == "Abre el cofre y el mapa" and "Open the house chest" not in after
+              and after.get("Light the torch") == "Accendi la torcia")
 
     # 11f. a text that is only a game name, machine-translated: the name comes back, without requests, and then it is
     # not rechecked at every run ('non tradotta' does not apply to a name left as it is on purpose)
-    nome = "Cult Of The Lamb"
-    percorso = profilo_di(base, "solo-nome", non_tradurre=[nome])
-    memoria = progetto.percorso_memoria({"nome": "solo-nome", "lingua_destinazione": "it"})
-    scrivi_json(memoria, {nome: "Culto dell'Agnello"})
-    scrivi_json(memoria[:-5] + ".automatiche.json", {nome: "Culto dell'Agnello"})
-    richieste = []
+    name = "Cult Of The Lamb"
+    path = profile_of(base, "solo-nome", non_tradurre=[name])
+    memory = project.memory_path({"nome": "solo-nome", "lingua_destinazione": "it"})
+    write_json(memory, {name: "Culto dell'Agnello"})
+    write_json(memory[:-5] + ".automatiche.json", {name: "Culto dell'Agnello"})
+    requests = []
     for _ in range(2):
-        p = Progetto(percorso, silenzio)
-        b, server = locale(lambda t, o: "IT " + t)
-        p.traduci_testi([nome], b, "en", "it")
-        richieste.append(len(server.richieste))
-    controlla("testo che e' solo un nome del gioco, tradotto: torna il nome senza richieste, e non si rifa' a ogni avvio",
-              p.memoria[nome] == nome and richieste == [0, 0] and not p.problemi() and not p._da_rifare([nome], "it"))
+        p = Project(path, silent)
+        b, server = local(lambda t, o: "IT " + t)
+        p.translate_texts([name], b, "en", "it")
+        requests.append(len(server.requests))
+    check("testo che e' solo un nome del gioco, tradotto: torna il nome senza richieste, e non si rifa' a ogni avvio",
+              p.memory[name] == name and requests == [0, 0] and not p.problems() and not p._to_redo([name], "it"))
 
     # 11e. official translation copied: only for sentences (a word that is the same in two languages is normal)
-    controlla("'riferimento copiato' solo per le frasi: 'Oro' per 'Gold' (come in spagnolo) va bene",
-              not progetto.problemi_voce("Gold", "Oro", "it", riferimenti=["Oro"])
-              and progetto.problemi_voce("Open the big chest now", "Abre el gran cofre ahora", "it",
-                                         riferimenti=["Abre el gran cofre ahora"]) == ["riferimento copiato"])
+    check("'riferimento copiato' solo per le frasi: 'Oro' per 'Gold' (come in spagnolo) va bene",
+              not project.entry_problems("Gold", "Oro", "it", references=["Oro"])
+              and project.entry_problems("Open the big chest now", "Abre el gran cofre ahora", "it",
+                                         references=["Abre el gran cofre ahora"]) == ["riferimento copiato"])
 
 
 if __name__ == "__main__":

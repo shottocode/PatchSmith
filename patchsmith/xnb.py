@@ -10,112 +10,112 @@ list of type readers, shared resources, then the main object.
 import struct
 
 
-class ErroreXnb(ValueError):
+class XnbError(ValueError):
     pass
 
 
-def _leggi_7bit(dati, pos):
-    valore = spostamento = 0
+def _read_7bit(data, pos):
+    value_ = shift = 0
     while True:
-        b = dati[pos]
+        b = data[pos]
         pos += 1
-        valore |= (b & 0x7F) << spostamento
+        value_ |= (b & 0x7F) << shift
         if not b & 0x80:
-            return valore, pos
-        spostamento += 7
-        if spostamento > 35:
-            raise ErroreXnb("intero a 7 bit non valido")
+            return value_, pos
+        shift += 7
+        if shift > 35:
+            raise XnbError("intero a 7 bit non valido")
 
 
-def _leggi_stringa(dati, pos):
-    n, pos = _leggi_7bit(dati, pos)
-    return dati[pos:pos + n].decode("utf-8"), pos + n
+def _read_string(data, pos):
+    n, pos = _read_7bit(data, pos)
+    return data[pos:pos + n].decode("utf-8"), pos + n
 
 
-def _leggi_char(dati, pos):
+def _read_char(data, pos):
     """BinaryReader.ReadChar: one UTF-8 character (1-4 bytes)."""
-    b = dati[pos]
+    b = data[pos]
     n = 1 if b < 0x80 else 2 if b >> 5 == 6 else 3 if b >> 4 == 14 else 4
-    return dati[pos:pos + n].decode("utf-8"), pos + n
+    return data[pos:pos + n].decode("utf-8"), pos + n
 
 
-def intestazione(dati):
+def header(data):
     """(platform, version, flags, readers [(name, version)], position of the main object)."""
-    if dati[:3] != b"XNB":
-        raise ErroreXnb("non e' un file XNB")
-    piattaforma, versione, flags = chr(dati[3]), dati[4], dati[5]
-    dimensione = struct.unpack_from("<I", dati, 6)[0]
-    if dimensione != len(dati):
-        raise ErroreXnb("dimensione dichiarata diversa da quella del file")
+    if data[:3] != b"XNB":
+        raise XnbError("non e' un file XNB")
+    platform_id, version, flags = chr(data[3]), data[4], data[5]
+    size = struct.unpack_from("<I", data, 6)[0]
+    if size != len(data):
+        raise XnbError("dimensione dichiarata diversa da quella del file")
     if flags & 0xC0:
-        raise ErroreXnb("XNB compresso: non ancora supportato")
+        raise XnbError("XNB compresso: non ancora supportato")
     pos = 10
-    n, pos = _leggi_7bit(dati, pos)
-    lettori = []
+    n, pos = _read_7bit(data, pos)
+    readers = []
     for _ in range(n):
-        nome, pos = _leggi_stringa(dati, pos)
-        ver = struct.unpack_from("<i", dati, pos)[0]
+        name, pos = _read_string(data, pos)
+        ver = struct.unpack_from("<i", data, pos)[0]
         pos += 4
-        lettori.append((nome, ver))
-    condivise, pos = _leggi_7bit(dati, pos)
-    if condivise:
-        raise ErroreXnb("risorse condivise non supportate")
-    return piattaforma, versione, flags, lettori, pos
+        readers.append((name, ver))
+    shared_count, pos = _read_7bit(data, pos)
+    if shared_count:
+        raise XnbError("risorse condivise non supportate")
+    return platform_id, version, flags, readers, pos
 
 
-def _nome_breve(lettore):
-    return lettore.split(",")[0].split("`")[0].rsplit(".", 1)[-1]
+def _short_name(reader):
+    return reader.split(",")[0].split("`")[0].rsplit(".", 1)[-1]
 
 
-def leggi_spritefont(dati):
+def read_spritefont(data):
     """SpriteFont -> {"caratteri": [...], "predefinito": character or None, "interlinea", "spaziatura"}."""
-    _, _, _, lettori, pos = intestazione(dati)
+    _, _, _, readers, pos = header(data)
 
-    def oggetto(pos, atteso):
-        indice, pos = _leggi_7bit(dati, pos)
-        if indice == 0:
-            raise ErroreXnb("oggetto nullo inatteso")
-        nome = lettori[indice - 1][0]
-        if atteso not in nome:
-            raise ErroreXnb("atteso %s, trovato %s" % (atteso, nome))
+    def read_object(pos, expected):
+        idx, pos = _read_7bit(data, pos)
+        if idx == 0:
+            raise XnbError("oggetto nullo inatteso")
+        name = readers[idx - 1][0]
+        if expected not in name:
+            raise XnbError("atteso %s, trovato %s" % (expected, name))
         return pos
 
-    pos = oggetto(pos, "SpriteFontReader")
-    pos = oggetto(pos, "Texture2DReader")
-    _formato, larghezza, altezza, livelli = struct.unpack_from("<iIII", dati, pos)
+    pos = read_object(pos, "SpriteFontReader")
+    pos = read_object(pos, "Texture2DReader")
+    _fmt, width, height, levels = struct.unpack_from("<iIII", data, pos)
     pos += 16
-    for _ in range(livelli):
-        n = struct.unpack_from("<I", dati, pos)[0]
+    for _ in range(levels):
+        n = struct.unpack_from("<I", data, pos)[0]
         pos += 4 + n
     for _ in range(2):  # glyph rectangles and cropping
-        pos = oggetto(pos, "ListReader")
-        n = struct.unpack_from("<I", dati, pos)[0]
+        pos = read_object(pos, "ListReader")
+        n = struct.unpack_from("<I", data, pos)[0]
         pos += 4 + 16 * n
-    pos = oggetto(pos, "ListReader")
-    n = struct.unpack_from("<I", dati, pos)[0]
+    pos = read_object(pos, "ListReader")
+    n = struct.unpack_from("<I", data, pos)[0]
     pos += 4
-    caratteri = []
+    chars = []
     for _ in range(n):
-        c, pos = _leggi_char(dati, pos)
-        caratteri.append(c)
-    interlinea, spaziatura = struct.unpack_from("<if", dati, pos)
+        c, pos = _read_char(data, pos)
+        chars.append(c)
+    line_spacing, spacing = struct.unpack_from("<if", data, pos)
     pos += 8
-    pos = oggetto(pos, "ListReader")
-    n = struct.unpack_from("<I", dati, pos)[0]
+    pos = read_object(pos, "ListReader")
+    n = struct.unpack_from("<I", data, pos)[0]
     pos += 4 + 12 * n
-    ha_predefinito = dati[pos]
+    has_default = data[pos]
     pos += 1
-    predefinito = None
-    if ha_predefinito:
-        predefinito, pos = _leggi_char(dati, pos)
-    if pos != len(dati):
-        raise ErroreXnb("SpriteFont non letto fino in fondo (%d byte avanzati)" % (len(dati) - pos))
-    return {"caratteri": caratteri, "predefinito": predefinito, "interlinea": interlinea,
-            "spaziatura": spaziatura, "texture": (larghezza, altezza)}
+    default = None
+    if has_default:
+        default, pos = _read_char(data, pos)
+    if pos != len(data):
+        raise XnbError("SpriteFont non letto fino in fondo (%d byte avanzati)" % (len(data) - pos))
+    return {"caratteri": chars, "predefinito": default, "interlinea": line_spacing,
+            "spaziatura": spacing, "texture": (width, height)}
 
 
-def tipo_principale(dati):
+def main_kind(data):
     """Short name of the main object's reader (e.g. 'SpriteFontReader', 'Texture2DReader')."""
-    _, _, _, lettori, pos = intestazione(dati)
-    indice, _ = _leggi_7bit(dati, pos)
-    return _nome_breve(lettori[indice - 1][0]) if indice else None
+    _, _, _, readers, pos = header(data)
+    idx, _ = _read_7bit(data, pos)
+    return _short_name(readers[idx - 1][0]) if idx else None

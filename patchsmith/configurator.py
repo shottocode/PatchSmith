@@ -15,68 +15,68 @@ import os
 import shutil
 import sys
 
-from . import adapter_webjson, project as progetto, system as sistema
+from . import adapter_webjson, project, system
 
-MARGINE_SPAZIO = 100 * 1024 * 1024
+SPACE_MARGIN = 100 * 1024 * 1024
 
 
-class ErroreConfiguratore(ValueError):
+class ConfiguratorError(ValueError):
     pass
 
 
-def _adesso():
+def _now():
     return datetime.datetime.now().isoformat(timespec="seconds")
 
 
 # --- record ---------------------------------------------------------------------------------------
 
-def _registro(cartella):
-    chiave = hashlib.sha1(os.path.normcase(os.path.abspath(cartella)).encode("utf-8")).hexdigest()[:16]
-    return progetto.cartella_dati("configurations", "%s.json" % chiave)
+def _log_file(folder):
+    key = hashlib.sha1(os.path.normcase(os.path.abspath(folder)).encode("utf-8")).hexdigest()[:16]
+    return project.data_folder("configurations", "%s.json" % key)
 
 
-def leggi(cartella):
+def read_file(folder):
     """The folder's record ({} if there is none)."""
     try:
-        with open(_registro(cartella), encoding="utf-8") as f:
-            dati = json.load(f)
-        return dati if isinstance(dati, dict) else {}
+        with open(_log_file(folder), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-def _salva(cartella, dati):
-    percorso = _registro(cartella)
-    os.makedirs(os.path.dirname(percorso), exist_ok=True)
-    dati.setdefault("versione", 1)
-    dati["cartella_gioco"] = os.path.abspath(cartella).replace(os.sep, "/")
-    adapter_webjson.scrivi_atomico(percorso, json.dumps(dati, ensure_ascii=False, indent=2).encode("utf-8"))
+def _save(folder, data):
+    path = _log_file(folder)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data.setdefault("versione", 1)
+    data["cartella_gioco"] = os.path.abspath(folder).replace(os.sep, "/")
+    adapter_webjson.write_atomic(path, json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
 
-def ha_consenso(cartella, tipo="eseguibili"):
-    return bool(leggi(cartella).get("consensi", {}).get(tipo))
+def has_consent(folder, kind="eseguibili"):
+    return bool(read_file(folder).get("consensi", {}).get(kind))
 
 
-def salva_consenso(cartella, tipo="eseguibili"):
-    dati = leggi(cartella)
-    dati.setdefault("consensi", {})[tipo] = _adesso()
-    _salva(cartella, dati)
+def save_consent(folder, kind="eseguibili"):
+    data = read_file(folder)
+    data.setdefault("consensi", {})[kind] = _now()
+    _save(folder, data)
 
 
-def leva(cartella, nome):
+def lever(folder, name):
     """The lever's data if it is recorded ({'stato', 'valore', 'file', ...}), otherwise None."""
-    return leggi(cartella).get("leve", {}).get(nome)
+    return read_file(folder).get("leve", {}).get(name)
 
 
-def segna(cartella, chiave, valore=True):
+def mark(folder, key, value_=True):
     """Notes a fact in the record (e.g. saves already copied)."""
-    dati = leggi(cartella)
-    dati.setdefault("note", {})[chiave] = valore
-    _salva(cartella, dati)
+    data = read_file(folder)
+    data.setdefault("note", {})[key] = value_
+    _save(folder, data)
 
 
-def nota(cartella, chiave):
-    return leggi(cartella).get("note", {}).get(chiave)
+def note(folder, key):
+    return read_file(folder).get("note", {}).get(key)
 
 
 # --- checks ---------------------------------------------------------------------------------------
@@ -93,7 +93,7 @@ def smart_app_control():
         return None
 
 
-def controlli_eseguibili():
+def executable_checks():
     """Reasons NOT to modify executables on this PC (empty list = it is allowed)."""
     if smart_app_control() in (1, 2):
         return ["Smart App Control di Windows e' attivo (o in valutazione): bloccherebbe gli eseguibili modificati, "
@@ -103,213 +103,213 @@ def controlli_eseguibili():
 
 # --- all-or-nothing apply -------------------------------------------------------------------------
 
-def _backup_pronto(percorso, dati_attuali, nome_leva, log):
+def _backup_ready(path, current_data, lever_name, log):
     """Backup of the original ready to use: creates it, keeps it, or (if the game updated the file) renews it keeping
     the previous one. Returns (info, True if the backup was created now)."""
-    backup = percorso + progetto.SUFFISSO_BACKUP
+    backup = path + project.BACKUP_SUFFIX
     if not os.path.exists(backup):
-        return progetto.crea_backup(percorso, {"configuratore": nome_leva}), True
-    info = progetto.leggi_info(percorso)
+        return project.create_backup(path, {"configuratore": lever_name}), True
+    info = project.read_info(path)
     if not info:
-        raise ErroreConfiguratore("%s ha un backup senza informazioni: controllalo a mano prima di procedere."
-                                  % os.path.basename(percorso))
-    if progetto._hash_file(backup) != info["hash_originale"]:
-        raise ErroreConfiguratore("Il backup di %s non corrisponde all'originale registrato: mi fermo."
-                                  % os.path.basename(percorso))
-    attuale = progetto._hash_byte(dati_attuali)
-    if attuale == info["hash_originale"] or attuale in info.get("hash_scritti", []):
+        raise ConfiguratorError("%s ha un backup senza informazioni: controllalo a mano prima di procedere."
+                                  % os.path.basename(path))
+    if project._hash_file(backup) != info["hash_originale"]:
+        raise ConfiguratorError("Il backup di %s non corrisponde all'originale registrato: mi fermo."
+                                  % os.path.basename(path))
+    current = project._hash_bytes(current_data)
+    if current == info["hash_originale"] or current in info.get("hash_scritti", []):
         return info, False
     # the file was changed by someone else (update): it is the new original, the old one stays kept
     n = len(info.get("precedenti", [])) + 1
-    vecchio = "%s.%d" % (os.path.basename(backup), n)
-    percorso_vecchio = os.path.join(os.path.dirname(backup), vecchio)
-    os.replace(backup, percorso_vecchio)
+    old = "%s.%d" % (os.path.basename(backup), n)
+    old_path = os.path.join(os.path.dirname(backup), old)
+    os.replace(backup, old_path)
     try:
-        nuove = progetto.crea_backup(percorso, {"configuratore": nome_leva, "creati": info.get("creati", []),
-                                                "precedenti": info.get("precedenti", []) + [vecchio]})
+        new_lines = project.create_backup(path, {"configuratore": lever_name, "creati": info.get("creati", []),
+                                                "precedenti": info.get("precedenti", []) + [old]})
     except BaseException:
-        os.replace(percorso_vecchio, backup)  # the old backup goes back in its place, with its info
+        os.replace(old_path, backup)  # the old backup goes back in its place, with its info
         raise
     log("  %s e' cambiato (aggiornamento del gioco?): e' il nuovo originale, il precedente e' in %s"
-        % (os.path.basename(percorso), vecchio))
-    return nuove, False
+        % (os.path.basename(path), old))
+    return new_lines, False
 
 
-def _serve_backup(percorso, dati):
+def _needs_backup(path, data):
     """True if applying will need to create (or renew) the backup of this file: it needs space."""
-    if not os.path.exists(percorso + progetto.SUFFISSO_BACKUP):
+    if not os.path.exists(path + project.BACKUP_SUFFIX):
         return True
-    info = progetto.leggi_info(percorso) or {}
-    attuale = progetto._hash_byte(dati)
-    return attuale != info.get("hash_originale") and attuale not in info.get("hash_scritti", [])
+    info = project.read_info(path) or {}
+    current = project._hash_bytes(data)
+    return current != info.get("hash_originale") and current not in info.get("hash_scritti", [])
 
 
-def applica_byte(cartella, nome_leva, piani, log=print, valore=None, descrizione=None):
+def apply_bytes(folder, lever_name, plans, log=print, value_=None, description=None):
     """Applies byte changes to several files, all or nothing.
 
     piani: [{'percorso': assoluto, 'modifiche': [(offset, byte_prima, byte_dopo)]}]. A change already made (the
     'dopo' bytes are already there) is skipped; bytes different from both 'prima' and 'dopo' stop everything.
     Returns how many files were written. If something goes wrong (an interruption too) it puts every file back as it
-    was BEFORE this operation and raises ErroreConfiguratore."""
-    preparati = []
-    for piano in piani:
-        percorso = piano["percorso"]
-        with open(percorso, "rb") as f:
-            dati = f.read()
-        nuovi = bytearray(dati)
-        for offset, prima, dopo in piano["modifiche"]:
-            attuali = bytes(dati[offset:offset + len(prima)])
-            if attuali == bytes(dopo):
+    was BEFORE this operation and raises ConfiguratorError."""
+    prepared = []
+    for plan in plans:
+        path = plan["percorso"]
+        with open(path, "rb") as f:
+            data = f.read()
+        new_items = bytearray(data)
+        for offset, before, after in plan["modifiche"]:
+            current_count = bytes(data[offset:offset + len(before)])
+            if current_count == bytes(after):
                 continue
-            if attuali != bytes(prima):
-                raise ErroreConfiguratore("%s: a 0x%X ci sono byte inattesi (%s invece di %s): non e' la versione "
+            if current_count != bytes(before):
+                raise ConfiguratorError("%s: a 0x%X ci sono byte inattesi (%s invece di %s): non e' la versione "
                                           "prevista del file, non modifico nulla." % (
-                                              os.path.basename(percorso), offset, attuali.hex(), bytes(prima).hex()))
-            nuovi[offset:offset + len(dopo)] = dopo
-        if bytes(nuovi) != dati:
-            preparati.append((percorso, dati, bytes(nuovi)))
-    rel = [os.path.relpath(p["percorso"], cartella).replace(os.sep, "/") for p in piani]
-    if not preparati:
-        _registra_leva(cartella, nome_leva, "applicata", valore, rel, descrizione)
+                                              os.path.basename(path), offset, current_count.hex(), bytes(before).hex()))
+            new_items[offset:offset + len(after)] = after
+        if bytes(new_items) != data:
+            prepared.append((path, data, bytes(new_items)))
+    rel = [os.path.relpath(p["percorso"], folder).replace(os.sep, "/") for p in plans]
+    if not prepared:
+        _record_lever(folder, lever_name, "applicata", value_, rel, description)
         return 0
-    for percorso, _, _ in preparati:
-        if not os.access(percorso, os.W_OK):
-            raise ErroreConfiguratore("%s e' di sola lettura: togli la sola lettura e riprova. Non ho modificato "
-                                      "nulla." % os.path.basename(percorso))
-    servono = sum(len(d) for p, d, _ in preparati if _serve_backup(p, d))
-    if shutil.disk_usage(cartella).free < servono + MARGINE_SPAZIO:
-        raise ErroreConfiguratore("Spazio libero insufficiente per i backup (servono %.0f MB): non ho modificato "
-                                  "nulla." % ((servono + MARGINE_SPAZIO) / 1048576))
-    _gioco_chiuso(cartella)
-    precedente = leva(cartella, nome_leva)
-    _registra_leva(cartella, nome_leva, "in_corso", valore, rel, descrizione)
-    backup_nuovi, scritti = [], []
+    for path, _, _ in prepared:
+        if not os.access(path, os.W_OK):
+            raise ConfiguratorError("%s e' di sola lettura: togli la sola lettura e riprova. Non ho modificato "
+                                      "nulla." % os.path.basename(path))
+    needed = sum(len(d) for p, d, _ in prepared if _needs_backup(p, d))
+    if shutil.disk_usage(folder).free < needed + SPACE_MARGIN:
+        raise ConfiguratorError("Spazio libero insufficiente per i backup (servono %.0f MB): non ho modificato "
+                                  "nulla." % ((needed + SPACE_MARGIN) / 1048576))
+    _game_closed(folder)
+    previous = lever(folder, lever_name)
+    _record_lever(folder, lever_name, "in_corso", value_, rel, description)
+    new_backups, writes = [], []
     try:
-        for percorso, dati, nuovi in preparati:
-            info, nuovo = _backup_pronto(percorso, dati, nome_leva, log)
-            if nuovo:
-                backup_nuovi.append(percorso)
-            impronta = progetto._hash_byte(nuovi)
-            info["hash_scritti"] = ([h for h in info.get("hash_scritti", []) if h != impronta]
-                                    + [impronta])[-progetto.MAX_IMPRONTE:]
-            info["configuratore"] = nome_leva
-            progetto.salva_info(percorso, info)
-        _gioco_chiuso(cartella)
-        for percorso, _, nuovi in preparati:
-            scritti.append(percorso)
-            adapter_webjson.scrivi_atomico(percorso, nuovi)
-            if progetto._hash_file(percorso) != progetto._hash_byte(nuovi):
-                raise ErroreConfiguratore("%s: la scrittura non si rilegge uguale" % os.path.basename(percorso))
+        for path, data, new_items in prepared:
+            info, new = _backup_ready(path, data, lever_name, log)
+            if new:
+                new_backups.append(path)
+            fingerprint = project._hash_bytes(new_items)
+            info["hash_scritti"] = ([h for h in info.get("hash_scritti", []) if h != fingerprint]
+                                    + [fingerprint])[-project.MAX_FINGERPRINTS:]
+            info["configuratore"] = lever_name
+            project.save_info(path, info)
+        _game_closed(folder)
+        for path, _, new_items in prepared:
+            writes.append(path)
+            adapter_webjson.write_atomic(path, new_items)
+            if project._hash_file(path) != project._hash_bytes(new_items):
+                raise ConfiguratorError("%s: la scrittura non si rilegge uguale" % os.path.basename(path))
     except BaseException as e:
-        rimasti = _annulla(preparati, backup_nuovi, scritti, log)
+        remaining = _roll_back(prepared, new_backups, writes, log)
         try:
-            if precedente:
-                _rimetti_leva(cartella, nome_leva, precedente)
+            if previous:
+                _put_back_lever(folder, lever_name, previous)
             else:
-                _togli_leva(cartella, nome_leva)
+                _remove_lever(folder, lever_name)
         except OSError:
             pass
-        if not isinstance(e, (OSError, ErroreConfiguratore, RuntimeError)):
+        if not isinstance(e, (OSError, ConfiguratorError, RuntimeError)):
             raise  # interruption (Ctrl+C...): the files have already been put back as they were
-        if rimasti:
-            raise ErroreConfiguratore("Modifica non riuscita (%s). Non sono riuscito a rimettere com'erano: %s. "
+        if remaining:
+            raise ConfiguratorError("Modifica non riuscita (%s). Non sono riuscito a rimettere com'erano: %s. "
                                       "Chiudi i programmi che li usano e premi 'Ripristina originali'."
-                                      % (e, ", ".join(rimasti))) from e
-        raise ErroreConfiguratore("Modifica non riuscita (%s): ho rimesso tutto com'era prima." % e) from e
-    _registra_leva(cartella, nome_leva, "applicata", valore, rel, descrizione)
-    return len(preparati)
+                                      % (e, ", ".join(remaining))) from e
+        raise ConfiguratorError("Modifica non riuscita (%s): ho rimesso tutto com'era prima." % e) from e
+    _record_lever(folder, lever_name, "applicata", value_, rel, description)
+    return len(prepared)
 
 
-def _annulla(preparati, backup_nuovi, scritti, log):
+def _roll_back(prepared, new_backups, writes, log):
     """Puts every file back as it was before the operation. Returns the names of the files it could not restore."""
-    rimasti = []
-    for percorso, dati, _ in preparati:
-        nome = os.path.basename(percorso)
+    remaining = []
+    for path, data, _ in prepared:
+        name = os.path.basename(path)
         try:
-            if percorso in backup_nuovi:
+            if path in new_backups:
                 # backup created now: the file goes back to the original (= as it was), backup and info disappear
-                if progetto.leggi_info(percorso) and not progetto.ripristina_file(percorso, lambda _m: None):
-                    rimasti.append(nome)
-            elif percorso in scritti:
+                if project.read_info(path) and not project.restore_file(path, lambda _m: None):
+                    remaining.append(name)
+            elif path in writes:
                 # the file already had a backup (changed before, or updated by the game): it goes back to how it was
-                if not os.path.exists(percorso) or progetto._hash_file(percorso) != progetto._hash_byte(dati):
-                    adapter_webjson.scrivi_atomico(percorso, dati)
-                    if progetto._hash_file(percorso) != progetto._hash_byte(dati):
-                        rimasti.append(nome)
+                if not os.path.exists(path) or project._hash_file(path) != project._hash_bytes(data):
+                    adapter_webjson.write_atomic(path, data)
+                    if project._hash_file(path) != project._hash_bytes(data):
+                        remaining.append(name)
         except (OSError, RuntimeError) as e:
-            rimasti.append(nome)
-            log("  ! %s non rimesso com'era (%s)" % (nome, e))
-    return rimasti
+            remaining.append(name)
+            log("  ! %s non rimesso com'era (%s)" % (name, e))
+    return remaining
 
 
-def ripara_interrotte(cartella, log=print):
+def repair_interrupted(folder, log=print):
     """If an operation was interrupted halfway (record 'in_corso'), puts back the originals of that lever."""
-    for nome, dati in list(leggi(cartella).get("leve", {}).items()):
-        if isinstance(dati, dict) and dati.get("stato") == "in_corso":
-            log("  L'operazione precedente (%s) era stata interrotta a meta': rimetto gli originali." % nome)
-            ripristina(cartella, nome, log)
+    for name, data in list(read_file(folder).get("leve", {}).items()):
+        if isinstance(data, dict) and data.get("stato") == "in_corso":
+            log("  L'operazione precedente (%s) era stata interrotta a meta': rimetto gli originali." % name)
+            restore(folder, name, log)
 
 
-def _gioco_chiuso(cartella):
+def _game_closed(folder):
     try:
-        aperto = sistema.gioco_aperto(cartella)
-    except sistema.ErroreSistema as e:
-        raise ErroreConfiguratore(str(e)) from e
-    if aperto:
-        raise ErroreConfiguratore("Il gioco e' aperto: chiudilo e riprova. Non ho modificato nulla.")
+        is_open = system.game_open(folder)
+    except system.SysError as e:
+        raise ConfiguratorError(str(e)) from e
+    if is_open:
+        raise ConfiguratorError("Il gioco e' aperto: chiudilo e riprova. Non ho modificato nulla.")
 
 
-def _registra_leva(cartella, nome, stato, valore, file, descrizione):
-    dati = leggi(cartella)
-    dati.setdefault("leve", {})[nome] = {"stato": stato, "valore": valore, "file": file,
-                                         "descrizione": descrizione, "data": _adesso()}
-    _salva(cartella, dati)
+def _record_lever(folder, name, state, value_, file, description):
+    data = read_file(folder)
+    data.setdefault("leve", {})[name] = {"stato": state, "valore": value_, "file": file,
+                                         "descrizione": description, "data": _now()}
+    _save(folder, data)
 
 
-def _rimetti_leva(cartella, nome, voce):
-    dati = leggi(cartella)
-    dati.setdefault("leve", {})[nome] = voce
-    _salva(cartella, dati)
+def _put_back_lever(folder, name, entry):
+    data = read_file(folder)
+    data.setdefault("leve", {})[name] = entry
+    _save(folder, data)
 
 
-def _togli_leva(cartella, nome):
-    dati = leggi(cartella)
-    if nome in dati.get("leve", {}):
-        del dati["leve"][nome]
-        _salva(cartella, dati)
+def _remove_lever(folder, name):
+    data = read_file(folder)
+    if name in data.get("leve", {}):
+        del data["leve"][name]
+        _save(folder, data)
 
 
 # --- restore --------------------------------------------------------------------------------------
 
-def ripristina(cartella, nome_leva, log=print):
+def restore(folder, lever_name, log=print):
     """Puts the lever's files back as they were. None if the lever is not there, True if done, False if something is
     left to do (the record stays to try again). The consent given for the game stays."""
-    dati = leva(cartella, nome_leva)
-    if not dati:
+    data = lever(folder, lever_name)
+    if not data:
         return None
     try:
-        _gioco_chiuso(cartella)
-    except ErroreConfiguratore as e:
+        _game_closed(folder)
+    except ConfiguratorError as e:
         log("  ! %s" % e)
         return False
     ok = True
-    for rel in dati.get("file", []):
-        percorso = os.path.join(cartella, *rel.split("/"))
-        info = progetto.leggi_info(percorso)
+    for rel in data.get("file", []):
+        path = os.path.join(folder, *rel.split("/"))
+        info = project.read_info(path)
         if not info:
             continue  # already put back (e.g. by "Restore originals") or never touched
         try:
-            if not progetto.ripristina_file(percorso, log):
+            if not project.restore_file(path, log):
                 ok = False
         except OSError as e:
             ok = False
-            log("  ! %s non rimesso com'era (%s)" % (os.path.basename(percorso), e))
+            log("  ! %s non rimesso com'era (%s)" % (os.path.basename(path), e))
     if ok:
-        _togli_leva(cartella, nome_leva)
+        _remove_lever(folder, lever_name)
     return ok
 
 
-def file_del_configuratore(percorso):
+def configurator_file(path):
     """True if the file was modified by the configurator (not by a translation)."""
-    info = progetto.leggi_info(percorso)
+    info = project.read_info(path)
     return bool(info and info.get("configuratore"))

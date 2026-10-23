@@ -15,83 +15,83 @@ import urllib.parse
 import urllib.request
 import zlib
 
-from . import interruption as interruzione
-from .text import DETTAGLIO
+from . import interruption
+from .text import DETAIL
 
-MAX_BLOCCO = 4000  # characters per request (margin below the roughly 5,000 accepted)
+MAX_BLOCK = 4000  # characters per request (margin below the roughly 5,000 accepted)
 
 
-class ErroreBackend(Exception):
+class BackendError(Exception):
     """The translation service cannot be reached or rejects the requests.
 
     codice: the outcome for the interface (see outcome.py), e.g. TRADUTTORE_ASSENTE; comando: what to type on the
     command line to fix it (only the command line shows it: the messages talk about the interface's buttons)."""
 
-    def __init__(self, messaggio="", codice=None, comando=None):
-        super().__init__(messaggio)
-        self.codice = codice
-        self.comando = comando
+    def __init__(self, message="", code=None, command=None):
+        super().__init__(message)
+        self.code = code
+        self.command = command
 
 
 class Backend:
-    nome = "base"
+    name = "base"
 
-    def traduci_righe(self, righe, origine, destinazione):
+    def translate_lines(self, lines, origin, dest_lang):
         """Translates each line (without line breaks). Returns a list of the same length."""
         raise NotImplementedError
 
 
-class Finto(Backend):
+class Fake(Backend):
     """Test backend: does not use the network, puts [it] before the text. Its translations end up in a separate
-    translation memory (*.prova.json), so they do not pollute the real one."""
+    translation memory (*.test.json), so they do not pollute the real one."""
 
-    nome = "finto"
+    name = "finto"
 
-    def traduci_righe(self, righe, origine, destinazione):
-        interruzione.controlla()
-        return ["[%s] %s" % (destinazione, r) for r in righe]
+    def translate_lines(self, lines, origin, dest_lang):
+        interruption.check()
+        return ["[%s] %s" % (dest_lang, r) for r in lines]
 
 
 # invisible characters that Google sometimes inserts (e.g."​​gli"): in games they can show up
 # as little squares or, in XNA, make the game crash
-_INVISIBILI = dict.fromkeys(map(ord, "​⁠﻿"))
+_INVISIBLE = dict.fromkeys(map(ord, "​⁠﻿"))
 
 
-def pulisci(testo):
-    return testo.translate(_INVISIBILI)
+def clean(text):
+    return text.translate(_INVISIBLE)
 
 
-def _dividi_lunga(riga, massimo=MAX_BLOCCO):
+def _split_long(line, maximum=MAX_BLOCK):
     """Splits a line that is too long into pieces by sentences (or by spaces) of at most `massimo` characters."""
-    pezzi, attuale = [], ""
-    for frase in re.split(r"(?<=[.!?。！？])\s+", riga):
-        if len(frase) > massimo and attuale:  # the previous sentence first: the order must not change
-            pezzi.append(attuale)
-            attuale = ""
-        while len(frase) > massimo:  # huge sentence without punctuation: cut on the spaces
-            taglio = frase.rfind(" ", 0, massimo)
-            taglio = taglio if taglio > 0 else massimo
-            pezzi.append(frase[:taglio])
-            frase = frase[taglio:].lstrip()
-        if attuale and len(attuale) + 1 + len(frase) > massimo:
-            pezzi.append(attuale)
-            attuale = frase
+    pieces, current = [], ""
+    for sentence in re.split(r"(?<=[.!?。！？])\s+", line):
+        if len(sentence) > maximum and current:  # the previous sentence first: the order must not change
+            pieces.append(current)
+            current = ""
+        while len(sentence) > maximum:  # huge sentence without punctuation: cut on the spaces
+            cut = sentence.rfind(" ", 0, maximum)
+            cut = cut if cut > 0 else maximum
+            pieces.append(sentence[:cut])
+            sentence = sentence[cut:].lstrip()
+        if current and len(current) + 1 + len(sentence) > maximum:
+            pieces.append(current)
+            current = sentence
         else:
-            attuale = (attuale + " " + frase) if attuale else frase
-    if attuale:
-        pezzi.append(attuale)
-    return pezzi
+            current = (current + " " + sentence) if current else sentence
+    if current:
+        pieces.append(current)
+    return pieces
 
 
-class Bloccato(ErroreBackend):
+class Blocked(BackendError):
     """The service rejected the requests (or is paused because of a previous rejection): we do not insist."""
 
 
-def _apri_predefinito(req, timeout):
+def _default_opener(req, timeout):
     return urllib.request.urlopen(req, timeout=timeout)
 
 
-def _leggi_errore(e):
+def _read_error(e):
     """(Short) body of an HTTP error response, always closing it."""
     try:
         return e.read(2000) or b""
@@ -112,7 +112,7 @@ def _ua():
     return UA % __version__
 
 
-class GoogleGratis(Backend):
+class GoogleFree(Backend):
     """Free web endpoint of Google Translate (unofficial, without a key).
 
     Google does not publish limits and can reject automated access entirely: PatchSmith goes slowly (rate limiter
@@ -120,144 +120,144 @@ class GoogleGratis(Backend):
     and remembers until when not to retry, without insisting and without looking for other ways around the block.
     """
 
-    nome = "google"
+    name = "google"
     URL = "https://translate.googleapis.com/translate_a/single"
-    max_caratteri = 3600  # a group of texts = one request (the placeholders make the text a bit longer)
-    max_testi = 150
-    ATTESE_RETE = (10, 30)
+    max_chars = 3600  # a group of texts = one request (the placeholders make the text a bit longer)
+    max_texts = 150
+    NETWORK_WAITS = (10, 30)
 
-    def __init__(self, log=print, apri=None, limitatore=None):
-        from .limiter import Limitatore
+    def __init__(self, log=print, opener=None, limiter=None):
+        from .limiter import Limiter
         self.log = log
-        self.apri = apri or _apri_predefinito
-        self.limitatore = limitatore or Limitatore("google", log)
+        self.opener = opener or _default_opener
+        self.limiter = limiter or Limiter("google", log)
 
-    def pausa(self):
-        return self.limitatore.pausa()
+    def pause(self):
+        return self.limiter.pause()
 
-    def stima(self, caratteri_per_richiesta):
-        return self.limitatore.stima(caratteri_per_richiesta)
+    def estimate(self, chars_per_request):
+        return self.limiter.estimate(chars_per_request)
 
-    def _blocco(self, http_codice, dettaglio):
-        raise Bloccato(self.limitatore.bloccato(http_codice, dettaglio))
+    def _block(self, http_code, detail):
+        raise Blocked(self.limiter.blocked(http_code, detail))
 
-    def _richiesta(self, testo, origine, destinazione):
-        from .limiter import InPausa
-        parametri = urllib.parse.urlencode({"client": "gtx", "sl": origine, "tl": destinazione, "dt": "t"})
-        corpo = urllib.parse.urlencode({"q": testo}).encode("utf-8")
-        errori = 0
+    def _request(self, text, origin, dest_lang):
+        from .limiter import Paused
+        params = urllib.parse.urlencode({"client": "gtx", "sl": origin, "tl": dest_lang, "dt": "t"})
+        body = urllib.parse.urlencode({"q": text}).encode("utf-8")
+        errors = 0
         while True:
-            interruzione.controlla()
+            interruption.check()
             try:
-                self.limitatore.prima_di(len(testo))
-            except InPausa as e:
-                raise Bloccato(str(e)) from e
-            req = urllib.request.Request(self.URL + "?" + parametri, data=corpo, headers={
+                self.limiter.before_request(len(text))
+            except Paused as e:
+                raise Blocked(str(e)) from e
+            req = urllib.request.Request(self.URL + "?" + params, data=body, headers={
                 "Content-Type": "application/x-www-form-urlencoded;charset=utf-8", "User-Agent": _ua()})
             try:
-                with self.apri(req, 30) as risposta:
-                    finale = risposta.geturl() or ""
-                    tipo = risposta.headers.get("Content-Type", "") if risposta.headers else ""
-                    grezzo = risposta.read()
-                if "consent.google" in finale:
-                    raise ErroreBackend("Google chiede di accettare i cookie (pagina di consenso): da questo PC il "
+                with self.opener(req, 30) as response:
+                    final = response.geturl() or ""
+                    kind = response.headers.get("Content-Type", "") if response.headers else ""
+                    raw = response.read()
+                if "consent.google" in final:
+                    raise BackendError("Google chiede di accettare i cookie (pagina di consenso): da questo PC il "
                                         "traduttore gratuito non e' utilizzabile. Scegli un altro traduttore.")
-                if "/sorry" in finale or "html" in tipo.lower():
-                    self._blocco(200, "pagina di blocco al posto della traduzione")
-                dati = json.loads(grezzo.decode("utf-8"))
-                if not (isinstance(dati, list) and dati and isinstance(dati[0], (list, type(None)))):
-                    raise ErroreBackend("Google ha risposto in un formato inatteso: riprova piu' tardi.")
-                testo_tradotto = "".join(seg[0] for seg in (dati[0] or []) if isinstance(seg, list) and seg
+                if "/sorry" in final or "html" in kind.lower():
+                    self._block(200, "pagina di blocco al posto della traduzione")
+                data = json.loads(raw.decode("utf-8"))
+                if not (isinstance(data, list) and data and isinstance(data[0], (list, type(None)))):
+                    raise BackendError("Google ha risposto in un formato inatteso: riprova piu' tardi.")
+                translated_text = "".join(seg[0] for seg in (data[0] or []) if isinstance(seg, list) and seg
                                          and isinstance(seg[0], str))
-                self.limitatore.ok()
-                return pulisci(testo_tradotto)
+                self.limiter.ok()
+                return clean(translated_text)
             except urllib.error.HTTPError as e:
-                corpo_errore = _leggi_errore(e).lower()
-                finale = e.geturl() or ""
-                tipo_errore = (e.headers.get("Content-Type", "") if e.headers else "").lower()
-                html_errore = b"<html" in corpo_errore or b"<!doctype html" in corpo_errore or "html" in tipo_errore
-                if e.code in (429, 403) or "/sorry" in finale or html_errore or b"unusual traffic" in corpo_errore:
-                    self._blocco(e.code, "pagina \"Sorry\" di Google" if b"sorry" in corpo_errore else None)
+                error_body = _read_error(e).lower()
+                final = e.geturl() or ""
+                error_content_type = (e.headers.get("Content-Type", "") if e.headers else "").lower()
+                html_error = b"<html" in error_body or b"<!doctype html" in error_body or "html" in error_content_type
+                if e.code in (429, 403) or "/sorry" in final or html_error or b"unusual traffic" in error_body:
+                    self._block(e.code, "pagina \"Sorry\" di Google" if b"sorry" in error_body else None)
                 if 400 <= e.code < 500:
-                    raise ErroreBackend("Google rifiuta la richiesta (HTTP %d): controlla le lingue scelte (%s -> %s)"
-                                        % (e.code, origine, destinazione)) from e
-                errore = "HTTP %d" % e.code
+                    raise BackendError("Google rifiuta la richiesta (HTTP %d): controlla le lingue scelte (%s -> %s)"
+                                        % (e.code, origin, dest_lang)) from e
+                error = "HTTP %d" % e.code
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, IndexError, TypeError) as e:
-                errore = e
-            errori += 1
-            if errori > len(self.ATTESE_RETE):
-                raise ErroreBackend("Google non risponde (%s): riprova piu' tardi." % errore)
-            attesa = self.ATTESE_RETE[errori - 1]
+                error = e
+            errors += 1
+            if errors > len(self.NETWORK_WAITS):
+                raise BackendError("Google non risponde (%s): riprova piu' tardi." % error)
+            wait = self.NETWORK_WAITS[errors - 1]
             self.log("    ! errore di rete (%s): riprovo tra %d s (tentativo %d di %d)"
-                     % (errore, attesa, errori + 1, len(self.ATTESE_RETE) + 1))
-            interruzione.attendi(attesa)
+                     % (error, wait, errors + 1, len(self.NETWORK_WAITS) + 1))
+            interruption.wait_for(wait)
 
-    def _traduci_indici(self, parti, indici, tradotti, origine, destinazione, profondita=0):
+    def _translate_indices(self, parts, indices, translated_items, origin, dest_lang, depth=0):
         """Translates a block of lines; if Google merges or splits lines, retries in halves (at most 3 times), so a
         burst of requests never starts. The lines that do not line up stay untranslated."""
-        testo = "\n".join(parti[k][1] for k in indici)
-        risposta = self._richiesta(testo, origine, destinazione).split("\n")
-        if len(risposta) == len(indici):
-            for k, t in zip(indici, risposta):
-                tradotti[k] = t.strip()
+        text = "\n".join(parts[k][1] for k in indices)
+        response = self._request(text, origin, dest_lang).split("\n")
+        if len(response) == len(indices):
+            for k, t in zip(indices, response):
+                translated_items[k] = t.strip()
             return
-        if profondita >= 3 or len(indici) == 1:
-            self.log("    ! %d righe non allineate nella risposta: restano in originale" % len(indici))
+        if depth >= 3 or len(indices) == 1:
+            self.log("    ! %d righe non allineate nella risposta: restano in originale" % len(indices))
             return
-        meta = len(indici) // 2
-        self.log("    righe non allineate: riprovo in due meta' (%d + %d righe)" % (meta, len(indici) - meta))
-        self._traduci_indici(parti, indici[:meta], tradotti, origine, destinazione, profondita + 1)
-        self._traduci_indici(parti, indici[meta:], tradotti, origine, destinazione, profondita + 1)
+        half = len(indices) // 2
+        self.log("    righe non allineate: riprovo in due meta' (%d + %d righe)" % (half, len(indices) - half))
+        self._translate_indices(parts, indices[:half], translated_items, origin, dest_lang, depth + 1)
+        self._translate_indices(parts, indices[half:], translated_items, origin, dest_lang, depth + 1)
 
-    def traduci_righe(self, righe, origine, destinazione):
+    def translate_lines(self, lines, origin, dest_lang):
         # Lines that are too long are split by sentences and then put back together.
-        parti = []  # (line index, piece)
-        for i, r in enumerate(righe):
-            for pezzo in (_dividi_lunga(r) if len(r) > MAX_BLOCCO else [r]):
-                parti.append((i, pezzo))
-        blocchi = _blocchi([p for _, p in parti], MAX_BLOCCO)
-        tradotti = [None] * len(parti)
+        parts = []  # (line index, piece)
+        for i, r in enumerate(lines):
+            for piece in (_split_long(r) if len(r) > MAX_BLOCK else [r]):
+                parts.append((i, piece))
+        blocks = _blocks([p for _, p in parts], MAX_BLOCK)
+        translated_items = [None] * len(parts)
 
-        def risultati():
-            uniti = [[] for _ in righe]
-            for (i, _), t in zip(parti, tradotti):
-                uniti[i].append(t)
-            return ["" if any(t is None for t in r) else " ".join(r) for r in uniti]
+        def results():
+            joined = [[] for _ in lines]
+            for (i, _), t in zip(parts, translated_items):
+                joined[i].append(t)
+            return ["" if any(t is None for t in r) else " ".join(r) for r in joined]
         try:
-            for n, indici in enumerate(blocchi, 1):
-                self.log("    blocco %d/%d (%d righe)" % (n, len(blocchi), len(indici)))
-                self._traduci_indici(parti, indici, tradotti, origine, destinazione)
+            for n, indices in enumerate(blocks, 1):
+                self.log("    blocco %d/%d (%d righe)" % (n, len(blocks), len(indices)))
+                self._translate_indices(parts, indices, translated_items, origin, dest_lang)
         except BaseException as e:  # block or "Stop" halfway: the lines already translated stay usable
-            e.parziali = risultati()
+            e.partials = results()
             raise
-        return risultati()
+        return results()
 
 
-def _blocchi(pezzi, massimo, massimo_testi=None):
+def _blocks(pieces, maximum, texts_limit=None):
     """Indices of the pieces grouped into blocks of at most 'massimo' characters (line breaks included)."""
-    blocchi, blocco, lunghezza = [], [], 0
-    for k, pezzo in enumerate(pezzi):
-        if blocco and (lunghezza + len(pezzo) + 1 > massimo or (massimo_testi and len(blocco) >= massimo_testi)):
-            blocchi.append(blocco)
-            blocco, lunghezza = [], 0
-        blocco.append(k)
-        lunghezza += len(pezzo) + 1
-    if blocco:
-        blocchi.append(blocco)
-    return blocchi
+    blocks, block, length = [], [], 0
+    for k, piece in enumerate(pieces):
+        if block and (length + len(piece) + 1 > maximum or (texts_limit and len(block) >= texts_limit)):
+            blocks.append(block)
+            block, length = [], 0
+        block.append(k)
+        length += len(piece) + 1
+    if block:
+        blocks.append(block)
+    return blocks
 
 
 # --- DeepL (official API, personal key: free up to 500,000 characters a month) ----------------------
 
-def _lingua_deepl(codice, destinazione):
-    c = (codice or "").replace("_", "-")
+def _deepl_language(code, dest_lang):
+    c = (code or "").replace("_", "-")
     base = c.split("-")[0].lower()
     if base == "zh":
-        from .language import chiave_confronto
-        return ("ZH-HANT" if chiave_confronto(c) == "zh-hant" else "ZH-HANS") if destinazione else "ZH"
-    if destinazione and base == "en":
+        from .language import comparison_key
+        return ("ZH-HANT" if comparison_key(c) == "zh-hant" else "ZH-HANS") if dest_lang else "ZH"
+    if dest_lang and base == "en":
         return "EN-GB" if c.lower() in ("en-gb", "en-uk") else "EN-US"
-    if destinazione and base == "pt":
+    if dest_lang and base == "pt":
         return "PT-BR" if c.lower() == "pt-br" else "PT-PT"
     return {"no": "NB"}.get(base, base.upper())
 
@@ -266,240 +266,241 @@ class DeepL(Backend):
     """Official DeepL API with the user's key (free account: 500,000 characters a month). Free keys end with ':fx'
     and use api-free.deepl.com. Lists of texts are sent: no lines to line up."""
 
-    nome = "deepl"
-    max_testi = 50
-    max_caratteri = 30_000
-    ATTESE = (5, 15, 45)
-    ATTESA_MASSIMA = 300.0  # seconds: at most those asked by DeepL (Retry-After) before retrying
+    name = "deepl"
+    max_texts = 50
+    max_chars = 30_000
+    WAITS = (5, 15, 45)
+    LONGEST_WAIT = 300.0  # seconds: at most those asked by DeepL (Retry-After) before retrying
 
-    def __init__(self, chiave, log=print, apri=None, limitatore=None):
-        from .limiter import Limitatore
-        chiave = "".join((chiave or "").split()).replace("\u200b", "").replace("\ufeff", "")
-        if not chiave:
-            raise ErroreBackend("Per usare DeepL serve la tua chiave (gratuita): crea un account DeepL API Free su "
+    def __init__(self, key, log=print, opener=None, limiter=None):
+        from .limiter import Limiter
+        key = "".join((key or "").split()).replace("\u200b", "").replace("\ufeff", "")
+        if not key:
+            raise BackendError("Per usare DeepL serve la tua chiave (gratuita): crea un account DeepL API Free su "
                                 "deepl.com/pro-api e incollala nel campo 'Chiave DeepL' dell'interfaccia (oppure "
                                 "nella variabile PATCHSMITH_DEEPL).", "TRADUTTORE_ASSENTE")
-        if not re.fullmatch(r"[0-9A-Za-z:-]+", chiave):
-            raise ErroreBackend("La chiave DeepL contiene caratteri non validi: ricopiala dal sito di DeepL.",
+        if not re.fullmatch(r"[0-9A-Za-z:-]+", key):
+            raise BackendError("La chiave DeepL contiene caratteri non validi: ricopiala dal sito di DeepL.",
                                 "TRADUTTORE_ASSENTE")
-        self.chiave = chiave
-        self.da_variabile = False
-        self.base = "https://api-free.deepl.com" if chiave.endswith(":fx") else "https://api.deepl.com"
+        self.key = key
+        self.from_variable = False
+        self.base = "https://api-free.deepl.com" if key.endswith(":fx") else "https://api.deepl.com"
         self.log = log
-        self.apri = apri or _apri_predefinito
-        self.limitatore = limitatore or Limitatore("deepl", log)
+        self.opener = opener or _default_opener
+        self.limiter = limiter or Limiter("deepl", log)
 
-    def pausa(self):
-        return self.limitatore.pausa()
+    def pause(self):
+        return self.limiter.pause()
 
-    def stima(self, caratteri_per_richiesta):
-        return self.limitatore.stima(caratteri_per_richiesta, durata_risposta=1.0)
+    def estimate(self, chars_per_request):
+        return self.limiter.estimate(chars_per_request, response_duration=1.0)
 
-    def verifica(self):
+    def verify(self):
         """(characters used, limit) of this month: proves that the key works (GET /v2/usage, no text)."""
-        dati = self._chiama("/v2/usage")
-        return int(dati.get("character_count") or 0), int(dati.get("character_limit") or 0)
+        data = self._call("/v2/usage")
+        return int(data.get("character_count") or 0), int(data.get("character_limit") or 0)
 
-    def _chiama(self, percorso, corpo=None):
-        from .limiter import InPausa
-        errori = 0
+    def _call(self, path, body=None):
+        from .limiter import Paused
+        errors = 0
         while True:
-            interruzione.controlla()
+            interruption.check()
             try:
-                self.limitatore.prima_di(len(corpo or b""))
-            except InPausa as e:
-                raise Bloccato(str(e)) from e
-            req = urllib.request.Request(self.base + percorso, data=corpo, headers={
-                "Authorization": "DeepL-Auth-Key " + self.chiave, "Content-Type": "application/json",
+                self.limiter.before_request(len(body or b""))
+            except Paused as e:
+                raise Blocked(str(e)) from e
+            req = urllib.request.Request(self.base + path, data=body, headers={
+                "Authorization": "DeepL-Auth-Key " + self.key, "Content-Type": "application/json",
                 "User-Agent": _ua()})
             try:
                 try:
-                    risposta = self.apri(req, 60)
+                    response = self.opener(req, 60)
                 except (ValueError, UnicodeError) as e:  # request that cannot be built (e.g. the key): never retry
-                    raise ErroreBackend("Non riesco a preparare la richiesta per DeepL (%s): controlla la chiave."
+                    raise BackendError("Non riesco a preparare la richiesta per DeepL (%s): controlla la chiave."
                                         % type(e).__name__) from None
-                with risposta:
-                    dati = json.loads(risposta.read().decode("utf-8"))
-                self.limitatore.ok()
-                return dati
+                with response:
+                    data = json.loads(response.read().decode("utf-8"))
+                self.limiter.ok()
+                return data
             except urllib.error.HTTPError as e:
-                dettaglio = _leggi_errore(e).decode("utf-8", "replace")[:200]
+                detail = _read_error(e).decode("utf-8", "replace")[:200]
                 if e.code == 403:
-                    raise ErroreBackend("DeepL non accetta la chiave (HTTP 403): controlla di averla copiata intera "
+                    raise BackendError("DeepL non accetta la chiave (HTTP 403): controlla di averla copiata intera "
                                         "nel campo 'Chiave DeepL'%s." % (" (ora viene dalla variabile PATCHSMITH_DEEPL)"
-                                                                         if self.da_variabile else "")) from e
+                                                                         if self.from_variable else "")) from e
                 if e.code == 456:
-                    raise ErroreBackend("Hai finito i caratteri gratuiti di DeepL di questo mese: le traduzioni fatte "
+                    raise BackendError("Hai finito i caratteri gratuiti di DeepL di questo mese: le traduzioni fatte "
                                         "restano salvate, riprendi il mese prossimo o scegli un altro traduttore.") from e
                 if e.code == 400:
-                    raise ErroreBackend("DeepL rifiuta la richiesta (%s): forse la lingua non e' supportata."
-                                        % dettaglio) from e
+                    raise BackendError("DeepL rifiuta la richiesta (%s): forse la lingua non e' supportata."
+                                        % detail) from e
                 if e.code != 429 and e.code < 500:
-                    raise ErroreBackend("DeepL: errore HTTP %d (%s)" % (e.code, dettaglio)) from e
-                errore = "HTTP %d" % e.code
-                attesa_suggerita = e.headers.get("Retry-After") if e.headers else None
+                    raise BackendError("DeepL: errore HTTP %d (%s)" % (e.code, detail)) from e
+                error = "HTTP %d" % e.code
+                suggested_wait = e.headers.get("Retry-After") if e.headers else None
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-                errore, attesa_suggerita = type(e).__name__, None  # never the error's text: it can contain the key
-            errori += 1
-            if errori > len(self.ATTESE):
-                raise ErroreBackend("DeepL non risponde (%s): riprova piu' tardi." % errore)
+                error, suggested_wait = type(e).__name__, None  # never the error's text: it can contain the key
+            errors += 1
+            if errors > len(self.WAITS):
+                raise BackendError("DeepL non risponde (%s): riprova piu' tardi." % error)
             try:
-                attesa = min(self.ATTESA_MASSIMA, float(attesa_suggerita)) if attesa_suggerita else \
-                    self.ATTESE[errori - 1]
+                wait = min(self.LONGEST_WAIT, float(suggested_wait)) if suggested_wait else \
+                    self.WAITS[errors - 1]
             except ValueError:
-                attesa = self.ATTESE[errori - 1]
+                wait = self.WAITS[errors - 1]
             self.log("    ! DeepL: %s, riprovo tra %d s (tentativo %d di %d)"
-                     % (errore, attesa, errori + 1, len(self.ATTESE) + 1))
-            interruzione.attendi(attesa)
+                     % (error, wait, errors + 1, len(self.WAITS) + 1))
+            interruption.wait_for(wait)
 
-    def utilizzo(self):
+    def usage(self):
         """(characters used, limit) of the month, or None."""
         try:
-            dati = self._chiama("/v2/usage")
-            return dati.get("character_count"), dati.get("character_limit")
-        except ErroreBackend:
+            data = self._call("/v2/usage")
+            return data.get("character_count"), data.get("character_limit")
+        except BackendError:
             return None
 
-    def traduci_righe(self, righe, origine, destinazione):
-        uscita = []
-        for indici in _blocchi(righe, self.max_caratteri, self.max_testi):
-            richiesta = {"text": [righe[k] for k in indici], "target_lang": _lingua_deepl(destinazione, True)}
-            if origine and origine != "auto":
-                richiesta["source_lang"] = _lingua_deepl(origine, False)
-            self.log("    DeepL: %d testi" % len(indici))
-            dati = self._chiama("/v2/translate", json.dumps(richiesta, ensure_ascii=False).encode("utf-8"))
-            traduzioni = [t.get("text", "") for t in dati.get("translations", [])]
-            if len(traduzioni) != len(indici):
-                raise ErroreBackend("DeepL ha risposto con %d traduzioni invece di %d" % (len(traduzioni), len(indici)))
-            uscita += [pulisci(t) for t in traduzioni]
-        return uscita
+    def translate_lines(self, lines, origin, dest_lang):
+        output = []
+        for indices in _blocks(lines, self.max_chars, self.max_texts):
+            request = {"text": [lines[k] for k in indices], "target_lang": _deepl_language(dest_lang, True)}
+            if origin and origin != "auto":
+                request["source_lang"] = _deepl_language(origin, False)
+            self.log("    DeepL: %d testi" % len(indices))
+            data = self._call("/v2/translate", json.dumps(request, ensure_ascii=False).encode("utf-8"))
+            translations = [t.get("text", "") for t in data.get("translations", [])]
+            if len(translations) != len(indices):
+                raise BackendError("DeepL ha risposto con %d traduzioni invece di %d"
+                                   % (len(translations), len(indices)))
+            output += [clean(t) for t in translations]
+        return output
 
 
 # --- MyMemory (public API, no account: 5,000 characters a day, 50,000 with your own email) ------------------
 
-def _dividi_byte(riga, massimo=480):
+def _split_bytes(line, maximum=480):
     """Pieces of at most 'massimo' UTF-8 bytes (MyMemory accepts at most 500 bytes per request)."""
-    pezzi = []
-    for pezzo in _dividi_lunga(riga, massimo):
-        while len(pezzo.encode("utf-8")) > massimo:
+    pieces = []
+    for piece in _split_long(line, maximum):
+        while len(piece.encode("utf-8")) > maximum:
             # how many characters really fit in 'massimo' bytes (even with mixed text, e.g. Japanese + English)
-            taglio = max(1, len(pezzo.encode("utf-8")[:massimo].decode("utf-8", "ignore")))
-            spazio = pezzo.rfind(" ", 0, taglio)
-            taglio = spazio if spazio > 0 else taglio
-            pezzi.append(pezzo[:taglio])
-            pezzo = pezzo[taglio:].lstrip()
-        if pezzo:
-            pezzi.append(pezzo)
-    return pezzi
+            cut = max(1, len(piece.encode("utf-8")[:maximum].decode("utf-8", "ignore")))
+            space = piece.rfind(" ", 0, cut)
+            cut = space if space > 0 else cut
+            pieces.append(piece[:cut])
+            piece = piece[cut:].lstrip()
+        if piece:
+            pieces.append(piece)
+    return pieces
 
 
 class MyMemory(Backend):
     """Public API of MyMemory (Translated): no account. Without email 5,000 characters a day, with your own email
     (parameter 'de') 50,000. One request per line (at most 500 bytes)."""
 
-    nome = "mymemory"
+    name = "mymemory"
     URL = "https://api.mymemory.translated.net/get"
-    max_testi = 10  # one request per line: small groups, so a block halfway loses little
-    max_caratteri = 800
+    max_texts = 10  # one request per line: small groups, so a block halfway loses little
+    max_chars = 800
     QUOTA = (5_000, 50_000)  # characters a day without / with email
 
-    def richieste(self, testi):
+    def requests(self, texts):
         """Characters of each request that will be sent (one per line, several pieces for long lines)."""
-        return [len(p) for t in testi for p in (_dividi_byte(t) if len(t.encode("utf-8")) > 480 else [t])]
+        return [len(p) for t in texts for p in (_split_bytes(t) if len(t.encode("utf-8")) > 480 else [t])]
 
     def quota(self):
         return self.QUOTA[1] if self.email else self.QUOTA[0]
 
-    def verifica(self):
+    def verify(self):
         """Translates "Hello" (5 characters) with the given email: MyMemory answers and accepts the email. There is no
         account to check: the email only serves to get more characters a day."""
-        return self._richiesta("Hello", "en", "it")
+        return self._request("Hello", "en", "it")
 
-    def __init__(self, email=None, log=print, apri=None, limitatore=None):
-        from .limiter import Limitatore
+    def __init__(self, email=None, log=print, opener=None, limiter=None):
+        from .limiter import Limiter
         self.email = (email or "").strip() or None
         self.log = log
-        self.apri = apri or _apri_predefinito
-        self.limitatore = limitatore or Limitatore("mymemory", log)
+        self.opener = opener or _default_opener
+        self.limiter = limiter or Limiter("mymemory", log)
 
-    def pausa(self):
-        blocco = self.limitatore.blocco_attuale()
-        if blocco and blocco.get("tipo") == "quota" and self.email and not blocco.get("con_email"):
-            self.limitatore.azzera()  # quota without email used up: with the email we can go on
+    def pause(self):
+        block = self.limiter.current_block()
+        if block and block.get("tipo") == "quota" and self.email and not block.get("con_email"):
+            self.limiter.reset()  # quota without email used up: with the email we can go on
             return None
-        return self.limitatore.pausa()
+        return self.limiter.pause()
 
-    def stima(self, caratteri_per_richiesta):
-        return self.limitatore.stima(caratteri_per_richiesta, durata_risposta=0.8)
+    def estimate(self, chars_per_request):
+        return self.limiter.estimate(chars_per_request, response_duration=0.8)
 
-    def _quota_finita(self):
-        adesso = datetime.datetime.fromtimestamp(self.limitatore.ora())
-        domani = (adesso + datetime.timedelta(days=1)).replace(hour=0, minute=30, second=0, microsecond=0)
-        self.limitatore.bloccato(429, "caratteri gratuiti del giorno finiti", fino=domani.timestamp(),
+    def _quota_used_up(self):
+        now = datetime.datetime.fromtimestamp(self.limiter.current_time())
+        tomorrow = (now + datetime.timedelta(days=1)).replace(hour=0, minute=30, second=0, microsecond=0)
+        self.limiter.blocked(429, "caratteri gratuiti del giorno finiti", until=tomorrow.timestamp(),
                                  extra={"con_email": bool(self.email)})
         return ("Hai usato i caratteri gratuiti di oggi di MyMemory (%s): le traduzioni fatte restano salvate, "
                 "riprendi domani%s." % ("50.000 con la tua email" if self.email else "5.000 senza email",
                                         "" if self.email else " o indica la tua email per arrivare a 50.000"))
 
-    def _richiesta(self, testo, origine, destinazione):
-        from .limiter import InPausa
-        parametri = {"q": testo, "langpair": "%s|%s" % (origine, destinazione)}
+    def _request(self, text, origin, dest_lang):
+        from .limiter import Paused
+        params = {"q": text, "langpair": "%s|%s" % (origin, dest_lang)}
         if self.email:
-            parametri["de"] = self.email
-        errori = 0
+            params["de"] = self.email
+        errors = 0
         while True:
-            interruzione.controlla()
+            interruption.check()
             try:
-                self.limitatore.prima_di(len(testo))
-            except InPausa as e:
-                raise Bloccato(str(e)) from e
-            req = urllib.request.Request(self.URL + "?" + urllib.parse.urlencode(parametri),
+                self.limiter.before_request(len(text))
+            except Paused as e:
+                raise Blocked(str(e)) from e
+            req = urllib.request.Request(self.URL + "?" + urllib.parse.urlencode(params),
                                          headers={"User-Agent": _ua()})
             try:
-                with self.apri(req, 30) as risposta:
-                    dati = json.loads(risposta.read().decode("utf-8"))
-                stato = str(dati.get("responseStatus"))
-                tradotto = (dati.get("responseData") or {}).get("translatedText") or ""
-                if dati.get("quotaFinished") or stato == "429" or "MYMEMORY WARNING" in tradotto.upper():
-                    raise Bloccato(self._quota_finita())
-                if stato != "200":
-                    if "LENGTH" in str(dati.get("responseDetails", "")).upper():
+                with self.opener(req, 30) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                state = str(data.get("responseStatus"))
+                translated = (data.get("responseData") or {}).get("translatedText") or ""
+                if data.get("quotaFinished") or state == "429" or "MYMEMORY WARNING" in translated.upper():
+                    raise Blocked(self._quota_used_up())
+                if state != "200":
+                    if "LENGTH" in str(data.get("responseDetails", "")).upper():
                         self.log("    ! MyMemory: testo troppo lungo, resta in originale")
                         return ""  # it only concerns this line: the work goes on
-                    raise ErroreBackend("MyMemory rifiuta la richiesta (%s): %s" % (stato, dati.get("responseDetails")))
-                self.limitatore.ok()
-                return pulisci(html.unescape(tradotto))
+                    raise BackendError("MyMemory rifiuta la richiesta (%s): %s" % (state, data.get("responseDetails")))
+                self.limiter.ok()
+                return clean(html.unescape(translated))
             except urllib.error.HTTPError as e:
-                _leggi_errore(e)
+                _read_error(e)
                 if e.code == 429:
-                    raise Bloccato(self._quota_finita()) from e
+                    raise Blocked(self._quota_used_up()) from e
                 if e.code < 500:
-                    raise ErroreBackend("MyMemory: errore HTTP %d" % e.code) from e
-                errore = "HTTP %d" % e.code
+                    raise BackendError("MyMemory: errore HTTP %d" % e.code) from e
+                error = "HTTP %d" % e.code
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
-                errore = e
-            errori += 1
-            if errori > 2:
-                raise ErroreBackend("MyMemory non risponde (%s): riprova piu' tardi." % errore)
-            self.log("    ! MyMemory: %s, riprovo tra %d s" % (errore, 10 * errori))
-            interruzione.attendi(10 * errori)
+                error = e
+            errors += 1
+            if errors > 2:
+                raise BackendError("MyMemory non risponde (%s): riprova piu' tardi." % error)
+            self.log("    ! MyMemory: %s, riprovo tra %d s" % (error, 10 * errors))
+            interruption.wait_for(10 * errors)
 
-    def traduci_righe(self, righe, origine, destinazione):
-        uscita = []
+    def translate_lines(self, lines, origin, dest_lang):
+        output = []
         try:
-            for riga in righe:
-                pezzi = _dividi_byte(riga) if len(riga.encode("utf-8")) > 480 else [riga]
-                tradotti = [self._richiesta(p, origine, destinazione).strip() for p in pezzi]
-                uscita.append("" if any(not t for t in tradotti) else " ".join(tradotti))
+            for line in lines:
+                pieces = _split_bytes(line) if len(line.encode("utf-8")) > 480 else [line]
+                translated_items = [self._request(p, origin, dest_lang).strip() for p in pieces]
+                output.append("" if any(not t for t in translated_items) else " ".join(translated_items))
         except BaseException as e:  # quota used up or "Stop" halfway: the lines already translated are not lost
-            e.parziali = uscita + [""] * (len(righe) - len(uscita))
+            e.partials = output + [""] * (len(lines) - len(output))
             raise
-        return uscita
+        return output
 
 
 # --- Local translator (Ollama + TranslateGemma on the user's PC: no limits, no blocks) ---------------------
 
-NOMI_INGLESI = {
+ENGLISH_NAMES = {
     "en": "English", "it": "Italian", "fr": "French", "de": "German", "es": "Spanish", "pt": "Portuguese",
     "pt-BR": "Brazilian Portuguese", "ru": "Russian", "pl": "Polish", "ja": "Japanese", "ko": "Korean",
     "zh-CN": "Chinese (Simplified)", "zh-TW": "Chinese (Traditional)", "zh": "Chinese", "nl": "Dutch",
@@ -519,34 +520,34 @@ PROMPT_TRANSLATEGEMMA = (
     "commentary. Please translate the following {sl} text into {tl}:\n\n\n{testo}")
 # Context per line (tests on Forager, October 2026: 4B from 43% to 64% good translations, 12B from 73% to 80%):
 # the text's key in the file (without the final number) and the game's official translations, not to be copied.
-CONTESTO_CHIAVE = "In the game's files this text has the identifier \"%s\", a hint of where it appears.\n"
-CONTESTO_RIFERIMENTI = ("The game's official translations of this text into other languages, only to understand its "
+KEY_CONTEXT = "In the game's files this text has the identifier \"%s\", a hint of where it appears.\n"
+REFERENCES_CONTEXT = ("The game's official translations of this text into other languages, only to understand its "
                         "meaning (write your answer in %s, do not copy them; names of people and games stay as in "
                         "the original): %s\n")
 # second attempt after a rejection because of the numbers (tests: '200% more' -> 'il doppio' fixed into
 # 'il 200% in piu'')
-CORREZIONE_SEGNAPOSTO = ("Copy every marker like [[0]], [[1]] exactly as written, around the same words: they are "
+PLACEHOLDER_FIX = ("Copy every marker like [[0]], [[1]] exactly as written, around the same words: they are "
                          "game codes.\n")
-CORREZIONE_NUMERI = ("Keep every number exactly as written in the original: digits stay digits (200% stays 200%, "
+NUMBERS_FIX = ("Keep every number exactly as written in the original: digits stay digits (200% stays 200%, "
                      "1 stays 1) and numbers written in words stay words.\n")
-# text re-translated because the previous translation could not be written to the game (see Progetto.applica)
-CORREZIONE_CARATTERI = "The game's font cannot draw these characters, so do not use them: %s\n"
-# short label requested again because the translation was too long for its space (Progetto._accorcia)
-CONTESTO_LARGHEZZA = ("In the game this text is a short label with little space: the %s translation must be at most %d "
+# text re-translated because the previous translation could not be written to the game (see Project.apply)
+CHARS_FIX = "The game's font cannot draw these characters, so do not use them: %s\n"
+# short label requested again because the translation was too long for its space (Project._shorten)
+WIDTH_CONTEXT = ("In the game this text is a short label with little space: the %s translation must be at most %d "
                       "characters long. Use a shorter word or synonym if needed, keeping the meaning.\n")
-_CONTROLLO = re.compile(r"<\s*/?\s*(?:end_of_turn|start_of_turn)\s*>|<\|[^|>]*\|>|<｜[^｜>]*｜?>")
-_PREAMBOLO = re.compile(r"^\s*(?:translation|translated text|traduzione|testo tradotto|here is the translation|"
+_CONTROL_CHARS = re.compile(r"<\s*/?\s*(?:end_of_turn|start_of_turn)\s*>|<\|[^|>]*\|>|<｜[^｜>]*｜?>")
+_PREAMBLE = re.compile(r"^\s*(?:translation|translated text|traduzione|testo tradotto|here is the translation|"
                         r"here's the translation|ecco la traduzione|note|nota)\b[^:\n]{0,40}:", re.I)
-_RIFIUTO = re.compile(r"^\s*(?:i can'?t|i cannot|i'm sorry|i am sorry|i'm unable|i am unable|as an ai|mi dispiace|"
+_REFUSAL = re.compile(r"^\s*(?:i can'?t|i cannot|i'm sorry|i am sorry|i'm unable|i am unable|as an ai|mi dispiace|"
                       r"non posso|non sono in grado)\b.{0,80}?\b(?:translat\w*|tradu\w*|assist\w*|"
                       r"this (?:text|request|content)|questo (?:testo|contenuto))", re.I | re.S)
-_ALTRA_SCRITTURA = re.compile(r"[Ѐ-ӿ぀-ヿ㐀-䶿一-鿿가-힯]")
-_PAROLE_INGLESI = re.compile(r"\b(the|of|and|you|your|to|is|are|with|for|this|that)\b", re.I)
-_NUMERO = re.compile(r"\d+(?:[.,]\d+)?")
-_CHIUDE_FRASE = re.compile(r"[.!?:;\u2026\u3002\uff01\uff1f][\"')\]\u201d\u00bb\u300d\u300f\uff09]*$")
+_OTHER_SCRIPT = re.compile(r"[Ѐ-ӿ぀-ヿ㐀-䶿一-鿿가-힯]")
+_ENGLISH_WORDS = re.compile(r"\b(the|of|and|you|your|to|is|are|with|for|this|that)\b", re.I)
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+_ENDS_SENTENCE = re.compile(r"[.!?:;\u2026\u3002\uff01\uff1f][\"')\]\u201d\u00bb\u300d\u300f\uff09]*$")
 # numbers in words accepted in place of digits ("1 or more" -> "uno o piu'"): only unambiguous words (no articles
 # like 'un'/'a', no 'sei' which is also 'tu sei')
-_NUMERI_IN_LETTERE = {
+_NUMBERS_IN_WORDS = {
     "it": {1: "uno|una", 2: "due", 3: "tre", 4: "quattro", 5: "cinque", 7: "sette", 8: "otto", 9: "nove", 10: "dieci"},
     "en": {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"},
     "fr": {2: "deux", 3: "trois", 4: "quatre", 5: "cinq", 6: "six", 7: "sept", 8: "huit", 9: "neuf", 10: "dix"},
@@ -557,506 +558,508 @@ _NUMERI_IN_LETTERE = {
 }
 
 
-_PAROLE_NUMERO = re.compile(r"\b(?:one|two|twice|double|pair|three|thrice|triple|four|five|six|seven|eight|nine|"
+_NUMBER_WORDS = re.compile(r"\b(?:one|two|twice|double|pair|three|thrice|triple|four|five|six|seven|eight|nine|"
                             r"ten)\b", re.I)
-_VALORE_PAROLA = {"one": 1, "two": 2, "twice": 2, "double": 2, "pair": 2, "three": 3, "thrice": 3, "triple": 3,
+_WORD_VALUE = {"one": 1, "two": 2, "twice": 2, "double": 2, "pair": 2, "three": 3, "thrice": 3, "triple": 3,
                   "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
 # accented letters of each target language: an accented Latin letter that does not belong to this language (and is
 # not in the original) comes from a copied official translation ('crânio' from Portuguese)
-_LETTERE_DELLA_LINGUA = {"it": set("àèéìíîòóùúÀÈÉÌÍÎÒÓÙÚ")}
+_LANGUAGE_LETTERS = {"it": set("àèéìíîòóùúÀÈÉÌÍÎÒÓÙÚ")}
 
 
-def _numeri_in_lettere(o, t, destinazione):
+def _numbers_in_words(o, t, dest_lang):
     """True if the difference in numbers between original and translation is explained by numbers written in words:
     - a digit missing from the translation is there as a word ('1 or more' -> 'uno o piu''), counting only the words
       beyond those that translate words of the original ('twice' -> 'due volte' does not count for a '2');
     - an extra digit in the translation translates a number in words of the original ('restore one' -> 'ripristina
       1')."""
-    in_lettere = collections.Counter(_VALORE_PAROLA[w.lower()] for w in _PAROLE_NUMERO.findall(o))
-    articoli = len(re.findall(r"\b(?:a|an)\b", o, re.I))  # 'a'/'an' are translated 'un'/'una'
-    no, nt = collections.Counter(_numeri(o)), collections.Counter(_numeri(t))
-    mancanti, in_piu = no - nt, nt - no
-    for numero, quanti in in_piu.items():
-        if not numero.isdigit() or in_lettere.get(int(numero), 0) < quanti:
+    in_words = collections.Counter(_WORD_VALUE[w.lower()] for w in _NUMBER_WORDS.findall(o))
+    articles = len(re.findall(r"\b(?:a|an)\b", o, re.I))  # 'a'/'an' are translated 'un'/'una'
+    no, nt = collections.Counter(_numbers(o)), collections.Counter(_numbers(t))
+    missing, additional = no - nt, nt - no
+    for number, count in additional.items():
+        if not number.isdigit() or in_words.get(int(number), 0) < count:
             return False
-    if not mancanti:
-        return bool(in_piu)
-    parole = _NUMERI_IN_LETTERE.get(destinazione.split("-")[0])
-    if not parole:
+    if not missing:
+        return bool(additional)
+    words = _NUMBERS_IN_WORDS.get(dest_lang.split("-")[0])
+    if not words:
         return False
-    for numero, quanti in mancanti.items():
-        if not numero.isdigit():  # '2.5': no words for decimals
+    for number, count in missing.items():
+        if not number.isdigit():  # '2.5': no words for decimals
             return False
-        parola = parole.get(int(numero))
-        gia = in_lettere.get(int(numero), 0) + (articoli if numero == "1" else 0)
-        if not parola or len(re.findall(r"(?<!\w)(?:%s)(?!\w)" % parola, t, re.I)) < quanti + gia:
+        word = words.get(int(number))
+        already = in_words.get(int(number), 0) + (articles if number == "1" else 0)
+        if not word or len(re.findall(r"(?<!\w)(?:%s)(?!\w)" % word, t, re.I)) < count + already:
             return False
     return True
 
 
-_TOKEN_ROVINATO = re.compile(r"\[\[?\s*(\d{1,2})\s*[\]\u3015\u3011]{0,2}")
-_VIRGOLETTE = "\"'\u201c\u201d\u2018\u2019\u00ab\u00bb\u201e\u300c\u300e"
-_MIGLIAIA = re.compile(r"(?<=\d)[.,\u00a0\u202f ](?=\d{3}(?!\d))")
+_BROKEN_TOKEN = re.compile(r"\[\[?\s*(\d{1,2})\s*[\]\u3015\u3011]{0,2}")
+_QUOTES = "\"'\u201c\u201d\u2018\u2019\u00ab\u00bb\u201e\u300c\u300e"
+_THOUSANDS = re.compile(r"(?<=\d)[.,\u00a0\u202f ](?=\d{3}(?!\d))")
 
 
 # "50k", "1.5M", "2B": thousands, millions, billions (M and B only uppercase: "5m" is meters or minutes)
-_SUFFISSO_NUMERO = re.compile(r"(\d+(?:\.\d+)?)\s?([kK]|M|B)(?![A-Za-z])")
-_PER_SUFFISSO = {"k": 1e3, "K": 1e3, "M": 1e6, "B": 1e9}
+_NUMBER_SUFFIX = re.compile(r"(\d+(?:\.\d+)?)\s?([kK]|M|B)(?![A-Za-z])")
+_BY_SUFFIX = {"k": 1e3, "K": 1e3, "M": 1e6, "B": 1e9}
 
 
-def _con_suffisso(m):
-    v = float(m.group(1)) * _PER_SUFFISSO[m.group(2)]
+def _with_suffix(m):
+    v = float(m.group(1)) * _BY_SUFFIX[m.group(2)]
     return str(int(v)) if v == int(v) else repr(v)
 
 
-def _numeri(testo):
+def _numbers(text):
     """The numbers of a text as values comparable across languages: digits of every script ("\uff11\uff10" = 10),
     without thousands separators ("1.000", "1,000", "1 000" = 1000), decimal comma as a point, "50k" = 50000."""
     t = "".join(str(unicodedata.decimal(c)) if not c.isascii() and unicodedata.decimal(c, None) is not None else c
-                for c in testo)
-    t = re.sub(r"(?<=\d),(?=\d)", ".", _MIGLIAIA.sub("", t))
-    t = _SUFFISSO_NUMERO.sub(_con_suffisso, t)
+                for c in text)
+    t = re.sub(r"(?<=\d),(?=\d)", ".", _THOUSANDS.sub("", t))
+    t = _NUMBER_SUFFIX.sub(_with_suffix, t)
     return sorted(re.findall(r"\d+(?:\.\d+)?", t))
 
 
-def differenza_numeri(originale, tradotto):
-    """(mancano, in_piu): the numbers of the original that are not in the translation and the extra ones (as values:
+def numbers_difference(original, translated):
+    """(mancano, additional): the numbers of the original that are not in the translation and the extra ones (as values:
     "50k" and "50.000" are the same number), written as in the texts."""
-    def valori(testo):
-        uscita = collections.Counter()
-        for m in re.finditer(r"\d+(?:[.,\u00a0\u202f ]\d+)*(?:\s?(?:[kK]|M|B)(?![A-Za-z]))?", testo):
-            for v in _numeri(m.group()):
-                uscita[(v, m.group())] += 1
-        return uscita
-    o, t = valori(originale), valori(tradotto)
+    def values(text):
+        output = collections.Counter()
+        for m in re.finditer(r"\d+(?:[.,\u00a0\u202f ]\d+)*(?:\s?(?:[kK]|M|B)(?![A-Za-z]))?", text):
+            for v in _numbers(m.group()):
+                output[(v, m.group())] += 1
+        return output
+    o, t = values(original), values(translated)
     vo = collections.Counter(v for v, _ in o.elements())
     vt = collections.Counter(v for v, _ in t.elements())
-    mancano = [s for (v, s) in o if v in vo - vt]
-    in_piu = [s for (v, s) in t if v in vt - vo]
-    return mancano, in_piu
+    absent = [s for (v, s) in o if v in vo - vt]
+    additional = [s for (v, s) in t if v in vt - vo]
+    return absent, additional
 
 
-def _peso(testo):
+def _weight(text):
     """Visual length: a Chinese, Japanese or Korean character is worth about two and a half letters."""
     from .text import _CJK
-    return len(testo) + 1.5 * len(_CJK.findall(testo))
-_RIPETIZIONE = re.compile(r"(\b\S+\b)(?:\W+\1\b){3,}", re.I)
+    return len(text) + 1.5 * len(_CJK.findall(text))
+_REPETITION = re.compile(r"(\b\S+\b)(?:\W+\1\b){3,}", re.I)
 
 
-def problemi_traduzione(originale, tradotto, destinazione="it"):
+def translation_problems(original, translated, dest_lang="it"):
     """List of the reasons to reject a translation of the local model (empty = good)."""
     from .text import _TOKEN
-    problemi = []
-    if not tradotto.strip():
+    problems = []
+    if not translated.strip():
         return ["vuota"]
-    if "\n" in tradotto and "\n" not in originale:
-        problemi.append("a capo aggiunto")
-    elif tradotto.count("\n") != originale.count("\n"):  # more or fewer lines: the label overflows its space
-        problemi.append("a capo diversi")
-    if _PREAMBOLO.match(tradotto) and not _PREAMBOLO.match(originale):
-        problemi.append("testo di contorno")
-    if _RIFIUTO.match(tradotto) and not _RIFIUTO.match(originale):
-        problemi.append("rifiuto del modello")
-    if destinazione.split("-")[0] not in ("ru", "uk", "ja", "zh", "ko", "bg") and \
-            _ALTRA_SCRITTURA.search(tradotto) and not _ALTRA_SCRITTURA.search(originale):
-        problemi.append("scrittura sbagliata")
-    lo, lt = _peso(originale), _peso(tradotto)
+    if "\n" in translated and "\n" not in original:
+        problems.append("a capo aggiunto")
+    elif translated.count("\n") != original.count("\n"):  # more or fewer lines: the label overflows its space
+        problems.append("a capo diversi")
+    if _PREAMBLE.match(translated) and not _PREAMBLE.match(original):
+        problems.append("testo di contorno")
+    if _REFUSAL.match(translated) and not _REFUSAL.match(original):
+        problems.append("rifiuto del modello")
+    if dest_lang.split("-")[0] not in ("ru", "uk", "ja", "zh", "ko", "bg") and \
+            _OTHER_SCRIPT.search(translated) and not _OTHER_SCRIPT.search(original):
+        problems.append("scrittura sbagliata")
+    lo, lt = _weight(original), _weight(translated)
     if lt > 2.5 * lo + 15 or (lo > 20 and lt < 0.3 * lo) or (lo > 80 and lt < 0.5 * lo):
-        problemi.append("lunghezza anomala")
-    if _RIPETIZIONE.search(tradotto) and not _RIPETIZIONE.search(originale):
-        problemi.append("ripetizioni")
-    if tradotto.strip() == originale.strip() and len(_PAROLE_INGLESI.findall(originale)) >= 2:
-        problemi.append("non tradotta")
-    o, t = _TOKEN.sub(" ", originale), _TOKEN.sub(" ", tradotto)  # the digits of the [[0]] codes are not numbers
-    if _numeri(o) != _numeri(t) and sorted(re.findall(r"\d+", o)) != sorted(re.findall(r"\d+", t)) \
-            and not _numeri_in_lettere(o, t, destinazione):
-        problemi.append("numeri diversi")
-    if collections.Counter(_TOKEN.findall(originale)) != collections.Counter(_TOKEN.findall(tradotto)):
-        problemi.append("segnaposto")
-    proprie = _LETTERE_DELLA_LINGUA.get(destinazione.split("-")[0])
-    if proprie and any(c not in proprie and c not in originale and c.isalpha() and not c.isascii()
-                       and unicodedata.normalize("NFKD", c)[0].isascii() for c in tradotto):
-        problemi.append("lettere di un'altra lingua")
-    return problemi
+        problems.append("lunghezza anomala")
+    if _REPETITION.search(translated) and not _REPETITION.search(original):
+        problems.append("ripetizioni")
+    if translated.strip() == original.strip() and len(_ENGLISH_WORDS.findall(original)) >= 2:
+        problems.append("non tradotta")
+    o, t = _TOKEN.sub(" ", original), _TOKEN.sub(" ", translated)  # the digits of the [[0]] codes are not numbers
+    if _numbers(o) != _numbers(t) and sorted(re.findall(r"\d+", o)) != sorted(re.findall(r"\d+", t)) \
+            and not _numbers_in_words(o, t, dest_lang):
+        problems.append("numeri diversi")
+    if collections.Counter(_TOKEN.findall(original)) != collections.Counter(_TOKEN.findall(translated)):
+        problems.append("segnaposto")
+    own_letters = _LANGUAGE_LETTERS.get(dest_lang.split("-")[0])
+    if own_letters and any(c not in own_letters and c not in original and c.isalpha() and not c.isascii()
+                       and unicodedata.normalize("NFKD", c)[0].isascii() for c in translated):
+        problems.append("lettere di un'altra lingua")
+    return problems
 
 
-class _RigaLenta(Exception):
+class _SlowLine(Exception):
     """A single line went over the maximum time, but the server is alive: that line stays untranslated."""
 
 
-def _uguale(originale, tradotto):
-    def norma(x):
+def _unchanged(original, translated):
+    def norm(x):
         return re.sub(r"[\s.!?\u2026]+$", "", x.strip()).casefold()
-    return norma(originale) == norma(tradotto)
+    return norm(original) == norm(translated)
 
 
-def seme_per(testo, numero):
+def seed_for(text, number):
     """The seed of attempt 'numero' for a text: always the same for the same pair (even from one run to the next:
     no Python hash(), which changes at every run), different from one attempt to the next and never equal to those
-    of the first round (Locale.TENTATIVI: 42, 7, 11)."""
-    return zlib.crc32(("%d\x00%s" % (numero, testo)).encode("utf-8")) % 2_000_000_000 + 100
+    of the first round (Local.ATTEMPTS: 42, 7, 11)."""
+    return zlib.crc32(("%d\x00%s" % (number, text)).encode("utf-8")) % 2_000_000_000 + 100
 
 
-NON_INSTALLATO = ("Il traduttore locale non e' installato: scegli 'Traduttore locale (sul tuo PC)' e premi "
+NOT_INSTALLED = ("Il traduttore locale non e' installato: scegli 'Traduttore locale (sul tuo PC)' e premi "
                   "'Installa...' accanto.")
-COMANDO_INSTALLA = "python -I smith.py local --install 12b (o 4b)"
+INSTALL_COMMAND = "python -I smith.py local --install 12b (o 4b)"
 
 
-class Locale(Backend):
+class Local(Backend):
     """Translator on the user's PC: Ollama + TranslateGemma. No quota and no blocks: it goes at the pace of the
     graphics card. One request per line (the TranslateGemma format expects one text at a time), with checks on
     every answer and a second attempt with different parameters; the lines that do not pass the checks stay
-    untranslated (Progetto retries them right away in another round: see 'giri' in traduci_righe). The server
-    starts at the first line and is closed with chiudi()."""
+    untranslated (Project retries them right away in another round: see 'giri' in translate_lines). The server
+    starts at the first line and is closed with close()."""
 
-    nome = "locale"
-    limitato = False
-    usa_contesto = True  # accepts for each line the key and the game's official translations (see Progetto)
-    semi_variabili = True  # accepts for each line the round (see traduci_righe): an already rejected text changes seeds
-    max_testi = 40
-    max_caratteri = 8000
+    name = "locale"
+    limited = False
+    uses_context = True  # accepts for each line the key and the game's official translations (see Project)
+    # accepts for each line the round (see translate_lines): an already rejected text changes seeds
+    varying_seeds = True
+    max_texts = 40
+    max_chars = 8000
     NUM_CTX = 2048
-    TENTATIVI = ((0.0, 42), (0.3, 7), (0.6, 11))  # first round; the third only for texts rejected twice
-    # from the second round (text already rejected, in this run or an earlier one): new seeds at every round (seme_per)
+    ATTEMPTS = ((0.0, 42), (0.3, 7), (0.6, 11))  # first round; the third only for texts rejected twice
+    # from the second round (text already rejected, in this run or an earlier one): new seeds at every round (seed_for)
     # and higher temperatures. At temperature 0 the seed does not matter: the same question would give the same answer
-    TEMPERATURE_GIRI = (0.3, 0.6, 0.9)
+    ROUND_TEMPERATURES = (0.3, 0.6, 0.9)
 
-    def __init__(self, modello="4b", log=print, server=None, parallele=None):
+    def __init__(self, model="4b", log=print, server=None, parallel=None):
         from . import ollama
-        if modello not in ollama.MODELLI:
-            modello = "4b"
-        self.chiave = modello
-        self.modello = ollama.MODELLI[modello]["nome"]
+        if model not in ollama.MODELS:
+            model = "4b"
+        self.key = model
+        self.model = ollama.MODELS[model]["nome"]
         self.log = log
         self._server = server
-        self._proprio = server is None
-        self._pronto = False
-        self.token, self.secondi, self.righe_fatte = 0, 0.0, 0
-        self.tempo_righe = 0.0  # real seconds spent translating (without startup): for the estimate
-        self._avvisato_lento = False
+        self._owned = server is None
+        self._ready = False
+        self.token, self.seconds, self.lines_done = 0, 0.0, 0
+        self.lines_elapsed = 0.0  # real seconds spent translating (without startup): for the estimate
+        self._warned_slow = False
         # lines translated together: with PatchSmith's server as many as the model on the graphics card can handle;
         # with a server given from outside (tests) one at a time, unless told otherwise
-        self.parallele = max(1, parallele or (ollama.MODELLI[modello].get("parallele", 1) if server is None else 1))
-        self._lucchetto = threading.Lock()
+        self.parallel = max(1, parallel or (ollama.MODELS[model].get("parallele", 1) if server is None else 1))
+        self._lock = threading.Lock()
         # {testo: (traduzione, problemi)}: the best proposal for the texts rejected by the checks. Only if it is a
-        # dictionary (the live translator, servizio_xunity, prepares it to answer XUnity anyway)
-        self.scarti = None
+        # dictionary (the live translator, xunity_service, prepares it to answer XUnity anyway)
+        self.rejects = None
 
-    def pausa(self):
+    def pause(self):
         return None
 
-    def richieste(self, testi):
-        return [len(t) for t in testi]
+    def requests(self, texts):
+        return [len(t) for t in texts]
 
-    def stima(self, caratteri_per_richiesta):
+    def estimate(self, chars_per_request):
         """Expected seconds: startup (detection of the graphics card and loading of the model) plus the texts, at the
         pace measured on this PC after the first lines (before that: the one from the tests on an RTX 3060 Ti 8 GB)."""
         from . import ollama
-        per_testo = ollama.MODELLI[self.chiave]["secondi_per_testo"]
-        if self.righe_fatte >= 10:
-            per_testo = self.tempo_righe / self.righe_fatte
-        avvio = 0 if self._pronto else ollama.MODELLI[self.chiave]["secondi_avvio"]  # graphics card + model
-        return avvio + sum(per_testo * (0.5 + c / 80) for c in caratteri_per_richiesta)
+        per_text = ollama.MODELS[self.key]["secondi_per_testo"]
+        if self.lines_done >= 10:
+            per_text = self.lines_elapsed / self.lines_done
+        startup = 0 if self._ready else ollama.MODELS[self.key]["secondi_avvio"]  # graphics card + model
+        return startup + sum(per_text * (0.5 + c / 80) for c in chars_per_request)
 
-    def _assicura_server(self):
+    def _ensure_server(self):
         from . import ollama
-        if self._pronto:
+        if self._ready:
             return
         if self._server is None:
-            if not ollama.installato():
-                raise ErroreBackend(NON_INSTALLATO, "TRADUTTORE_ASSENTE", comando=COMANDO_INSTALLA)
-            if not ollama.modello_presente(self.chiave):
-                raise ErroreBackend("Il modello %s non e' scaricato: premi 'Installa...' accanto al traduttore locale."
-                                    % ollama.MODELLI[self.chiave]["etichetta"], "TRADUTTORE_ASSENTE",
-                                    comando="python -I smith.py local --install %s" % self.chiave)
-            self._server = ollama.Server(self.log, parallele=self.parallele)
+            if not ollama.installed():
+                raise BackendError(NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=INSTALL_COMMAND)
+            if not ollama.model_present(self.key):
+                raise BackendError("Il modello %s non e' scaricato: premi 'Installa...' accanto al traduttore locale."
+                                    % ollama.MODELS[self.key]["etichetta"], "TRADUTTORE_ASSENTE",
+                                    command="python -I smith.py local --install %s" % self.key)
+            self._server = ollama.Server(self.log, parallel=self.parallel)
         try:
-            self._server.avvia()
+            self._server.launch()
             self.log("    Traduttore locale: carico il modello nella scheda video (la prima volta puo' volerci un "
                      "minuto)...")
-            self.log(DETTAGLIO + "    (modello %s)" % self.modello)
-            self._server.chiama("/api/generate", {"model": self.modello, "keep_alive": "30m"}, timeout=600)
-            caricati = self._server.chiama("/api/ps").get("models", [])
-        except ollama.ErroreLocale as e:
-            raise ErroreBackend(str(e)) from None
+            self.log(DETAIL + "    (modello %s)" % self.model)
+            self._server.call("/api/generate", {"model": self.model, "keep_alive": "30m"}, timeout=600)
+            loaded = self._server.call("/api/ps").get("models", [])
+        except ollama.LocalError as e:
+            raise BackendError(str(e)) from None
         except urllib.error.HTTPError as e:
-            raise ErroreBackend(self._spiega(e)) from None
+            raise BackendError(self._explain(e)) from None
         except (OSError, ValueError) as e:
-            raise ErroreBackend("Il traduttore locale non risponde (%s)." % type(e).__name__) from None
-        for m in caricati:
-            if m.get("name") == self.modello and m.get("size"):
+            raise BackendError("Il traduttore locale non risponde (%s)." % type(e).__name__) from None
+        for m in loaded:
+            if m.get("name") == self.model and m.get("size"):
                 quota = m.get("size_vram", 0) / m["size"]
-                self.log((DETTAGLIO if quota > 0.95 else "") +  # fully ready: detail; otherwise the warning is shown
+                self.log((DETAIL if quota > 0.95 else "") +  # fully ready: detail; otherwise the warning is shown
                          "    Traduttore locale pronto: %.0f%% del modello nella scheda video%s" % (
                     100 * quota, "" if quota > 0.95 else (" (il resto in memoria: piu' lento)" if quota > 0 else
                                                          " - ATTENZIONE: usa solo il processore, molto piu' lento: "
                                                          "controlla il driver NVIDIA")))
-        self._pronto = True
+        self._ready = True
 
-    def _spiega(self, e):
-        corpo = _leggi_errore(e).decode("utf-8", "replace").lower()
-        if e.code == 404 or "not found" in corpo:
-            return "Il modello %s non e' scaricato: premi 'Installa' accanto al traduttore locale." % self.modello
-        if "memory" in corpo or "out of memory" in corpo:
+    def _explain(self, e):
+        body = _read_error(e).decode("utf-8", "replace").lower()
+        if e.code == 404 or "not found" in body:
+            return "Il modello %s non e' scaricato: premi 'Installa' accanto al traduttore locale." % self.model
+        if "memory" in body or "out of memory" in body:
             return ("Memoria insufficiente per il traduttore locale: chiudi il gioco e gli altri programmi pesanti, "
                     "oppure scegli il modello Veloce (4B).")
-        if "cuda" in corpo:
+        if "cuda" in body:
             return "Errore della scheda video (CUDA): aggiorna il driver NVIDIA e riprova."
         return "Il traduttore locale ha dato un errore (HTTP %d)." % e.code
 
     @staticmethod
-    def _nome_inglese(codice):
-        return NOMI_INGLESI.get(codice, NOMI_INGLESI.get(codice.split("-")[0], codice))
+    def _english_name(code):
+        return ENGLISH_NAMES.get(code, ENGLISH_NAMES.get(code.split("-")[0], code))
 
-    def _testo_contesto(self, contesto, destinazione):
+    def _context_text(self, context, dest_lang):
         """The prompt's context lines for one line (empty if there is no context: prompt as before)."""
-        if not contesto:
+        if not context:
             return ""
-        righe = ""
-        chiave = (contesto.get("chiave") or "").replace("\n", " ").strip()[:80]
-        if chiave:
-            righe += CONTESTO_CHIAVE % chiave
-        riferimenti = [(c, t.replace("\n", " ").strip()) for c, t in (contesto.get("riferimenti") or {}).items()
+        lines = ""
+        key = (context.get("chiave") or "").replace("\n", " ").strip()[:80]
+        if key:
+            lines += KEY_CONTEXT % key
+        references = [(c, t.replace("\n", " ").strip()) for c, t in (context.get("riferimenti") or {}).items()
                        if t and t.strip()]
-        if riferimenti:
-            righe += CONTESTO_RIFERIMENTI % (self._nome_inglese(destinazione), "; ".join(
-                "%s: %s" % (self._nome_inglese(c), t) for c, t in riferimenti))
-        non_usare = "".join(c for c in dict.fromkeys(contesto.get("non_usare") or "") if not c.isspace())
-        if non_usare:
-            righe += CORREZIONE_CARATTERI % " ".join(non_usare)
-        larghezza = contesto.get("larghezza")
-        if isinstance(larghezza, int) and larghezza > 0:  # (only when a label is requested shorter)
-            righe += CONTESTO_LARGHEZZA % (self._nome_inglese(destinazione), larghezza)
-        return righe
+        if references:
+            lines += REFERENCES_CONTEXT % (self._english_name(dest_lang), "; ".join(
+                "%s: %s" % (self._english_name(c), t) for c, t in references))
+        do_not_use = "".join(c for c in dict.fromkeys(context.get("non_usare") or "") if not c.isspace())
+        if do_not_use:
+            lines += CHARS_FIX % " ".join(do_not_use)
+        width = context.get("larghezza")
+        if isinstance(width, int) and width > 0:  # (only when a label is requested shorter)
+            lines += WIDTH_CONTEXT % (self._english_name(dest_lang), width)
+        return lines
 
-    def _tentativi(self, testo, giro):
+    def _attempts(self, text, round_):
         """[(temperature, seed)] of the attempts for a text: at the first round (0) the fixed ones; from the others,
-        seeds derived from the text and the attempt number (seme_per), so every round asks new questions even from
-        one run to the next (Progetto remembers the rounds done in memory/<gioco>.problemi.json)."""
-        if not giro:
-            return list(self.TENTATIVI)
-        n = len(self.TEMPERATURE_GIRI)
-        return [(t, seme_per(testo, giro * n + i)) for i, t in enumerate(self.TEMPERATURE_GIRI)]
+        seeds derived from the text and the attempt number (seed_for), so every round asks new questions even from
+        one run to the next (Project remembers the rounds done in memory/<gioco>.problems.json)."""
+        if not round_:
+            return list(self.ATTEMPTS)
+        n = len(self.ROUND_TEMPERATURES)
+        return [(t, seed_for(text, round_ * n + i)) for i, t in enumerate(self.ROUND_TEMPERATURES)]
 
-    def altro_modello(self):
+    def other_model(self):
         """A local translator with the other model (Fast <-> Quality), if it is downloaded, for the texts this one
         rejected; None if there is none. This translator's model leaves the graphics card (and, if the server is
         PatchSmith's, the server closes: the new translator starts one with the parameters of its model)."""
         from . import ollama
-        altro = {"4b": "12b", "12b": "4b"}.get(self.chiave)
+        other = {"4b": "12b", "12b": "4b"}.get(self.key)
         try:
-            if not altro or not ollama.modello_presente(altro):
+            if not other or not ollama.model_present(other):
                 return None
         except (OSError, KeyError):
             return None
-        if self._proprio:
-            self.chiudi()
-            return Locale(altro, log=self.log)
-        if self._server is not None and self._pronto:  # server given from outside (the tests): it stays on
+        if self._owned:
+            self.close()
+            return Local(other, log=self.log)
+        if self._server is not None and self._ready:  # server given from outside (the tests): it stays on
             try:
-                self._server.chiama("/api/generate", {"model": self.modello, "keep_alive": 0}, timeout=30)
+                self._server.call("/api/generate", {"model": self.model, "keep_alive": 0}, timeout=30)
             except (OSError, ValueError):
                 pass
-        self._pronto = False
-        return Locale(altro, log=self.log, server=self._server, parallele=self.parallele)
+        self._ready = False
+        return Local(other, log=self.log, server=self._server, parallel=self.parallel)
 
-    def _chat(self, testo, origine, destinazione, temperatura, seme, num_predict, contesto=""):
-        sc, tc = origine, destinazione
-        prompt = PROMPT_TRANSLATEGEMMA.format(sl=self._nome_inglese(sc), sc=sc, tl=self._nome_inglese(tc), tc=tc,
-                                              contesto=contesto, testo=testo)
-        dati = {"model": self.modello, "messages": [{"role": "user", "content": prompt}], "stream": False,
-                "keep_alive": "30m", "options": {"temperature": temperatura, "seed": seme, "num_ctx": self.NUM_CTX,
+    def _chat(self, text, origin, dest_lang, temperature, seed, num_predict, context=""):
+        sc, tc = origin, dest_lang
+        prompt = PROMPT_TRANSLATEGEMMA.format(sl=self._english_name(sc), sc=sc, tl=self._english_name(tc), tc=tc,
+                                              contesto=context, testo=text)
+        data = {"model": self.model, "messages": [{"role": "user", "content": prompt}], "stream": False,
+                "keep_alive": "30m", "options": {"temperature": temperature, "seed": seed, "num_ctx": self.NUM_CTX,
                                                  "num_predict": num_predict, "top_k": 64, "top_p": 0.95}}
         try:  # maximum time in proportion to how much it can write (even at 2-3 words a second)
-            risposta = self._server.chiama("/api/chat", dati, timeout=120 + num_predict // 2)
+            response = self._server.call("/api/chat", data, timeout=120 + num_predict // 2)
         except urllib.error.HTTPError as e:
-            raise ErroreBackend(self._spiega(e)) from None
+            raise BackendError(self._explain(e)) from None
         except (OSError, ValueError) as e:
-            scaduto = isinstance(e, TimeoutError) or isinstance(getattr(e, "reason", None), TimeoutError)
-            if scaduto and self._vivo():
-                raise _RigaLenta() from None
-            raise ErroreBackend("Il traduttore locale non risponde (%s): riprova." % type(e).__name__) from None
-        with self._lucchetto:
-            self.token += risposta.get("eval_count", 0)
-            self.secondi += risposta.get("eval_duration", 0) / 1e9
-        usati = risposta.get("prompt_eval_count", 0) + risposta.get("eval_count", 0)
-        return (risposta.get("message") or {}).get("content", ""), risposta.get("done_reason"), usati
+            timed_out = isinstance(e, TimeoutError) or isinstance(getattr(e, "reason", None), TimeoutError)
+            if timed_out and self._alive():
+                raise _SlowLine() from None
+            raise BackendError("Il traduttore locale non risponde (%s): riprova." % type(e).__name__) from None
+        with self._lock:
+            self.token += response.get("eval_count", 0)
+            self.seconds += response.get("eval_duration", 0) / 1e9
+        used = response.get("prompt_eval_count", 0) + response.get("eval_count", 0)
+        return (response.get("message") or {}).get("content", ""), response.get("done_reason"), used
 
-    def _vivo(self):
+    def _alive(self):
         try:
-            self._server.chiama("/api/version", timeout=10)
+            self._server.call("/api/version", timeout=10)
             return True
         except (OSError, ValueError):
             return False
 
-    def _pulisci(self, tradotto, originale, destinazione="it"):
+    def _clean(self, translated, original, dest_lang="it"):
         """Removes what the model adds on its own: quotes, notes in parentheses, several alternative translations
         for a name, final period or ellipsis where the original has none; lowercase initial like the original."""
-        t = _CONTROLLO.sub("", tradotto).strip()
-        o = originale.strip()
+        t = _CONTROL_CHARS.sub("", translated).strip()
+        o = original.strip()
         from .text import _CJK, _TOKEN
-        validi = {int(n) for n in _TOKEN.findall(o)}
-        if validi:
+        valid_spots = {int(n) for n in _TOKEN.findall(o)}
+        if valid_spots:
             # placeholders damaged by the model ('[[4]Spine', '[0]Colpo', '[[2]〕'): they are restored, if the number
             # is one of those of the original and the original does not have that spelling on its own
-            resto = _TOKEN.sub(" ", o)  # the original without the correct placeholders
+            rest = _TOKEN.sub(" ", o)  # the original without the correct placeholders
 
-            def ripara(m):
+            def repair(m):
                 n = int(m.group(1))
-                return "[[%d]]" % n if n in validi and m.group(0).strip() not in resto else m.group(0)
-            t = _TOKEN_ROVINATO.sub(ripara, t)
+                return "[[%d]]" % n if n in valid_spots and m.group(0).strip() not in rest else m.group(0)
+            t = _BROKEN_TOKEN.sub(repair, t)
         if "\n" not in o:  # line breaks added by the model (e.g. before each button code): spaces
             t = re.sub(r"[ \t]*\n+[ \t]*", " ", t)
-        for apre, chiude in ('""', "''", "\u201c\u201d", "\u00ab\u00bb", "\u300c\u300d", "\u300e\u300f"):
-            if len(t) > 1 and t[0] == apre and t[-1] == chiude and o[:1] not in _VIRGOLETTE:
+        for open_quote, close_quote in ('""', "''", "\u201c\u201d", "\u00ab\u00bb", "\u300c\u300d", "\u300e\u300f"):
+            if len(t) > 1 and t[0] == open_quote and t[-1] == close_quote and o[:1] not in _QUOTES:
                 t = t[1:-1].strip()
         if "(" not in o and "\uff08" not in o:  # "corna (di cervo, alce, ecc.)", "punti esperienza (EP)"
             t = re.sub(r"\s*[(\uff08][^()\uff08\uff09\n]{1,40}[)\uff09]", "", t).strip() or t
         if re.fullmatch(r"[^\W_]+(?: [^\W_]+){0,2}", o) and not _CJK.search(o) and "\n" not in t and \
                 (";" in t or " " not in o):
             # a name translated with several alternatives: "edificio; costruzione", "incantare, affascinare"
-            parti = [x for x in re.split(r"\s*;\s*" if ";" in t else r"\s*,\s*", t.rstrip(".")) if x]
-            if len(parti) > 1 and all(len(x.split()) <= 3 for x in parti):
-                t = parti[0]
-        if not _CHIUDE_FRASE.search(o):
+            parts = [x for x in re.split(r"\s*;\s*" if ";" in t else r"\s*,\s*", t.rstrip(".")) if x]
+            if len(parts) > 1 and all(len(x.split()) <= 3 for x in parts):
+                t = parts[0]
+        if not _ENDS_SENTENCE.search(o):
             if re.search(r"(?:\.\.\.|\u2026)$", t):  # ellipsis added to a split sentence
                 t = re.sub(r"\s*(?:\.\.\.|\u2026)$", "", t) or t
             elif re.search(r"(?<!\.)[.;,]$", t) and not re.search(r"(?:\b\w\.\w\.|\b(?:ecc|etc|ca)\.)$", t, re.I):
                 # "scarpe dorate." for "golden boots" (abbreviations like "U.S.A." stay)
                 t = t[:-1].rstrip()
-        lingua = destinazione.split("-")[0]
-        if lingua != "de" and o[:1].isalpha() and o[:1].islower() and t[:1].isupper() \
-                and (t[1:2].islower() or (t[1:2] == " " and lingua != "en")):  # games all in lowercase (Forager)
+        language = dest_lang.split("-")[0]
+        if language != "de" and o[:1].isalpha() and o[:1].islower() and t[:1].isupper() \
+                and (t[1:2].islower() or (t[1:2] == " " and language != "en")):  # games all in lowercase (Forager)
             t = t[:1].lower() + t[1:]
-        if originale[:1].isspace() or originale[-1:].isspace():
-            t = originale[:len(originale) - len(originale.lstrip())] + t + originale[len(originale.rstrip()):]
+        if original[:1].isspace() or original[-1:].isspace():
+            t = original[:len(original) - len(original.lstrip())] + t + original[len(original.rstrip()):]
         return t
 
-    def _traduci_una(self, testo, origine, destinazione, contesto=None, giro=0):
-        if len(testo) > 1500:
-            pezzi = [self._traduci_una(p, origine, destinazione, giro=giro) for p in _dividi_lunga(testo, 1500)]
-            return "" if any(not p for p in pezzi) else " ".join(pezzi)
+    def _translate_one(self, text, origin, dest_lang, context=None, round_=0):
+        if len(text) > 1500:
+            pieces = [self._translate_one(p, origin, dest_lang, round_=round_) for p in _split_long(text, 1500)]
+            return "" if any(not p for p in pieces) else " ".join(pieces)
         from .text import _TOKEN
-        ultimo, eco, eco_viste = "", None, 0
-        stessa_lingua = origine.split("-")[0] == destinazione.split("-")[0]
-        attuale = dict(contesto or {})
-        chiave = re.sub(r"[\W_]+", "", attuale.get("chiave") or "").casefold()
-        riferimenti = [r for r in (attuale.get("riferimenti") or {}).values() if r and r.strip()]
-        tentativi, correzione = self._tentativi(testo, giro), ""
-        proposta = None  # (translation, problems) rejected with the fewest problems: for self.scarti
-        for n, (temperatura, seme) in enumerate(tentativi):
-            base = self._testo_contesto(attuale, destinazione)
-            num_predict = min(1024, 64 + 2 * (len(testo) // 3 + 1))
+        last, echo, echoes_seen = "", None, 0
+        same_language = origin.split("-")[0] == dest_lang.split("-")[0]
+        current = dict(context or {})
+        key = re.sub(r"[\W_]+", "", current.get("chiave") or "").casefold()
+        references = [r for r in (current.get("riferimenti") or {}).values() if r and r.strip()]
+        attempts, fix = self._attempts(text, round_), ""
+        proposal = None  # (translation, problems) rejected with the fewest problems: for self.rejects
+        for n, (temperature, seed) in enumerate(attempts):
+            base = self._context_text(current, dest_lang)
+            num_predict = min(1024, 64 + 2 * (len(text) // 3 + 1))
             for _ in range(2):
                 try:
-                    grezzo, fine, _usati = self._chat(testo, origine, destinazione, temperatura, seme, num_predict,
-                                                      base + correzione)
-                except _RigaLenta:
+                    raw, end, _used = self._chat(text, origin, dest_lang, temperature, seed, num_predict,
+                                                      base + fix)
+                except _SlowLine:
                     self.log("    ! Un testo richiede troppo tempo al traduttore locale: resta in originale (\"%s\")"
-                             % testo[:50])
+                             % text[:50])
                     return ""
-                piu_spazio = min(2 * num_predict, self.NUM_CTX - 256)  # truncated: more room, within the context
-                if fine != "length" or piu_spazio <= num_predict:
+                more_room = min(2 * num_predict, self.NUM_CTX - 256)  # truncated: more room, within the context
+                if end != "length" or more_room <= num_predict:
                     break
-                num_predict = piu_spazio
-            tradotto = self._pulisci(pulisci(grezzo), testo, destinazione)
-            problemi = problemi_traduzione(testo, tradotto, destinazione)
-            if len(chiave) >= 6 and chiave in re.sub(r"[\W_]+", "", tradotto).casefold() \
-                    and chiave not in re.sub(r"[\W_]+", "", testo).casefold():
-                problemi.append("chiave copiata")  # the model wrote the hint instead of the translation
-                attuale["chiave"] = None  # the next attempt, without the hint
-            if riferimenti and not _uguale(testo, tradotto) and any(_uguale(r, tradotto) for r in riferimenti):
-                problemi.append("riferimento copiato")  # an official translation of another language, copied
-                attuale["riferimenti"] = {}  # next attempt, without the references (if the same again, it is right)
-                riferimenti = []
-            correzione = ""
-            if "numeri diversi" in problemi and re.search(r"\d", testo):
-                correzione += CORREZIONE_NUMERI
-            if "segnaposto" in problemi:
-                correzione += CORREZIONE_SEGNAPOSTO
-            if correzione and n == 0:
-                tentativi[1] = tentativi[0]  # the same question, with the correction (then the third attempt remains)
-            if not problemi:
-                if stessa_lingua or not _uguale(testo, tradotto):
-                    return tradotto
-                eco, eco_viste = tradotto, eco_viste + 1  # equal to the original: we believe it only if it repeats
-                if eco_viste >= 2:
-                    return tradotto  # a text that stayed the same twice is a name or a word that does not change
-            elif problemi == ["segnaposto"] and _TOKEN.search(testo):
-                ultimo = tradotto
-            if tradotto.strip() and (proposta is None or len(problemi) < len(proposta[1])):
-                proposta = (tradotto, problemi)
-        if self.scarti is not None and proposta is not None:
-            self.scarti[testo] = proposta
+                num_predict = more_room
+            translated = self._clean(clean(raw), text, dest_lang)
+            problems = translation_problems(text, translated, dest_lang)
+            if len(key) >= 6 and key in re.sub(r"[\W_]+", "", translated).casefold() \
+                    and key not in re.sub(r"[\W_]+", "", text).casefold():
+                problems.append("chiave copiata")  # the model wrote the hint instead of the translation
+                current["chiave"] = None  # the next attempt, without the hint
+            if references and not _unchanged(text, translated) and any(_unchanged(r, translated) for r in references):
+                problems.append("riferimento copiato")  # an official translation of another language, copied
+                current["riferimenti"] = {}  # next attempt, without the references (if the same again, it is right)
+                references = []
+            fix = ""
+            if "numeri diversi" in problems and re.search(r"\d", text):
+                fix += NUMBERS_FIX
+            if "segnaposto" in problems:
+                fix += PLACEHOLDER_FIX
+            if fix and n == 0:
+                attempts[1] = attempts[0]  # the same question, with the correction (then the third attempt remains)
+            if not problems:
+                if same_language or not _unchanged(text, translated):
+                    return translated
+                # equal to the original: we believe it only if it repeats
+                echo, echoes_seen = translated, echoes_seen + 1
+                if echoes_seen >= 2:
+                    return translated  # a text that stayed the same twice is a name or a word that does not change
+            elif problems == ["segnaposto"] and _TOKEN.search(text):
+                last = translated
+            if translated.strip() and (proposal is None or len(problems) < len(proposal[1])):
+                proposal = (translated, problems)
+        if self.rejects is not None and proposal is not None:
+            self.rejects[text] = proposal
         # with only the placeholders wrong the translation goes back to PatchSmith, which re-translates the pieces
         # between the codes
-        return ultimo
+        return last
 
-    def traduci_righe(self, righe, origine, destinazione, contesti=None, giri=None):
+    def translate_lines(self, lines, origin, dest_lang, contexts=None, rounds=None):
         """Translates the lines, 'parallele' at a time (the graphics card processes several together); the order stays
-        that of the lines. With 'Stop' or an error, those already translated are in e.parziali. giri: for each line
-        how many times it has already been tried (0 or missing: first round, see _tentativi)."""
-        self._assicura_server()
-        contesti = list(contesti or [])
-        giri = list(giri or [])
-        uscita = [None] * len(righe)
-        inizio = time.monotonic()
+        that of the lines. With 'Stop' or an error, those already translated are in e.partials. giri: for each line
+        how many times it has already been tried (0 or missing: first round, see _attempts)."""
+        self._ensure_server()
+        contexts = list(contexts or [])
+        rounds = list(rounds or [])
+        output = [None] * len(lines)
+        start = time.monotonic()
 
-        def una(i):
-            interruzione.controlla()
-            return self._traduci_una(righe[i], origine, destinazione, contesti[i] if i < len(contesti) else None,
-                                     giri[i] if i < len(giri) else 0)
+        def one(i):
+            interruption.check()
+            return self._translate_one(lines[i], origin, dest_lang, contexts[i] if i < len(contexts) else None,
+                                     rounds[i] if i < len(rounds) else 0)
         try:
-            if self.parallele <= 1 or len(righe) <= 1:
-                for i in range(len(righe)):
-                    uscita[i] = una(i)
-                    self._riga_fatta()
+            if self.parallel <= 1 or len(lines) <= 1:
+                for i in range(len(lines)):
+                    output[i] = one(i)
+                    self._line_done()
             else:
-                pool = concurrent.futures.ThreadPoolExecutor(self.parallele)
-                futuri = {pool.submit(una, i): i for i in range(len(righe))}
+                pool = concurrent.futures.ThreadPoolExecutor(self.parallel)
+                futures = {pool.submit(one, i): i for i in range(len(lines))}
                 try:
-                    for f in concurrent.futures.as_completed(futuri):
-                        uscita[futuri[f]] = f.result()
-                        self._riga_fatta()
+                    for f in concurrent.futures.as_completed(futures):
+                        output[futures[f]] = f.result()
+                        self._line_done()
                 except BaseException:
                     pool.shutdown(wait=True, cancel_futures=True)  # the requests already sent finish
-                    for f, i in futuri.items():
-                        if uscita[i] is None and f.done() and not f.cancelled() and f.exception() is None:
-                            uscita[i] = f.result()
+                    for f, i in futures.items():
+                        if output[i] is None and f.done() and not f.cancelled() and f.exception() is None:
+                            output[i] = f.result()
                     raise
                 pool.shutdown()
         except BaseException as e:  # "Stop" or error halfway: the lines already translated are not lost
-            e.parziali = [u if u is not None else "" for u in uscita]
+            e.partials = [u if u is not None else "" for u in output]
             raise
         finally:
-            self.tempo_righe += time.monotonic() - inizio
-        return uscita
+            self.lines_elapsed += time.monotonic() - start
+        return output
 
-    def _riga_fatta(self):
-        self.righe_fatte += 1
-        if self.righe_fatte == 20 and self.secondi > 0 and not self._avvisato_lento:
-            al_secondo = self.token / self.secondi
-            self._avvisato_lento = True
-            self.log(DETTAGLIO + "    Traduttore locale: %.0f parole-unita' (token) al secondo%s" % (
-                al_secondo, ", %d righe insieme" % self.parallele if self.parallele > 1 else ""))
-            if al_secondo < 6:
+    def _line_done(self):
+        self.lines_done += 1
+        if self.lines_done == 20 and self.seconds > 0 and not self._warned_slow:
+            per_second = self.token / self.seconds
+            self._warned_slow = True
+            self.log(DETAIL + "    Traduttore locale: %.0f parole-unita' (token) al secondo%s" % (
+                per_second, ", %d righe insieme" % self.parallel if self.parallel > 1 else ""))
+            if per_second < 6:
                 self.log("    ! E' lento: se il gioco e' aperto chiudilo; altrimenti prova il modello Veloce (4B).")
 
-    def chiudi(self):
+    def close(self):
         """Frees the graphics card and closes the server (if this translator started it)."""
-        if self._server is not None and self._pronto:
+        if self._server is not None and self._ready:
             try:
-                self._server.chiama("/api/generate", {"model": self.modello, "keep_alive": 0}, timeout=30)
+                self._server.call("/api/generate", {"model": self.model, "keep_alive": 0}, timeout=30)
             except (OSError, ValueError):
                 pass
-        if self._server is not None and self._proprio:
-            self._server.chiudi()
+        if self._server is not None and self._owned:
+            self._server.close()
             self._server = None
-        self._pronto = False
+        self._ready = False
 
 
-BACKEND = {"locale": Locale, "google": GoogleGratis, "deepl": DeepL, "mymemory": MyMemory, "finto": Finto}
-DESCRIZIONI = {
+BACKEND = {"locale": Local, "google": GoogleFree, "deepl": DeepL, "mymemory": MyMemory, "finto": Fake}
+DESCRIPTIONS = {
     "locale": "Traduttore locale (sul tuo PC: nessun limite, nessun blocco)",
     "google": "Google gratuito (non ufficiale, spesso bloccato: Google puo' rifiutarlo)",
     "deepl": "DeepL (gratis con la tua chiave, 500.000 caratteri al mese)",
@@ -1064,132 +1067,132 @@ DESCRIZIONI = {
 }
 
 
-def credenziali():
+def credentials():
     """DeepL key and email for MyMemory: from the environment variables or from settings.json."""
-    from . import project as progetto
-    dati = {}
+    from . import project
+    data = {}
     try:
-        with open(progetto.cartella_dati("settings.json"), encoding="utf-8") as f:
-            dati = json.load(f)
+        with open(project.data_folder("settings.json"), encoding="utf-8") as f:
+            data = json.load(f)
     except (OSError, ValueError):
         pass
-    return {"chiave_deepl": dati.get("chiave_deepl") or os.environ.get("PATCHSMITH_DEEPL") or "",
-            "email_mymemory": dati.get("email_mymemory") or os.environ.get("PATCHSMITH_EMAIL") or "",
-            "deepl_da_variabile": not dati.get("chiave_deepl") and bool(os.environ.get("PATCHSMITH_DEEPL")),
-            "modello_locale": dati.get("modello_locale") or os.environ.get("PATCHSMITH_MODELLO") or ""}
+    return {"chiave_deepl": data.get("chiave_deepl") or os.environ.get("PATCHSMITH_DEEPL") or "",
+            "email_mymemory": data.get("email_mymemory") or os.environ.get("PATCHSMITH_EMAIL") or "",
+            "deepl_da_variabile": not data.get("chiave_deepl") and bool(os.environ.get("PATCHSMITH_DEEPL")),
+            "modello_locale": data.get("modello_locale") or os.environ.get("PATCHSMITH_MODELLO") or ""}
 
 
-def predefinito():
+def default():
     """The proposed translator: always the local one (no limits, no blocks), even if it is not installed yet.
     On a new PC the first step is to install it ("to install" and the "Install..." button next to it): free Google
     often rejects PatchSmith's requests from the very first one."""
     return "locale"
 
 
-def prova_locale(modello=None, log=print, testo="Start game", a="it", server=None):
+def probe_local(model=None, log=print, text="Start game", a="it", server=None):
     """Test of the local translator (after installation): starts the server, loads the model and translates a
     sentence, measuring the times. {'ok', 'traduzione', 'avvio' (seconds to start the server and load the model),
     'secondi' (for the sentence), 'scheda' (how much of the model is on the graphics card, from 0 to 1; None if
     unknown), 'messaggio' (for the player)}. Does not raise translator errors: if the test fails, the message says so.
     server: for the tests."""
     from . import ollama
-    chiave = modello if modello in ollama.MODELLI and (server is not None or ollama.modello_presente(modello)) \
-        else ollama.modello_predefinito()
+    key = model if model in ollama.MODELS and (server is not None or ollama.model_present(model)) \
+        else ollama.default_model()
     a = "it" if (a or "en").split("-")[0].lower() == "en" else a  # (in English the sentence would stay the same)
-    traduttore = Locale(chiave, log=log, server=server)
-    uscita = {"ok": False, "traduzione": None, "avvio": None, "secondi": None, "scheda": None, "modello": chiave}
-    inizio = time.monotonic()
+    translator = Local(key, log=log, server=server)
+    output = {"ok": False, "traduzione": None, "avvio": None, "secondi": None, "scheda": None, "modello": key}
+    start = time.monotonic()
     try:
-        traduttore._assicura_server()
-        uscita["avvio"] = time.monotonic() - inizio
+        translator._ensure_server()
+        output["avvio"] = time.monotonic() - start
         try:
-            caricati = traduttore._server.chiama("/api/ps").get("models", [])
+            loaded = translator._server.call("/api/ps").get("models", [])
         except (OSError, ValueError, AttributeError):
-            caricati = []
-        for m in caricati:
-            if m.get("name") == traduttore.modello and m.get("size"):
-                uscita["scheda"] = max(0.0, min(1.0, m.get("size_vram", 0) / m["size"]))
-        prima = time.monotonic()
-        risposta = traduttore.traduci_righe([testo], "en", a)[0]
-        uscita["secondi"] = time.monotonic() - prima
+            loaded = []
+        for m in loaded:
+            if m.get("name") == translator.model and m.get("size"):
+                output["scheda"] = max(0.0, min(1.0, m.get("size_vram", 0) / m["size"]))
+        before = time.monotonic()
+        response = translator.translate_lines([text], "en", a)[0]
+        output["secondi"] = time.monotonic() - before
     except Exception as e:  # noqa: BLE001 - the installation succeeded: here we only say how the test went
-        uscita["messaggio"] = "la prova di traduzione non e' riuscita: %s" % (
-            e if isinstance(e, ErroreBackend) else "%s: %s" % (type(e).__name__, e))
-        return uscita
+        output["messaggio"] = "la prova di traduzione non e' riuscita: %s" % (
+            e if isinstance(e, BackendError) else "%s: %s" % (type(e).__name__, e))
+        return output
     finally:
-        traduttore.chiudi()
-    uscita["traduzione"] = risposta
-    if not risposta or _uguale(risposta, testo):
-        uscita["messaggio"] = ("la prova di traduzione non e' riuscita: \"%s\" e' rimasto in originale. Riprova; se "
-                               "succede ancora, crea un rapporto." % testo)
-        return uscita
-    uscita["ok"] = True
-    scheda = uscita["scheda"]
-    dove = ("" if scheda is None else ", sulla scheda video" if scheda > 0.95 else
-            ", in parte sulla scheda video (un po' piu' lento)" if scheda > 0 else
+        translator.close()
+    output["traduzione"] = response
+    if not response or _unchanged(response, text):
+        output["messaggio"] = ("la prova di traduzione non e' riuscita: \"%s\" e' rimasto in originale. Riprova; se "
+                               "succede ancora, crea un rapporto." % text)
+        return output
+    output["ok"] = True
+    sheet = output["scheda"]
+    where = ("" if sheet is None else ", sulla scheda video" if sheet > 0.95 else
+            ", in parte sulla scheda video (un po' piu' lento)" if sheet > 0 else
             ", ma solo con il processore, senza scheda video: sara' lento (aggiorna il driver della scheda video, "
             "oppure scegli il modello Veloce)")
-    uscita["messaggio"] = "pronto%s: \"%s\" -> \"%s\" in %s (avvio e caricamento del modello: %s)." % (
-        dove, testo, risposta, _secondi(uscita["secondi"]), _secondi(uscita["avvio"]))
-    return uscita
+    output["messaggio"] = "pronto%s: \"%s\" -> \"%s\" in %s (avvio e caricamento del modello: %s)." % (
+        where, text, response, _seconds(output["secondi"]), _seconds(output["avvio"]))
+    return output
 
 
-def _secondi(valore):
-    return ("%.1f s" % valore).replace(".", ",") if valore < 10 else "%d s" % round(valore)
+def _seconds(value_):
+    return ("%.1f s" % value_).replace(".", ",") if value_ < 10 else "%d s" % round(value_)
 
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-def verifica_traduttore(nome, credenziale, apri=None):
+def verify_translator(name, credential, opener=None):
     """(ok, messaggio) for the "Check" button: does the DeepL key or the MyMemory email really work?"""
     try:
-        if nome == "deepl":
-            usati, limite = DeepL(credenziale, log=lambda _m: None, apri=apri).verifica()
-            if limite:
+        if name == "deepl":
+            used, limit = DeepL(credential, log=lambda _m: None, opener=opener).verify()
+            if limit:
                 return True, ("La chiave DeepL funziona. Questo mese hai usato %s caratteri su %s (ne restano %s)."
-                              % tuple(format(n, ",d").replace(",", ".") for n in (usati, limite, max(0, limite - usati))))
+                              % tuple(format(n, ",d").replace(",", ".") for n in (used, limit, max(0, limit - used))))
             return True, "La chiave DeepL funziona."
-        if nome == "mymemory":
-            email = (credenziale or "").strip()
+        if name == "mymemory":
+            email = (credential or "").strip()
             if email and not EMAIL.match(email):
                 return False, "\"%s\" non sembra un indirizzo email: controlla che sia scritto bene (es. nome@esempio.it)." \
                     % email
-            MyMemory(email or None, log=lambda _m: None, apri=apri).verifica()
+            MyMemory(email or None, log=lambda _m: None, opener=opener).verify()
             if email:
                 return True, ("MyMemory risponde e accetta l'email: puoi tradurre fino a 50.000 caratteri al giorno. "
                               "MyMemory non usa account e non manda conferme: l'email serve solo ad alzare il limite "
                               "(senza: 5.000 caratteri al giorno).")
             return True, ("MyMemory risponde: senza email puoi tradurre 5.000 caratteri al giorno. Con la tua email "
                           "arrivi a 50.000 (non serve un account).")
-    except ErroreBackend as e:
+    except BackendError as e:
         return False, str(e)
     except Exception as e:  # noqa: BLE001 - no network or odd answer: explain it, no exceptions in the window
         return False, "Non riesco a contattare il servizio (%s). Controlla la connessione e riprova." % type(e).__name__
     return False, "Questo traduttore non ha niente da verificare."
 
 
-def crea_backend(nome, log=print):
-    if nome not in BACKEND:
-        raise ValueError("Backend sconosciuto: %s (disponibili: %s)" % (nome, ", ".join(BACKEND)))
-    if nome == "google":
-        return GoogleGratis(log=log)
-    if nome == "deepl":
-        c = credenziali()
+def create_backend(name, log=print):
+    if name not in BACKEND:
+        raise ValueError("Backend sconosciuto: %s (disponibili: %s)" % (name, ", ".join(BACKEND)))
+    if name == "google":
+        return GoogleFree(log=log)
+    if name == "deepl":
+        c = credentials()
         d = DeepL(c["chiave_deepl"], log=log)
-        d.da_variabile = c["deepl_da_variabile"]
+        d.from_variable = c["deepl_da_variabile"]
         return d
-    if nome == "mymemory":
-        return MyMemory(credenziali()["email_mymemory"], log=log)
-    if nome == "locale":
+    if name == "mymemory":
+        return MyMemory(credentials()["email_mymemory"], log=log)
+    if name == "locale":
         from . import ollama
-        if ollama.stato() != "pronto":  # right away: before installing or changing anything in the game
-            raise ErroreBackend(NON_INSTALLATO, "TRADUTTORE_ASSENTE", comando=COMANDO_INSTALLA)
-        modello = credenziali()["modello_locale"]
-        if modello not in ollama.MODELLI or not ollama.modello_presente(modello):
-            if modello in ollama.MODELLI:
-                log("  Il modello %s non e' scaricato: uso %s." % (ollama.MODELLI[modello]["etichetta"],
-                                                                  ollama.MODELLI[ollama.modello_predefinito()]["etichetta"]))
-            modello = ollama.modello_predefinito()
-        return Locale(modello, log=log)
-    return Finto()
+        if ollama.state() != "pronto":  # right away: before installing or changing anything in the game
+            raise BackendError(NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=INSTALL_COMMAND)
+        model = credentials()["modello_locale"]
+        if model not in ollama.MODELS or not ollama.model_present(model):
+            if model in ollama.MODELS:
+                log("  Il modello %s non e' scaricato: uso %s." % (ollama.MODELS[model]["etichetta"],
+                                                                  ollama.MODELS[ollama.default_model()]["etichetta"]))
+            model = ollama.default_model()
+        return Local(model, log=log)
+    return Fake()

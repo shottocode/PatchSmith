@@ -1,27 +1,27 @@
 """Text heuristics: what counts as readable text, placeholder protection, line handling."""
 import re
 
-_LETTERE2 = re.compile(r"[^\W\d_]{2,}")
+_LETTERS2 = re.compile(r"[^\W\d_]{2,}")
 _URL = re.compile(r"^(?:[a-z][a-z0-9+.-]*:)?//|^www\.|^data:|^mailto:", re.I)
-_COLORE = re.compile(r"^(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?)\(.*\))$", re.I)
+_COLOR = re.compile(r"^(?:#[0-9a-f]{3,8}|(?:rgba?|hsla?)\(.*\))$", re.I)
 _FILE = re.compile(
     r"^\S+\.(?:png|jpe?g|gif|webp|svg|bmp|tga|dds|ico|mp3|ogg|wav|flac|m4a|opus|mp4|webm|avi|"
     r"json|js|mjs|cjs|ts|css|html?|xml|ya?ml|txt|md|csv|ini|cfg|dat|bin|bytes|pak|asset|prefab|"
     r"unity|ttf|otf|woff2?|fnt|atlas|exe|dll|so|dylib|lua|py|rb)$",
     re.I,
 )
-_SPAZI = re.compile(r"\s")
+_SPACES = re.compile(r"\s")
 # Lines of code inside the data (e.g. script commands of RPG Maker events)
-_INIZIO = r"(?:^|[^\w$])"
-_CODICE = re.compile(
+_START = r"(?:^|[^\w$])"
+_CODE = re.compile(
     r"=>|&&|\|\||===|!==|\$game[A-Z]|;\S"
-    + r"|" + _INIZIO + r"function\s*\("
-    + r"|" + _INIZIO + r"this\."
-    + r"|" + _INIZIO + r"[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*\("
+    + r"|" + _START + r"function\s*\("
+    + r"|" + _START + r"this\."
+    + r"|" + _START + r"[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*\("
 )
 
 # Placeholders and codes not to translate: {x} {{x}} %s %1$d <tag> \C[3] **  [variable]
-_SEGNAPOSTO = re.compile(
+_PLACEHOLDER = re.compile(
     r"^[+\-\u2212]\d+(?:[.,]\d+)?%?(?=\s)"  # value with the sign at the start ("-1 Dash Charge", "+25% damage")
     r"|\[\[\d+\]\]"  # a [[0]] written in the game's text: protected, otherwise mistaken for the internal placeholders
     r"|\{\{[^{}]*\}\}(?:%|×|(?:ms|s|m|x)(?!\w))?"  # XUnity's {{A}}, with the unit attached ({{A}}s)
@@ -49,37 +49,37 @@ _CJK = re.compile(
     "[぀-ヿㇰ-ㇿ㐀-䶿一-鿿豈-﫿"
     "가-힯ᄀ-ᇿ㄰-㆏ｦ-ﾟ]"
 )
-_PERCORSO = re.compile(r"^[\w\-./\\]+$")
+_PATH = re.compile(r"^[\w\-./\\]+$")
 
 
-def _testo_cjk(t):
+def _cjk_text(t):
     """True/False for texts in Japanese, Chinese or Korean; None if the text is not CJK."""
     cjk = len(_CJK.findall(t))
     if not cjk or cjk < 0.5 * sum(1 for c in t if c.isalpha()):
         return None
-    if _URL.search(t) or _FILE.match(t) or _CODICE.search(t):
+    if _URL.search(t) or _FILE.match(t) or _CODE.search(t):
         return False
     # paths like img/背景 (with at least one ASCII part); はい/いいえ stays text
-    if ("/" in t or "\\" in t) and _PERCORSO.match(t) and re.search(r"[A-Za-z]", t):
+    if ("/" in t or "\\" in t) and _PATH.match(t) and re.search(r"[A-Za-z]", t):
         return False
     return True
 
 
-def e_testo_leggibile(s):
+def is_readable_text(s):
     """True if the string looks like text for the player (and not an id, a file, a color...)."""
     t = s.strip()
-    cjk = _testo_cjk(t) if t else None
+    cjk = _cjk_text(t) if t else None
     if cjk is not None:
         return cjk
     if len(t) < 3:
         return False
-    if not _LETTERE2.search(t):
+    if not _LETTERS2.search(t):
         return False
-    if _URL.search(t) or _COLORE.match(t) or _FILE.match(t):
+    if _URL.search(t) or _COLOR.match(t) or _FILE.match(t):
         return False
-    if _CODICE.search(t):
+    if _CODE.search(t):
         return False
-    if not _SPAZI.search(t):  # a single "word": often an identifier
+    if not _SPACES.search(t):  # a single "word": often an identifier
         if "/" in t or "\\" in t:
             return False
         if re.search(r"[_\d]", t):  # img_12, room_3, r4c3
@@ -95,82 +95,82 @@ def e_testo_leggibile(s):
     return True
 
 
-def proteggi(riga, codici=()):
+def protect(line, codes=()):
     """Replaces the placeholders with [[n]] tokens. Returns (text, placeholder_list). 'codici': game words not
     to translate (e.g. Forager's 'EP' and 'H' icons), protected like the placeholders (exact case)."""
-    trovati = []
+    found = []
 
     def _sub(m):
-        trovati.append(m.group(0))
-        return "[[%d]]" % (len(trovati) - 1)
+        found.append(m.group(0))
+        return "[[%d]]" % (len(found) - 1)
 
-    if not codici:
-        return _SEGNAPOSTO.sub(_sub, riga), trovati
-    schema = re.compile(r"%s|(?<![^\W\d_])(?:%s)(?![^\W\d_])" % (
-        _SEGNAPOSTO.pattern, "|".join(re.escape(c) for c in sorted(codici, key=len, reverse=True))))
-    return schema.sub(_sub, riga), trovati
-
-
-_CITAZIONE = re.compile(r"\"[^\"\n]{1,80}\"|“[^”\n]{1,80}”|«[^»\n]{1,80}»")
+    if not codes:
+        return _PLACEHOLDER.sub(_sub, line), found
+    pattern = re.compile(r"%s|(?<![^\W\d_])(?:%s)(?![^\W\d_])" % (
+        _PLACEHOLDER.pattern, "|".join(re.escape(c) for c in sorted(codes, key=len, reverse=True))))
+    return pattern.sub(_sub, line), found
 
 
-def solo_parole(testo):
+_QUOTATION = re.compile(r"\"[^\"\n]{1,80}\"|“[^”\n]{1,80}”|«[^»\n]{1,80}»")
+
+
+def words_only(text):
     """The text without placeholders, tags and codes (e.g. <color=#FFF>, {action.Interact}) and without the quoted
     parts (titles and names left untranslated on purpose, e.g. the achievement "Favor of the Fae"): to tell which
     language it is in."""
-    return _CITAZIONE.sub(" ", _TOKEN.sub(" ", proteggi(testo)[0]))
+    return _QUOTATION.sub(" ", _TOKEN.sub(" ", protect(text)[0]))
 
 
-def ripristina_segnaposto(testo, segnaposto):
+def restore_placeholders(text, placeholders):
     """Puts the placeholders back in place of the tokens. None if some token was lost."""
-    if not segnaposto:
-        return testo
-    visti = []
+    if not placeholders:
+        return text
+    seen = []
 
     def _sub(m):
         i = int(m.group(1))
-        if i >= len(segnaposto):
+        if i >= len(placeholders):
             return m.group(0)
-        visti.append(i)
-        return segnaposto[i]
+        seen.append(i)
+        return placeholders[i]
 
-    risultato = _TOKEN.sub(_sub, testo)
-    if sorted(visti) != list(range(len(segnaposto))):
+    result = _TOKEN.sub(_sub, text)
+    if sorted(seen) != list(range(len(placeholders))):
         return None
-    return risultato
+    return result
 
 
-def dividi_righe(testo):
+def split_lines(text):
     """Splits into lines keeping the leading/trailing spaces: [(prima, nucleo, dopo), ...]."""
-    parti = []
-    for riga in testo.split("\n"):
-        nucleo = riga.strip()
-        if not nucleo:
-            parti.append((riga, "", ""))
+    parts = []
+    for line in text.split("\n"):
+        core = line.strip()
+        if not core:
+            parts.append((line, "", ""))
             continue
-        inizio = len(riga) - len(riga.lstrip())
-        fine = inizio + len(nucleo)
-        parti.append((riga[:inizio], nucleo, riga[fine:]))
-    return parti
+        start = len(line) - len(line.lstrip())
+        end = start + len(core)
+        parts.append((line[:start], core, line[end:]))
+    return parts
 
 
-def ricomponi_righe(parti, traduzioni):
+def reassemble_lines(parts, translations):
     """Rebuilds the lines using the dictionary {nucleo: traduzione}."""
-    return "\n".join(p + (traduzioni.get(n, n) if n else "") + d for p, n, d in parti)
+    return "\n".join(p + (translations.get(n, n) if n else "") + d for p, n, d in parts)
 
 
-def slug(nome):
-    s = re.sub(r"[^\w]+", "-", nome.lower(), flags=re.UNICODE).strip("-")
+def slug(name):
+    s = re.sub(r"[^\w]+", "-", name.lower(), flags=re.UNICODE).strip("-")
     return s or "gioco"
 
 
 # --- log lines --------------------------------------------------------------------------------------------------
-# A line that contains DETTAGLIO is a technical detail (versions, addresses, paths, file lists): the window does not
+# A line that contains DETAIL is a technical detail (versions, addresses, paths, file lists): the window does not
 # show it, but it stays in the log on disk (and so in "Create report"); the command line prints it.
-DETTAGLIO = "\x1f"
+DETAIL = "\x1f"
 
 # words written in the code with the apostrophe instead of the accent (e', gia', piu'...): in the window with the accent
-_ACCENTI = {"e": "è", "gia": "già", "piu": "più", "puo": "può", "perche": "perché", "cosi": "così", "pero": "però",
+_ACCENTS = {"e": "è", "gia": "già", "piu": "più", "puo": "può", "perche": "perché", "cosi": "così", "pero": "però",
             "finche": "finché", "poiche": "poiché", "affinche": "affinché", "meta": "metà", "li": "lì", "la": "là",
             "cioe": "cioè", "sara": "sarà", "verra": "verrà", "partira": "partirà", "potra": "potrà",
             "dovra": "dovrà", "avra": "avrà", "fara": "farà", "dara": "darà", "restera": "resterà",
@@ -179,9 +179,9 @@ _ACCENTI = {"e": "è", "gia": "già", "piu": "più", "puo": "può", "perche": "p
             "unita": "unità", "qualita": "qualità", "velocita": "velocità", "novita": "novità",
             "possibilita": "possibilità", "quantita": "quantità", "identita": "identità", "attivita": "attività",
             "E": "È", "Gia": "Già", "Piu": "Più", "Perche": "Perché", "Cosi": "Così", "Pero": "Però"}
-_APOSTROFO = re.compile(r"(?<![\w'])(%s)'(?=[\s.,;:!?)\]]|$)" % "|".join(sorted(_ACCENTI, key=len, reverse=True)))
+_APOSTROPHE = re.compile(r"(?<![\w'])(%s)'(?=[\s.,;:!?)\]]|$)" % "|".join(sorted(_ACCENTS, key=len, reverse=True)))
 
 
-def leggibile(riga):
+def readable(line):
     """The line for the window: 'e'' -> 'è', 'gia'' -> 'già'... (only the known words, standing on their own)."""
-    return _APOSTROFO.sub(lambda m: _ACCENTI[m.group(1)], riga)
+    return _APOSTROPHE.sub(lambda m: _ACCENTS[m.group(1)], line)

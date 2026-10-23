@@ -18,203 +18,203 @@ is read back and its structure compared.
 """
 import re
 
-_SEPARATORI = " \t\u3000"
-_ID_TESTO = re.compile(r"^(\d+(?:\.\d+)*)([ \t\u3000])(.*)$", re.S)
-_ID_DA_SOLO = re.compile(r"^\d+(?:\.\d+)*[ \t\u3000]*$")
-_CHIUSURE = {".", "\uff0e"}  # '.' and the full-width period (also with spaces around it)
+_SEPARATORS = " \t\u3000"
+_ID_TEXT = re.compile(r"^(\d+(?:\.\d+)*)([ \t\u3000])(.*)$", re.S)
+_ID_ALONE = re.compile(r"^\d+(?:\.\d+)*[ \t\u3000]*$")
+_CLOSERS = {".", "\uff0e"}  # '.' and the full-width period (also with spaces around it)
 # numeric prefix that games compare with the id they look for (e.g. Dokimon: every line is a candidate id)
-_PREFISSO_NUMERO = re.compile(r"^[\s\u3000\ufeff]*[-+]?(?:\d{0,30}\.)?\d{1,30}")
+_NUMBER_PREFIX = re.compile(r"^[\s\u3000\ufeff]*[-+]?(?:\d{0,30}\.)?\d{1,30}")
 BOM = "\ufeff"
 # control characters and Unicode line separators: a game could read them as line breaks
-_CONTROLLO = frozenset([chr(c) for c in range(32) if c not in (9, 10)] + ["\x7f", "\x85", "\u2028", "\u2029"])
+_CONTROL_CHARS = frozenset([chr(c) for c in range(32) if c not in (9, 10)] + ["\x7f", "\x85", "\u2028", "\u2029"])
 
 
-class ErroreRighe(ValueError):
+class LinesError(ValueError):
     pass
 
 
-def _dividi(testo):
+def _split(text):
     """Lines with their line breaks; splits only on \\n (not on other Unicode separators)."""
-    parti = testo.split("\n")
-    righe = [p + "\n" for p in parti[:-1]]
-    if parti[-1]:
-        righe.append(parti[-1])
-    return righe
+    parts = text.split("\n")
+    lines = [p + "\n" for p in parts[:-1]]
+    if parts[-1]:
+        lines.append(parts[-1])
+    return lines
 
 
-def _separa_fine(riga):
-    corpo = riga.rstrip("\r\n")
-    return corpo, riga[len(corpo):]
+def _split_end(line):
+    body = line.rstrip("\r\n")
+    return body, line[len(body):]
 
 
-def _e_testo(s):
+def _is_text(s):
     return any(c.isalpha() for c in s)
 
 
-def _commento_o_vuota(corpo):
-    return corpo.startswith("//") or not corpo.strip()
+def _comment_or_empty(body):
+    return body.startswith("//") or not body.strip()
 
 
-def _chiusura(corpo):
-    return corpo.strip(" \t\u3000") in _CHIUSURE
+def _is_closer(body):
+    return body.strip(" \t\u3000") in _CLOSERS
 
 
-def _prefisso_numero(s):
-    m = _PREFISSO_NUMERO.match(s)
+def _number_prefix(s):
+    m = _NUMBER_PREFIX.match(s)
     return m.group(0).strip(" \t\u3000\ufeff") if m else ""
 
 
-def modo(righe):
+def mode(lines):
     """'blocchi' if the file is made of multi-line entries closed by '.', otherwise 'righe'."""
-    corpi = [_separa_fine(r)[0] for r in righe]
-    punti = sum(1 for c in corpi if _chiusura(c))
-    voci_riga = sum(1 for c in corpi if _ID_TESTO.match(c) and _ID_TESTO.match(c).group(3).strip())
-    return "blocchi" if punti >= 3 and punti >= voci_riga else "righe"
+    bodies = [_split_end(r)[0] for r in lines]
+    periods = sum(1 for c in bodies if _is_closer(c))
+    line_entries = sum(1 for c in bodies if _ID_TEXT.match(c) and _ID_TEXT.match(c).group(3).strip())
+    return "blocchi" if periods >= 3 and periods >= line_entries else "righe"
 
 
-def valida(pos, originale, tradotto):
+def is_valid(pos, original, translated):
     """True if the translation can replace the original without changing how the game reads the file."""
-    if "\r" in tradotto or any(c in _CONTROLLO for c in tradotto):
+    if "\r" in translated or any(c in _CONTROL_CHARS for c in translated):
         return False
     if pos[0] == "riga":
-        return ("\n" not in tradotto and _e_testo(tradotto) and tradotto.strip(_SEPARATORI) != ""
-                and not tradotto.lstrip(_SEPARATORI).startswith("//"))
-    righe_o, righe_t = originale.split("\n"), tradotto.split("\n")
-    if len(righe_o) != len(righe_t) or not _e_testo(tradotto):
+        return ("\n" not in translated and _is_text(translated) and translated.strip(_SEPARATORS) != ""
+                and not translated.lstrip(_SEPARATORS).startswith("//"))
+    lines_o, lines_t = original.split("\n"), translated.split("\n")
+    if len(lines_o) != len(lines_t) or not _is_text(translated):
         return False
-    for o, t in zip(righe_o, righe_t):
+    for o, t in zip(lines_o, lines_t):
         if o.strip() and not t.strip():
             return False  # a text line cannot become empty (the first one would open another entry)
-        if _chiusura(t) or _ID_DA_SOLO.match(t) or t.startswith("//"):
+        if _is_closer(t) or _ID_ALONE.match(t) or t.startswith("//"):
             return False
-        if _prefisso_numero(t) != _prefisso_numero(o):
+        if _number_prefix(t) != _number_prefix(o):
             return False  # a line starting with a different number could "steal" another entry
     return True
 
 
-class FileRighe:
+class LinesFile:
     """File read: lines (with their line breaks), translatable text units and fixed structure."""
 
-    def __init__(self, dati_byte):
+    def __init__(self, data_bytes):
         try:
-            testo = dati_byte.decode("utf-8")
+            text = data_bytes.decode("utf-8")
         except UnicodeDecodeError as e:
-            raise ErroreRighe("il file non e' UTF-8: %s" % e) from e
-        self.bom = testo.startswith(BOM)
+            raise LinesError("il file non e' UTF-8: %s" % e) from e
+        self.bom = text.startswith(BOM)
         if self.bom:
-            testo = testo[1:]
-        self.righe = _dividi(testo)
-        self.modo = modo(self.righe)
-        self.unita, self.forma, self.anomale = (_analizza_blocchi if self.modo == "blocchi"
-                                                else _analizza_righe)(self.righe)
+            text = text[1:]
+        self.lines = _split(text)
+        self.mode = mode(self.lines)
+        self.units, self.shape, self.anomalies = (_analyze_blocks if self.mode == "blocchi"
+                                                else _analyze_lines)(self.lines)
 
-    def testi(self):
+    def texts(self):
         """[(posizione, testo)]: posizione = ('riga', i) or ('blocco', i, j) for lines i..j-1."""
-        return list(self.unita)
+        return list(self.units)
 
-    def _scrivi(self, sostituzioni):
-        righe = list(self.righe)
-        for pos, nuovo in sostituzioni.items():
+    def _write(self, replacements):
+        lines = list(self.lines)
+        for pos, new in replacements.items():
             if pos[0] == "riga":
                 i = pos[1]
-                corpo, fine = _separa_fine(righe[i])
-                m = _ID_TESTO.match(corpo)
-                if not m or "\n" in nuovo or "\r" in nuovo:
-                    raise ErroreRighe("traduzione non valida per la riga %d" % (i + 1))
-                righe[i] = m.group(1) + m.group(2) + nuovo + fine
+                body, end = _split_end(lines[i])
+                m = _ID_TEXT.match(body)
+                if not m or "\n" in new or "\r" in new:
+                    raise LinesError("traduzione non valida per la riga %d" % (i + 1))
+                lines[i] = m.group(1) + m.group(2) + new + end
             else:
                 _, i, j = pos
-                nuove = nuovo.split("\n")
-                if len(nuove) != j - i or any("\r" in r for r in nuove):
-                    raise ErroreRighe("la traduzione delle righe %d-%d ha un numero di righe diverso" % (i + 1, j))
-                for k, r in enumerate(nuove):
-                    righe[i + k] = r + _separa_fine(righe[i + k])[1]
-        dati = ((BOM if self.bom else "") + "".join(righe)).encode("utf-8")
-        controllo = FileRighe(dati)
-        if (controllo.modo, controllo.forma) != (self.modo, self.forma) or \
-                [p for p, _ in controllo.unita] != [p for p, _ in self.unita]:
-            raise ErroreRighe("la struttura del file cambierebbe: non scrivo")
-        return dati
+                new_lines = new.split("\n")
+                if len(new_lines) != j - i or any("\r" in r for r in new_lines):
+                    raise LinesError("la traduzione delle righe %d-%d ha un numero di righe diverso" % (i + 1, j))
+                for k, r in enumerate(new_lines):
+                    lines[i + k] = r + _split_end(lines[i + k])[1]
+        data = ((BOM if self.bom else "") + "".join(lines)).encode("utf-8")
+        checks = LinesFile(data)
+        if (checks.mode, checks.shape) != (self.mode, self.shape) or \
+                [p for p, _ in checks.units] != [p for p, _ in self.units]:
+            raise LinesError("la struttura del file cambierebbe: non scrivo")
+        return data
 
-    def serializza(self, sostituzioni):
+    def serialize(self, replacements):
         """Bytes of the file with the texts replaced {posizione: nuovo testo}; structure verified."""
-        return self._scrivi(sostituzioni)
+        return self._write(replacements)
 
-    def serializza_robusto(self, sostituzioni):
+    def serialize_robust(self, replacements):
         """(bytes, rejected positions): the translations that would change the structure stay in the original."""
-        originali = dict(self.unita)
-        buone = {p: t for p, t in sostituzioni.items() if valida(p, originali.get(p, ""), t)}
-        scartate = [p for p in sostituzioni if p not in buone]
+        originals = dict(self.units)
+        good_ones = {p: t for p, t in replacements.items() if is_valid(p, originals.get(p, ""), t)}
+        rejected = [p for p in replacements if p not in good_ones]
         try:
-            return self._scrivi(buone), scartate
-        except ErroreRighe:
+            return self._write(good_ones), rejected
+        except LinesError:
             pass
         # rare case: check one translation at a time
-        tenute = {}
-        for p, t in buone.items():
+        kept = {}
+        for p, t in good_ones.items():
             try:
-                self._scrivi({p: t})
-                tenute[p] = t
-            except ErroreRighe:
-                scartate.append(p)
-        return self._scrivi(tenute), scartate
+                self._write({p: t})
+                kept[p] = t
+            except LinesError:
+                rejected.append(p)
+        return self._write(kept), rejected
 
 
-def _analizza_righe(righe):
-    unita, forma, anomale = [], [], []
-    for i, riga in enumerate(righe):
-        corpo, fine = _separa_fine(riga)
-        m = _ID_TESTO.match(corpo)
-        if _commento_o_vuota(corpo) or _ID_DA_SOLO.match(corpo):
-            forma.append(("fisso", riga))
+def _analyze_lines(lines):
+    units, shape, anomalies = [], [], []
+    for i, line in enumerate(lines):
+        body, end = _split_end(line)
+        m = _ID_TEXT.match(body)
+        if _comment_or_empty(body) or _ID_ALONE.match(body):
+            shape.append(("fisso", line))
         elif m:
-            forma.append(("voce", m.group(1), m.group(2), fine))
-            if _e_testo(m.group(3)) and not m.group(3).lstrip(_SEPARATORI).startswith("//"):
-                unita.append((("riga", i), m.group(3)))
+            shape.append(("voce", m.group(1), m.group(2), end))
+            if _is_text(m.group(3)) and not m.group(3).lstrip(_SEPARATORS).startswith("//"):
+                units.append((("riga", i), m.group(3)))
         else:
-            forma.append(("fisso", riga))
-            anomale.append(i + 1)
-    return unita, forma, anomale
+            shape.append(("fisso", line))
+            anomalies.append(i + 1)
+    return units, shape, anomalies
 
 
-def _analizza_blocchi(righe):
-    unita, forma, anomale = [], [], []
-    i, n = 0, len(righe)
+def _analyze_blocks(lines):
+    units, shape, anomalies = [], [], []
+    i, n = 0, len(lines)
     while i < n:
-        corpo, _ = _separa_fine(righe[i])
-        if _commento_o_vuota(corpo) or _ID_DA_SOLO.match(corpo) or _chiusura(corpo):
-            forma.append(("fisso", righe[i]))
+        body, _ = _split_end(lines[i])
+        if _comment_or_empty(body) or _ID_ALONE.match(body) or _is_closer(body):
+            shape.append(("fisso", lines[i]))
             i += 1
             continue
         # text section: up to the closing line
         j = i
-        while j < n and not _chiusura(_separa_fine(righe[j])[0]):
+        while j < n and not _is_closer(_split_end(lines[j])[0]):
             j += 1
         if j >= n:  # section without an end: left untouched
             for k in range(i, n):
-                forma.append(("fisso", righe[k]))
-                anomale.append(k + 1)
+                shape.append(("fisso", lines[k]))
+                anomalies.append(k + 1)
             break
-        contenuto = [_separa_fine(r)[0] for r in righe[i:j]]
-        forma.append(("sezione", j - i, tuple(_separa_fine(r)[1] for r in righe[i:j]), righe[j],
-                      tuple(_prefisso_numero(c) for c in contenuto)))
-        if _e_testo("\n".join(contenuto)) and not any(c.startswith("//") for c in contenuto):
-            unita.append((("blocco", i, j), "\n".join(contenuto)))
+        content = [_split_end(r)[0] for r in lines[i:j]]
+        shape.append(("sezione", j - i, tuple(_split_end(r)[1] for r in lines[i:j]), lines[j],
+                      tuple(_number_prefix(c) for c in content)))
+        if _is_text("\n".join(content)) and not any(c.startswith("//") for c in content):
+            units.append((("blocco", i, j), "\n".join(content)))
         else:
-            forma.append(("contenuto", tuple(righe[i:j])))
+            shape.append(("contenuto", tuple(lines[i:j])))
         i = j + 1
-    return unita, forma, anomale
+    return units, shape, anomalies
 
 
-def leggi(percorso):
-    with open(percorso, "rb") as f:
-        return FileRighe(f.read())
+def read_file(path):
+    with open(path, "rb") as f:
+        return LinesFile(f.read())
 
 
-def sembra_localizzazione(percorso, minimo=5):
+def looks_like_localization(path, minimum=5):
     """True if the file is in the 'lines with an id' format and has at least 'minimo' texts."""
     try:
-        f = leggi(percorso)
-    except (ErroreRighe, OSError):
+        f = read_file(path)
+    except (LinesError, OSError):
         return False
-    return len(f.unita) >= minimo and len(f.anomale) <= max(3, len(f.unita) // 20)
+    return len(f.units) >= minimum and len(f.anomalies) <= max(3, len(f.units) // 20)

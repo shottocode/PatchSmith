@@ -1,4 +1,4 @@
-"""Test of the protection of placeholders and game codes (testo.proteggi), shared by all engines.
+"""Test of the protection of placeholders and game codes (text.protect), shared by all engines.
 
 Usage: python -I test/test_placeholders.py
 """
@@ -7,9 +7,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from patchsmith import text as testo  # noqa: E402
+from patchsmith import text  # noqa: E402
 
-CASI = [
+CASES = [
     # (text, expected placeholders)
     ("Press [Input:12] to jump\\nand {0} times", ["[Input:12]", "\\n", "{0}"]),  # \n written as text
     ("[Button:LeftStick] to navigate", ["[Button:LeftStick]"]),
@@ -34,14 +34,14 @@ CASI = [
 
 def main():
     ok = 0
-    for s, atteso in CASI:
-        protetto, trovati = testo.proteggi(s)
-        rimesso = testo.ripristina_segnaposto(protetto, trovati)
-        esito = trovati == atteso and rimesso == s
-        ok += esito
-        print(("OK    " if esito else "ERRORE") + "  %r -> %r %s" % (s, protetto, trovati))
-    print("\nRISULTATO: %d/%d controlli superati" % (ok, len(CASI)))
-    return ok == len(CASI)
+    for s, expected in CASES:
+        shielded, found = text.protect(s)
+        put_back_text = text.restore_placeholders(shielded, found)
+        outcome = found == expected and put_back_text == s
+        ok += outcome
+        print(("OK    " if outcome else "ERRORE") + "  %r -> %r %s" % (s, shielded, found))
+    print("\nRISULTATO: %d/%d controlli superati" % (ok, len(CASES)))
+    return ok == len(CASES)
 
 
 if __name__ == "__main__":
