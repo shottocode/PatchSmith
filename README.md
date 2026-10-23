@@ -70,7 +70,7 @@ Machine translation has no context: expect machine-translation quality.
 
 ## Building the release
 
-`python -I smith.py pacchetto` builds `PatchSmith-rilascio/PatchSmith` and `PatchSmith-<version>-windows.zip` next to the program folder: the program, `PatchSmith.exe` and a portable Python (with Tkinter) isolated from the rest of the PC. `--python <folder>` uses another Python (the latest one from python.org is recommended). The tests: `python -I test/esegui_tutto.py` (they use fake games and translators, never your real data).
+`python -I smith.py package` builds `PatchSmith-rilascio/PatchSmith` and `PatchSmith-<version>-windows.zip` next to the program folder: the program, `PatchSmith.exe` and a portable Python (with Tkinter) isolated from the rest of the PC. `--python <folder>` uses another Python (the latest one from python.org is recommended). The tests: `python -I test/run_all.py` (they use fake games and translators, never your real data).
 
 ## Contact
 

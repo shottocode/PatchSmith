@@ -8,7 +8,7 @@ import json
 import os
 import re
 
-from .testo import e_testo_leggibile
+from .text import e_testo_leggibile
 
 # Tutti i file creati da PatchSmith nella cartella del gioco contengono questo marcatore nel nome.
 MARCATORE = "patchsmith-"

@@ -15,8 +15,8 @@ import urllib.parse
 import urllib.request
 import zlib
 
-from . import interruzione
-from .testo import DETTAGLIO
+from . import interruption as interruzione
+from .text import DETTAGLIO
 
 MAX_BLOCCO = 4000  # caratteri per richiesta (margine sotto i circa 5.000 accettati)
 
@@ -24,7 +24,7 @@ MAX_BLOCCO = 4000  # caratteri per richiesta (margine sotto i circa 5.000 accett
 class ErroreBackend(Exception):
     """Il servizio di traduzione non e' raggiungibile o rifiuta le richieste.
 
-    codice: l'esito per l'interfaccia (vedi esito.py), es. TRADUTTORE_ASSENTE; comando: cosa scrivere dalla riga di
+    codice: l'esito per l'interfaccia (vedi outcome.py), es. TRADUTTORE_ASSENTE; comando: cosa scrivere dalla riga di
     comando per rimediare (lo mostra solo la riga di comando: i messaggi parlano dei pulsanti dell'interfaccia)."""
 
     def __init__(self, messaggio="", codice=None, comando=None):
@@ -127,7 +127,7 @@ class GoogleGratis(Backend):
     ATTESE_RETE = (10, 30)
 
     def __init__(self, log=print, apri=None, limitatore=None):
-        from .limitatore import Limitatore
+        from .limiter import Limitatore
         self.log = log
         self.apri = apri or _apri_predefinito
         self.limitatore = limitatore or Limitatore("google", log)
@@ -142,7 +142,7 @@ class GoogleGratis(Backend):
         raise Bloccato(self.limitatore.bloccato(http_codice, dettaglio))
 
     def _richiesta(self, testo, origine, destinazione):
-        from .limitatore import InPausa
+        from .limiter import InPausa
         parametri = urllib.parse.urlencode({"client": "gtx", "sl": origine, "tl": destinazione, "dt": "t"})
         corpo = urllib.parse.urlencode({"q": testo}).encode("utf-8")
         errori = 0
@@ -253,7 +253,7 @@ def _lingua_deepl(codice, destinazione):
     c = (codice or "").replace("_", "-")
     base = c.split("-")[0].lower()
     if base == "zh":
-        from .lingua import chiave_confronto
+        from .language import chiave_confronto
         return ("ZH-HANT" if chiave_confronto(c) == "zh-hant" else "ZH-HANS") if destinazione else "ZH"
     if destinazione and base == "en":
         return "EN-GB" if c.lower() in ("en-gb", "en-uk") else "EN-US"
@@ -273,7 +273,7 @@ class DeepL(Backend):
     ATTESA_MASSIMA = 300.0  # secondi: al massimo quelli chiesti da DeepL (Retry-After) prima di riprovare
 
     def __init__(self, chiave, log=print, apri=None, limitatore=None):
-        from .limitatore import Limitatore
+        from .limiter import Limitatore
         chiave = "".join((chiave or "").split()).replace("\u200b", "").replace("\ufeff", "")
         if not chiave:
             raise ErroreBackend("Per usare DeepL serve la tua chiave (gratuita): crea un account DeepL API Free su "
@@ -301,7 +301,7 @@ class DeepL(Backend):
         return int(dati.get("character_count") or 0), int(dati.get("character_limit") or 0)
 
     def _chiama(self, percorso, corpo=None):
-        from .limitatore import InPausa
+        from .limiter import InPausa
         errori = 0
         while True:
             interruzione.controlla()
@@ -416,7 +416,7 @@ class MyMemory(Backend):
         return self._richiesta("Hello", "en", "it")
 
     def __init__(self, email=None, log=print, apri=None, limitatore=None):
-        from .limitatore import Limitatore
+        from .limiter import Limitatore
         self.email = (email or "").strip() or None
         self.log = log
         self.apri = apri or _apri_predefinito
@@ -442,7 +442,7 @@ class MyMemory(Backend):
                                         "" if self.email else " o indica la tua email per arrivare a 50.000"))
 
     def _richiesta(self, testo, origine, destinazione):
-        from .limitatore import InPausa
+        from .limiter import InPausa
         parametri = {"q": testo, "langpair": "%s|%s" % (origine, destinazione)}
         if self.email:
             parametri["de"] = self.email
@@ -636,14 +636,14 @@ def differenza_numeri(originale, tradotto):
 
 def _peso(testo):
     """Lunghezza 'a vista': un carattere cinese, giapponese o coreano vale circa due lettere e mezza."""
-    from .testo import _CJK
+    from .text import _CJK
     return len(testo) + 1.5 * len(_CJK.findall(testo))
 _RIPETIZIONE = re.compile(r"(\b\S+\b)(?:\W+\1\b){3,}", re.I)
 
 
 def problemi_traduzione(originale, tradotto, destinazione="it"):
     """Elenco dei motivi per scartare una traduzione del modello locale (vuoto = buona)."""
-    from .testo import _TOKEN
+    from .text import _TOKEN
     problemi = []
     if not tradotto.strip():
         return ["vuota"]
@@ -697,7 +697,7 @@ def seme_per(testo, numero):
 
 NON_INSTALLATO = ("Il traduttore locale non e' installato: scegli 'Traduttore locale (sul tuo PC)' e premi "
                   "'Installa...' accanto.")
-COMANDO_INSTALLA = "python -I smith.py locale --installa 12b (o 4b)"
+COMANDO_INSTALLA = "python -I smith.py local --install 12b (o 4b)"
 
 
 class Locale(Backend):
@@ -766,7 +766,7 @@ class Locale(Backend):
             if not ollama.modello_presente(self.chiave):
                 raise ErroreBackend("Il modello %s non e' scaricato: premi 'Installa...' accanto al traduttore locale."
                                     % ollama.MODELLI[self.chiave]["etichetta"], "TRADUTTORE_ASSENTE",
-                                    comando="python -I smith.py locale --installa %s" % self.chiave)
+                                    comando="python -I smith.py local --install %s" % self.chiave)
             self._server = ollama.Server(self.log, parallele=self.parallele)
         try:
             self._server.avvia()
@@ -892,7 +892,7 @@ class Locale(Backend):
         per un nome, punto finale o puntini dove l'originale non li ha; minuscola iniziale come l'originale."""
         t = _CONTROLLO.sub("", tradotto).strip()
         o = originale.strip()
-        from .testo import _CJK, _TOKEN
+        from .text import _CJK, _TOKEN
         validi = {int(n) for n in _TOKEN.findall(o)}
         if validi:
             # segnaposto rovinati dal modello ('[[4]Spine', '[0]Colpo', '[[2]〕'): si rimettono, se il numero e'
@@ -934,7 +934,7 @@ class Locale(Backend):
         if len(testo) > 1500:
             pezzi = [self._traduci_una(p, origine, destinazione, giro=giro) for p in _dividi_lunga(testo, 1500)]
             return "" if any(not p for p in pezzi) else " ".join(pezzi)
-        from .testo import _TOKEN
+        from .text import _TOKEN
         ultimo, eco, eco_viste = "", None, 0
         stessa_lingua = origine.split("-")[0] == destinazione.split("-")[0]
         attuale = dict(contesto or {})
@@ -1063,7 +1063,7 @@ DESCRIZIONI = {
 
 def credenziali():
     """Chiave DeepL ed email per MyMemory: dalle variabili d'ambiente o da settings.json."""
-    from . import progetto
+    from . import project as progetto
     dati = {}
     try:
         with open(progetto.cartella_dati("settings.json"), encoding="utf-8") as f:

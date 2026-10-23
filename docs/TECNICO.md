@@ -4,22 +4,22 @@
 
 ## Lingua dell'interfaccia
 
-I testi del programma sono scritti in italiano nel codice; ogni altra lingua è un file `patchsmith/interfaccia/<codice>.json`:
+I testi del programma sono scritti in italiano nel codice; ogni altra lingua è un file `patchsmith/ui_language/<codice>.json`:
 
 ```json
 {"nome": "English", "bandiera": {"tipo": "gb"}, "testi": {"Crea rapporto": "Create report", "Motore: %s": "Engine: %s"}}
 ```
 
 - La traduzione avviene quando la finestra mostra un testo: pulsanti, etichette, titoli, menu, finestre di dialogo e righe del registro. Una voce con `%s`, `%d`... vale per tutte le righe di quella forma (`"Tradotti %d di %d"` traduce "Tradotti 400 di 1654"), e i pezzi di testo dentro si traducono a loro volta. Quello che non è nel file resta in italiano; il registro salvato su disco resta in italiano.
-- **Aggiungere una lingua** (es. francese): `python -I smith.py interfaccia --crea fr --nome Français --bandiera "{\"verticali\": [\"#0055a4\", \"#ffffff\", \"#ef4135\"]}"`. PatchSmith estrae dal codice tutti i testi per chi lo usa e li traduce con il traduttore locale (i segnaposto `%s`, `%d` sono protetti; le voci già nel file restano, quindi le correzioni a mano non si perdono). Poi conviene rivedere a mano i testi della finestra: la traduzione automatica sbaglia soprattutto le parole isolate dei pulsanti.
+- **Aggiungere una lingua** (es. francese): `python -I smith.py interface --create fr --name Français --flag "{\"verticali\": [\"#0055a4\", \"#ffffff\", \"#ef4135\"]}"`. PatchSmith estrae dal codice tutti i testi per chi lo usa e li traduce con il traduttore locale (i segnaposto `%s`, `%d` sono protetti; le voci già nel file restano, quindi le correzioni a mano non si perdono). Poi conviene rivedere a mano i testi della finestra: la traduzione automatica sbaglia soprattutto le parole isolate dei pulsanti.
 - La bandiera è a strisce (`{"verticali": [colori]}` o `{"orizzontali": [colori]}`), oppure un'immagine PNG 24x16 accanto al file (`{"file": "fr.png"}`).
 - La lingua predefinita è quella di Windows, se c'è il suo file; altrimenti l'inglese.
 
 ## Il modo più semplice: l'interfaccia grafica
 
-Fai doppio clic su **`PatchSmith.exe`** (oppure su `PatchSmith.pyw`, o lancia `python -I smith.py gui`). `PatchSmith.exe` è un piccolo avvio con l'icona del programma: apre PatchSmith con il Python installato (il più recente dal 3.10 in su) e, se Python manca, spiega cosa installare. Lo compila PatchSmith stesso con il compilatore C# che c'è in ogni Windows (sorgente: `patchsmith/avvio.cs`), senza scaricare nulla: se manca, compare alla prima apertura di `PatchSmith.pyw`. Si può fissare a Start o copiare sul Desktop come collegamento.
+Fai doppio clic su **`PatchSmith.exe`** (oppure su `PatchSmith.pyw`, o lancia `python -I smith.py gui`). `PatchSmith.exe` è un piccolo avvio con l'icona del programma: apre PatchSmith con il Python installato (il più recente dal 3.10 in su) e, se Python manca, spiega cosa installare. Lo compila PatchSmith stesso con il compilatore C# che c'è in ogni Windows (sorgente: `patchsmith/launcher.cs`), senza scaricare nulla: se manca, compare alla prima apertura di `PatchSmith.pyw`. Si può fissare a Start o copiare sul Desktop come collegamento.
 
-L'icona della finestra (un martello sopra una cartella, quella del gioco) è disegnata da `patchsmith/icona.py`, senza file scaricati: `python -I patchsmith/icona.py` rifà le immagini in `patchsmith/icona/` (PNG di ogni lato e `PatchSmith.ico`) e `PatchSmith.exe`.
+L'icona della finestra (un martello sopra una cartella, quella del gioco) è disegnata da `patchsmith/icon.py`, senza file scaricati: `python -I patchsmith/icon.py` rifà le immagini in `patchsmith/icon/` (PNG di ogni lato e `PatchSmith.ico`) e `PatchSmith.exe`.
 
 1. **Sfoglia…**: scegli la cartella del gioco (quella che contiene l'eseguibile). La casella si riempie solo così: non si può scrivere a mano, quindi niente percorsi sbagliati.
 2. Le lingue di solito non vanno toccate:
@@ -122,7 +122,7 @@ Con il **traduttore locale** le etichette troppo lunghe si chiedono di nuovo, un
 
 ### Dopo aver giocato: il controllo automatico
 
-Dopo una partita il gioco lascia tracce su disco: i registri di Unity e di BepInEx, le cartelle dei crash, il diario del traduttore delle frasi nuove, i file che un aggiornamento ha rimesso originali. **Quando apri PatchSmith** il programma guarda (solo le date dei file, in un attimo) quali giochi tradotti hanno tracce nuove dall'ultimo controllo e li controlla da solo, in background: il risultato compare nel registro della finestra. Solo se c'è qualcosa da fare, in fondo alla finestra (a sinistra di "Crea rapporto") compaiono i pulsanti **Dettagli ultima partita** e **Ritraduci N frasi**. Il controllo all'apertura fa da solo solo le cose veloci (crash, configurazione, traduttore delle frasi nuove, file rimessi dal gioco); le frasi del diario da ritradurre le lascia al pulsante **Ritraduci N frasi** (o a "Ritraduci le frasi" nei Dettagli): ritradurle vorrebbe dire caricare il traduttore locale o aspettare le pause di Google con i pulsanti fermi. Se nel frattempo hai già avviato un'altra operazione, il controllo parte da solo appena quella finisce (il registro lo dice). Dalle finestre dei **Dettagli** i pulsanti ("Ripristina originali", "Riapplica", "Crea rapporto"...) valgono per il gioco di quella finestra: la cartella scelta diventa la sua. Dalla riga di comando: `python -I smith.py controlla <cartella>` (senza cartella: tutti i giochi); con `--solo-leggi` dice cosa farebbe senza toccare nulla.
+Dopo una partita il gioco lascia tracce su disco: i registri di Unity e di BepInEx, le cartelle dei crash, il diario del traduttore delle frasi nuove, i file che un aggiornamento ha rimesso originali. **Quando apri PatchSmith** il programma guarda (solo le date dei file, in un attimo) quali giochi tradotti hanno tracce nuove dall'ultimo controllo e li controlla da solo, in background: il risultato compare nel registro della finestra. Solo se c'è qualcosa da fare, in fondo alla finestra (a sinistra di "Crea rapporto") compaiono i pulsanti **Dettagli ultima partita** e **Ritraduci N frasi**. Il controllo all'apertura fa da solo solo le cose veloci (crash, configurazione, traduttore delle frasi nuove, file rimessi dal gioco); le frasi del diario da ritradurre le lascia al pulsante **Ritraduci N frasi** (o a "Ritraduci le frasi" nei Dettagli): ritradurle vorrebbe dire caricare il traduttore locale o aspettare le pause di Google con i pulsanti fermi. Se nel frattempo hai già avviato un'altra operazione, il controllo parte da solo appena quella finisce (il registro lo dice). Dalle finestre dei **Dettagli** i pulsanti ("Ripristina originali", "Riapplica", "Crea rapporto"...) valgono per il gioco di quella finestra: la cartella scelta diventa la sua. Dalla riga di comando: `python -I smith.py check <cartella>` (senza cartella: tutti i giochi); con `--dry-run` dice cosa farebbe senza toccare nulla.
 
 Contano solo le tracce arrivate **dopo l'ultima volta che PatchSmith ha scritto nel gioco** (installazione, Riapplica, una correzione): un crash di prima della correzione non conta più. Le cartelle dei registri e dei crash di Unity sono le stesse per tutte le copie di un gioco: un registro conta solo se è della copia giusta (il percorso del gioco scritto dentro: `Mono path[0]`, o `Discovering subsystems at path` nei giochi IL2CPP). Dei registri molto grandi (oltre 2 MB) si leggono l'inizio e la fine. Dopo un aggiornamento di PatchSmith i giochi Unity si ricontrollano una volta all'apertura, per portarli alla configurazione della versione nuova.
 
@@ -170,27 +170,27 @@ Niente file del gioco e niente salvataggi. Se la chiave o l'email fossero finite
 python -I smith.py auto "D:\giochi\MioGioco"
 ```
 
-Questo comando fa tutto in automatico: rileva il motore, trova i testi, traduce e applica.
+Questo comando fa tutto in automatico: rileva il motore, trova i testi, traduce e applica. Funzionano ancora anche i nomi italiani di prima di comandi e opzioni (`traduci`, `--forza`...).
 
 | Comando | A cosa serve |
 |---|---|
-| `python -I smith.py rileva <cartella>` | Riconosce il motore e la strada consigliata |
-| `python -I smith.py scansiona <cartella> --nome mio-gioco` | Crea il profilo da controllare a mano |
-| `python -I smith.py traduci mio-gioco` | Traduce i testi mancanti e li applica |
-| `python -I smith.py applica mio-gioco` | Riapplica dalla memoria, senza rete |
-| `python -I smith.py ripristina mio-gioco` | Rimette gli originali; accetta anche la cartella del gioco, e rimette pure la lingua impostata da PatchSmith |
-| `python -I smith.py stato mio-gioco` | Quanti testi sono tradotti, con esempi |
-| `python -I smith.py pacchetto` | Prepara il pacchetto da pubblicare (vedi "Pacchetto da pubblicare") |
-| `python -I smith.py controlla <cartella>` | Controllo dopo aver giocato (vedi sopra); senza cartella tutti i giochi, `--solo-leggi` non corregge nulla. Esce con 0 se non resta niente da fare, 2 se resta qualcosa (anche una correzione rimandata perché il gioco è aperto, o che con `--solo-leggi` non è stata fatta), 1 per un errore |
+| `python -I smith.py detect <cartella>` | Riconosce il motore e la strada consigliata |
+| `python -I smith.py scan <cartella> --name mio-gioco` | Crea il profilo da controllare a mano |
+| `python -I smith.py translate mio-gioco` | Traduce i testi mancanti e li applica |
+| `python -I smith.py apply mio-gioco` | Riapplica dalla memoria, senza rete |
+| `python -I smith.py restore mio-gioco` | Rimette gli originali; accetta anche la cartella del gioco, e rimette pure la lingua impostata da PatchSmith |
+| `python -I smith.py status mio-gioco` | Quanti testi sono tradotti, con esempi |
+| `python -I smith.py package` | Prepara il pacchetto da pubblicare (vedi "Pacchetto da pubblicare") |
+| `python -I smith.py check <cartella>` | Controllo dopo aver giocato (vedi sopra); senza cartella tutti i giochi, `--dry-run` non corregge nulla. Esce con 0 se non resta niente da fare, 2 se resta qualcosa (anche una correzione rimandata perché il gioco è aperto, o che con `--dry-run` non è stata fatta), 1 per un errore |
 
 Opzioni utili:
-- `--da` e `--a`: le lingue. `--da` è predefinito su `auto` (lingua rilevata dai testi), `--a` sulla lingua di Windows. Accettano codici (`en`) o nomi (`inglese`);
+- `--from` e `--to`: le lingue. `--from` è predefinito su `auto` (lingua rilevata dai testi), `--to` sulla lingua di Windows. Accettano codici (`en`) o nomi (`inglese`);
 - `--backend locale` / `deepl` / `mymemory` / `google`: traduttore da usare. Se non lo indichi: quello locale; se non è installato, l'errore dice il comando per installarlo. La chiave DeepL, l'email per MyMemory e il modello locale si leggono da `settings.json` (le salva l'interfaccia) o dalle variabili `PATCHSMITH_DEEPL` / `PATCHSMITH_EMAIL` / `PATCHSMITH_MODELLO` (`4b` o `12b`);
-- `python -I smith.py locale`: stato del traduttore locale e, se non è installato, il modello consigliato per la tua scheda video; `--installa 12b` (oppure `4b`, o entrambi) lo scarica e installa, poi traduce una frase di prova (esce con 2 se la prova non riesce);
-- `python -I smith.py servizi`: stato dei traduttori (pause dopo un blocco); `--azzera google` lo riattiva (per un traduttore disattivato lo ricorda anche l'elenco);
+- `python -I smith.py local`: stato del traduttore locale e, se non è installato, il modello consigliato per la tua scheda video; `--install 12b` (oppure `4b`, o entrambi) lo scarica e installa, poi traduce una frase di prova (esce con 2 se la prova non riesce);
+- `python -I smith.py services`: stato dei traduttori (pause dopo un blocco); `--reset google` lo riattiva (per un traduttore disattivato lo ricorda anche l'elenco);
 - `--backend finto`: prova tecnica senza rete, antepone `[it]` ai testi. Disponibile solo da riga di comando, non nell'interfaccia grafica;
-- `--forza` (per `auto`): prova anche con i motori non supportati;
-- `--rigenera`: ricrea il profilo da zero.
+- `--force` (per `auto`): prova anche con i motori non supportati;
+- `--regenerate`: ricrea il profilo da zero.
 
 I messaggi parlano dei pulsanti dell'interfaccia; quando c'è un comando per rimediare (per esempio installare il traduttore locale), la riga di comando lo scrive sotto l'errore. I codici di uscita restano quelli di sempre: 0 fatto (anche quando il gioco ha già la lingua ufficiale), 2 fatto in parte, niente da fare o non possibile, 1 errore.
 
@@ -296,7 +296,7 @@ Poi li installa nella cartella del gioco scelto: `BepInEx/`, `winhttp.dll`, `doo
   - **Traduttori in fila:** prima il traduttore locale, se è installato (con il modello Veloce, se c'è: la scheda video serve anche al gioco); poi il traduttore online che hai scelto (DeepL con la tua chiave, MyMemory); poi Google gratuito, se non è in pausa. Se uno non risponde o è in pausa si passa al successivo. Google passa dagli stessi limiti prudenti della traduzione: se dovrebbe aspettare più di un minuto, la frase resta per ora in originale. Dopo un errore di rete (o se DeepL chiede di aspettare) si riprova una volta sola dopo pochi secondi, poi si passa al traduttore successivo: XUnity non aspetta una risposta per minuti.
   - **Mai un errore per una frase difficile:** XUnity smette di chiedere traduzioni dopo 5 errori di fila. Se tutti i traduttori scartano una frase (per esempio perché la traduzione perde un `{{A}}` o è troppo lunga), PatchSmith riprova una volta i pezzi tra i numeri e risponde con la traduzione migliore, purché abbia tutti i `{{A}}` e sia in italiano; altrimenti risponde con l'originale. Queste risposte di ripiego non vanno nella memoria. L'errore arriva a XUnity solo se nessun traduttore è raggiungibile; mentre il gioco si chiude il traduttore non traduce più nulla.
   - **Diario delle frasi:** ogni frase chiesta mentre giochi finisce in `memory/<gioco>.richieste.jsonl`, una riga per frase con testo, esito (`ok`, `rilassata` = risposta di ripiego, `rifiutata` = lasciata in originale, `rinviata`, `errore`, `interrotta`), traduttore e motivo. Le frasi non `ok` sono quelle da ritradurre a gioco chiuso. Oltre i 2 MB il diario diventa `.richieste.jsonl.1`.
-  - Come funziona: un piccolo plugin (`BepInEx/plugins/Patchsmith/Patchsmith.Servizio.dll`) avvia, all'apertura del gioco e senza finestre, `smith.py servizio-xunity`.
+  - Come funziona: un piccolo plugin (`BepInEx/plugins/Patchsmith/Patchsmith.Servizio.dll`) avvia, all'apertura del gioco e senza finestre, `smith.py servizio-xunity` (il nome italiano di `xunity-service`).
     - Il servizio risponde solo su `127.0.0.1`, su una porta fissa per ogni gioco, ed è collegato a XUnity con `Endpoint=CustomTranslate`, senza il controllo anti-spam di XUnity (che spegnerebbe la traduzione quando compaiono molte frasi nuove insieme) e con testi fino a 2500 caratteri.
     - Il plugin viene compilato con `csc` di Windows usando le librerie del gioco stesso; il sorgente è `components/plugin/PatchsmithServizio.cs`.
     - Il comando è scritto in `BepInEx/config/patchsmith-servizio.cfg`. Se il Python indicato non c'è più (spostato o aggiornato), il plugin prova il Python di Windows (`py -3`). Com'è andato l'avvio lo scrive in `BepInEx/patchsmith-servizio-stato.txt`.
@@ -308,7 +308,7 @@ Poi li installa nella cartella del gioco scelto: `BepInEx/`, `winhttp.dll`, `doo
 - **Memoria condivisa:** la memoria del gioco, le traduzioni automatiche e la memoria comune le scrivono sia l'interfaccia sia il traduttore avviato dal gioco. Chi salva prende un lucchetto (`<file>.lock`), rilegge il file e aggiunge solo le sue modifiche: nessuno cancella le frasi dell'altro. Se il `.lock` per un attimo non si apre (un altro programma lo sta togliendo), si riprova invece di salvare senza lucchetto. Valgono le stesse regole per i testi con problemi (`problemi.json`) e per la provenienza della memoria comune. Un file rovinato a mano viene conservato in `<file>.illeggibile` prima di essere riscritto; i file `.tmp` lasciati da un salvataggio interrotto li toglie il traduttore all'avvio.
 - **Traduzioni salvate:** `BepInEx/Translation/<lingua>/Text/_AutoGeneratedTranslations.txt` contiene righe `originale=traduzione`. "Correggi traduzioni" mostra queste righe insieme alla memoria del gioco e, salvando, sostituisce quelle corrette (a gioco chiuso); "Apri il file (avanzato)" apre questo file.
 - **Lettere che i font non hanno:** PatchSmith accende in `BepInEx.cfg` la scrittura dei messaggi di Unity nel registro di BepInEx (`[Logging.Disk] WriteUnityLog = true`; nei giochi già installati lo fa il controllo dopo aver giocato). Lì TextMeshPro scrive ogni lettera che i font del gioco non hanno: dopo la partita PatchSmith la annota nel profilo e la sostituisce nelle righe della cache scritte da lui, e da allora la evitano anche la pre-traduzione e il traduttore delle frasi nuove (in memoria resta la traduzione vera).
-- **Controllo dopo aver giocato:** lo fa PatchSmith da solo all'apertura (vedi "Dopo aver giocato"). `python -I smith.py stato <gioco>` legge `BepInEx/LogOutput.log` e dice se BepInEx e XUnity sono partiti (solo con "Chainloader startup complete": "Chainloader started" c'è anche quando il gioco si chiude subito dopo) e quante frasi sono state tradotte.
+- **Controllo dopo aver giocato:** lo fa PatchSmith da solo all'apertura (vedi "Dopo aver giocato"). `python -I smith.py status <gioco>` legge `BepInEx/LogOutput.log` e dice se BepInEx e XUnity sono partiti (solo con "Chainloader startup complete": "Chainloader started" c'è anche quando il gioco si chiude subito dopo) e quante frasi sono state tradotte.
 - **Versione:** il manifesto `patchsmith-unity.json` ricorda con quale versione di PatchSmith è stata scritta la configurazione (`patchsmith_versione`, anche nei manifesti di Unreal e XNA e nelle informazioni dei file tradotti); il controllo dopo aver giocato aggiorna i giochi installati con una versione precedente. Le opzioni di prova di XUnity (`EnableTextPathLogging`, `EnableTranslationHelper`, `CopyToClipboard`) restano sempre spente.
 - **Ripristino:**
   - toglie solo i file messi da PatchSmith e quelli creati da BepInEx/XUnity;
@@ -469,7 +469,7 @@ Se non trova le impostazioni del gioco, la prima volta chiede di avviarlo una vo
 
 Se è ancora installata una traduzione automatica di PatchSmith, il messaggio lo dice.
 
-Per tradurre comunque: `--traduci-comunque` da riga di comando, oppure "Sì" nella domanda dell'interfaccia. In questo caso il controllo della lingua ufficiale non viene fatto, e una lingua impostata prima da PatchSmith torna com'era, così la traduzione installata si vede. `smith auto` esce con 0 anche quando ha gestito la lingua ufficiale.
+Per tradurre comunque: `--translate-anyway` da riga di comando, oppure "Sì" nella domanda dell'interfaccia. In questo caso il controllo della lingua ufficiale non viene fatto, e una lingua impostata prima da PatchSmith torna com'era, così la traduzione installata si vede. `smith auto` esce con 0 anche quando ha gestito la lingua ufficiale.
 
 PatchSmith **non modifica** componenti non ufficiali, come i file che sostituiscono Steam nelle copie non originali.
 
@@ -482,9 +482,9 @@ Alcuni giochi hanno l'italiano dentro di sé, ma non hanno un'impostazione per s
 - **a gioco chiuso**, con controllo dello spazio libero e dei file di sola lettura;
 - se un aggiornamento del gioco sostituisce un file, il nuovo file diventa l'originale (il vecchio backup resta conservato) e la modifica si riapplica.
 
-**Modifiche agli eseguibili.** Si fanno solo con il tuo consenso: PatchSmith lo chiede la prima volta per ogni gioco, poi lo ricorda (per esempio per riapplicare dopo un aggiornamento). Dalla riga di comando: `smith auto <cartella> --modifica-eseguibili`. La firma digitale degli eseguibili modificati non è più valida: se Smart App Control di Windows è attivo, PatchSmith non li modifica, perché Windows li bloccherebbe. Qualche antivirus potrebbe segnalarli.
+**Modifiche agli eseguibili.** Si fanno solo con il tuo consenso: PatchSmith lo chiede la prima volta per ogni gioco, poi lo ricorda (per esempio per riapplicare dopo un aggiornamento). Dalla riga di comando: `smith auto <cartella> --modify-executables`. La firma digitale degli eseguibili modificati non è più valida: se Smart App Control di Windows è attivo, PatchSmith non li modifica, perché Windows li bloccherebbe. Qualche antivirus potrebbe segnalarli.
 
-Le conoscenze sui singoli giochi stanno nelle **schede** (`patchsmith/schede.py`). Ogni scheda trova le modifiche per **schema di byte** verificato, mai per indirizzo fisso: una versione diversa del gioco viene rifiutata senza toccare nulla.
+Le conoscenze sui singoli giochi stanno nelle **schede** (`patchsmith/games.py`). Ogni scheda trova le modifiche per **schema di byte** verificato, mai per indirizzo fisso: una versione diversa del gioco viene rifiutata senza toccare nulla.
 
 ### Scheda: KINGDOM HEARTS HD 1.5+2.5 ReMIX
 - **Come sceglie la lingua:** ognuno dei 6 programmi (KH1, Re:CoM, KH2, BBS, menu di avvio, Theater) chiede la lingua alla piattaforma (Steam/Epic) e la converte in un codice (inglese 1, tedesco 3, francese 4, spagnolo 5, italiano 6). Per qualsiasi altra risposta usa un valore predefinito: l'inglese. Non ha altre impostazioni della lingua. I testi di tutte queste lingue sono già installati.
@@ -594,42 +594,42 @@ In arrivo con lo stesso impianto: risoluzione, modalità finestra/schermo intero
 
 ## Test
 
-**Tutte le prove insieme:** `python -I test/esegui_tutto.py`. Ogni prova riceve una cartella vuota sua, con dentro i suoi profili, la sua memoria e le sue impostazioni (una cartella `PATCHSMITH_DATI` temporanea solo per lei). Anche `%LOCALAPPDATA%`, `%APPDATA%`, `%TEMP%` e la cartella dell'utente sono cartelle di prova sue. Così le opzioni, i salvataggi e i crash dei giochi veri non si toccano, e una prova non vede quello che ha lasciato un'altra.
+**Tutte le prove insieme:** `python -I test/run_all.py`. Ogni prova riceve una cartella vuota sua, con dentro i suoi profili, la sua memoria e le sue impostazioni (una cartella `PATCHSMITH_DATI` temporanea solo per lei). Anche `%LOCALAPPDATA%`, `%APPDATA%`, `%TEMP%` e la cartella dell'utente sono cartelle di prova sue. Così le opzioni, i salvataggi e i crash dei giochi veri non si toccano, e una prova non vede quello che ha lasciato un'altra.
 - L'uscita di ogni prova va in `registri/<prova>.txt`, nella cartella di lavoro. Una prova che dura più di 15 minuti si ferma, insieme ai programmi che ha avviato.
 - Alla fine controlla che i dati veri di PatchSmith (profili, memoria, impostazioni…) non siano cambiati.
-- La cartella di lavoro si cancella se tutto va bene; `--tieni` la conserva, `--lavoro <cartella>` la sceglie (ad esempio su un altro disco).
-- Con dei nomi esegue solo quelle prove: `python -I test/esegui_tutto.py prova_unity prova_xna`.
-- `prova_gui` si fa su un gioco web finto creato dalla prova (`test/gioco_web_finto.py`): per qualche secondo si apre la finestra di PatchSmith. Parte con delle impostazioni già salvate, che alla fine devono essere ancora com'erano.
-- `prova_sicurezza` vuole la **copia** di un gioco: `--sicurezza <copia> <file.json relativo>`. Senza la copia viene saltata, e lo dice.
+- La cartella di lavoro si cancella se tutto va bene; `--keep` la conserva, `--work <cartella>` la sceglie (ad esempio su un altro disco).
+- Con dei nomi esegue solo quelle prove: `python -I test/run_all.py test_unity test_xna`.
+- `test_gui` si fa su un gioco web finto creato dalla prova (`test/fake_web_game.py`): per qualche secondo si apre la finestra di PatchSmith. Parte con delle impostazioni già salvate, che alla fine devono essere ancora com'erano.
+- `test_safety` vuole la **copia** di un gioco: `--safety <copia> <file.json relativo>`. Senza la copia viene saltata, e lo dice.
 
 Le singole prove:
-- `python -I test/prova_regressioni.py <cartella-vuota>`: i problemi già risolti sui giochi veri, perché non tornino. Copre:
+- `python -I test/test_regressions.py <cartella-vuota>`: i problemi già risolti sui giochi veri, perché non tornino. Copre:
   - Unity 6: BepInEx parte al primo MonoBehaviour, Unity 2022 non si tocca, la configurazione esistente si conserva;
   - interfacce IMGUI (anche in un modulo del gioco o in `Assembly-UnityScript`, non nelle librerie di terzi), le DLL del gioco e chiavi scritte nella configurazione di XUnity;
   - catalogo di Unity Localization che controlla l'impronta (CRC) dei bundle, anche con il testo a una posizione dispari;
   - numeri con la virgola ('2.5') nel controllo del traduttore locale;
   - nomi dei tasti nei giochi web (`<kbd>`, `class="key"`), con node.js anche sull'iniettore vero;
   - le opzioni di prova di XUnity sempre spente nella configurazione;
-  - i registri veri, ridotti e anonimi, in `test/dati/segnali/` (vedi il loro `LEGGIMI.md`), anche gli eventi di crash di Windows e il diario delle frasi.
-- `python -I test/prova_controllo.py <cartella-vuota>`: il controllo dopo aver giocato, con giochi finti e i registri veri ridotti di `test/dati/segnali/`. `%TEMP%`, la cartella dell'utente e `%LOCALAPPDATA%` sono cartelle di prova. Copre:
+  - i registri veri, ridotti e anonimi, in `test/data/signals/` (vedi il loro `README.md`), anche gli eventi di crash di Windows e il diario delle frasi.
+- `python -I test/test_checks.py <cartella-vuota>`: il controllo dopo aver giocato, con giochi finti e i registri veri ridotti di `test/data/signals/`. `%TEMP%`, la cartella dell'utente e `%LOCALAPPDATA%` sono cartelle di prova. Copre:
   - Unity: crash all'avvio della copia giusta (quello dell'altra copia, nelle stesse cartelle, non conta) corretto con il punto d'ingresso di BepInEx; `LogOutput.log` senza "startup complete"; Google fermo nel `Player-prev.log`; comando del traduttore con un Python che non c'è; configurazione cambiata; diario con frasi provvisorie (righe della cache sostituite, la riga corretta a mano resta) e frasi perse rimesse in memoria; file temporanei; tutto in sola lettura senza scrivere nulla, con il gioco aperto senza scrivere nulla, poi corretto; un secondo controllo che non fa nulla; un crash anche dopo la correzione che propone "Ripristina originali" senza farlo;
   - un gioco installato con una versione vecchia (come Rubinite): Google in pausa detto con la data, traduttore di PatchSmith rimesso, versione aggiornata, "Installa il traduttore locale" se non c'è un traduttore;
   - file tolti dall'antivirus rimessi una volta, e da fare se tornano a mancare;
   - gioco web: file rimessi originali dal gioco (Riapplica da sola), aggiornati ("Analizza e traduci"), crash nel registro di Windows ("Ripristina originali" da confermare; eventi 1000 e 1026 veri letti anche nella codifica di Windows);
   - GameMaker (lingua aggiunta non scelta o tolta), Unreal (lingua e pak non caricato), XNA (satellite tolto, gioco aggiornato);
-  - `smith.py controlla --solo-leggi` (codice 2, nulla scritto), la finestra dell'esito, il rapporto e il file `<gioco>.controllo.json` che non è un profilo e non viene cancellato;
+  - `smith.py check --dry-run` (codice 2, nulla scritto), la finestra dell'esito, il rapporto e il file `<gioco>.controllo.json` che non è un profilo e non viene cancellato;
   - i casi trovati nella verifica: registri oltre 2 MB (una partita lunga non è un crash all'avvio, gli errori in fondo al `Player.log` contano), installazione interrotta (solo "Ripristina originali"), profilo senza cartella, registro di Unreal con la cartella del progetto, crash di Windows di prima dell'ultimo controllo, PatchSmith aggiornato, traduttore dal vivo partito senza traduttori, riga di comando con un profilo rovinato (gli altri giochi si controllano, codice 1);
   - il controllo all'apertura che non ritraduce le frasi del diario (restano da fare con "Ritraduci", il diario non va avanti, le frasi perse si salvano lo stesso) e poi le ritraduce con il pulsante; un gioco Unity 6 con `LogOutput.log` incompleto e nessun crash (solo da sapere), con un crash nel registro di Windows ("non accetta mod" da confermare) e "anche dopo la correzione" solo se la correzione c'è stata.
   - le correzioni di "Correggi traduzioni" salvate con il gioco Unity aperto scritte dal controllo (a gioco chiuso, una volta; una riga cambiata a mano resta), un'altra versione con la configurazione da rimettere detta in un solo messaggio, il rapporto con le correzioni in attesa e le lettere dei font; "Ritraduci" con il traduttore locale non installato (le frasi perse si salvano, il pulsante è "Installa il traduttore locale").
-- `python -I test/prova_preliminari.py <cartella-vuota>`: i controlli prima di partire e le scelte predefinite sicure, con processi aperti, spazio libero, Steam e scheda video simulati. Copre:
+- `python -I test/test_preliminary.py <cartella-vuota>`: i controlli prima di partire e le scelte predefinite sicure, con processi aperti, spazio libero, Steam e scheda video simulati. Copre:
   - gioco aperto (anche per Riapplica e Ripristina), lingue sconosciute, uguali o fuori elenco, cartella in cui non si può scrivere (anche dentro Programmi; il file di prova non resta), poco spazio, Google in pausa (Installa o Usa il traduttore locale), traduttore locale non installato (e continuare senza: ci si ferma prima di toccare il gioco);
   - lo stesso gioco in un'altra cartella: identità da Unity, Steam, eseguibili e nome (senza i programmi che tanti giochi hanno uguali, come `createdump.exe` o DOSBox); una copia delle traduzioni che non riesce non ferma "Analizza e traduci"; una copia che riusa la memoria dell'originale (anche una correzione a mano), un gioco spostato che porta con sé il suo profilo, nessuna proposta per un'altra lingua o una memoria vuota;
-  - traduttore predefinito locale anche se non è installato; memoria video da `nvidia-smi`, registro di Windows e WMI (al limite di 4 GB non si sa; `nvidia-smi` e PowerShell mai dalla cartella corrente) e modello consigliato; `smith.py locale` con il modello consigliato e `--installa` con la frase di prova;
+  - traduttore predefinito locale anche se non è installato; memoria video da `nvidia-smi`, registro di Windows e WMI (al limite di 4 GB non si sa; `nvidia-smi` e PowerShell mai dalla cartella corrente) e modello consigliato; `smith.py local` con il modello consigliato e `--install` con la frase di prova;
   - la frase di prova dopo l'installazione (scheda video, solo processore, frase rimasta in originale, server che non parte) e i messaggi di blocco che consigliano il traduttore locale.
-- `python -I test/prova_dati_utente.py <cartella-vuota>`: la cartella dei dati (`PATCHSMITH_DATI`). Controlla i percorsi con e senza la variabile, `smith auto`/`stato`/`ripristina` su un gioco finto, il comando del traduttore dal vivo per Unity, il salvataggio delle impostazioni e il passaggio dai nomi italiani delle cartelle a quelli inglesi (spostamento senza perdere nulla, componenti uniti, profilo chiesto con il percorso di prima).
-- `python -I test/prova_esegui_tutto.py <cartella-vuota>`: il programma che esegue tutte le prove. Controlla che ogni prova abbia dati e cartelle sue, che una prova bloccata si fermi insieme ai programmi che ha avviato, che il controllo dei dati veri si accorga di ogni cambiamento e che l'elenco delle prove senza argomenti sia giusto.
-- `python -I test/web/genera_pagina.py`: genera `test/web/index-inline.html`, la pagina che collauda l'iniettore nel browser (testi dinamici, attributi, `<option>`, pulsanti anche di una parola come `PLAY` e `OK`, canvas, entità HTML).
-- `python -I test/prova_formati.py <cartella-vuota>`: i formati dei file di lingua dei giochi nuovi e i limiti dei loro motori, con giochi finti costruiti sul modello di quelli veri (nessun testo dei giochi veri). Copre:
+- `python -I test/test_user_data.py <cartella-vuota>`: la cartella dei dati (`PATCHSMITH_DATI`). Controlla i percorsi con e senza la variabile, `smith auto`/`stato`/`ripristina` su un gioco finto, il comando del traduttore dal vivo per Unity, il salvataggio delle impostazioni e il passaggio dai nomi italiani delle cartelle a quelli inglesi (spostamento senza perdere nulla, componenti uniti, profilo chiesto con il percorso di prima).
+- `python -I test/test_run_all.py <cartella-vuota>`: il programma che esegue tutte le prove. Controlla che ogni prova abbia dati e cartelle sue, che una prova bloccata si fermi insieme ai programmi che ha avviato, che il controllo dei dati veri si accorga di ogni cambiamento e che l'elenco delle prove senza argomenti sia giusto.
+- `python -I test/web/make_page.py`: genera `test/web/index-inline.html`, la pagina che collauda l'iniettore nel browser (testi dinamici, attributi, `<option>`, pulsanti anche di una parola come `PLAY` e `OK`, canvas, entità HTML).
+- `python -I test/test_formats.py <cartella-vuota>`: i formati dei file di lingua dei giochi nuovi e i limiti dei loro motori, con giochi finti costruiti sul modello di quelli veri (nessun testo dei giochi veri). Copre:
   - JSON con commenti `//` e `/* */`, virgole in fondo e sezioni (stile Another Door): letto, riscritto identico byte per byte tranne le frasi tradotte (anche BOM, CRLF, numeri come `1.50`, escape `\u`), un valore non stringa cambiato che non si scrive, i file rovinati che restano errori;
   - GameMaker con `localization/stringsEN.json` e le traduzioni ufficiali: codice attaccato al nome (`stringsEN`, `stringsBR`, `stringsSC`, `stringsTC`), famiglia `strings{L}.json`, etichette di una parola e tag `[yellow1]…[/c]` tradotti, font giapponese e `scribble_fallback_font` che non tolgono `è` e `ò`, solo il file inglese cambiato, ripristino identico; con `stringsIT.json` la lingua ufficiale;
   - tabelle CSV: stile Megaloot (divisa sulle virgole, `koreana`, `schinese`, `tchinese`, colonna italiana vuota, `,` che diventa `;`) e una tabella CSV vera (BOM, `;`, CRLF, virgolette, `""` e a capo nelle celle), riscritte cambiando solo le celle tradotte (anche una tabella divisa a mano con una cella come `"Hero" rises`, e con righe vuote tra i gruppi di testi); tabelle senza chiave, con una lingua sola o non UTF-8 rifiutate; un gioco GameMaker con `translations.csv` tradotto e ripristinato (una traduzione con un a capo in più resta in originale, scritta nel registro); la colonna italiana piena come lingua ufficiale; la tabella in un gioco web e il sorgente di Godot saltato (anche nel registro);
@@ -638,13 +638,13 @@ Le singole prove:
   - pagina `test/web/index-inline.html` con i pulsanti PLAY e OK, e le stringhe del JavaScript che si vedono (`textContent`, `fillText`, `label:`, `add.text`) separate da identificativi, classi, font e confronti;
   - Unreal senza `.locres` (nessun profilo, il motivo), con i `.locres` fuori dagli archivi (motivo diverso), con un pak illeggibile (saltato, profilo creato) e con un pak montato in una cartella più profonda (tradotto in un pak di patch con i percorsi completi);
   - i file saltati nel registro: `.json` non validi o troppo grandi, file con pochi testi, file web troppo grandi.
-- `python -I test/prova_font_lunghezza.py <cartella-vuota>`: lettere che i font non hanno ed etichette troppo lunghe, per tutti i motori, con giochi, font e registri finti (`test/unity_finto.py`, `test/dati/segnali/`; nessun gioco vero, nessuna rete, traduttori finti in memoria). Copre:
+- `python -I test/test_font_length.py <cartella-vuota>`: lettere che i font non hanno ed etichette troppo lunghe, per tutti i motori, con giochi, font e registri finti (`test/fake_unity.py`, `test/data/signals/`; nessun gioco vero, nessuna rete, traduttori finti in memoria). Copre:
   - font di Unity: la tabella cmap di un `.ttf`, i font TextMeshPro nei bundle (con l'albero dei campi) e in `resources.assets` (senza, riconosciuti dalla forma), un font dinamico con il suo `.ttf`, nessun limite quando non si sa, il risultato tenuto in `font.json` e riletto dopo un aggiornamento del gioco;
   - Unity Localization: `è` → `e'` solo nella tabella del gioco (in memoria resta `è`, la tabella francese non cambia), un carattere che non si può adattare (`→`) in "Non scritte nel gioco", le lettere annotate dal controllo valide anche se un font le ha, nessun cambiamento con un font che ha tutte le lettere, un errore imprevisto nella lettura dei font che non ferma la scrittura;
   - XUnity: `WriteUnityLog` acceso all'installazione e rimesso dal controllo; i caratteri mancanti letti da righe vere (anche `\U0001F41A` e il formato vecchio); la copia del gioco riconosciuta anche nei giochi IL2CPP; il controllo che in sola lettura non scrive nulla, poi adatta le righe della cache scritte da PatchSmith (non quella cambiata a mano) e annota le lettere nel profilo; dopo, cache e traduttore delle frasi nuove le evitano; Unity Localization con il `Player.log`: lettera annotata e tabella riscritta, quelle dei soli testi del gioco ignorate; "Riapplica" che scrive adattata una correzione fatta in "Correggi traduzioni" (e la conta come scritta); un errore imprevisto nel controllo delle lettere che non nasconde gli altri problemi; un `BepInEx.cfg` con byte non UTF-8 riscritto uguale;
   - Unreal: con il francese il Latino-1 completo (anche `ì` e `ò`), il giapponese che non conta, un carattere che nessuna lingua usa (`★`) che lascia l'originale; senza indizi nessun limite;
   - etichette: lo spazio (con e senza traduzioni ufficiali), le troppo lunghe chieste più corte con il numero di caratteri (anche nel prompt del traduttore locale), la più corta valida tenuta, quella ancora lunga in `problemi.json` con il testo originale e nell'elenco "Troppo lunghi", una volta sola, le correzioni a mano lasciate, i traduttori online che solo annotano (e il traduttore locale che dopo le chiede più corte, una volta), "Ritraduci" con lo spazio, un errore imprevisto che non ferma la traduzione, l'esito.
-- `python -I test/prova_gui.py <copia-di-un-gioco>`: collaudo automatico dell'interfaccia grafica, con il traduttore di test e il ripristino finale. Controlla anche che durante un lavoro non ne parta un secondo e che i comandi del traduttore siano disattivati. Controlla poi:
+- `python -I test/test_gui.py <copia-di-un-gioco>`: collaudo automatico dell'interfaccia grafica, con il traduttore di test e il ripristino finale. Controlla anche che durante un lavoro non ne parta un secondo e che i comandi del traduttore siano disattivati. Controlla poi:
   - il titolo della finestra di fine operazione per ogni esito;
   - il registro salvato in `logs/`, anche con un errore imprevisto iniettato (finestra "Errore imprevisto", traceback nel file) e con un errore in un comando della finestra (registro `interfaccia` anche dopo l'installazione del traduttore locale, finestra senza "Riprova");
   - che un profilo rovinato non lasci i pulsanti disattivati e che "Usa il traduttore locale" dopo un errore ripeta "Analizza e traduci" con le stesse scelte;
@@ -655,21 +655,21 @@ Le singole prove:
   - "Correggi traduzioni…": una riga corretta nella finestra e salvata (memoria valida con il valore nuovo, "Riapplica" da sola che cambia il file del gioco) e il pulsante "Correggi traduzioni" nella finestra di fine con testi rimasti.
 
   Senza `PATCHSMITH_DATI` profilo e impostazioni vanno in `dati-prova-gui`, accanto alla copia. Le impostazioni che c'erano già in quella cartella tornano com'erano alla fine.
-- `python -I test/prova_pacchetto.py <cartella-vuota>`: il pacchetto da pubblicare (circa 40 secondi): programma, `PatchSmith.exe` e Python portatile con Tkinter, senza dati di chi lo usa né componenti scaricati; lo zip con la sola cartella `PatchSmith`; `smith.py` con il Python portatile; `PatchSmith.exe` che sceglie il Python portatile anche con un Python installato; un pacchetto con dei dati dentro che non si cancella.
-- `python -I test/prova_percorsi.py <cartella-vuota>`: i percorsi completi di chi usa solo l'interfaccia, dall'inizio alla fine, con giochi finti e traduttori finti (nessuna rete, nessun Ollama, nessun gioco vero); si apre per qualche secondo la finestra di PatchSmith, che a metà si chiude e si riapre. Copre:
+- `python -I test/test_package.py <cartella-vuota>`: il pacchetto da pubblicare (circa 40 secondi): programma, `PatchSmith.exe` e Python portatile con Tkinter, senza dati di chi lo usa né componenti scaricati; lo zip con la sola cartella `PatchSmith`; `smith.py` con il Python portatile; `PatchSmith.exe` che sceglie il Python portatile anche con un Python installato; un pacchetto con dei dati dentro che non si cancella.
+- `python -I test/test_paths.py <cartella-vuota>`: i percorsi completi di chi usa solo l'interfaccia, dall'inizio alla fine, con giochi finti e traduttori finti (nessuna rete, nessun Ollama, nessun gioco vero); si apre per qualche secondo la finestra di PatchSmith, che a metà si chiude e si riapre. Copre:
   - un gioco web nuovo: "Analizza e traduci", il controllo dopo aver giocato, "Correggi traduzioni" con la correzione scritta nel gioco, "Ripristina originali" (file identici) e "Riapplica", "Crea rapporto";
   - il gioco aperto prima di partire ("Riprova") e durante il lavoro (GameMaker: traduzioni pronte ma non scritte), Google in pausa ("Continua comunque", poi "Usa il traduttore locale"), Google che blocca a metà ("Traduzione interrotta"), il traduttore locale non installato ("Continua comunque" senza toccare il gioco, poi "Installa ora" e la traduzione che riparte da sola), testi rimasti in originale ("Correggi traduzioni" sull'elenco giusto);
   - un gioco GameMaker con una traduzione che i font non sanno disegnare (la finestra di fine e "Correggi traduzioni" portano a "Non scritte nel gioco");
   - un gioco Unity Mono: il traduttore delle frasi nuove di PatchSmith e il registro di Unity acceso; una correzione salvata con il gioco aperto; alla riapertura di PatchSmith il controllo con i registri veri ridotti (Google fermo, lettere che il font non ha) che corregge da solo, scrive la correzione rimasta in attesa e propone "Ritraduci"; "Dettagli", "Ripristina originali", "Riapplica" e il rapporto;
   - ogni finestra mostrata dice il passo dopo in italiano, senza nomi tecnici.
-- `python -I test/prova_correzioni.py <cartella-vuota>`: "Correggi traduzioni" con traduttori finti (nessuna rete, nessun Ollama) e giochi finti; si apre per qualche secondo la finestra di PatchSmith. Copre:
+- `python -I test/test_corrections.py <cartella-vuota>`: "Correggi traduzioni" con traduttori finti (nessuna rete, nessun Ollama) e giochi finti; si apre per qualche secondo la finestra di PatchSmith. Copre:
   - l'elenco e i suoi filtri (rimasti, troppo lunghi con lo spazio misurato nel gioco o senza, non scritte nel gioco, numeri e segnaposto, un'altra lingua, sospetti come "Esportare" al posto di "Esporta", corrette a mano), la ricerca e i controlli mentre scrivi;
   - la finestra: titolo, conteggi, riga modificata, Esc, Ctrl+Invio e gli altri tasti, traduzione vuota o con un segnaposto sbagliato, chiusura con correzioni non salvate, un elenco di 750 righe a pagine;
   - "Salva e applica al gioco" su un gioco web: memoria valida, traduzioni automatiche di prima conservate, memoria comune come correzione a mano, testo tolto dai rimasti, "Riapplica" da sola che cambia il file del gioco;
   - GameMaker: "Troppo lunghi" con lo spazio delle versioni del gioco e una correzione con un carattere che i font non hanno ("Non scritte nel gioco" e il pulsante nella finestra di fine);
   - Unity: righe della cache di XUnity nell'elenco (rimaste in originale, provvisorie del diario), sostituite salvando mentre tutte le altre restano identiche, correzione rimandata con il gioco aperto, riga cambiata a mano dopo la correzione che resta, ritraduzione di una riga della cache;
   - "Ritraduci selezionati" (domande nuove anche per le righe corrette a mano, e di nuovo nuove premendolo ancora; scelta del modello, traduttore locale mancante), "Ritraduci tutto con Qualità (12B)" e "Ricomincia da zero" (solo per le prove: i pulsanti non ci sono più), una memoria di una versione vecchia con poche voci annotate (solo le correzioni vere sono "Corrette a mano"), "Apri il file (avanzato)" con il Blocco note, un file delle traduzioni rovinato, il pulsante "Correggi traduzioni" nelle finestre di fine.
-- `python -I test/prova_esiti.py <cartella-vuota>`: l'esito di ogni operazione e le sue finestre, con giochi finti (web, GameMaker, Unity Mono, IL2CPP e Unity Localization) e il traduttore di test. Copre:
+- `python -I test/test_outcomes.py <cartella-vuota>`: l'esito di ogni operazione e le sue finestre, con giochi finti (web, GameMaker, Unity Mono, IL2CPP e Unity Localization) e il traduttore di test. Copre:
   - tradotto, in parte (con i testi rimasti da mostrare), riapplicato, ripristinato, già originale, niente da riapplicare;
   - gioco aperto (nessun file toccato), Google in pausa scritto in uno stato dei traduttori di prova (nessuna richiesta), lingua ufficiale;
   - Unity IL2CPP senza tabelle, Unity Localization con l'impronta (CRC) controllata (senza "serve BepInEx 6"), anti-cheat;
@@ -677,9 +677,9 @@ Le singole prove:
   - i pulsanti del traduttore locale ("Usa" se è installato, "Installa" se no) e le finestre delle operazioni che non toccano il gioco (rapporto, installazione: niente "Riprova");
   - "Crea rapporto": i file attesi ci sono, chiave DeepL ed email no (neanche dentro un registro o in un indirizzo web);
   - chi traduce le frasi nuove mentre giochi (Google, traduttore di PatchSmith, nessuno, con la spiegazione e "Installa il traduttore locale") e un file rovinato in `profiles/` (saltato);
-  - nessun testo che arriva all'interfaccia rimanda a `smith.py`; la riga di comando scrive il comando per rimediare sotto l'errore e in `smith servizi`.
+  - nessun testo che arriva all'interfaccia rimanda a `smith.py`; la riga di comando scrive il comando per rimediare sotto l'errore e in `smith services`.
   - le traduzioni che il gioco non saprebbe mostrare, scartate quando si scrivono: la finestra di fine e "Correggi traduzioni" portano all'elenco "Non scritte nel gioco".
-- `python -I test/prova_servizio_xunity.py <cartella-vuota> [<cartella _Data di un gioco Unity Mono>]`: traduttore delle frasi nuove per XUnity con traduttori di prova (nessuna rete, nessuna scheda video). Copre:
+- `python -I test/test_xunity_service.py <cartella-vuota> [<cartella _Data di un gioco Unity Mono>]`: traduttore delle frasi nuove per XUnity con traduttori di prova (nessuna rete, nessuna scheda video). Copre:
   - risposte, segnaposto `{{A}}` intatti, memoria, diario delle frasi, porta già in uso dallo stesso gioco, chiusura insieme al processo del gioco (503 mentre si chiude; porta liberata subito anche con una frase in traduzione, che finisce e si salva), `.tmp` vecchi tolti all'avvio;
   - traduttori in fila (uno che non risponde o in pausa si salta; 500 solo se nessuno risponde) e quali userebbe il servizio;
   - frasi scartate dai controlli: mai 500, risposta di ripiego (anche a pezzi tra i `{{A}}`) o l'originale, e cosa ne dice il diario; la lingua della risposta (frasi italiane con "se", "tu", "su", "no" non scambiate per spagnolo; una proposta rimasta in inglese sì);
@@ -687,23 +687,23 @@ Le singole prove:
   - memoria salvata insieme da due programmi e da 4 processi (nessuna voce persa, voci tolte che non tornano), memoria comune, file rovinato, lucchetto (anche un `.lock` che per un attimo non si apre);
   - configurazione `CustomTranslate` (senza anti-spam, 2500 caratteri), Google, Endpoint vuoto con Google in pausa.
   - Con la cartella `_Data` anche la compilazione del plugin, il comando e la rimozione.
-- `python -I test/prova_unity_loc.py <cartella-vuota> [<bundle con le tabelle dei testi>]`: Unity Localization, con bundle e giochi IL2CPP finti (`test/unity_finto.py`, nessun file di giochi veri). Copre:
+- `python -I test/test_unity_loc.py <cartella-vuota> [<bundle con le tabelle dei testi>]`: Unity Localization, con bundle e giochi IL2CPP finti (`test/fake_unity.py`, nessun file di giochi veri). Copre:
   - bundle senza compressione, LZ4 e LZMA, anche letti a pezzi (anche un blocco senza compressione grande quanto il bundle, e un LZMA più corto del previsto); bundle troncati; le tabelle degli asset non si traducono;
   - la lingua dal nome, dal contenuto (`english`, `localization_en`, `chinese(simplified)`) o dal nome della lingua; l'italiano trovato così come lingua ufficiale;
   - il catalogo che controlla l'impronta: solo quella del bundle tradotto va a 0 (anche con due bundle), backup del catalogo, Riapplica, una nuova "Analizza e traduci" (il catalogo resta nel profilo anche se nel gioco ha già il CRC 0), il catalogo e il bundle rimessi dal gioco visti dal controllo dopo aver giocato e ritradotti, un aggiornamento che cambia solo il catalogo (il controllo toglie di nuovo il CRC da solo), Ripristina identico; il catalogo senza impronte (come SWORN) non si tocca;
   - nessun file modificato con `catalog.bin`, con l'impronta che non si trova, con l'anti-cheat, senza la lingua di partenza (il motivo dice le lingue del gioco; scelta una di queste, si traduce) o con l'italiano già nel gioco;
   - con un bundle vero anche la riscrittura identica, i testi cambiati e riletti, il flusso con il traduttore di prova su una copia e il ripristino identico.
-- `python -I test/prova_unity.py <cartella-vuota>`: adapter Unity con un gioco e pacchetti finti, senza download (installazione, configurazione, mod dell'utente, antivirus, interruzioni, manifesto alterato, ripristino). Poi chi traduce le frasi nuove con "Analizza e traduci" e "Riapplica" (con un plugin finto): il traduttore di PatchSmith anche scegliendo Google e anche dopo "Ripristina originali", il traduttore scelto salvato nel profilo, nessun traduttore disponibile, compilatore C# mancante con Google libero o in pausa. La pre-traduzione dei giochi Unity di oggi: un modulo del gioco con le sue stringhe (non le librerie di terzi), `data.unity3d` compresso con un testo a cavallo di due blocchi (non le immagini), un bundle LZMA, la tabella dei testi inglese (non le altre lingue), un file grande letto a pezzi, un bundle rovinato, il limite di tempo dei bundle. Infine i nomi del gioco nel profilo (da `app.info`; un nome tolto a mano non torna) e la cache di XUnity: righe sbagliate scritte da PatchSmith o dal traduttore dal vivo rifatte e sostituite, righe cambiate a mano e nomi lasciati come sono.
-- `python -I test/prova_unreal.py <cartella-vuota>`: adapter Unreal con un gioco finto (pak v9 e `.locres` costruiti dal test). Copre lettura, traduzione, cambio lingua, pak altrui, manifesto alterato, installazione interrotta, pak firmati, aggiornamento del gioco e ripristino.
-- `python -I test/prova_xna.py <cartella-vuota>`: adapter XNA/.NET con un gioco finto, creato dal test con il compilatore C# di Windows, e un font XNB finto. Controlla le traduzioni con il vero ResourceManager di .NET e copre i font, gli accenti, il ripristino, i satelliti altrui, il manifesto alterato, l'installazione interrotta e l'aggiornamento del gioco.
-- `python -I test/prova_segnaposto.py`: protezione dei codici di gioco, comune a tutti i motori. Copre `{0}`, `%s`, `[Input:12]`, `\n` scritto come testo, i codici RPG Maker (`\C[3]`, `\nc<Nome>`), i tag di colore e font di GameMaker (`[yellow1]`, `[/c]`, `[/]`) e i percorsi Windows.
-- `python -I test/prova_limitatore.py <cartella-vuota>`: limitatore e traduttori online con risposte simulate (nessuna rete, orologio finto). Copre:
+- `python -I test/test_unity.py <cartella-vuota>`: adapter Unity con un gioco e pacchetti finti, senza download (installazione, configurazione, mod dell'utente, antivirus, interruzioni, manifesto alterato, ripristino). Poi chi traduce le frasi nuove con "Analizza e traduci" e "Riapplica" (con un plugin finto): il traduttore di PatchSmith anche scegliendo Google e anche dopo "Ripristina originali", il traduttore scelto salvato nel profilo, nessun traduttore disponibile, compilatore C# mancante con Google libero o in pausa. La pre-traduzione dei giochi Unity di oggi: un modulo del gioco con le sue stringhe (non le librerie di terzi), `data.unity3d` compresso con un testo a cavallo di due blocchi (non le immagini), un bundle LZMA, la tabella dei testi inglese (non le altre lingue), un file grande letto a pezzi, un bundle rovinato, il limite di tempo dei bundle. Infine i nomi del gioco nel profilo (da `app.info`; un nome tolto a mano non torna) e la cache di XUnity: righe sbagliate scritte da PatchSmith o dal traduttore dal vivo rifatte e sostituite, righe cambiate a mano e nomi lasciati come sono.
+- `python -I test/test_unreal.py <cartella-vuota>`: adapter Unreal con un gioco finto (pak v9 e `.locres` costruiti dal test). Copre lettura, traduzione, cambio lingua, pak altrui, manifesto alterato, installazione interrotta, pak firmati, aggiornamento del gioco e ripristino.
+- `python -I test/test_xna.py <cartella-vuota>`: adapter XNA/.NET con un gioco finto, creato dal test con il compilatore C# di Windows, e un font XNB finto. Controlla le traduzioni con il vero ResourceManager di .NET e copre i font, gli accenti, il ripristino, i satelliti altrui, il manifesto alterato, l'installazione interrotta e l'aggiornamento del gioco.
+- `python -I test/test_placeholders.py`: protezione dei codici di gioco, comune a tutti i motori. Copre `{0}`, `%s`, `[Input:12]`, `\n` scritto come testo, i codici RPG Maker (`\C[3]`, `\nc<Nome>`), i tag di colore e font di GameMaker (`[yellow1]`, `[/c]`, `[/]`) e i percorsi Windows.
+- `python -I test/test_limiter.py <cartella-vuota>`: limitatore e traduttori online con risposte simulate (nessuna rete, orologio finto). Copre:
   - finestre e pause;
   - stop al primo 429 / pagina "Sorry" / redirect, pausa ricordata tra un avvio e l'altro, livelli e disattivazione;
   - righe non allineate senza raffiche, errori di rete, Ferma durante una pausa, stima del tempo;
   - DeepL (chiave, lingue, 403/456/429) e MyMemory (email, 500 byte, quota del giorno);
   - credenziali lette dalle impostazioni.
-- `python -I test/prova_locale.py <cartella-vuota>`: traduttore locale senza rete e senza scheda video. Usa un server simulato in memoria e un Ollama simulato (`test/ollama_finto.py`) avviato davvero su 127.0.0.1. Copre:
+- `python -I test/test_local.py <cartella-vuota>`: traduttore locale senza rete e senza scheda video. Usa un server simulato in memoria e un Ollama simulato (`test/fake_ollama.py`) avviato davvero su 127.0.0.1. Copre:
   - formato del prompt, una richiesta per riga;
   - controlli e secondo tentativo (testo di contorno, alfabeto, rifiuti, numeri, ripetizioni, a capo, non tradotta), risposte troncate;
   - nessun falso scarto: "Ecco…", "Mi dispiace…", cinese e giapponese, "1.000", cifre larghe, virgolette di altro stile;
@@ -723,16 +723,16 @@ Le singole prove:
   - traduzioni salvate rifatte (numeri sbagliati, un'altra lingua) senza toccare le correzioni a mano, e lasciate dopo 6 tentativi;
   - traduzioni che il gioco non sa mostrare (un carattere che il font non ha): quella automatica rifatta subito con l'istruzione, quella corretta a mano annotata e detta nell'esito, anche dopo "Riapplica";
   - traduzioni salvate rifatte che non vanno ancora (rifatte uguali, o con la scrittura nel gioco): semi nuovi a ogni avvio, annotate come sospette e lasciate dopo 6 tentativi; un errore imprevisto nei nuovi giri non ferma la scrittura nel gioco; la memoria comune non prende una traduzione nuova in un'altra lingua; "riferimento copiato" solo per le frasi.
-- `python -I test/prova_gamemaker_json.py <cartella-vuota>`: file di localizzazione JSON (stile Forager) e tasto Ferma. Copre:
+- `python -I test/test_gamemaker_json.py <cartella-vuota>`: file di localizzazione JSON (stile Forager) e tasto Ferma. Copre:
   - riconoscimento delle lingue e delle convenzioni (`*` = a capo, simbolo `U`), senza falsi positivi;
   - a capo bilanciati, frasi spezzate da `**` tradotte intere (ma non titoli ed elenchi), righe vuote `* *`, segnaposto `{con spazi}`;
   - font: quelli solo ASCII non contano;
   - si traduce solo il file della lingua originale, con ripristino identico;
   - **Ferma** durante la traduzione: gioco non toccato, si riparte da dove ci si era fermati;
   - attesa del 429 interrotta subito e messaggio comprensibile.
-- `python -I test/prova_gamemaker.py <cartella-vuota>`: adapter GameMaker con un gioco finto (file a righe e a blocchi, una seconda lingua, un `data.win` minimo con tre font). Copre il formato, la scelta dei file, i font e gli accenti, il flusso completo con il traduttore di test, il ripristino identico e il caso del gioco che ha già l'italiano.
-- `python -I test/prova_lingua_ufficiale.py <cartella-vuota>`: lingua ufficiale con uno Steam finto (appinfo.vdf costruito dal test), un gioco Unreal finto con l'italiano (impostazione e ripristino di GameUserSettings.ini) e un gioco Unity finto con I2 (preferenza nel registro, in una chiave di prova che viene cancellata).
-- `python -I test/prova_configuratore.py <cartella-vuota> [<cartella di Kingdom Hearts>]`: configuratore e scheda di Kingdom Hearts su un'installazione finta (eseguibili PE costruiti dal test). Copre:
+- `python -I test/test_gamemaker.py <cartella-vuota>`: adapter GameMaker con un gioco finto (file a righe e a blocchi, una seconda lingua, un `data.win` minimo con tre font). Copre il formato, la scelta dei file, i font e gli accenti, il flusso completo con il traduttore di test, il ripristino identico e il caso del gioco che ha già l'italiano.
+- `python -I test/test_official_language.py <cartella-vuota>`: lingua ufficiale con uno Steam finto (appinfo.vdf costruito dal test), un gioco Unreal finto con l'italiano (impostazione e ripristino di GameUserSettings.ini) e un gioco Unity finto con I2 (preferenza nel registro, in una chiave di prova che viene cancellata).
+- `python -I test/test_configurator.py <cartella-vuota> [<cartella di Kingdom Hearts>]`: configuratore e scheda di Kingdom Hearts su un'installazione finta (eseguibili PE costruiti dal test). Copre:
   - riconoscimento ed eseguibili di versioni diverse;
   - consenso;
   - rifiuti: Smart App Control, gioco aperto, sola lettura;
@@ -740,13 +740,13 @@ Le singole prove:
   - aggiornamento del gioco e ripristino identico.
 
   Con la cartella del gioco vero ripete la prova su **copie** dei suoi eseguibili: la cartella del gioco non viene toccata.
-- `python -I test/prova_lingua_aggiunta.py <cartella-vuota>`: lingua aggiunta e giochi in minuscolo (stile Forager), con un gioco finto: `data.win` minimo (nome, stringhe, sprite di un font a immagini, maschera `local/*.json`), anche compilato YYC (maschera e mappa nell'eseguibile). Copre:
+- `python -I test/test_added_language.py <cartella-vuota>`: lingua aggiunta e giochi in minuscolo (stile Forager), con un gioco finto: `data.win` minimo (nome, stringhe, sprite di un font a immagini, maschera `local/*.json`), anche compilato YYC (maschera e mappa nell'eseguibile). Copre:
   - stile delle maiuscole, icone protette, minuscole, spazio delle righe;
   - `local/italiano.json` creato con l'inglese intatto, nessun file di PatchSmith che il gioco caricherebbe come lingua;
   - rilancio, senza scambiare la lingua aggiunta per una ufficiale;
   - lingua impostata nelle opzioni salvate (ds_map in esadecimale) e rimessa con "Ripristina originali" a file identico; con la lingua in più punti non si tocca nulla;
   - passaggio da una versione precedente, che aveva tradotto english.json al suo posto.
-- `python -I test/prova_lingua_regressioni.py <cartella-vuota>`: i casi difficili della lingua ufficiale. Copre:
+- `python -I test/test_language_regressions.py <cartella-vuota>`: i casi difficili della lingua ufficiale. Copre:
   - riconoscimento Steam prudente: installatori, nomi generici, eseguibili condivisi, pari merito, junction, cache rovinata;
   - pak montati in sottocartelle (v9 e v11);
   - cinese per scrittura;
@@ -754,21 +754,21 @@ Le singole prove:
   - Unity: catalogo binario, I2 personalizzato, errori isolati;
   - "traduci comunque" con GameMaker e Unreal;
   - ripristino dalla riga di comando con la cartella.
-- `python -I test/prova_cjk.py`: riconoscimento dei testi in giapponese, cinese e coreano. Verifica anche che nulla cambi per l'alfabeto latino.
-- `python -I test/prova_sicurezza.py <copia-di-un-gioco> <file.json>`: scenari critici, da lanciare dopo `smith auto <copia> --backend finto` (meglio con `esegui_tutto.py --sicurezza`, che fa tutto; se il profilo manca, la prova lo crea). Copre la cartella superiore, l'aggiornamento del gioco, il backup alterato e il ripristino completo. Senza `PATCHSMITH_DATI` profilo e memoria vanno in `dati-prova-sicurezza`, accanto alla copia.
+- `python -I test/test_cjk.py`: riconoscimento dei testi in giapponese, cinese e coreano. Verifica anche che nulla cambi per l'alfabeto latino.
+- `python -I test/test_safety.py <copia-di-un-gioco> <file.json>`: scenari critici, da lanciare dopo `smith auto <copia> --backend finto` (meglio con `run_all.py --safety`, che fa tutto; se il profilo manca, la prova lo crea). Copre la cartella superiore, l'aggiornamento del gioco, il backup alterato e il ripristino completo. Senza `PATCHSMITH_DATI` profilo e memoria vanno in `dati-prova-sicurezza`, accanto alla copia.
 
 **Questi test vanno usati solo su copie, mai su un gioco vero.**
 
 ## Pacchetto da pubblicare
 
-`python -I smith.py pacchetto` prepara, accanto alla cartella del programma, `PatchSmith-rilascio/PatchSmith` e lo zip `PatchSmith-<versione>-windows.zip`: chi lo scarica lo estrae e fa doppio clic su `PatchSmith.exe`, anche su un PC senza Python.
+`python -I smith.py package` prepara, accanto alla cartella del programma, `PatchSmith-rilascio/PatchSmith` e lo zip `PatchSmith-<versione>-windows.zip`: chi lo scarica lo estrae e fa doppio clic su `PatchSmith.exe`, anche su un PC senza Python.
 
 - **Cosa c'è dentro:** il programma (`PatchSmith.pyw`, `smith.py`, `patchsmith/`, i sorgenti dei plugin, `data/`, `LEGGIMI.md`, `README.md` in inglese, `docs/`, `LICENSE`), `PatchSmith.exe` e in `runtime/` un **Python portatile**: le sole parti di un Python installato che servono a PatchSmith (Tkinter compresa; senza prove, IDLE, pip), circa 42 MB, 16 MB nello zip con Python 3.15. Il file `._pth` lo isola dalle variabili d'ambiente e dal registro: un altro Python installato sul PC non conta.
 - **Cosa non c'è:** i dati di chi usa PatchSmith (profili, memoria, registri, impostazioni…), le prove, i componenti scaricati (BepInEx, XUnity, Ollama: si scaricano quando servono, chiedendo prima).
 - `PatchSmith.exe` usa il Python portatile se c'è, se no quello installato. Il traduttore che parte con i giochi (Unity, giochi web dal vivo) usa il Python con cui gira PatchSmith, quindi anche lui quello portatile.
 - Prima di creare lo zip PatchSmith prova il Python portatile in un ambiente senza Python (solo le cartelle di Windows nel PATH): deve partire e avere i moduli che servono, Tkinter compresa.
 - Nello zip c'è una sola cartella `PatchSmith`: estratta sopra quella di prima la aggiorna e lascia i dati come sono.
-- `--python <cartella>` usa un altro Python (consigliato per il rilascio: il più recente da python.org); `--uscita <cartella>` cambia dove va il pacchetto. Un Python recente senza installarlo: dalla cartella `amd64/` della versione su python.org (es. `https://www.python.org/ftp/python/3.15.1/amd64/`) si scaricano `core.msi`, `exe.msi`, `lib.msi` e `tcltk.msi` e si estraggono con `msiexec /a <file>.msi TARGETDIR=<cartella> /qn` (estrazione: niente in "Programmi" né nel registro). Il pacchetto della 0.1.0 è fatto con Python 3.15.1 (Tcl/Tk 9.0.4); tutte le prove passano sia con il 3.15 sia con il 3.11. Un pacchetto in cui qualcuno ha già lavorato (con dei dati dentro) non si cancella.
+- `--python <cartella>` usa un altro Python (consigliato per il rilascio: il più recente da python.org); `--output <cartella>` cambia dove va il pacchetto. Un Python recente senza installarlo: dalla cartella `amd64/` della versione su python.org (es. `https://www.python.org/ftp/python/3.15.1/amd64/`) si scaricano `core.msi`, `exe.msi`, `lib.msi` e `tcltk.msi` e si estraggono con `msiexec /a <file>.msi TARGETDIR=<cartella> /qn` (estrazione: niente in "Programmi" né nel registro). Il pacchetto della 0.1.0 è fatto con Python 3.15.1 (Tcl/Tk 9.0.4); tutte le prove passano sia con il 3.15 sia con il 3.11. Un pacchetto in cui qualcuno ha già lavorato (con dei dati dentro) non si cancella.
 
 ## Aggiungere un adapter
 
@@ -778,4 +778,4 @@ Un adapter deve saper fare quattro cose:
 3. reinserirli;
 4. verificare il risultato.
 
-Guarda `adapter_webjson.py` (dati) e `adapter_webui.py` (menu web), e come li usa `progetto.py`. Le librerie esterne con licenza GPL vanno usate solo come programmi esterni, per restare in licenza MIT.
+Guarda `adapter_webjson.py` (dati) e `adapter_webui.py` (menu web), e come li usa `project.py`. Le librerie esterne con licenza GPL vanno usate solo come programmi esterni, per restare in licenza MIT.

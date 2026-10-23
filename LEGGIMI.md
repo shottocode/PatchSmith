@@ -70,7 +70,7 @@ La traduzione automatica non ha contesto: la qualità è quella di una traduzion
 
 ## Pacchetto da pubblicare
 
-`python -I smith.py pacchetto` prepara `PatchSmith-rilascio/PatchSmith` e `PatchSmith-<versione>-windows.zip` accanto alla cartella del programma: il programma, `PatchSmith.exe` e un Python portatile (con Tkinter) isolato dal resto del PC. `--python <cartella>` usa un altro Python (consigliato il più recente da python.org). Le prove: `python -I test/esegui_tutto.py` (usano giochi e traduttori finti, mai i tuoi dati veri). Dettagli in [docs/TECNICO.md](docs/TECNICO.md).
+`python -I smith.py package` prepara `PatchSmith-rilascio/PatchSmith` e `PatchSmith-<versione>-windows.zip` accanto alla cartella del programma: il programma, `PatchSmith.exe` e un Python portatile (con Tkinter) isolato dal resto del PC. `--python <cartella>` usa un altro Python (consigliato il più recente da python.org). Le prove: `python -I test/run_all.py` (usano giochi e traduttori finti, mai i tuoi dati veri). Dettagli in [docs/TECNICO.md](docs/TECNICO.md).
 
 ## Contatti
 

@@ -20,9 +20,9 @@ import struct
 import unicodedata
 import zlib
 
-from . import __version__, lingua, rilevamento
+from . import __version__, language as lingua, detection as rilevamento
 from .adapter_webjson import SUFFISSO_TMP, scrivi_atomico
-from .sistema import gioco_aperto
+from .system import gioco_aperto
 
 MAGIC_PAK = 0x5A6F12E1
 MAGIC_LOCRES = bytes.fromhex("0e147475674a03fc4a15909dc3377f1b")
@@ -38,7 +38,7 @@ def nome_pak(lingua_dest):
 class ErroreUnreal(Exception):
     def __init__(self, messaggio="", codice=None):
         super().__init__(messaggio)
-        self.codice = codice  # esito per l'interfaccia (vedi esito.py), es. GIOCO_APERTO
+        self.codice = codice  # esito per l'interfaccia (vedi outcome.py), es. GIOCO_APERTO
 
 
 # --- FString ------------------------------------------------------------------------------------
@@ -489,7 +489,7 @@ def caratteri_ammessi(cartella, presenti, native=()):
     altre, culture = caratteri_culture(cartella, native)
     if not culture or not any(c.isalpha() and not c.isascii() for c in altre):
         return None
-    from .caratteri import ASCII
+    from .characters import ASCII
     ammessi = set(ASCII) | set(presenti) | altre
     if any(c in _LATINO_1 and c.isalpha() for c in altre):
         ammessi |= _LATINO_1
@@ -503,7 +503,7 @@ def _adatta(traduzione, presenti, ammessi=None, lingua_dest="it"):
         return None
     pronta = "".join(SOSTITUTI[c] if c in SOSTITUTI and c not in presenti else c for c in traduzione)
     if ammessi is not None:
-        from .caratteri import adatta_caratteri
+        from .characters import adatta_caratteri
         pronta = adatta_caratteri(pronta, ammessi, lingua_dest)
     return pronta
 
@@ -533,7 +533,7 @@ def installa(cartella, a, nome_profilo, memoria, log=print, respinte=None):
             grezza = memoria.get(s)
             t = _adatta(grezza, presenti, ammessi, a) if grezza else None
             if grezza and t is None and ammessi is not None and _adatta(grezza, presenti) is not None:
-                from .caratteri import Filtro, non_disegnabili
+                from .characters import Filtro, non_disegnabili
                 scartate[s] = non_disegnabili(grezza, Filtro(ammessi, aggiunti=s), a)
             elif t and _adatta(grezza, presenti) != t:
                 adattate += 1

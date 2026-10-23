@@ -26,7 +26,7 @@ import re
 import struct
 import time
 
-from . import interruzione, unityfs
+from . import interruption as interruzione, unityfs
 from .adapter_webjson import scrivi_atomico
 
 MAX_SECONDI = 180  # lettura dei font: oltre, non si sa (nessun limite); il risultato poi si tiene (vedi cache)

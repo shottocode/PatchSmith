@@ -20,8 +20,8 @@ import os
 import re
 import struct
 
-from . import adapter_righe, gamemaker, lingua
-from .caratteri import ASCII
+from . import adapter_lines as adapter_righe, gamemaker, language as lingua
+from .characters import ASCII
 
 # nomi completi delle lingue (valgono ovunque nel percorso) e codici brevi (valgono solo in posizioni sicure)
 NOMI_LINGUE = {
@@ -147,7 +147,7 @@ def famiglia(rel):
 def leggi_originale(percorso, lettore):
     """I dati del file com'era in origine: dal backup di PatchSmith se c'e' ed e' valido (il file puo' essere gia'
     tradotto), altrimenti dal file stesso. 'lettore' legge un percorso."""
-    from . import progetto
+    from . import project as progetto
     backup = percorso + progetto.SUFFISSO_BACKUP
     if os.path.exists(backup):
         info = progetto.leggi_info(percorso)
@@ -370,7 +370,7 @@ def creati_da_patchsmith(cartella):
     """Nomi dei file che PatchSmith ha creato in questa cartella (es. la lingua nuova local/italiano.json), letti
     dalle informazioni dei backup: non sono file del gioco. Un file creato e poi sostituito da altri (es. un
     italiano.json ufficiale arrivato con un aggiornamento: impronta diversa da quella scritta) non conta piu'."""
-    from . import progetto
+    from . import project as progetto
     creati = set()
     try:
         nomi = os.listdir(cartella)
@@ -759,7 +759,7 @@ def _parole_miste(testo):
 
 
 def _senza_segnaposto(testo):
-    from .testo import _SEGNAPOSTO
+    from .text import _SEGNAPOSTO
     return _SEGNAPOSTO.sub(" ", testo)
 
 
@@ -809,7 +809,7 @@ def in_minuscolo(tradotto, originale, codici=(), lingua_dest="it"):
     """La traduzione con le maiuscole come le scrive il gioco: per un testo il cui originale e' in minuscolo,
     tutte le lettere in minuscolo tranne i codici dell'originale (icone) e i segnaposto. I testi con maiuscole
     normali (messaggi di sistema) restano come sono."""
-    from .testo import _SEGNAPOSTO
+    from .text import _SEGNAPOSTO
     if _parole_miste(_senza_segnaposto(originale)):
         return tradotto
     presenti = [c for c in codici if re.search(r"(?<![^\W\d_])%s(?![^\W\d_])" % re.escape(c), originale)]

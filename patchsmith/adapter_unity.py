@@ -12,7 +12,7 @@ successiva e' immediata.
 Sicurezza:
 - non tocca mai i file del gioco: aggiunge solo file nuovi (BepInEx/, winhttp.dll, doorstop_config.ini...);
 - se trova gia' un loader di mod (BepInEx, MelonLoader, winhttp.dll/version.dll...) si ferma;
-- i componenti arrivano dalle release ufficiali con impronta SHA-256 verificata (componenti.py);
+- i componenti arrivano dalle release ufficiali con impronta SHA-256 verificata (components.py);
 - PRIMA di scrivere salva in patchsmith-unity.json l'elenco completo dei file con la loro impronta;
 - ogni file viene scritto su un nome temporaneo e poi rinominato (niente file scritti a meta');
 - se l'installazione si interrompe, toglie tutto quello che aveva previsto di mettere;
@@ -34,10 +34,11 @@ import sys
 import time
 import zipfile
 
-from . import __version__, adapter_unity_loc, componenti, interruzione, lingua, rilevamento, unityfs
+from . import (__version__, adapter_unity_loc, components as componenti, interruption as interruzione,
+               language as lingua, detection as rilevamento, unityfs)
 from .adapter_webjson import SUFFISSO_TMP, scrivi_atomico
-from .progetto import CARTELLA_PROGETTO, cartella_dati
-from .testo import DETTAGLIO, e_testo_leggibile, solo_parole
+from .project import CARTELLA_PROGETTO, cartella_dati
+from .text import DETTAGLIO, e_testo_leggibile, solo_parole
 
 MANIFESTO = "patchsmith-unity.json"
 CONFIG_XUNITY = "BepInEx/config/AutoTranslatorConfig.ini"
@@ -68,7 +69,7 @@ ARTEFATTI_RADICE = re.compile(r"^(preloader_.*\.log|output_log\.txt|BepInEx_Shim
 class ErroreUnity(Exception):
     def __init__(self, messaggio="", codice=None):
         super().__init__(messaggio)
-        self.codice = codice  # esito per l'interfaccia (vedi esito.py), es. GIOCO_APERTO
+        self.codice = codice  # esito per l'interfaccia (vedi outcome.py), es. GIOCO_APERTO
 
 
 def _sha256(percorso):
@@ -428,7 +429,7 @@ def _imposta_bepinex(cartella, sezione, chiave, valore, nuova_sezione=None):
 
 def registro_unity_attivo(cartella):
     """True se BepInEx copia nel suo registro (LogOutput.log) anche i messaggi di Unity ([Logging.Disk]
-    WriteUnityLog): li' TextMeshPro scrive i caratteri che i font del gioco non hanno (vedi controllo.py)."""
+    WriteUnityLog): li' TextMeshPro scrive i caratteri che i font del gioco non hanno (vedi checks.py)."""
     valore = (leggi_ini(_percorso(cartella, CONFIG_BEPINEX)).get("Logging.Disk") or {}).get("WriteUnityLog")
     return (valore or "").strip().lower() == "true"
 
@@ -558,7 +559,7 @@ def servizio_attivo(cartella):
 
 def url_servizio(cartella):
     """Indirizzo del traduttore di PatchSmith scritto nel comando del plugin, o None se non attivo."""
-    from . import servizio_xunity
+    from . import xunity_service as servizio_xunity
     if not servizio_attivo(cartella):
         return None
     with open(_percorso(cartella, CONFIG_SERVIZIO), encoding="utf-8-sig") as f:
@@ -585,7 +586,7 @@ def traduttore_dal_vivo(cartella):
 def attiva_servizio(cartella, info, percorso_profilo, nome_profilo):
     """Le frasi nuove mentre si gioca le traduce PatchSmith (servizio_xunity): compila il plugin che avvia il servizio
     all'apertura del gioco e scrive il comando. Restituisce l'indirizzo per XUnity."""
-    from . import servizio_xunity
+    from . import xunity_service as servizio_xunity
     porta = servizio_xunity.porta_per(nome_profilo)
     righe = [
         "# Scritto da Patchsmith: traduttore delle frasi nuove avviato all'apertura del gioco (plugin "
@@ -643,7 +644,7 @@ def disattiva_servizio(cartella):
 def google_libero():
     """True se Google gratuito non e' in pausa per un blocco. XUnity con Google manda le richieste da se', senza le
     pause di PatchSmith: durante una pausa non lo si configura (sarebbe un traduttore che non risponde)."""
-    from .limitatore import Limitatore
+    from .limiter import Limitatore
     try:
         return Limitatore("google", log=None).pausa() is None
     except (OSError, ValueError, TypeError, AttributeError):
@@ -1049,13 +1050,13 @@ def scrivi_cache_xunity(cartella, a, traduzioni, log=print, sostituisci=None, co
     sostituisci: {originale: traduzione che la riga deve avere adesso}: quelle righe si riscrivono con la traduzione
     di 'traduzioni', ma solo se nel file c'e' ancora proprio quella traduzione (scritta da PatchSmith o dal suo
     traduttore dal vivo, vedi controlla_cache_xunity): una riga cambiata a mano nel frattempo resta com'e'.
-    esclusi: i caratteri che i font del gioco non sanno disegnare (profilo["caratteri_mancanti"], vedi controllo.py):
+    esclusi: i caratteri che i font del gioco non sanno disegnare (profilo["caratteri_mancanti"], vedi checks.py):
     nelle righe scritte adesso si adattano (è -> e', caratteri.adatta_senza).
     Restituisce quante righe ha aggiunto; in 'conteggi' (se c'e') anche {'aggiunte', 'sostituite'}."""
     percorso = _percorso_cache(cartella, a)
     sostituisci = sostituisci or {}
     if esclusi:
-        from .caratteri import adatta_senza
+        from .characters import adatta_senza
         traduzioni = {t: (adatta_senza(v, esclusi, a) or v) for t, v in traduzioni.items()}
     righe, bom = [], False
     if os.path.exists(percorso):

@@ -20,7 +20,7 @@ import shutil
 import subprocess
 
 from .adapter_webjson import MARCATORE
-from .testo import _CJK, e_testo_leggibile
+from .text import _CJK, e_testo_leggibile
 
 SUFFISSO_BACKUP = ".patchsmith-originale"  # deve coincidere con progetto.SUFFISSO_BACKUP
 
@@ -392,7 +392,7 @@ def estrai_testi(radice, log=None):
 # --- scrittura ------------------------------------------------------------------------------
 
 def genera_script(dizionario):
-    modello_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "iniettore.js")
+    modello_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "injector.js")
     with open(modello_path, encoding="utf-8") as f:
         modello = f.read()
     voci = {normalizza(k): v for k, v in dizionario.items() if v and normalizza(k) != v}

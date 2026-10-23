@@ -1,13 +1,13 @@
 """Interfaccia grafica (Tkinter, inclusa in Python): scegli la cartella del gioco e premi Traduci.
 
-Ogni operazione finisce con una finestra scelta dal suo esito (esito.py: tradotto, in parte, non supportato, gioco
+Ogni operazione finisce con una finestra scelta dal suo esito (outcome.py: tradotto, in parte, non supportato, gioco
 aperto, traduttore fermo...) con i pulsanti per il passo successivo. Il registro di ogni operazione si salva anche su
 disco, in registri/ tra i dati dell'utente (gli ultimi MAX_REGISTRI), con i dettagli tecnici degli errori; "Crea
-rapporto" li mette in uno zip sul Desktop (rapporto.py).
+rapporto" li mette in uno zip sul Desktop (report.py).
 All'apertura, i giochi con segnali nuovi dopo l'ultima partita (crash, traduttore fermo, file rimessi dal gioco...) si
-controllano da soli (controllo.py): il risultato e' nella riga sotto la cartella, con "Dettagli" (e "Ritraduci" per
+controllano da soli (checks.py): il risultato e' nella riga sotto la cartella, con "Dettagli" (e "Ritraduci" per
 le frasi tradotte mentre si giocava da rifare).
-"Correggi traduzioni…" apre la finestra con l'elenco delle traduzioni del gioco e i loro problemi (gui_correzioni.py):
+"Correggi traduzioni…" apre la finestra con l'elenco delle traduzioni del gioco e i loro problemi (gui_corrections.py):
 le correzioni salvate li' si scrivono nel gioco da sole ("Riapplica"); da li' partono anche la ritraduzione dei testi
 scelti, "Ritraduci tutto con Qualità (12B)" e "Ricomincia da zero".
 """
@@ -24,12 +24,13 @@ import tkinter as tk
 import traceback
 from tkinter import filedialog, ttk
 
-from . import __version__, automatico, controllo, esito as esiti, icona, interruzione, lingua, rapporto, servizio_xunity
-from . import interfaccia, musica, progetto, suoni, tema
+from . import (__version__, auto as automatico, checks as controllo, outcome as esiti, icon as icona,
+               interruption as interruzione, language as lingua, report as rapporto, xunity_service as servizio_xunity)
+from . import ui_language as interfaccia, music as musica, project as progetto, sounds as suoni, theme as tema
 from .backend import verifica_traduttore
-from .esito import Esito
-from .progetto import cartella_dati
-from .testo import DETTAGLIO, leggibile, slug
+from .outcome import Esito
+from .project import cartella_dati
+from .text import DETTAGLIO, leggibile, slug
 
 IMPOSTAZIONI = None  # None = settings.json tra i dati dell'utente (progetto.cartella_dati); le prove la cambiano
 VERSIONE_IMPOSTAZIONI = 2
@@ -162,7 +163,7 @@ class App:
         # errori nei comandi della finestra (pythonw non ha una console): nel registro su disco e in una finestra
         radice.report_callback_exception = self._errore_interfaccia
         radice.title("PatchSmith")  # (la versione e' nei registri e nei rapporti)
-        try:  # martello e cartella (icona.py) su questa finestra e su quelle che si aprono dopo
+        try:  # martello e cartella (icon.py) su questa finestra e su quelle che si aprono dopo
             icona.applica(radice)
         except tk.TclError:  # immagini rovinate: resta l'icona di Tk
             pass
@@ -197,7 +198,7 @@ class App:
         # il campo della cartella
         self.btn_sfoglia = ttk.Button(cornice, text="Sfoglia…", style="Campo.TButton", command=self._sfoglia)
         self.btn_sfoglia.grid(row=0, column=2, sticky="nsew")
-        # bandierina: lingua dell'interfaccia (le lingue sono i file in patchsmith/interfaccia/)
+        # bandierina: lingua dell'interfaccia (le lingue sono i file in patchsmith/ui_language/)
         self._bandiere = {c: interfaccia.bandiera(c, radice) for c in interfaccia.lingue()}
         # (una tendina disegnata qui: i menu di Windows hanno il bordo chiaro anche nel tema scuro)
         angolo = ttk.Frame(cornice)  # sotto "Sfoglia…": musica, suoni, tema chiaro/scuro e lingua
@@ -497,7 +498,7 @@ class App:
     def _aggiorna_stato_servizio(self, ripeti=False):
         """Accanto al traduttore: se e' in pausa dopo un blocco (fino a quando) o disattivato (pulsante Riattiva);
         per il traduttore locale se e' pronto o da installare. Con ripeti=True si riaggiorna ogni minuto."""
-        from .limitatore import Limitatore
+        from .limiter import Limitatore
         self.stato_traduttore.pack_forget()
         self.btn_riattiva.pack_forget()
         self.btn_installa.pack_forget()
@@ -525,7 +526,7 @@ class App:
             self.radice.after(60_000, lambda: self._aggiorna_stato_servizio(ripeti=True))
 
     def _riattiva(self):
-        from .limitatore import NOMI, Limitatore
+        from .limiter import NOMI, Limitatore
         nome = NOMI.get(self._scelto, self._scelto)
         if tema.chiedi(self.radice, self.colori, "Riattivare %s?" % nome,
                        "%s ha rifiutato piu' volte le richieste. Se lo riattivi e continua a rifiutarle, insistere "
@@ -592,7 +593,7 @@ class App:
         self.btn_musica.configure(image=self._img_musica)
 
     def _cambia_musica(self):
-        """Pulsante con la nota: accende o spegne la musica di sottofondo (musica.py) e lo ricorda."""
+        """Pulsante con la nota: accende o spegne la musica di sottofondo (music.py) e lo ricorda."""
         self.musica_accesa = not self.musica_accesa
         self._simbolo_musica()
         self._chiudi_tendina()
@@ -985,7 +986,7 @@ class App:
         """Fine di Analizza e traduci / Riapplica / Ripristina: una finestra per ogni esito, con il passo dopo."""
         self.ultimo_esito = e
         x = e.extra
-        if e.codice == "UFFICIALE" and x.get("lingua_ufficiale"):  # la lingua ufficiale c'e' (lingua_ufficiale.py)
+        if e.codice == "UFFICIALE" and x.get("lingua_ufficiale"):  # la lingua ufficiale c'e' (official_language.py)
             righe = x.get("righe") or [e.motivo]
             if x.get("serve_consenso"):
                 self.stato.set("Il gioco ha gia' la lingua ufficiale: serve il tuo consenso per attivarla.")
@@ -1511,12 +1512,12 @@ class App:
                         "PatchSmith è stato aggiornato mentre questa finestra era aperta: chiudi PatchSmith e riaprilo, "
                         "altrimenti continui a usare la versione di prima.")
 
-    # --- correggi traduzioni (gui_correzioni.py) ------------------------------------------------------------
+    # --- correggi traduzioni (gui_corrections.py) ------------------------------------------------------------
 
     def _correggi(self, filtro=None):
         """"Correggi traduzioni…": la finestra con le traduzioni del gioco della cartella scelta e i loro problemi;
         filtro: l'elenco da mostrare subito (vedi correzioni.FILTRI). Restituisce la finestra (o None)."""
-        from . import correzioni, gui_correzioni
+        from . import corrections as correzioni, gui_corrections as gui_correzioni
         if self._occupato():
             return None
         cartella = self.cartella.get().strip().strip('"')

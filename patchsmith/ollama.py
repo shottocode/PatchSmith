@@ -21,7 +21,7 @@ import urllib.error
 import urllib.request
 import zipfile
 
-from . import interruzione
+from . import interruption as interruzione
 
 VERSIONE = "0.40.4"
 URL_ZIP = "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-windows-amd64.zip"
@@ -43,7 +43,7 @@ class ErroreLocale(Exception):
 
 
 def cartella():
-    from . import progetto
+    from . import project as progetto
     return progetto.cartella_componenti("ollama")
 
 

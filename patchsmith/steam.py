@@ -184,7 +184,7 @@ def gioco_installato(cartella_gioco, steam=None):
 def in_esecuzione():
     """True se Steam e' aperto (steam.exe), None se non si puo' sapere."""
     try:
-        from .sistema import processi_windows
+        from .system import processi_windows
         return any(os.path.basename(p).lower() == "steam.exe" for p in processi_windows())
     except (OSError, AttributeError, ImportError):
         return None

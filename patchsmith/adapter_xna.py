@@ -26,10 +26,10 @@ import struct
 import subprocess
 import tempfile
 
-from . import __version__, dotnet, lingua, rilevamento, xnb
-from .caratteri import ASCII, adatta_caratteri  # noqa: F401 (usati anche dai test)
+from . import __version__, dotnet, language as lingua, detection as rilevamento, xnb
+from .characters import ASCII, adatta_caratteri  # noqa: F401 (usati anche dai test)
 from .adapter_webjson import SUFFISSO_TMP, scrivi_atomico
-from .sistema import gioco_aperto
+from .system import gioco_aperto
 
 MANIFESTO = "patchsmith-xna.json"
 MARCATORE = "Patchsmith"  # [AssemblyProduct] dei satelliti creati da noi: un satellite del gioco non lo ha
@@ -41,7 +41,7 @@ _CULTURA = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 class ErroreXna(Exception):
     def __init__(self, messaggio="", codice=None):
         super().__init__(messaggio)
-        self.codice = codice  # esito per l'interfaccia (vedi esito.py), es. GIOCO_APERTO
+        self.codice = codice  # esito per l'interfaccia (vedi outcome.py), es. GIOCO_APERTO
 
 
 # --- analisi -------------------------------------------------------------------------------------
