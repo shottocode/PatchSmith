@@ -149,26 +149,62 @@ def _traduci_nucleo(testo, profondita=0):
     if t is not None:
         return t
     modelli = _modelli()
-    # i modelli che cominciano come il testo, dal piu' lungo inizio fisso (i piu' precisi), poi i ripieghi
-    for inizio in [testo[:n] for n in range(min(6, len(testo)), -1, -1)] + [None]:
-        if inizio is None and profondita > 0:
-            break
-        for _fisso, regex, segni, traduzione in modelli.get(inizio, ()):
+    # tra i modelli che cominciano come il testo vince quello con piu' testo fisso (il piu' preciso), non quello con
+    # l'inizio piu' lungo: "%s: interfaccia, %d testi tradotti..." batte "index.html: %s"
+    migliore = None
+    for inizio in [testo[:n] for n in range(min(6, len(testo)), -1, -1)]:
+        for fisso, regex, segni, traduzione in modelli.get(inizio, ()):
+            if migliore is not None and fisso <= migliore[0]:
+                break  # (ordinati per testo fisso: gli altri del gruppo sono meno precisi)
             m = regex.match(testo)
-            if not m:
-                continue
-            valori = list(m.groups())
-            if profondita < 2:  # i pezzi di testo dentro (es. " (387 da altri giochi)"): anche loro tradotti
-                valori = [_traduci_pezzo(v, profondita + 1) if s[-1] in "sr" else v for s, v in zip(segni, valori)]
-            return _riempi(traduzione, segni, valori)
-    return testo
+            if m:
+                migliore = (fisso, m, segni, traduzione)
+                break
+    if migliore is None and profondita == 0:  # messaggi fatti di piu' frasi del file messe una dopo l'altra
+        tradotto = _per_frasi(testo)
+        if tradotto != testo:
+            return tradotto
+    if migliore is None and profondita <= 1:  # ripieghi ("%s: %s", "%s (%s)"), anche per i pezzi dentro una frase
+        for fisso, regex, segni, traduzione in modelli[None]:
+            m = regex.match(testo)
+            if m:
+                migliore = (fisso, m, segni, traduzione)
+                break
+    if migliore is None:
+        return testo
+    _fisso, m, segni, traduzione = migliore
+    valori = list(m.groups())
+    if profondita < 2:  # i pezzi di testo dentro (es. " (387 da altri giochi)"): anche loro tradotti
+        valori = [_traduci_pezzo(v, profondita + 1) if s[-1] in "sr" else v for s, v in zip(segni, valori)]
+    return _riempi(traduzione, segni, valori)
+
+
+def _per_frasi(testo):
+    """Il testo diviso in frasi ("... evitano. Una frase con..."), tradotto a gruppi: dall'inizio, il gruppo di frasi
+    consecutive piu' lungo che e' nel file (una voce puo' avere piu' frasi); le frasi che non ci sono restano com'erano."""
+    parti = re.split(r"(?<=[.!?])( +)(?=[A-ZÀ-Ý\"«(\d])", testo)
+    frasi, spazi = parti[0::2], parti[1::2] + [""]
+    if len(frasi) < 2:
+        return testo
+    uscita, i = [], 0
+    while i < len(frasi):
+        for j in range(len(frasi), i, -1):
+            if (i, j) == (0, len(frasi)):
+                continue  # (il testo intero non c'e' gia')
+            pezzo = "".join(frasi[k] + spazi[k] for k in range(i, j - 1)) + frasi[j - 1]
+            tradotto = _traduci_nucleo(pezzo, 1)
+            if tradotto != pezzo or j == i + 1:
+                uscita.append(tradotto + spazi[j - 1])
+                i = j
+                break
+    return "".join(uscita)
 
 
 def _traduci_pezzo(testo, profondita=0):
     m = _PREFISSO.match(testo)
     prefisso, nucleo, coda = m.group(1), m.group(2), m.group(3)
-    if not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo):
-        return testo
+    if not re.search(r"[A-Za-zÀ-ÿ]{2}", nucleo):  # numeri e simboli: solo una voce del file (es. "A:" -> "To:")
+        return prefisso + _stato["testi"].get(nucleo, nucleo) + coda if nucleo else testo
     return prefisso + _traduci_nucleo(nucleo, profondita) + coda
 
 
@@ -341,8 +377,13 @@ def _sembra_testo(s):
         return False
     if re.fullmatch(r"[\w.\-/\\:]+", nucleo) and ("_" in nucleo or "/" in nucleo or "\\" in nucleo):
         return False
-    if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|->|\[[^\]]*\]\?|^#", nucleo):
+    if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|->|\[[^\]]*\]\?|^#|==|^if .*:$"
+                 r"|(?<![\w%])_[a-z]\w*", nucleo):
         return False  # codice (es. lo script per Godot) o espressioni regolari
+    parole = nucleo.split()
+    if len(parole) >= 12 and nucleo == nucleo.lower() and not re.search(r"[.,:;!?()'\"]", nucleo) \
+            and sum(map(len, parole)) / len(parole) < 4.5:
+        return False  # elenco di parole frequenti (riconoscimento della lingua), non una frase
     return " " in nucleo or nucleo.endswith(("…", ":", "?", "!")) or re.match(r"[A-ZÀ-Ý][a-zà-ÿ]+$", nucleo) is not None
 
 
@@ -375,6 +416,7 @@ def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo
     """Crea o completa patchsmith/interfaccia/<codice>.json traducendo con 'traduttore' (es. backend.Locale) i testi
     del programma che mancano; quelli gia' nel file (anche corretti a mano) restano. Restituisce quanti ne ha aggiunti."""
     from .backend import ErroreBackend
+    from .lingua import lingua_evidente
     from .testo import leggibile
     percorso = os.path.join(CARTELLA, codice + ".json")
     try:
@@ -384,6 +426,9 @@ def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo
         dati = {"nome": nome, "bandiera": bandiera_info or {}, "testi": {}}
     testi = dati.setdefault("testi", {})
     mancanti = [t for t in testi_del_programma() if t not in testi]
+    for t in [t for t in mancanti if lingua_evidente(t, SORGENTE)]:
+        testi[t] = t  # gia' in un'altra lingua (es. le istruzioni in inglese per il traduttore locale): resta com'e'
+        mancanti.remove(t)
     if massimo:
         mancanti = mancanti[:massimo]
     log("Testi del programma da tradurre in %s: %d (gia' nel file: %d)" % (nome, len(mancanti), len(testi)))
@@ -406,6 +451,10 @@ def crea_lingua(codice, nome, traduttore, log=print, bandiera_info=None, massimo
         for t, (p, segni), r in zip(gruppo, protetti, tradotti):
             if not r:
                 continue
+            ordine = [ord(m) - 65 for m in re.findall(r"\{\{([A-Z])\}\}", r)]
+            if any(segni[a] == segni[b] and a > b for i, a in enumerate(ordine) for b in ordine[i + 1:]
+                   if a < len(segni) and b < len(segni)):
+                continue  # due segnaposto dello stesso tipo scambiati: i valori finirebbero al posto sbagliato
             for j, s in enumerate(segni):
                 r = r.replace("{{%s}}" % chr(65 + j), s, 1)
             if re.search(r"\{\{[A-Z]\}\}", r) or len(_SEGNO.findall(r)) != len(segni):

@@ -349,12 +349,13 @@ def _testo_tentativi(e):
     righe = []
     if e.extra.get("ritentati"):
         n = e.extra["ritentati"]
-        righe.append("%s scartat%s dai controlli %s già riprovat%s da solo (frasi separate, parametri diversi): "
-                     "%s vedi con \"Mostra i rimasti\". Alla prossima "
-                     "\"Analizza e traduci\" %s riprovo con parametri nuovi." % (
-                         "Un testo" if n == 1 else "%d testi" % n, "o" if n == 1 else "i",
-                         "l'ho" if n == 1 else "li ho", "o" if n == 1 else "i", "lo" if n == 1 else "li",
-                         "lo" if n == 1 else "li"))
+        # frasi intere, al singolare e al plurale (a pezzi non si traducono nella lingua dell'interfaccia)
+        righe.append("Un testo scartato dai controlli l'ho già riprovato da solo (frasi separate, parametri diversi): "
+                     "lo vedi con \"Mostra i rimasti\". Alla prossima \"Analizza e traduci\" lo riprovo con parametri "
+                     "nuovi." if n == 1 else
+                     "%d testi scartati dai controlli li ho già riprovati da solo (frasi separate, parametri diversi): "
+                     "li vedi con \"Mostra i rimasti\". Alla prossima \"Analizza e traduci\" li riprovo con parametri "
+                     "nuovi." % n)
     if e.extra.get("rifatte"):
         righe.append("Ho rifatto %d traduzioni salvate che non andavano bene." % e.extra["rifatte"])
     if e.extra.get("cache_corrette"):
@@ -364,11 +365,11 @@ def _testo_tentativi(e):
         righe.append("Ho scritto nel gioco %s." % ("la tua correzione" if n == 1 else "%d tue correzioni" % n))
     if e.extra.get("corrette_a_mano_scartate"):
         n = e.extra["corrette_a_mano_scartate"]
-        righe.append("%s (righe o caratteri che il gioco non sa mostrare): %s con \"Correggi traduzioni\" (elenco "
-                     "\"Non scritte nel gioco\")." % (
-                         "Una traduzione corretta a mano non si può scrivere nel gioco" if n == 1 else
-                         "%d traduzioni corrette a mano non si possono scrivere nel gioco" % n,
-                         "sistemala" if n == 1 else "sistemale"))
+        righe.append("Una traduzione corretta a mano non si può scrivere nel gioco (righe o caratteri che il gioco non "
+                     "sa mostrare): sistemala con \"Correggi traduzioni\" (elenco \"Non scritte nel gioco\")." if n == 1
+                     else "%d traduzioni corrette a mano non si possono scrivere nel gioco (righe o caratteri che il "
+                     "gioco non sa mostrare): sistemale con \"Correggi traduzioni\" (elenco \"Non scritte nel gioco\")."
+                     % n)
     if e.extra.get("adattate_font"):
         n = e.extra["adattate_font"]
         righe.append("%s lettere che i font del gioco non sanno disegnare: le ho sostituite (es. è diventa e')."

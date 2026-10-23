@@ -6,6 +6,8 @@
 
 PatchSmith automatically translates a video game's text **inside the game itself**, like an official localization: no overlays, both the game's data and its menus. It is free, it works offline with a translator that runs on your PC, and it always keeps a backup of the original files: one click puts everything back.
 
+![Lantern Keeper, a small demo game made for this page: the original in English and the same game after PatchSmith, in Italian](docs/img/before-after.png)
+
 What it does:
 - recognizes the game's engine;
 - finds the text on its own;
@@ -25,6 +27,8 @@ Windows only. The interface is in Italian and English (the flag button switches 
 **Restore originals** puts back the original files, byte for byte; your translations stay saved, so **Analyze and translate** brings them back in a moment. **Fix translations…** lists every translated line, with the ones worth checking (left untranslated, too long, suspicious), and writes your corrections into the game. **Create report** makes a zip to send to whoever helps you (without your DeepL key or email).
 
 From source: you need **Python 3.10+** with Tkinter (no other libraries). Run `PatchSmith.pyw`, or `python -I smith.py gui`; `python -I smith.py -h` lists the command-line commands (for example `python -I smith.py auto "D:\Games\MyGame"`).
+
+![PatchSmith after translating the demo game](docs/img/window-en.png)
 
 ## Supported games
 

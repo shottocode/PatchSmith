@@ -2,7 +2,8 @@
 
 Uso: python -I test/prova_interfaccia.py <cartella_di_prova_che_non_esiste>
 - traduzione dei testi: uguali, con valori dentro (%s, %d), pezzi tradotti dentro, prefissi del registro, piu' righe;
-- il file inglese: ogni traduzione ha gli stessi segnaposto del testo italiano;
+- il file inglese: ogni traduzione ha gli stessi segnaposto del testo italiano; i testi gia' in un'altra lingua restano
+  com'erano e il codice non c'e';
 - la finestra in inglese: pulsanti, menu a tendina, lingue "Da"/"A" (e ritorno al codice), bandierina con il menu delle
   lingue; scelta una lingua, tutta la finestra (registro compreso) cambia subito, senza riaprire, e la ricorda.
 """
@@ -37,6 +38,20 @@ def prova_traduzione():
               and t("Inglese (en)") == "English (en)"
               and t("Una frase che non c'e' nel file") == "Una frase che non c'e' nel file"
               and t("Crea rapporto\nCrea rapporto") == "Create report\nCreate report")
+    # un messaggio fatto di piu' voci del file messe una dopo l'altra (anche una voce di due frasi): a gruppi di frasi
+    voci = interfaccia._stato["testi"]
+    prova = {"Mancano %s. Le metto io.": "%s are missing. I'll add them.", "%d frasi sono rimaste.": "%d sentences are left."}
+    voci.update(prova)
+    interfaccia._stato["modelli"] = None
+    try:
+        controlla("messaggio di piu' frasi: tradotto a gruppi di frasi, quelle che non ci sono restano",
+                  t("Mancano à, è. Le metto io. 3 frasi sono rimaste.") == "à, è are missing. I'll add them. 3 sentences are left."
+                  and t("Il gioco e' aperto: chiudilo e riprova. Frase nuova.")
+                  == "The game is open: close it and try again. Frase nuova.")
+    finally:
+        for k in prova:
+            del voci[k]
+        interfaccia._stato["modelli"] = None
     interfaccia.imposta("it")
     controlla("in italiano nessuna traduzione", interfaccia.traduci("Crea rapporto") == "Crea rapporto")
     lingue = interfaccia.lingue()
@@ -51,6 +66,19 @@ def prova_file():
                != collections.Counter(interfaccia._SEGNO.findall(v))]
     controlla("file inglese: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(testi), diversi[:3]),
               len(testi) > 1000 and not diversi)
+    # i testi del codice che non sono italiani (istruzioni per il traduttore locale, parole per riconoscere le lingue)
+    # restano come sono, e il codice (es. lo script per Godot) non e' tra i testi da tradurre
+    cambiati = [k for k, v in testi.items() if lingua.lingua_evidente(k, "it") and v != k]
+    codice = [k for k in testi if k.startswith("if ") or "==" in k or k.startswith("the and of ")]
+    controlla("file inglese: testi in altre lingue lasciati com'erano (%s), niente codice (%s)" % (cambiati[:2], codice[:2]),
+              not cambiati and not codice)
+    mancanti = [k for k in interfaccia.testi_del_programma() if k not in testi]
+    controlla("file inglese: c'e' ogni testo del programma (%d mancanti: %s)" % (len(mancanti), mancanti[:2]), not mancanti)
+    controlla("testi del programma: niente codice ne' elenchi di parole",
+              not interfaccia._sembra_testo("if not _fatto:") and not interfaccia._sembra_testo("if f == null:")
+              and not interfaccia._sembra_testo(" ".join(sorted(lingua._PAROLE["it"])))
+              and interfaccia._sembra_testo("Il gioco e' aperto: chiudilo e riprova.")
+              and interfaccia._sembra_testo("Testi del gioco: %d, gia' tradotti: %d%s, da tradurre: %d"))
 
 
 def _pixel_png(percorso):

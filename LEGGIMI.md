@@ -6,6 +6,8 @@
 
 PatchSmith traduce automaticamente i testi di un videogioco **dentro il gioco stesso**, come una localizzazione ufficiale: niente overlay, sia i dati del gioco sia i menu. È gratuito, funziona anche senza internet con un traduttore che gira sul tuo PC e fa sempre una copia di sicurezza dei file originali: con un clic torna tutto com'era.
 
+![Lantern Keeper, un piccolo gioco dimostrativo fatto per questa pagina: l'originale in inglese e lo stesso gioco dopo PatchSmith, in italiano](docs/img/before-after.png)
+
 Cosa fa:
 - riconosce il motore del gioco;
 - trova da solo dove sono i testi;
@@ -25,6 +27,8 @@ Solo per Windows. L'interfaccia è in italiano e in inglese (si cambia con la ba
 **Ripristina originali** rimette i file originali, identici byte per byte; le traduzioni restano salvate, quindi **Analizza e traduci** le rimette in un attimo. **Correggi traduzioni…** elenca tutte le righe tradotte, con quelle da guardare (rimaste in originale, troppo lunghe, sospette), e scrive le tue correzioni nel gioco. **Crea rapporto** prepara uno zip da inviare a chi ti aiuta (senza la chiave DeepL né l'email).
 
 Dal sorgente serve **Python 3.10+** con Tkinter (nessun'altra libreria): avvia `PatchSmith.pyw`, oppure `python -I smith.py gui`; `python -I smith.py -h` elenca i comandi della riga di comando (per esempio `python -I smith.py auto "D:\giochi\MioGioco"`).
+
+![PatchSmith dopo aver tradotto il gioco dimostrativo](docs/img/window-it.png)
 
 ## Giochi supportati
 

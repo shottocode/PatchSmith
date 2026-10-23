@@ -410,12 +410,13 @@ def _lettere_mancanti(c, registri):
     messaggio = ("Nel gioco alcune lettere delle traduzioni non si vedono (al loro posto un quadratino o uno spazio): "
                  "i font del gioco non hanno %s. Le sostituisco nelle frasi tradotte (es. è diventa e') e da ora le "
                  "traduzioni scritte nel gioco le evitano." % _elenco_caratteri(mostrati))
-    if a_mano:
-        messaggio += (" %s quelle lettere non %s cambiare da solo (cambiat%s a mano, o senza una lettera simile): "
-                      "%s con \"Correggi traduzioni\"." % (
-                          "Una frase con" if a_mano == 1 else "%d frasi con" % a_mano,
-                          "la posso" if a_mano == 1 else "le posso", "a" if a_mano == 1 else "e",
-                          "correggila" if a_mano == 1 else "correggile"))
+    # frasi intere, al singolare e al plurale (a pezzi non si traducono nella lingua dell'interfaccia)
+    if a_mano == 1:
+        messaggio += (" Una frase con quelle lettere non la posso cambiare da solo (cambiata a mano, o senza una "
+                      "lettera simile): correggila con \"Correggi traduzioni\".")
+    elif a_mano:
+        messaggio += (" %d frasi con quelle lettere non le posso cambiare da solo (cambiate a mano, o senza una "
+                      "lettera simile): correggile con \"Correggi traduzioni\"." % a_mano)
     return [Problema("FONT_MANCANTI", "avviso", messaggio, rimedio=lambda: _adatta_font(c, set(trovati), righe),
                      sicuro=True, segnale="font:" + "".join(sorted(mostrati | nuovi)), chiave="font",
                      azione="correggi" if a_mano else "crea_rapporto",
@@ -834,9 +835,10 @@ def _verifica_correzioni(c):
         return True, testo
 
     return [Problema(
-        "CORREZIONI_IN_ATTESA", "info", "%s in \"Correggi traduzioni\" con il gioco aperto non %s ancora nel gioco: "
-        "%s scrivo adesso." % ("Una tua correzione fatta" if n == 1 else "%d tue correzioni fatte" % n,
-                               "era" if n == 1 else "erano", "la" if n == 1 else "le"),
+        "CORREZIONI_IN_ATTESA", "info",
+        "Una tua correzione fatta in \"Correggi traduzioni\" con il gioco aperto non era ancora nel gioco: la scrivo "
+        "adesso." if n == 1 else "%d tue correzioni fatte in \"Correggi traduzioni\" con il gioco aperto non erano "
+        "ancora nel gioco: le scrivo adesso." % n,
         rimedio=scrivi, sicuro=True, segnale="correzioni:%s" % impronta, chiave="correzioni", azione="riapplica")]
 
 
