@@ -20,19 +20,19 @@ from patchsmith import (adapter_unity, auto as automatic, checks, cli, legacy, p
 
 OUTCOMES = []
 
-OLD_PROFILE = {"nome": "lantern-keeper", "cartella_gioco": "C:/Giochi/Lantern Keeper", "motore": "web",
+OLD_PROFILE = {"nome": "lantern-keeper", "cartella_gioco": "C:/Games/Lantern Keeper", "motore": "web",
                "lingua_origine": "en", "lingua_destinazione": "it", "backend": "locale", "dal_vivo": "servizio",
                "non_tradurre": ["Lantern Keeper"], "identita": {"nome": "lantern-keeper", "exe": ["lk.exe"]},
                "file": [{"percorso": "data/menu.json", "formato": "json", "includi": ["menu.*"], "escludi": [],
                          "riferimenti": {"da": "Afslut", "fr": "Quitter"}}]}
-NEW_PROFILE = {"name": "lantern-keeper", "game_folder": "C:/Giochi/Lantern Keeper", "engine": "web",
+NEW_PROFILE = {"name": "lantern-keeper", "game_folder": "C:/Games/Lantern Keeper", "engine": "web",
                "source_language": "en", "target_language": "it", "backend": "local", "live": "service",
                "do_not_translate": ["Lantern Keeper"], "identity": {"name": "lantern-keeper", "exe": ["lk.exe"]},
                "file": [{"path": "data/menu.json", "format": "json", "include": ["menu.*"], "exclude": [],
                          "references": {"da": "Afslut", "fr": "Quitter"}}]}
-OLD_SETTINGS = {"cartella": "C:/Giochi/Lantern Keeper", "da": "auto", "a": "it", "backend": "finto", "tema": "scuro",
+OLD_SETTINGS = {"cartella": "C:/Games/Lantern Keeper", "da": "auto", "a": "it", "backend": "finto", "tema": "scuro",
                 "interfaccia": "it", "chiave_deepl": "", "musica": False, "suoni": True, "versione": 2}
-NEW_SETTINGS = {"folder": "C:/Giochi/Lantern Keeper", "from": "auto", "to": "it", "backend": "fake", "theme": "dark",
+NEW_SETTINGS = {"folder": "C:/Games/Lantern Keeper", "from": "auto", "to": "it", "backend": "fake", "theme": "dark",
                 "interface": "it", "deepl_key": "", "music": False, "sounds": True, "version": 2}
 OLD_STATE = {"versione": 1, "ultimo_controllo": "2026-10-20T10:00:00",
              "visti": {"manifesto": 12.5, "diario": 3, "creato:x.json": "1/2"},
@@ -199,11 +199,11 @@ def test_migrate(base):
 
 def main(base):
     os.makedirs(base)
-    project.DATA_ROOT = os.path.join(base, "dati")  # never the real data
+    project.DATA_ROOT = os.path.join(base, "data")  # never the real data
     automatic.PROFILES_FOLDER = None
     test_upgrade()
-    test_readers(os.path.join(base, "lettori"))
-    project.DATA_ROOT = os.path.join(base, "dati-migrazione")
+    test_readers(os.path.join(base, "readers"))
+    project.DATA_ROOT = os.path.join(base, "data-migration")
     test_migrate(base)
     ok = sum(1 for _, r in OUTCOMES if r)
     print("\nRESULT: %d/%d checks passed" % (ok, len(OUTCOMES)))

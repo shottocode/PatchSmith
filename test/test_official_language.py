@@ -67,32 +67,33 @@ def main(base):
         raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base)
     steam_root = os.path.join(base, "Steam")
-    library = os.path.join(base, "Libreria")
+    library = os.path.join(base, "Library")
     os.makedirs(os.path.join(steam_root, "appcache"))
     os.makedirs(os.path.join(steam_root, "steamapps"))
     os.makedirs(os.path.join(library, "steamapps", "common"))
     steam.steam_folder = lambda: steam_root
     open(os.path.join(steam_root, "steamapps", "libraryfolders.vdf"), "w").write(
-        '"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n\t// commento\n\t"1"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n}\n'
+        '"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n\t// comment\n'
+        '\t"1"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n}\n'
         % (steam_root.replace("\\", "\\\\"), library.replace("\\", "\\\\")))
 
     # --- text VDF
-    v = steam.read_vdf('"A"\n{\n\t"x"\t"1 \\"q\\""\n\t// commento\n\t"B" { "y" "2" }\n}\n')
+    v = steam.read_vdf('"A"\n{\n\t"x"\t"1 \\"q\\""\n\t// comment\n\t"B" { "y" "2" }\n}\n')
     check("text VDF: nesting, escaped quotes, comments", v == {"A": {"x": '1 "q"', "B": {"y": "2"}}})
 
     # --- appinfo: three games
     open(os.path.join(steam_root, "appcache", "appinfo.vdf"), "wb").write(appinfo({
-        100: {"common": {"name": "Gioco Steam", "type": "Game",
+        100: {"common": {"name": "Steam Game", "type": "Game",
                          "supported_languages": {"english": {"supported": "true"}, "italian": {"supported": "true",
                                                                                                "subtitles": "true"}}},
               "depots": {"baselanguages": "english,italian"}},
-        200: {"common": {"name": "Gioco Senza Italiano", "type": "Game",
+        200: {"common": {"name": "Game Without Italian", "type": "Game",
                          "supported_languages": {"english": {"supported": 1}}}},
-        300: {"common": {"name": "Gioco Fuori Steam", "type": "Game",
+        300: {"common": {"name": "Game Outside Steam", "type": "Game",
                          "supported_languages": {"italian": {"supported": "true"}}},
-              "config": {"launch": {"0": {"executable": "GiocoFuoriSteam.exe"}}}},
-        301: {"common": {"name": "Gioco Fuori Steam Demo", "type": "Game"},
-              "config": {"launch": {"0": {"executable": "GiocoFuoriSteam.exe"}}}},
+              "config": {"launch": {"0": {"executable": "GameOutsideSteam.exe"}}}},
+        301: {"common": {"name": "Game Outside Steam Demo", "type": "Game"},
+              "config": {"launch": {"0": {"executable": "GameOutsideSteam.exe"}}}},
     }))
     check("appinfo v41: official languages", steam.official_languages(100) == {
         "english": {"supported": True}, "italian": {"supported": True, "subtitles": True}}
@@ -101,10 +102,10 @@ def main(base):
               steam.selectable_languages(100) == {"english", "italian"} and steam.selectable_languages(200) == set())
 
     # --- game installed by Steam (appmanifest)
-    steam_game = os.path.join(library, "steamapps", "common", "Gioco Steam")
+    steam_game = os.path.join(library, "steamapps", "common", "Steam Game")
     os.makedirs(os.path.join(steam_game, "bin"))
     open(os.path.join(library, "steamapps", "appmanifest_100.acf"), "w").write(
-        '"AppState"\n{\n\t"appid"\t\t"100"\n\t"name"\t\t"Gioco Steam"\n\t"installdir"\t\t"Gioco Steam"\n'
+        '"AppState"\n{\n\t"appid"\t\t"100"\n\t"name"\t\t"Steam Game"\n\t"installdir"\t\t"Steam Game"\n'
         '\t"UserConfig"\n\t{\n\t\t"language"\t\t"english"\n\t}\n}\n')
     info = steam.game_installed(os.path.join(steam_game, "bin"))
     check("installed game recognized (even from a subfolder)", info and info["appid"] == "100"
@@ -115,9 +116,9 @@ def main(base):
               r["present"] and r["steam_selectable"] and any("General > Language" in x for x in lines))
 
     # --- folder outside Steam, recognized by the executable (the demo does not count)
-    outside = os.path.join(base, "Fuori")
+    outside = os.path.join(base, "Outside")
     os.makedirs(outside)
-    open(os.path.join(outside, "GiocoFuoriSteam.exe"), "wb").write(b"MZ")
+    open(os.path.join(outside, "GameOutsideSteam.exe"), "wb").write(b"MZ")
     known = steam.identify_from_executables(outside)
     check("game outside Steam recognized by the executable, not the demo", known and known["appid"] == "300")
     r = official_language.detect(outside, "it")
@@ -132,7 +133,7 @@ def main(base):
     os.makedirs(automatic.PROFILES_FOLDER)
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
     os.environ["LOCALAPPDATA"] = os.path.join(base, "LocalAppData")
-    ue = os.path.join(base, "GiocoUE")
+    ue = os.path.join(base, "UnrealGame")
     paks = os.path.join(ue, "Proj", "Content", "Paks")
     os.makedirs(paks)
     os.makedirs(os.path.join(ue, "Engine", "Binaries", "ThirdParty"))
@@ -175,11 +176,11 @@ def main(base):
     # --- Unity with I2: list of languages in the assets, preference in the registry (test key)
     check("PlayerPrefs: value name like Unity's",
               language_unity.pref_name("I2 Language") == "I2 Language_h3293684300")
-    un = os.path.join(base, "GiocoUnity")
-    data = os.path.join(un, "Gioco_Data")
+    un = os.path.join(base, "UnityGame")
+    data = os.path.join(un, "Game_Data")
     os.makedirs(os.path.join(data, "Managed"))
     open(os.path.join(data, "globalgamemanagers"), "wb").write(b"x")
-    open(os.path.join(data, "app.info"), "w").write("PatchsmithTest\nGioco")
+    open(os.path.join(data, "app.info"), "w").write("PatchsmithTest\nGame")
     open(os.path.join(data, "Managed", "I2Localization.dll"), "wb").write(b"MZ I2.Loc\x00")
 
     def s(t):
@@ -192,7 +193,7 @@ def main(base):
     check("I2: active languages from the assets (not the disabled ones)",
               language_unity.i2_languages(data) == [("English", "en"), ("Italiano", "it")])
     import winreg
-    key = "Software\\PatchsmithTest\\Gioco"
+    key = "Software\\PatchsmithTest\\Game"
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
     except OSError:
@@ -200,18 +201,18 @@ def main(base):
     r = official_language.detect(un, "it", "Unity")
     done, lines = official_language.set_(un, r, "it", silent)
     check("Unity: game never started (no key) -> nothing written, instructions", not done
-              and language_unity.read_pref("PatchsmithTest", "Gioco", "I2 Language") is False)
+              and language_unity.read_pref("PatchsmithTest", "Game", "I2 Language") is False)
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key) as k:
         winreg.SetValueEx(k, language_unity.pref_name("I2 Language"), 0, winreg.REG_BINARY, b"English\x00")
-        winreg.SetValueEx(k, "Altro_h1", 0, winreg.REG_DWORD, 7)
+        winreg.SetValueEx(k, "Other_h1", 0, winreg.REG_DWORD, 7)
     done, lines = official_language.set_(un, r, "it", silent)
     check("Unity: I2 preference set to the exact name ('Italiano')", done and
-              language_unity.read_pref("PatchsmithTest", "Gioco", "I2 Language")[1] == b"Italiano\x00")
+              language_unity.read_pref("PatchsmithTest", "Game", "I2 Language")[1] == b"Italiano\x00")
     official_language.restore(un, silent)
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
-        other = winreg.QueryValueEx(k, "Altro_h1")[0]
+        other = winreg.QueryValueEx(k, "Other_h1")[0]
     check("Unity: restore of only the value touched",
-              language_unity.read_pref("PatchsmithTest", "Gioco", "I2 Language")[1] == b"English\x00" and other == 7)
+              language_unity.read_pref("PatchsmithTest", "Game", "I2 Language")[1] == b"English\x00" and other == 7)
     for k in (key, "Software\\PatchsmithTest"):
         try:
             winreg.DeleteKey(winreg.HKEY_CURRENT_USER, k)

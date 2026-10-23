@@ -192,19 +192,19 @@ def test_lenient_json(base):
     except ValueError:
         refuse = True
     check("a changed value that is not a string: not written (ValueError)", refuse)
-    for name, text in (("vero.json", b"{\"a\": [1, 2,], \"b\": \"x\" // fine\n}"),
-                        ("rotto.json", b"{\"a\": \"senza chiusura\""), ("non_json.json", b"<html>no</html>")):
+    for name, text in (("valid.json", b"{\"a\": [1, 2,], \"b\": \"x\" // end\n}"),
+                        ("broken.json", b"{\"a\": \"senza chiusura\""), ("not_json.json", b"<html>no</html>")):
         write_bytes(os.path.join(folder, name), text)
-    was_read = adapter_webjson.JSONFile(os.path.join(folder, "vero.json")).data
+    was_read = adapter_webjson.JSONFile(os.path.join(folder, "valid.json")).data
     errors = 0
-    for name in ("rotto.json", "non_json.json"):
+    for name in ("broken.json", "not_json.json"):
         try:
             adapter_webjson.JSONFile(os.path.join(folder, name))
         except ValueError:
             errors += 1
     check("trailing comma in a list and end-of-line comment; a damaged file is still an error",
               was_read == {"a": [1, 2], "b": "x"} and errors == 2)
-    strict_file = os.path.join(folder, "rigido.json")
+    strict_file = os.path.join(folder, "strict.json")
     write_bytes(strict_file, b'{"a": "x", "b": 1.50}')
     check("a strict JSON is read and written as before (not lenient)",
               not adapter_webjson.JSONFile(strict_file).lenient)
@@ -226,7 +226,7 @@ def door_game(folder, languages=("EN", "FR", "DE")):
                 b'//note\r\n{"langs": [{"stringsFile": "stringsEN.json",},],}\r\n')
     write_bytes(os.path.join(folder, "data.win"), test_gamemaker.data_win(
         [("ftText", LATIN), ("ftFusionJP", JAPANESE), ("scribble_fallback_font", set(ASCII))]))
-    write_bytes(os.path.join(folder, "Porta.exe"), b"MZ")
+    write_bytes(os.path.join(folder, "Door.exe"), b"MZ")
 
 
 def _skeleton(text):
@@ -235,7 +235,7 @@ def _skeleton(text):
 
 
 def test_door(base):
-    game = os.path.join(base, "Porta finta")
+    game = os.path.join(base, "Fake Door")
     door_game(game)
     loc = os.path.join(game, "localization")
     check("code attached to the name: stringsEN -> en, stringsBR -> pt, stringsSC -> zh, stringsTC -> zh-TW",
@@ -296,7 +296,7 @@ def test_door(base):
               and fingerprints(game) == before)
     automatic.create_backend = lambda name, log=print: Translator()
 
-    with_it = os.path.join(base, "Porta con italiano")
+    with_it = os.path.join(base, "Door with Italian")
     door_game(with_it, ("EN", "FR", "IT"))
     _, engine_data = official_language.languages_in_files(with_it, "GameMaker", "it")
     path, _, outcome = automatic.analyze_and_translate(with_it, "auto", "it", "dictionary", silent)
@@ -378,14 +378,14 @@ def test_csv(base):
         .replace('hero;"Hero";', 'hero;"Eroe";')
     check("real CSV table rewritten: quotes, \"\" and CRLF line breaks like the original, the rest identical",
               new == expected.encode("utf-8"))
-    write_bytes(os.path.join(folder, "senza_chiave.csv"),
+    write_bytes(os.path.join(folder, "no_key.csv"),
                 b"English,French\nHello there,Bonjour\nGood bye,Au revoir\nSee you,A plus\nThanks,Merci\n")
-    write_bytes(os.path.join(folder, "una_lingua.csv"), b"id,english\na,Hello there\nb,Good bye\nc,See you\n")
-    write_bytes(os.path.join(folder, "latino1.csv"), "id,english,french\na,Caf\u00e9,Caf\u00e9\n".encode("latin-1"))
+    write_bytes(os.path.join(folder, "one_language.csv"), b"id,english\na,Hello there\nb,Good bye\nc,See you\n")
+    write_bytes(os.path.join(folder, "latin1.csv"), "id,english,french\na,Caf\u00e9,Caf\u00e9\n".encode("latin-1"))
     check("not tables: without a key column, with only one language, not UTF-8",
-              adapter_csv.table(os.path.join(folder, "senza_chiave.csv")) is None
-              and adapter_csv.table(os.path.join(folder, "una_lingua.csv")) is None
-              and adapter_csv.table(os.path.join(folder, "latino1.csv")) is None
+              adapter_csv.table(os.path.join(folder, "no_key.csv")) is None
+              and adapter_csv.table(os.path.join(folder, "one_language.csv")) is None
+              and adapter_csv.table(os.path.join(folder, "latin1.csv")) is None
               and sorted(adapter_csv.tables(folder)) == ["rfc.csv", "translations.csv"])
     # table split by hand where the only cell that is not valid CSV is in the translated column: after the
     # translation the file would look like a CSV with quotes, but it is read back the way the game reads it
@@ -409,7 +409,7 @@ def test_csv(base):
                                                           b"shop_bye,Good bye,Tschuss\n\n")
 
     # GameMaker with translations.csv
-    game = os.path.join(base, "Megaloot finto")
+    game = os.path.join(base, "Fake Megaloot")
     megaloot_game(game)
     before = fingerprints(game)
     original = read_bytes(os.path.join(game, "translations.csv"))
@@ -432,12 +432,12 @@ def test_csv(base):
               == original)
     # a translation with an extra line break is left untranslated (the game reads one line per text), the others
     # are written; the comma becomes ';' here too
-    line_break = os.path.join(base, "Tabella a capo")
+    line_break = os.path.join(base, "Line Break Table")
     write_bytes(os.path.join(line_break, "translations.csv"), (
         "id,english,french\nchest,Open the old chest,Ouvrir le vieux coffre\nbag,Your bag is full,Ton sac est plein\n"
         "play,Play,Jouer\nquit,QUIT,QUITTER\nshop,Hello traveler; welcome to the shop,Bonjour voyageur\n").encode())
     write_bytes(os.path.join(line_break, "data.win"), test_gamemaker.data_win([("fntMain", LATIN)]))
-    write_bytes(os.path.join(line_break, "Tabella.exe"), b"MZ")
+    write_bytes(os.path.join(line_break, "Table.exe"), b"MZ")
     log_file = []
     automatic.analyze_and_translate(line_break, "auto", "it", "dictionary", log_file.append)
     written = read_bytes(os.path.join(line_break, "translations.csv")).decode("utf-8")
@@ -447,7 +447,7 @@ def test_csv(base):
               "shop,Ciao viaggiatore; benvenuto nel negozio,Bonjour voyageur\n"
               and any("left untranslated" in r and "Open the old chest" in r for r in log_file))
 
-    with_it = os.path.join(base, "Megaloot con italiano")
+    with_it = os.path.join(base, "Megaloot with Italian")
     megaloot_game(with_it, italian=True)
     path, _, outcome = automatic.analyze_and_translate(with_it, "auto", "it", "dictionary", silent)
     check("full italian column: official language (no automatic translation)",
@@ -455,18 +455,18 @@ def test_csv(base):
               and official_language.languages_in_files(with_it, "GameMaker", "it")[1]["found"] is True)
 
     # generic search (web game): the table becomes an entry of the game profile
-    web = os.path.join(base, "web con csv")
+    web = os.path.join(base, "web with csv")
     write_bytes(os.path.join(web, "index.html"), b"<html><body><button>Start</button></body></html>")
     write_bytes(os.path.join(web, "lang", "translations.csv"), MEGALOOT.encode("utf-8"))
-    write_bytes(os.path.join(web, "lang", "sorgente.csv"), MEGALOOT.encode("utf-8"))
-    write_bytes(os.path.join(web, "lang", "sorgente.csv.import"), b"[remap]\n")  # Godot source: not touched
+    write_bytes(os.path.join(web, "lang", "source.csv"), MEGALOOT.encode("utf-8"))
+    write_bytes(os.path.join(web, "lang", "source.csv.import"), b"[remap]\n")  # Godot source: not touched
     candidates, others = scan.scan_folder(web, silent)
     profile = scan.create_profile("web-csv", web, candidates, "auto", "it", "fake")
     check("generic search: CSV table as an entry of the profile (not the Godot source)",
               [v for v in profile["file"] if v.get("format") == "csv"] == [
                   {"path": "lang/translations.csv", "format": "csv", "column": "english", "localization": True}]
-              and "lang/sorgente.csv" not in [c["path"] for c in candidates]
-              and "lang/sorgente.csv" not in [p for items in others.values() for p in items])
+              and "lang/source.csv" not in [c["path"] for c in candidates]
+              and "lang/source.csv" not in [p for items in others.values() for p in items])
 
 
 # --- 4. GameMaker and XNA from the generic search -------------------------------------------------------
@@ -477,11 +477,11 @@ UI.update({"msg_%02d" % i: "The lantern number %d is now lit" % i for i in range
 
 
 def test_generic(base):
-    game = os.path.join(base, "Isola GM")
+    game = os.path.join(base, "GM Island")
     write_bytes(os.path.join(game, "texts", "ui.json"), json.dumps(UI, indent=1).encode("utf-8"))
     without_e = set(chr(c) for c in range(32, 127)) | set("àéìòù")  # game font without è
     write_bytes(os.path.join(game, "data.win"), test_gamemaker.data_win([("fntMain", without_e)]))
-    write_bytes(os.path.join(game, "Isola.exe"), b"MZ")
+    write_bytes(os.path.join(game, "Island.exe"), b"MZ")
     _, outcome = automatic.prepare(game, "auto", "it", "dictionary", silent)
     check("GameMaker without recognized language files: the experimental translation is offered",
               outcome["outcome"].code == "NOT_SUPPORTED" and "experimental" in outcome["outcome"].actions)
@@ -514,7 +514,7 @@ def test_generic(base):
     # a data file with a list of objects (like the PluginInfo.json of Wwise sounds: name, type and library of each
     # effect) is not a text table even if many values look like words: 'Effect' or 'Windows' translated would break
     # the audio. A table with sections ({"menu": {"_play": "Play"}}) instead is
-    audio_data = os.path.join(base, "Dati audio")
+    audio_data = os.path.join(base, "Audio Data")
     libraries = [{"LibName": "Sound %s" % n, "LibId": str(1000 + i), "Type": "Effect", "DLL": "Snd%s" % n,
                  "StaticLib": "Snd%sFX" % n} for i, n in enumerate(("Echo", "Delay", "Chorus", "Limiter"))]
     libraries += [{"LibName": n, "LibId": str(2000 + i), "Type": "AudioDevice"}
@@ -546,13 +546,13 @@ def test_generic(base):
               and entries.get("items/en.json", {}).get("include") == ["items[].name"])
 
     # XNA: generic game profile with the detected engine (the game's XNB fonts are simulated: ASCII only)
-    xna = os.path.join(base, "Isola XNA")
+    xna = os.path.join(base, "XNA Island")
     write_bytes(os.path.join(xna, "Content", "lang.json"), json.dumps(UI).encode("utf-8"))
     candidates, _ = scan.scan_folder(xna, silent)
-    profile = scan.create_profile("isola-xna", xna, candidates, "auto", "it", "dictionary", engine="XNA")
+    profile = scan.create_profile("island-xna", xna, candidates, "auto", "it", "dictionary", engine="XNA")
     check("generic XNA profile: game_engine xna, no engine (it is not the .NET resources path)",
               profile.get("game_engine") == "xna" and "engine" not in profile)
-    path = os.path.join(automatic.profiles_folder(), "isola-xna.json")
+    path = os.path.join(automatic.profiles_folder(), "island-xna.json")
     scan.save_json(path, profile)
     real = adapter_xna.font_chars
     adapter_xna.font_chars = lambda folder, log=None: set(ASCII)
@@ -594,7 +594,7 @@ def test_font(base):
     check("without official translations the Cyrillic font still counts (to be safe: è no, é yes)",
               allowed is not None and "è" not in allowed and "é" in allowed)
     write_bytes(os.path.join(game, "data.win"), test_gamemaker.data_win(
-        [("fntMain", LATIN), ("fntPiccolo", set(ASCII) | set("é"))]))
+        [("fntMain", LATIN), ("fntSmall", set(ASCII) | set("é"))]))
     allowed = adapter_gamemaker.font_chars(game)
     check("a Latin font without accents still counts (to be safe: è not allowed)",
               allowed is not None and "è" not in allowed and "é" in allowed)
@@ -613,7 +613,7 @@ def test_web(base):
               'var x={label:"Back",id:"left"};var k="left";el.className="NONE";'
               'this.add.text(1,2,"MENU",{fontFamily:"Arial",align:"center"});b.innerText="ok";'
               'if(a.value=="yes")b.title="Options";s.setAttribute("title","x");var t="Continue";var n="retry";}')
-    write_bytes(os.path.join(web, "gioco.js"), code.encode("utf-8"))
+    write_bytes(os.path.join(web, "game.js"), code.encode("utf-8"))
     texts = adapter_webui.extract_texts(web)
     check("JavaScript: single words only where they are surely shown (textContent, fillText, label:, add.text, "
               "innerText, title=)", all(t in texts for t in ("QUIT", "GO", "Back", "MENU", "ok", "Options")))
@@ -640,10 +640,10 @@ def test_web(base):
 
 def test_unreal(base):
     adapter_unreal.game_open = lambda c: False
-    unlabeled = os.path.join(base, "Unreal senza locres")
+    unlabeled = os.path.join(base, "Unreal without locres")
     paks = os.path.join(unlabeled, "Proj", "Content", "Paks")
     write_bytes(os.path.join(paks, "Proj-WindowsNoEditor.pak"),
-                fake_unreal.pak_v9([("Proj/Content/Maps/Level.umap", b"mappa" * 50)]))
+                fake_unreal.pak_v9([("Proj/Content/Maps/Level.umap", b"map" * 50)]))
     os.makedirs(os.path.join(unlabeled, "Engine", "Binaries"))
     profiles_before = sorted(os.listdir(automatic.profiles_folder())) if os.path.isdir(
         automatic.profiles_folder()) else []
@@ -654,21 +654,21 @@ def test_unreal(base):
               result[0] is None and result[1]["outcome"].code == "NOT_SUPPORTED" and ".locres" in reason
               and "can't translate yet" in reason and sorted(os.listdir(automatic.profiles_folder()) if os.path.isdir(
                   automatic.profiles_folder()) else []) == profiles_before)
-    mixed = os.path.join(base, "Unreal con pak rotto")
+    mixed = os.path.join(base, "Unreal with broken pak")
     fake_unreal.create_game(mixed)
-    write_bytes(os.path.join(mixed, "Proj", "Content", "Paks", "Proj-Rotto.pak"), b"non e' un pak" * 20)
+    write_bytes(os.path.join(mixed, "Proj", "Content", "Paks", "Proj-Broken.pak"), b"non e' un pak" * 20)
     skipped = []
     sources = adapter_unreal.find_locres(mixed, skipped)
     log_file = []
     path, outcome = automatic._prepare_unreal(mixed, None, "auto", "it", {"results": []}, log_file.append)
     check("an unreadable pak is skipped: the .locres of the others is found and the profile is created",
               [s[1] for s in sources] == ["Proj/Content/Localization/Game/en/Game.locres"]
-              and len(skipped) == 1 and "Proj-Rotto.pak" in skipped[0] and path and os.path.exists(path)
-              and any("archives not read" in r and "Proj-Rotto.pak" in r for r in log_file))
+              and len(skipped) == 1 and "Proj-Broken.pak" in skipped[0] and path and os.path.exists(path)
+              and any("archives not read" in r and "Proj-Broken.pak" in r for r in log_file))
 
     # small pak mounted in a deeper folder (Remnant: '../../../Remnant/Content/'), language in the .locmeta of
     # another pak
-    mounted = os.path.join(base, "Unreal montato")
+    mounted = os.path.join(base, "Unreal mounted")
     paks = os.path.join(mounted, "Proj", "Content", "Paks")
     os.makedirs(os.path.join(mounted, "Engine", "Binaries"))
     entries = [("UI", "Start", "Start Game"), ("UI", "Quit", "Quit")]
@@ -679,7 +679,7 @@ def test_unreal(base):
         ("Localization/Game/de/Game.locres", fake_unreal.locres_v2([("UI", "Start", "Spiel starten")]))]))
     sources = adapter_unreal.find_locres(mounted)
     _, texts, culture = adapter_unreal.texts_to_translate(mounted, silent)
-    n = adapter_unreal.install(mounted, "it", "montato", {"Start Game": "Inizia la partita", "Quit": "Esci"}, silent)
+    n = adapter_unreal.install(mounted, "it", "mounted", {"Start Game": "Inizia la partita", "Quit": "Esci"}, silent)
     patch = adapter_unreal.Pak(os.path.join(paks, adapter_unreal.pak_name("it")))
     translated = adapter_unreal.read_locres(patch.read_file("Proj/Content/Localization/Game/en/Game.locres"))
     check("pak mounted in a deeper folder: .locres found with the full name, translated into a patch pak with "
@@ -688,7 +688,7 @@ def test_unreal(base):
               and sorted(texts) == ["Quit", "Start Game"] and n == 2 and patch.mount == "../../../"
               and sorted(patch.entries) == ["Proj/Content/Localization/Game/en/Game.locres"]
               and [s for s, _ in translated["strings"]] == ["Inizia la partita", "Esci"])
-    german = os.path.join(base, "Unreal tedesco")
+    german = os.path.join(base, "Unreal German")
     write_bytes(os.path.join(german, "Proj", "Content", "Paks", "pakchunk0-WindowsNoEditor.pak"), fake_unreal.pak_v9(
         [("Proj/Content/Localization/Game/Game.locmeta", fake_unreal.locmeta("de"))]))
     write_bytes(os.path.join(german, "Proj", "Content", "Paks", "pakchunk1-WindowsNoEditor.pak"),
@@ -698,9 +698,9 @@ def test_unreal(base):
     check("source language from the .locmeta of another pak (de): the German .locres is translated",
               [(s[1], s[3]) for s in adapter_unreal.find_locres(german)]
               == [("Proj/Content/Localization/Game/de/Game.locres", "de")])
-    loose = os.path.join(base, "Unreal sciolto")
+    loose = os.path.join(base, "Unreal loose")
     write_bytes(os.path.join(loose, "Proj", "Content", "Paks", "Proj-WindowsNoEditor.pak"),
-                fake_unreal.pak_v9([("Proj/Content/Maps/Level.umap", b"mappa" * 50)]))
+                fake_unreal.pak_v9([("Proj/Content/Maps/Level.umap", b"map" * 50)]))
     write_bytes(os.path.join(loose, "Proj", "Content", "Localization", "Game", "en", "Game.locres"),
                 fake_unreal.locres_v2(entries))
     _, outcome = automatic._prepare_unreal(loose, None, "auto", "it", {"results": []}, silent)
@@ -729,10 +729,10 @@ def mounted_pak(mount, file):
 # --- 8. log of the files skipped by the generic search -----------------------------------------------
 
 def test_log(base):
-    folder = os.path.join(base, "saltati")
-    write_bytes(os.path.join(folder, "rotto.json"), b"{non json")
-    write_bytes(os.path.join(folder, "pochi.json"), json.dumps({"a": "Hello there friend", "b": "x"}).encode())
-    write_bytes(os.path.join(folder, "testi.json"), json.dumps(
+    folder = os.path.join(base, "skipped")
+    write_bytes(os.path.join(folder, "broken.json"), b"{non json")
+    write_bytes(os.path.join(folder, "few.json"), json.dumps({"a": "Hello there friend", "b": "x"}).encode())
+    write_bytes(os.path.join(folder, "texts.json"), json.dumps(
         {"t%d" % i: "This is the sentence number %d of the game" % i for i in range(30)}).encode())
     real = scan.MAX_JSON_SIZE
     scan.MAX_JSON_SIZE = 1000
@@ -742,14 +742,14 @@ def test_log(base):
     finally:
         scan.MAX_JSON_SIZE = real
     check("generic search: invalid and too large JSON files written to the log with how many there are",
-              any("not valid JSON" in r and "rotto.json" in r for r in lines)
-              and any("too large" in r and "testi.json" in r for r in lines))
+              any("not valid JSON" in r and "broken.json" in r for r in lines)
+              and any("too large" in r and "texts.json" in r for r in lines))
     candidates, _ = scan.scan_folder(folder, silent)
     lines = []
-    profile = scan.create_profile("saltati", folder, candidates, "auto", "it", "fake", log=lines.append)
+    profile = scan.create_profile("skipped", folder, candidates, "auto", "it", "fake", log=lines.append)
     check("files with few texts left out of the profile, written to the log with the numbers",
-              [v["path"] for v in profile["file"]] == ["testi.json"]
-              and any("pochi.json (1 texts" in r for r in lines))
+              [v["path"] for v in profile["file"]] == ["texts.json"]
+              and any("few.json (1 texts" in r for r in lines))
 
 
 def main(base):

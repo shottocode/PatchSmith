@@ -141,20 +141,20 @@ def test_sounds(app, root):
             theme.ON_SHOW("info")
         real_finish = app._finish_operation
         app._finish_operation = fake_operation
-        app._finish("Analisi e traduzione", None, None)
+        app._finish("Analysis and translation", None, None)
         after_error = list(heard)
         app._finish_operation = lambda *_a: theme.ON_SHOW("question")
-        app._finish("Analisi e traduzione", None, None)
+        app._finish("Analysis and translation", None, None)
         app._finish_operation = lambda *_a: theme.ON_SHOW("warning")  # a warning: like a question
-        app._finish("Analisi e traduzione", None, None)
+        app._finish("Analysis and translation", None, None)
 
         def partly(*_a):  # partly translated (warning), as in _show_window: "done"
             app._forced_sound = "done"
             theme.ON_SHOW("warning")
         app._finish_operation = partly
-        app._finish("Analisi e traduzione", None, None)
+        app._finish("Analysis and translation", None, None)
         app._operation, app._auto_check = "check", True
-        app._finish("Controllo", None, None)  # at startup no "done" (even partly translated): the warning plays
+        app._finish("Check", None, None)  # at startup no "done" (even partly translated): the warning plays
         app._operation, app._auto_check = None, False
         app._finish_operation = real_finish
         theme.ON_SHOW("info")  # outside the end of an operation every dialog plays: information and warnings
@@ -162,12 +162,12 @@ def test_sounds(app, root):
         theme.ON_SHOW("error")
         root.after(150, lambda: [w.destroy() for w in root.winfo_children() if isinstance(w, tk.Toplevel)])
         app._sound_pending = True
-        theme.inform(root, app.colors, "Prova", "Una finestra vera: chiama AL_MOSTRARE")
+        theme.inform(root, app.colors, "Test", "A real window: calls ON_SHOW")
         # the buttons' click: a pressed one plays, a disabled one does not (also in another window)
         events = list(heard)
         del heard[:]
         another = tk.Toplevel(root)
-        button, off_button = gui.ttk.Button(another, text="Prova"), gui.ttk.Button(another, text="Spento")
+        button, off_button = gui.ttk.Button(another, text="Test"), gui.ttk.Button(another, text="Off")
         button.pack()
         off_button.pack()
         off_button.state(["disabled"])
@@ -177,7 +177,7 @@ def test_sounds(app, root):
         button_clicks = list(heard)
         another.destroy()
         app._change_sounds()  # off again
-        mute_button = gui.ttk.Button(root, text="Muto")
+        mute_button = gui.ttk.Button(root, text="Mute")
         mute_button.place(x=0, y=0)
         root.update()
         del heard[:]
@@ -192,7 +192,7 @@ def test_sounds(app, root):
                  for n in ("done", "error", "question")]
     click = wave.open(io.BytesIO(sounds.click())).getnframes() / sounds.SAMPLE_RATE
     check("sounds: off by default, turned on (with the click) and remembered by the button; at the end of an operation "
-              "the first window plays \"fatto\" if it is information or a partial translation (not at the check "
+              "the first window plays \"done\" if it is information or a partial translation (not at the check "
               "at startup); every other window always, errors as errors and the rest as questions (%s); duration %s"
               % (events, durations),
               sounds_off and saved_sounds is True and is_on and after_error == ["error", "question"]
@@ -206,13 +206,13 @@ def test_sounds(app, root):
 
 def test_music(app):
     """Background music: off by default, the button with the note turns it on and off (and remembers it); Windows does
-    the loop without gaps (tested with silence); "Miniera" with exactly 16 bars."""
+    the loop without gaps (tested with silence); "Mine" with exactly 16 bars."""
     import inspect
     import re
     import time
     from patchsmith import music
     calls, actual = [], (music.launch, music.stop)
-    music.launch, music.stop = (lambda *_a: calls.append("avvia")), (lambda: calls.append("ferma"))
+    music.launch, music.stop = (lambda *_a: calls.append("start")), (lambda: calls.append("stop"))
     try:
         music_off = not app.music_on
         app._change_music()
@@ -245,9 +245,9 @@ def test_music(app):
     melody = re.search(r'melody = """(.*?)"""', inspect.getsource(music.mine), re.S).group(1)
     measures = [sum(p for _n, p in music._read(b)) for b in re.split(r"\s{3,}", melody.strip())]
     check("music: off by default, turned on and off by the button with the note and remembered (%s); seamless loop "
-              "(%s bytes played from a block of %d); Miniera with %d bars of 8 eighths" % (calls, played,
+              "(%s bytes played from a block of %d); Mine with %d bars of 8 eighths" % (calls, played,
                                                                                          len(silent), len(measures)),
-              music_off and saved_music is True and music_off_after and calls == ["avvia", "ferma"]
+              music_off and saved_music is True and music_off_after and calls == ["start", "stop"]
               and (not modal_open or played and played > 2 * len(silent)) and music._state["output"] is None
               and measures == [8] * 16)
     check("music ready in advance: generated and saved the first time, then read from the file (%.3f s)" % seconds,
@@ -299,7 +299,7 @@ def test_window(base):
                   and str(app.text.cget("background")) == app.colors["field"])
         test_sounds(app, root)
         test_music(app)
-        app._log("Analysis and translation: D:\\giochi\\x")
+        app._log("Analysis and translation: D:\\games\\x")
         app.state.set("Translated 400 of 1654 (24%)...")
         app._drain_queue()
         log_en = app.text.get("1.0", "end").strip()
@@ -321,8 +321,8 @@ def test_window(base):
                       and app.src_lang.get() == "Rileva automaticamente"
                       and app._language_code(app.src_lang.get()) == language.AUTO
                       and app._target_lang() == "it" and app.a.get() == "Italiano (it)"
-                      and log_en == "Analysis and translation: D:\\giochi\\x"
-                      and app.text.get("1.0", "end").strip() == "Analisi e traduzione: D:\\giochi\\x"
+                      and log_en == "Analysis and translation: D:\\games\\x"
+                      and app.text.get("1.0", "end").strip() == "Analisi e traduzione: D:\\games\\x"
                       and app.state.get() == "Tradotti 400 di 1654 (24%)...")
             app._change_ui("en")
             root.update()
@@ -348,10 +348,10 @@ def test_executable(base):
     double click it opens the .pyw with the installed Python (here the test .pyw only writes a file)."""
     if not sys.platform.startswith("win"):
         return
-    folder = os.path.join(base, "programma con spazi")
+    folder = os.path.join(base, "program with spaces")
     os.makedirs(folder)
     with open(os.path.join(folder, "PatchSmith.pyw"), "w", encoding="utf-8") as f:
-        f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partito.txt'), 'w')"
+        f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'started.txt'), 'w')"
                 ".write(sys.version)\n")
     created_one = icon.executable(folder)
     calls, real = [], icon.subprocess.run
@@ -363,7 +363,7 @@ def test_executable(base):
     exe = os.path.join(folder, "PatchSmith.exe")
     with open(exe, "rb") as f:
         data = f.read()
-    started_file = os.path.join(folder, "partito.txt")
+    started_file = os.path.join(folder, "started.txt")
     if created_one:
         subprocess.run([exe], timeout=30)
         for _ in range(40):
@@ -378,11 +378,11 @@ def test_executable(base):
 def test_command_line(base):
     """Commands and options in English, the former Italian names as aliases; the help in the interface language."""
     smith = os.path.join(project.PROJECT_FOLDER, "smith.py")
-    game = os.path.join(base, "gioco vuoto")
+    game = os.path.join(base, "empty game")
     os.makedirs(game)
 
     def run_command(arguments, window_language):
-        test_env = dict(os.environ, PATCHSMITH_DATA=os.path.join(base, "dati-cli"),
+        test_env = dict(os.environ, PATCHSMITH_DATA=os.path.join(base, "data-cli"),
                         PATCHSMITH_INTERFACE=window_language)
         r = subprocess.run([sys.executable, "-I", smith] + arguments, capture_output=True, encoding="utf-8",
                            errors="replace", env=test_env, timeout=120)

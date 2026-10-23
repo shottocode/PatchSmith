@@ -95,7 +95,7 @@ def main(base):
     os.makedirs(os.path.join(base, "patchsmith", "memory"))
     steam.steam_folder = lambda: None
 
-    game = os.path.join(base, "Forager finto")
+    game = os.path.join(base, "Fake Forager")
     local = os.path.join(game, "local")
     os.makedirs(local)
     for name, data in (("english", EN), ("french", FR), ("spanish", ES), ("german", DE)):
@@ -189,17 +189,17 @@ def main(base):
     check("identical restore", fingerprints(local) == before)
 
     # --- generic search: among per-language files (same family) only the original language is kept
-    web = os.path.join(base, "gioco web")
+    web = os.path.join(base, "web game")
     texts = {"english": ["The castle is dark and the door is closed", "You have found a key in the room"],
              "french": ["Le château est sombre et la porte est fermée", "Vous avez trouvé une clé dans la salle"],
              "german": ["Das Schloss ist dunkel und die Tür ist zu", "Du hast einen Schlüssel im Raum gefunden"],
              "italian": ["Il castello è buio e la porta è chiusa", "Hai trovato una chiave nella stanza"]}
     for rel_folder, names in (("locales", ("english", "french", "german")), ("lang/en", ("ui",)),
-                               ("lang/fr", ("ui",)), ("data", ("items",)), ("nazioni", ("english", "french"))):
+                               ("lang/fr", ("ui",)), ("data", ("items",)), ("nations", ("english", "french"))):
         os.makedirs(os.path.join(web, rel_folder), exist_ok=True)
         for n in names:
             texts_language = "french" if rel_folder == "lang/fr" else n if n in texts else "english"
-            if rel_folder == "nazioni":
+            if rel_folder == "nations":
                 texts_language = "english"  # language names in the file name, but the texts are all English
             with open(os.path.join(web, rel_folder, n + ".json"), "w", encoding="utf-8") as f:
                 json.dump({"t%d" % i: t for i, t in enumerate(texts[texts_language] * 5)}, f, ensure_ascii=False)
@@ -208,12 +208,12 @@ def main(base):
         return {"path": rel, "readable_strings": n}
     candidates = [cand("locales/english.json"), cand("locales/french.json"), cand("locales/german.json"),
                  cand("lang/en/ui.json"), cand("lang/fr/ui.json"), cand("data/items.json"),
-                 cand("nazioni/english.json"), cand("nazioni/french.json")]
+                 cand("nations/english.json"), cand("nations/french.json")]
     kept_items, dropped, target_files = automatic._original_language_only(candidates, web, "auto", "it", silent)
     check("generic search: of the language families only English stays (also lang/{L}/ui.json)",
               sorted(dropped) == ["lang/fr/ui.json", "locales/french.json", "locales/german.json"] and not target_files)
     check("generic search: a file with a language's name but English texts is not removed",
-              "nazioni/french.json" in [c["path"] for c in kept_items])
+              "nations/french.json" in [c["path"] for c in kept_items])
     _, dropped, _ = automatic._original_language_only(
         [cand("locales/english.json", 2), cand("locales/french.json", 10)], web, "auto", "it", silent)
     check("generic search: a much smaller (partial) English does not remove the other languages", not dropped)

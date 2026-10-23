@@ -185,7 +185,7 @@ def main(base):
     check("server down: error (the translation stops and resumes at the next run)", went_down)
 
     # --- 3. lost placeholders: the last attempt goes back to PatchSmith, which re-translates the pieces between codes
-    profile = os.path.join(base, "profilo.json")
+    profile = os.path.join(base, "profile.json")
     json.dump({"name": "test", "game_folder": base, "source_language": "en", "target_language": "it",
                "file": []}, open(profile, "w"))
     p = Project(profile, silent)
@@ -300,20 +300,20 @@ def main(base):
         json.dump({"name": name, "game_folder": base, "source_language": "en", "target_language": "it",
                    "file": []}, open(path, "w"))
         return Project(path, silent)
-    first = game_profile("gioco-uno")
+    first = game_profile("game-one")
     b, server = local(lambda t, o: "IT " + t)
     first.translate_texts(["options", "back", "a long sentence that only this game has"], b, "en", "it")
-    second = game_profile("gioco-due")
+    second = game_profile("game-two")
     b, server = local(lambda t, o: "IT " + t)
     second.translate_texts(["options", "back", "new game"], b, "en", "it")
     check("shared memory: short texts already translated for another game are not retranslated (sentences are)",
               [t for t, _ in server.requests] == ["new game"] and second.memory["options"] == "IT options")
     first.memory["options"] = "opzioni"  # as with 'Fix translations'
     first._save_memory()
-    first = game_profile("gioco-uno")
+    first = game_profile("game-one")
     b, server = local(lambda t, o: "IT " + t)
     first.translate_texts(["options"], b, "en", "it")
-    third = game_profile("gioco-tre")
+    third = game_profile("game-three")
     b, server = local(lambda t, o: "IT " + t)
     third.translate_texts(["options"], b, "en", "it")
     check("hand fix of a short text: it goes into the shared memory and the next games use it",
@@ -370,9 +370,9 @@ def main(base):
               and server.requests[0][1]["messages"][0]["content"].endswith("\n\n\nStart"))
 
     # --- 7. simulated Ollama: startup, environment, closing, server that does not start
-    os.environ["OLLAMA_ORIGINS"] = r"C:\non\usare"  # the user's configuration: it must not reach the server
-    environment = os.path.join(base, "ambiente.json")
-    os.environ["PATCHSMITH_FINTO_AMBIENTE"] = environment
+    os.environ["OLLAMA_ORIGINS"] = r"C:\do\not\use"  # the user's configuration: it must not reach the server
+    environment = os.path.join(base, "environment.json")
+    os.environ["PATCHSMITH_FAKE_ENVIRONMENT"] = environment
     command = [sys.executable, "-I", os.path.join(HERE, "fake_ollama.py")]
     server = ollama.Server(silent, command=command, startup_wait=20)
     server.launch()
@@ -388,24 +388,24 @@ def main(base):
     check("server environment: models in PatchSmith's folder, its own port, none of the user's variables",
               env.get("OLLAMA_MODELS") == ollama.models_folder() and env.get("OLLAMA_NO_CLOUD") == "1"
               and env.get("OLLAMA_HOST", "").startswith("127.0.0.1:114") and "OLLAMA_ORIGINS" not in env
-              and r"C:\non\usare" not in env.values())
+              and r"C:\do\not\use" not in env.values())
     del os.environ["OLLAMA_ORIGINS"]
-    os.environ["PATCHSMITH_FINTO_MUORI"] = "1"
+    os.environ["PATCHSMITH_FAKE_DIE"] = "1"
     try:
         ollama.Server(silent, command=command, startup_wait=20).launch()
         message = ""
     except ollama.LocalError as e:
         message = str(e)
-    del os.environ["PATCHSMITH_FINTO_MUORI"]
+    del os.environ["PATCHSMITH_FAKE_DIE"]
     check("server that does not start: error with the last lines of its log",
-              "didn't start" in message and "errore simulato" in message)
+              "didn't start" in message and "simulated error" in message)
 
     # Stop while the server is starting: the process just launched does not stay running
     import threading
     started_pids = []
     real_bind = ollama._bind_to_job
     ollama._bind_to_job = lambda pid: started_pids.append(pid) or real_bind(pid)
-    os.environ["PATCHSMITH_FINTO_LENTO"] = "8"
+    os.environ["PATCHSMITH_FAKE_SLOW"] = "8"
     threading.Timer(1.0, interruption.request_stop).start()
     try:
         with ollama.Server(silent, command=command, startup_wait=20):
@@ -414,7 +414,7 @@ def main(base):
     except interruption.Interrupted:
         stopped = True
     interruption.reset()
-    del os.environ["PATCHSMITH_FINTO_LENTO"]
+    del os.environ["PATCHSMITH_FAKE_SLOW"]
     ollama._bind_to_job = real_bind
     alive = bool(started_pids) and str(started_pids[0]).encode() in subprocess.run(
         ["tasklist", "/FI", "PID eq %d" % started_pids[0]], capture_output=True).stdout
@@ -431,29 +431,29 @@ def main(base):
     check("port used by another program recognized", busy and not ollama._port_busy(other_port))
 
     # --- 8. installation: zip with dangerous paths rejected, status without installation
-    dangerous = os.path.join(base, "pericoloso.zip")
+    dangerous = os.path.join(base, "dangerous.zip")
     with zipfile.ZipFile(dangerous, "w") as z:
-        z.writestr("../fuori.txt", "x")
+        z.writestr("../outside.txt", "x")
     try:
-        ollama._extract(dangerous, os.path.join(base, "estratto"))
+        ollama._extract(dangerous, os.path.join(base, "extracted"))
         was_refused = False
     except ollama.LocalError:
         was_refused = True
     check("installation: zip with paths outside the folder rejected, nothing extracted",
-              was_refused and not os.path.exists(os.path.join(base, "fuori.txt"))
-              and not os.path.exists(os.path.join(base, "estratto")))
+              was_refused and not os.path.exists(os.path.join(base, "outside.txt"))
+              and not os.path.exists(os.path.join(base, "extracted")))
     # damaged installation (ollama.exe removed, e.g. by the antivirus): reinstalling replaces it
-    good = os.path.join(base, "buono.zip")
+    good = os.path.join(base, "good.zip")
     with zipfile.ZipFile(good, "w") as z:
-        z.writestr("ollama.exe", "nuovo")
+        z.writestr("ollama.exe", "new")
         z.writestr("lib/ollama/x.dll", "x")
     corrupted = os.path.join(base, "version")
     os.makedirs(os.path.join(corrupted, "lib", "ollama"))
-    open(os.path.join(corrupted, "lib", "ollama", "vecchio.dll"), "w").close()
+    open(os.path.join(corrupted, "lib", "ollama", "old.dll"), "w").close()
     ollama._extract(good, corrupted)
     check("damaged installation: the folder is rebuilt from scratch",
-              open(os.path.join(corrupted, "ollama.exe")).read() == "nuovo"
-              and not os.path.exists(os.path.join(corrupted, "lib", "ollama", "vecchio.dll"))
+              open(os.path.join(corrupted, "ollama.exe")).read() == "new"
+              and not os.path.exists(os.path.join(corrupted, "lib", "ollama", "old.dll"))
               and not os.path.exists(corrupted + ".tmp"))
 
     # Ollama download: Stop or a dropped network do not throw away the part already downloaded, it resumes with Range
@@ -466,7 +466,7 @@ def main(base):
 
         def read(self, n):
             if self.break_at is not None and self.read_items >= self.break_at:
-                raise ConnectionResetError("rete interrotta")
+                raise ConnectionResetError("network dropped")
             block = self.data[self.read_items:self.read_items + min(n, 1024)]
             self.read_items += len(block)
             return block
@@ -584,7 +584,7 @@ def test_recovery(base):
     def fixed_seeds(text, options):
         seen.append(options["seed"])
         return text if options["seed"] in (42, 7, 11) else "IT " + text
-    p = Project(profile_of(base, "recupero"), silent)
+    p = Project(profile_of(base, "recovery"), silent)
     b, server = local(fixed_seeds)
     failed = p.translate_texts(["Open the door to the castle"], b, "en", "it")
     check("rejected with the first round's seeds (42, 7, 11): translated in the same run, with a new seed",
@@ -593,7 +593,7 @@ def test_recovery(base):
 
     # 9b. a text always rejected: problemi.json, not in the translation memory; the second run uses all new seeds
     text = "Close the window of the house"
-    p = Project(profile_of(base, "sempre-scartato"), silent)
+    p = Project(profile_of(base, "always-rejected"), silent)
     b, server = local(lambda t, o: t)
     failed = p.translate_texts([text], b, "en", "it")
     first_seeds = [d["options"]["seed"] for _, d in server.requests]
@@ -610,7 +610,7 @@ def test_recovery(base):
     check("final message: no 'relaunch'; it says what it already tried on its own and names 'Fix translations'",
               "Fix translations" in " ".join(log_file) and "retried automatically" in window
               and "Show remaining" in window and "relaunch" not in (" ".join(log_file) + window).lower())
-    p = Project(profile_of(base, "sempre-scartato"), silent)
+    p = Project(profile_of(base, "always-rejected"), silent)
     b, server = local(lambda t, o: t)
     p.translate_texts([text], b, "en", "it")
     second_seeds = [d["options"]["seed"] for _, d in server.requests]
@@ -622,21 +622,21 @@ def test_recovery(base):
               and all(backend.seed_for("x%d" % i, i) >= 100 for i in range(200)))
 
     # 9c. the same with the real simulated Ollama (HTTP), which gets it wrong with seeds 42, 7, 11 and logs the requests
-    requests_log = os.path.join(base, "richieste-ollama.jsonl")
+    requests_log = os.path.join(base, "ollama-requests.jsonl")
     command = [sys.executable, "-I", os.path.join(HERE, "fake_ollama.py")]
-    os.environ["PATCHSMITH_FINTO_SEMI_SBAGLIATI"] = "42,7,11"
-    os.environ["PATCHSMITH_FINTO_RICHIESTE"] = requests_log
+    os.environ["PATCHSMITH_FAKE_WRONG_SEEDS"] = "42,7,11"
+    os.environ["PATCHSMITH_FAKE_REQUESTS"] = requests_log
     try:
         server = ollama.Server(silent, command=command, startup_wait=20)
         server.launch()
         try:
-            p = Project(profile_of(base, "ollama-finto"), silent)
+            p = Project(profile_of(base, "fake-ollama"), silent)
             p.translate_texts(["Find the key in the old house"], backend.Local("4b", log=silent, server=server),
                             "en", "it")
         finally:
             server.close()
     finally:
-        del os.environ["PATCHSMITH_FINTO_SEMI_SBAGLIATI"], os.environ["PATCHSMITH_FINTO_RICHIESTE"]
+        del os.environ["PATCHSMITH_FAKE_WRONG_SEEDS"], os.environ["PATCHSMITH_FAKE_REQUESTS"]
     with open(requests_log, encoding="utf-8") as f:
         seeds = [json.loads(r)["seed"] for r in f]
     check("simulated Ollama that gets it wrong with 42, 7, 11: translated in the same run with a new seed (from its "
@@ -652,7 +652,7 @@ def test_recovery(base):
     open(manifest, "w").close()
     try:
         server = ServerWithPrompt(lambda t, o, prompt, model: ("IT " + t) if model == twelve else t)
-        p = Project(profile_of(base, "altro-modello"), silent)
+        p = Project(profile_of(base, "other-model"), silent)
         p.translate_texts(["Talk to the guard at the gate"], backend.Local("4b", log=silent, server=server),
                         "en", "it")
         check("rejected by the Fast model in the new rounds too: the chosen model stays (no 12B loaded on its "
@@ -668,10 +668,10 @@ def test_memory(base):
     from patchsmith import names
 
     # 10a. game names: Unity's app.info and the version information of an executable
-    game = os.path.join(base, "gioco-nomi")
-    os.makedirs(os.path.join(game, "Gioco_Data"))
-    open(os.path.join(game, "Gioco_Data", "globalgamemanagers"), "wb").write(b"x")
-    with open(os.path.join(game, "Gioco_Data", "app.info"), "w", encoding="utf-8") as f:
+    game = os.path.join(base, "game-names")
+    os.makedirs(os.path.join(game, "Game_Data"))
+    open(os.path.join(game, "Game_Data", "globalgamemanagers"), "wb").write(b"x")
+    with open(os.path.join(game, "Game_Data", "app.info"), "w", encoding="utf-8") as f:
         f.write("Cup Dog Games\nRubinite")
     found = names.names_of_game(game)
     info = names.exe_version(sys.executable)
@@ -705,8 +705,8 @@ def test_memory(base):
 
     # 10b. shared translation memory: only the texts translated now go in, with their source; old entries without a
     # source that do not pass the checks are skipped (and replaced)
-    path = profile_of(base, "comune-a")
-    write_json(project.memory_path({"name": "comune-a", "target_language": "it"}),
+    path = profile_of(base, "shared-a")
+    write_json(project.memory_path({"name": "shared-a", "target_language": "it"}),
                 {"Save game": "Salva partita"})  # old entry of the game
     p = Project(path, silent)
     b, server = local(lambda t, o: {"Deal 5 damage": "Infliggi 5 danni", "New quest": "Nuova missione"}.get(
@@ -735,7 +735,7 @@ def test_memory(base):
               and p.memory["New quest"] == "Missione nuova" and not server.requests)
 
     # 10c. saved translations redone: only the machine translations that do not pass the current checks
-    name = "rivalida"
+    name = "revalidated"
     path = profile_of(base, name)
     saved_count = {"Collect 5 coins": "Raccogli 50 monete", "Find 3 gems": "Trova 30 gemme",
                "Open the chest of the house": "Abre el cofre de la casa y el mapa"}
@@ -779,7 +779,7 @@ def test_apply(base):
     """Translations that cannot be written to the game: in problemi.json; the machine translations are redone right away
     with the right instruction, those fixed by hand stay."""
     from patchsmith import auto as automatic
-    game = os.path.join(base, "gioco-righe")
+    game = os.path.join(base, "game-lines")
     os.makedirs(game)
     with open(os.path.join(game, "english.txt"), "w", encoding="utf-8", newline="") as f:
         f.write("0 Start a brand new game now\n1 Quit\n2 Options\n")  # long sentence: not in the shared memory
@@ -824,7 +824,7 @@ def test_apply(base):
 
 def lines_game(base, name, lines):
     """A game with a line file ('0 text') and its game profile; returns (folder, game profile, translation memory)."""
-    game = os.path.join(base, "gioco-" + name)
+    game = os.path.join(base, "game-" + name)
     os.makedirs(game)
     with open(os.path.join(game, "english.txt"), "w", encoding="utf-8", newline="") as f:
         f.write("".join("%d %s\n" % (i, r) for i, r in enumerate(lines)))
@@ -840,8 +840,8 @@ def test_limited_redos(base):
 
     # 11a. the local translator gives it back unchanged (it passes its own checks, not the language one): new seeds at
     # every run, recorded in problemi.json, and after MAX_ATTEMPTS it is left alone
-    path = profile_of(base, "rifatta-uguale")
-    memory = project.memory_path({"name": "rifatta-uguale", "target_language": "it"})
+    path = profile_of(base, "redone-same")
+    memory = project.memory_path({"name": "redone-same", "target_language": "it"})
     write_json(memory, suspect)
     write_json(memory[:-5] + ".automatiche.json", suspect)
     seeds = []
@@ -860,7 +860,7 @@ def test_limited_redos(base):
 
     # 11b. the same with a full 'Analyze and translate' (it writes to the game): the note in problemi.json stays, the
     # attempts grow and after MAX_ATTEMPTS nothing more is requested
-    game, path, memory = lines_game(base, "rifatta-gioco", ["Open the chest of the house", "Quit"])
+    game, path, memory = lines_game(base, "redone-game", ["Open the chest of the house", "Quit"])
     write_json(memory, dict(suspect, Quit="Esci"))
     write_json(memory[:-5] + ".automatiche.json", dict(suspect, Quit="Esci"))
     requests, attempts = [], []
@@ -878,11 +878,11 @@ def test_limited_redos(base):
               and attempts[-1] >= project.MAX_ATTEMPTS and "0 Abre el cofre de la casa y el mapa" in written)
 
     # 11c. an unexpected error of the translator in the new rounds: the first round's translations are written anyway
-    game, path, memory = lines_game(base, "giro-rotto", ["Light the lamp in the tower", "Close the gate of the house"])
+    game, path, memory = lines_game(base, "broken-run", ["Light the lamp in the tower", "Close the gate of the house"])
 
     def broken(text, options):
         if options["seed"] not in (42, 7, 11):
-            return RuntimeError("guasto imprevisto")
+            return RuntimeError("unexpected failure")
         return text if text == "Close the gate of the house" else "IT " + text
     p = Project(path, silent)
     b, server = local(broken)
@@ -897,7 +897,7 @@ def test_limited_redos(base):
 
     # 11d. shared translation memory: a short text translated now that fails the current checks does not go in
     shared = project.shared_path("en", "it")
-    p = Project(profile_of(base, "comune-spagnolo"), silent)
+    p = Project(profile_of(base, "shared-spanish"), silent)
     b, server = local(lambda t, o: {"Open the house chest": "Abre el cofre y el mapa",
                                      "Light the torch": "Accendi la torcia"}.get(t, t))
     p.translate_texts(["Open the house chest", "Light the torch"], b, "en", "it")
@@ -909,8 +909,8 @@ def test_limited_redos(base):
     # 11f. a text that is only a game name, machine-translated: the name comes back, without requests, and then it is
     # not rechecked at every run ('not translated' does not apply to a name left as it is on purpose)
     name = "Cult Of The Lamb"
-    path = profile_of(base, "solo-nome", do_not_translate=[name])
-    memory = project.memory_path({"name": "solo-nome", "target_language": "it"})
+    path = profile_of(base, "name-only", do_not_translate=[name])
+    memory = project.memory_path({"name": "name-only", "target_language": "it"})
     write_json(memory, {name: "Culto dell'Agnello"})
     write_json(memory[:-5] + ".automatiche.json", {name: "Culto dell'Agnello"})
     requests = []

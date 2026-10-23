@@ -2,11 +2,11 @@
 
 Usage (ollama.Server starts it in the tests): python -I fake_ollama.py serve
 - /api/version, /api/tags, /api/ps, /api/generate, /api/chat (translates by prepending "IT:"), /api/pull (NDJSON);
-- with PATCHSMITH_FINTO_MUORI=1 it exits at once (a server that does not start);
-- writes the environment it received to PATCHSMITH_FINTO_AMBIENTE (to check the variables passed);
-- with PATCHSMITH_FINTO_LENTO=seconds it waits before answering (slow start);
-- with PATCHSMITH_FINTO_SEMI_SBAGLIATI=42,7,11 it answers with the original (untranslated) to requests with those seeds;
-- with PATCHSMITH_FINTO_RICHIESTE=<file> it appends to the file one JSON line per /api/chat: {text, seed,
+- with PATCHSMITH_FAKE_DIE=1 it exits at once (a server that does not start);
+- writes the environment it received to PATCHSMITH_FAKE_ENVIRONMENT (to check the variables passed);
+- with PATCHSMITH_FAKE_SLOW=seconds it waits before answering (slow start);
+- with PATCHSMITH_FAKE_WRONG_SEEDS=42,7,11 it answers with the original (untranslated) to requests with those seeds;
+- with PATCHSMITH_FAKE_REQUESTS=<file> it appends to the file one JSON line per /api/chat: {text, seed,
   temperature, model} (the log of requests, for the tests).
 """
 import json
@@ -42,11 +42,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/chat":
             text = data["messages"][0]["content"].split("\n\n\n", 1)[1]
             options = data.get("options") or {}
-            if os.environ.get("PATCHSMITH_FINTO_RICHIESTE"):
-                with open(os.environ["PATCHSMITH_FINTO_RICHIESTE"], "a", encoding="utf-8") as f:
+            if os.environ.get("PATCHSMITH_FAKE_REQUESTS"):
+                with open(os.environ["PATCHSMITH_FAKE_REQUESTS"], "a", encoding="utf-8") as f:
                     f.write(json.dumps({"text": text, "seed": options.get("seed"),
                                         "temperature": options.get("temperature"), "model": data.get("model")}) + "\n")
-            wrong_seeds = {int(s) for s in os.environ.get("PATCHSMITH_FINTO_SEMI_SBAGLIATI", "").split(",")
+            wrong_seeds = {int(s) for s in os.environ.get("PATCHSMITH_FAKE_WRONG_SEEDS", "").split(",")
                            if s.strip()}
             response = text if options.get("seed") in wrong_seeds else "IT: " + text
             self._reply({"message": {"content": response}, "done_reason": "stop", "eval_count": 10,
@@ -63,14 +63,14 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    if os.environ.get("PATCHSMITH_FINTO_MUORI"):
-        print("errore simulato: impossibile avviare", flush=True)
+    if os.environ.get("PATCHSMITH_FAKE_DIE"):
+        print("simulated error: cannot start", flush=True)
         sys.exit(3)
-    if os.environ.get("PATCHSMITH_FINTO_LENTO"):  # a server that takes a while to start
+    if os.environ.get("PATCHSMITH_FAKE_SLOW"):  # a server that takes a while to start
         import time
-        time.sleep(float(os.environ["PATCHSMITH_FINTO_LENTO"]))
-    if os.environ.get("PATCHSMITH_FINTO_AMBIENTE"):
-        with open(os.environ["PATCHSMITH_FINTO_AMBIENTE"], "w", encoding="utf-8") as f:
+        time.sleep(float(os.environ["PATCHSMITH_FAKE_SLOW"]))
+    if os.environ.get("PATCHSMITH_FAKE_ENVIRONMENT"):
+        with open(os.environ["PATCHSMITH_FAKE_ENVIRONMENT"], "w", encoding="utf-8") as f:
             json.dump({k: v for k, v in os.environ.items() if k.upper().startswith(("OLLAMA", "TEMP", "TMP"))}, f)
     host, port = os.environ["OLLAMA_HOST"].rsplit(":", 1)
     ThreadingHTTPServer((host, int(port)), Handler).serve_forever()

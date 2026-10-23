@@ -45,8 +45,8 @@ def main(base):
                              "description": "Beat the first dragon of the game"}]).encode()
 
     # Electron game with files encrypted by GemShell (like "Now That's a Big Dragon")
-    game = os.path.join(base, "Drago", "game")
-    for name, data in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "drago.exe": b"MZ",
+    game = os.path.join(base, "Dragon", "game")
+    for name, data in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "dragon.exe": b"MZ",
                        "resources/app/main.js": b"require('./gemshell-native.node')",
                        "resources/app/package.json": b'{"main": "main.js"}',
                        "resources/app/gemshell-assets": b"GS02\x16\x00drago" + os.urandom(64),
@@ -67,13 +67,13 @@ def main(base):
 
     # ordinary web game with a Steam emulator folder next to it: only the game is translated
     web = os.path.join(base, "Web")
-    write(os.path.join(web, "data", "testi.json"), json.dumps({"titolo": "Start the adventure now",
-                                                                "esci": "Quit to the main menu"}).encode())
+    write(os.path.join(web, "data", "texts.json"), json.dumps({"title": "Start the adventure now",
+                                                                "quit": "Quit to the main menu"}).encode())
     write(os.path.join(web, "steam_settings", "achievements.json"), achievements)
     candidates, others = scan.scan_folder(web, lambda _m: None)
     paths = [c["path"] for c in candidates] + [a if isinstance(a, str) else a.get("path", "") for a in others]
     check("Steam emulator folder (steam_settings) never scanned",
-              not any("steam_settings" in p for p in paths) and any("testi.json" in p for p in paths))
+              not any("steam_settings" in p for p in paths) and any("texts.json" in p for p in paths))
 
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))

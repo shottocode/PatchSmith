@@ -102,8 +102,8 @@ def test_run(base):
 def test_snapshot(base):
     saved_items = project.PROJECT_FOLDER, project.DATA_ROOT
     root = os.path.join(base, "program")
-    for rel, text in (("profiles/gioco.json", "{}"), ("memory/gioco.it.json", "{}"), ("settings.json", "{}"),
-                       ("components/altro.txt", "x")):
+    for rel, text in (("profiles/game.json", "{}"), ("memory/game.it.json", "{}"), ("settings.json", "{}"),
+                       ("components/other.txt", "x")):
         p = os.path.join(root, *rel.split("/"))
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
@@ -112,18 +112,18 @@ def test_snapshot(base):
         project.PROJECT_FOLDER, project.DATA_ROOT = root, None
         before = run_all.snapshot()
         check("snapshot: the user's data yes, components no",
-                  os.path.join(root, "profiles", "gioco.json") in before
+                  os.path.join(root, "profiles", "game.json") in before
                   and os.path.join(root, "settings.json") in before
                   and not any("components" in p for p in before))
-        with open(os.path.join(root, "memory", "gioco.it.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(root, "memory", "game.it.json"), "w", encoding="utf-8") as f:
             f.write('{"a": "b"}')
-        with open(os.path.join(root, "memory", "nuovo.it.json"), "w", encoding="utf-8") as f:
+        with open(os.path.join(root, "memory", "new.it.json"), "w", encoding="utf-8") as f:
             f.write("{}")
         os.remove(os.path.join(root, "settings.json"))
         after = run_all.snapshot()
         changed_files = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
         check("snapshot: it notices a file changed, added and removed", changed_files == {
-            os.path.join(root, "memory", "gioco.it.json"), os.path.join(root, "memory", "nuovo.it.json"),
+            os.path.join(root, "memory", "game.it.json"), os.path.join(root, "memory", "new.it.json"),
             os.path.join(root, "settings.json")})
     finally:
         project.PROJECT_FOLDER, project.DATA_ROOT = saved_items

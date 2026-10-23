@@ -94,7 +94,7 @@ class FakeServer:
 # --- checks before starting ------------------------------------------------------------------------------------
 
 def test_checks(base):
-    game = web_game(os.path.join(base, "giochi", "Lantern Keeper"), "Lantern Keeper.exe")
+    game = web_game(os.path.join(base, "games", "Lantern Keeper"), "Lantern Keeper.exe")
     before = sorted(os.listdir(game))
     problems = automatic.preflight_checks(game, "fake", "translate", language.AUTO, "it")
     check("game ready: no problems, and the write test file does not stay behind (%s)" % codes(problems),
@@ -143,10 +143,10 @@ def test_checks(base):
     automatic.check_writable = lambda _c: PermissionError(13, "Accesso negato")
     old_pf = os.environ.get("ProgramFiles")
     try:
-        os.environ["ProgramFiles"] = os.path.join(base, "altrove")
+        os.environ["ProgramFiles"] = os.path.join(base, "elsewhere")
         outside = {op: by_code(automatic.preflight_checks(game, "fake", op, language.AUTO, "it"),
                                 "READ_ONLY") for op in ("translate", "reapply", "restore")}
-        os.environ["ProgramFiles"] = os.path.join(base, "giochi")
+        os.environ["ProgramFiles"] = os.path.join(base, "games")
         inside = by_code(automatic.preflight_checks(game, "fake", "translate", language.AUTO, "it"),
                             "READ_ONLY")
     finally:
@@ -161,7 +161,7 @@ def test_checks(base):
               and "Controlled Folder Access" in outside["translate"].message)
     check("protected folder inside Program Files: it says so and explains how to move the game",
               inside and "Program Files" in inside.message and "Move install folder" in inside.message)
-    one_file = os.path.join(base, "un-file")
+    one_file = os.path.join(base, "a-file")
     open(one_file, "w").close()
     check("real write test: works in a folder (nothing stays behind), error if it is not a folder",
               real_version(game) is None and sorted(os.listdir(game)) == before
@@ -228,8 +228,8 @@ def test_checks(base):
 
 def test_same_game(base):
     unity_a = unity_game(os.path.join(base, "unity", "A", "Rubinite"), "Rubinite", "Cup Dog Games", "Rubinite")
-    unity_b = unity_game(os.path.join(base, "unity", "B", "Rubinite Copia"), "Rubinite", "Cup Dog Games", "Rubinite")
-    unity_c = unity_game(os.path.join(base, "unity", "C", "Altro"), "Rubinite", "Studio", "Altro Gioco")
+    unity_b = unity_game(os.path.join(base, "unity", "B", "Rubinite Copy"), "Rubinite", "Cup Dog Games", "Rubinite")
+    unity_c = unity_game(os.path.join(base, "unity", "C", "Other"), "Rubinite", "Studio", "Other Game")
     a, b, c = (automatic.identity(x) for x in (unity_a, unity_b, unity_c))
     check("Unity identity: company/product and executables (%s)" % a,
               a.get("unity") == "Cup Dog Games/Rubinite" and a.get("exe") == ["rubinite.exe"])
@@ -246,7 +246,7 @@ def test_same_game(base):
               and not automatic.same_game({"name": "lantern-keeper"}, {"name": "lantern-keeper-2"})
               and not automatic.same_game({"name": "gioco"}, {"name": "gioco"}))
     real = steam.game_installed
-    steam.game_installed = lambda folder, steam=None: {"appid": "4242", "name": "Prova"}
+    steam.game_installed = lambda folder, steam=None: {"appid": "4242", "name": "Test"}
     try:
         with_steam = automatic.identity(unity_a)
         unlabeled = automatic.identity(unity_a, steam=False)
@@ -255,8 +255,8 @@ def test_same_game(base):
     check("identity: Steam appid from the manifest (not looked up with steam=False)",
               with_steam.get("steam") == "4242" and "steam" not in unlabeled)
     # programs that many games share (.NET runtime, Ren'Py, DOSBox): they do not mean it is the same game
-    singular = web_game(os.path.join(base, "net", "Uno", "Gioco"), "Primo Gioco.exe")
-    two = web_game(os.path.join(base, "net", "Due", "Gioco"), "Secondo Gioco.exe")
+    singular = web_game(os.path.join(base, "net", "One", "Game"), "First Game.exe")
+    two = web_game(os.path.join(base, "net", "Two", "Game"), "Second Game.exe")
     for d in (singular, two):
         os.makedirs(os.path.join(d, "lib", "py3-windows-x86_64"))
         for exe in ("createdump.exe", os.path.join("lib", "py3-windows-x86_64", "zsync.exe"), "DOSBox.exe"):
@@ -264,11 +264,11 @@ def test_same_game(base):
     i_one, i_two = automatic.identity(singular), automatic.identity(two)
     check("identity: createdump, zsync, DOSBox do not count; different games sharing those programs are not "
               "the same game (%s)" % i_one,
-              i_one.get("exe") == ["primo gioco.exe"] and not automatic.same_game(i_one, i_two))
+              i_one.get("exe") == ["first game.exe"] and not automatic.same_game(i_one, i_two))
 
     # a copy of the already translated web game: its translation memory is offered (with the test translator, the
     # test one)
-    original = web_game(os.path.join(base, "web", "Originale", "Lantern Keeper"), "Lantern Keeper.exe")
+    original = web_game(os.path.join(base, "web", "Original", "Lantern Keeper"), "Lantern Keeper.exe")
     path, completed, _ = automatic.analyze_and_translate(original, "auto", "it", "fake", silent)
     with open(path, encoding="utf-8") as f:
         profile = json.load(f)
@@ -278,7 +278,7 @@ def test_same_game(base):
     json.dump(entries, open(memory, "w", encoding="utf-8"), ensure_ascii=False)
     check("original translated: the identity stays in the profile",
               completed and profile.get("identity", {}).get("exe") == ["lantern keeper.exe"])
-    copy_dir = web_game(os.path.join(base, "web", "Copia", "Lantern Keeper"), "Lantern Keeper.exe")
+    copy_dir = web_game(os.path.join(base, "web", "Copy", "Lantern Keeper"), "Lantern Keeper.exe")
     proposal = by_code(automatic.preflight_checks(copy_dir, "fake", "translate", language.AUTO, "it"),
                           "SAME_GAME")
     online = by_code(automatic.preflight_checks(copy_dir, "deepl", "translate", language.AUTO, "it"),
@@ -317,7 +317,7 @@ def test_same_game(base):
                                                                              "it")))
     # copying the translations fails (disk full, file in use): what is missing is translated from scratch, without
     # stopping "Analyze and translate" and without leaving a half-written translation memory
-    third_game = web_game(os.path.join(base, "web", "Terza", "Lantern Keeper"), "Lantern Keeper.exe")
+    third_game = web_game(os.path.join(base, "web", "Third", "Lantern Keeper"), "Lantern Keeper.exe")
     real_save, failures = automatic.shared_file.save_merging, []
 
     def broken_save(*a, **k):  # the first write (the copy of the translation memory) fails, the others succeed
@@ -341,16 +341,16 @@ def test_same_game(base):
               and memory3.get("Start a new game") and any("I haven't been able to copy" in r for r in lines))
 
     # a moved game: the recorded folder is no longer there, the game profile moves to the new folder
-    moved = os.path.join(automatic.profiles_folder(), "gioco-spostato.json")
+    moved = os.path.join(automatic.profiles_folder(), "moved-game.json")
     with open(moved, "w", encoding="utf-8") as f:
-        json.dump({"name": "gioco-spostato", "game_folder": os.path.join(base, "sparita", "Gioco").replace(
+        json.dump({"name": "moved-game", "game_folder": os.path.join(base, "gone", "Game").replace(
             os.sep, "/"), "source_language": "auto", "target_language": "it", "backend": "fake", "file": [],
-            "identity": {"name": "game", "exe": ["gioco spostato.exe"]}}, f)
+            "identity": {"name": "game", "exe": ["moved game.exe"]}}, f)
     for test in (False, True):
-        with open(project.memory_path({"name": "gioco-spostato", "target_language": "it"}, test), "w",
+        with open(project.memory_path({"name": "moved-game", "target_language": "it"}, test), "w",
                   encoding="utf-8") as f:
             json.dump({"Start a new game": "Nuova partita (spostato)"}, f)
-    new_folder = web_game(os.path.join(base, "web", "Nuovo Disco", "Gioco Spostato 2"), "Gioco Spostato.exe")
+    new_folder = web_game(os.path.join(base, "web", "New Disk", "Moved Game 2"), "Moved Game.exe")
     profiles_before = len(list(automatic.list_profiles()))
     proposal = by_code(automatic.preflight_checks(new_folder, "deepl", "translate", language.AUTO, "it"),
                           "SAME_GAME")
@@ -364,7 +364,7 @@ def test_same_game(base):
     check("moved game with 'reuse': same profile and same memory in the new folder, no new profile",
               path_s == moved and automatic._normalize(after["game_folder"]) == automatic._normalize(
                   new_folder)
-              and after.get("previous_folder", "").endswith("sparita/Gioco")
+              and after.get("previous_folder", "").endswith("gone/Game")
               and len(list(automatic.list_profiles())) == profiles_before
               and json.load(open(project.memory_path(after, test=True), encoding="utf-8")).get(
                   "Start a new game") == "Nuova partita (spostato)")
@@ -425,14 +425,14 @@ def test_defaults(base):
               "with the full path (%s)" % commands[1:2],
               nvidia == 8.0 and wmi_limit is None and wmi_2 == 2.0 and all(os.path.isabs(c) for c in commands))
     # nvidia-smi never from the current folder (a program with that name there must not start): System32, NVSMI, PATH
-    current_name, elsewhere = os.path.join(base, "nvsmi-corrente"), os.path.join(base, "nvsmi-path")
+    current_name, elsewhere = os.path.join(base, "nvsmi-current"), os.path.join(base, "nvsmi-path")
     for d in (current_name, elsewhere):
         os.makedirs(d)
         open(os.path.join(d, "nvidia-smi.exe"), "wb").close()
     env_vars = {k: os.environ.get(k) for k in ("SystemRoot", "ProgramFiles", "PATH")}
     cwd = os.getcwd()
     try:
-        os.environ.update(SystemRoot=os.path.join(base, "windows"), ProgramFiles=os.path.join(base, "programmi"))
+        os.environ.update(SystemRoot=os.path.join(base, "windows"), ProgramFiles=os.path.join(base, "programs"))
         os.chdir(current_name)
         os.environ["PATH"] = os.pathsep.join([".", current_name])
         current_only = ollama._nvidia_smi_program()

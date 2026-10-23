@@ -4,7 +4,7 @@ Usage: python -I test/test_safety.py <game_copy_folder> <relative_json_file>
 or (recommended) python -I test/run_all.py --safety <game_copy_folder> <relative_json_file>
 Prerequisite: `smith auto <copy> --backend fake` has already been run on the copy with the same data folder
 (run_all.py does it by itself); if the game profile is not there, the test does it itself.
-Game profile and translation memory go in the PATCHSMITH_DATA folder; without it, in "dati-prova-sicurezza" next to
+Game profile and translation memory go in the PATCHSMITH_DATA folder; without it, in "safety-test-data" next to
 the copy: never among PatchSmith's real data. Do not use on a real game.
 """
 import hashlib
@@ -39,7 +39,7 @@ def main(folder, rel_json):
     data = os.path.join(folder, *rel_json.split("/"))
     backup = data + BACKUP_SUFFIX
     if not os.environ.get("PATCHSMITH_DATA"):
-        project.DATA_ROOT = os.path.join(os.path.dirname(folder), "dati-prova-sicurezza")
+        project.DATA_ROOT = os.path.join(os.path.dirname(folder), "safety-test-data")
     if not automatic.find_profile(folder):  # prerequisite not done with this data folder
         automatic.analyze_and_translate(folder, backend="fake", log=silent)
     original = fingerprint(backup)

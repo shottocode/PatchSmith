@@ -106,7 +106,7 @@ def main(base):
 
     # === Steam ==========================================================================================
     steam_root = os.path.join(base, "Steam")
-    library = os.path.join(base, "Libreria")
+    library = os.path.join(base, "Library")
     os.makedirs(os.path.join(steam_root, "appcache"))
     os.makedirs(os.path.join(library, "steamapps", "common"))
     steam.steam_folder = lambda: steam_root
@@ -116,14 +116,14 @@ def main(base):
     ita = {"italian": {"supported": "true"}, "english": {"supported": "true"}}
     appinfo_file = os.path.join(steam_root, "appcache", "appinfo.vdf")
     write(appinfo_file, appinfo({
-        500: {"common": {"name": "Gioco Con Redist", "type": "Game", "supported_languages": ita},
+        500: {"common": {"name": "Game With Redist", "type": "Game", "supported_languages": ita},
               "config": {"launch": {"0": {"executable": "RealGame.exe"}}},
-              "extended": {"script": "_CommonRedist\\vcredist\\vc_redist.x64.exe", "altro": "MyRepack.exe"}},
-        501: {"common": {"name": "Gioco Protetto", "type": "Game", "supported_languages": ita},
+              "extended": {"script": "_CommonRedist\\vcredist\\vc_redist.x64.exe", "other": "MyRepack.exe"}},
+        501: {"common": {"name": "Protected Game", "type": "Game", "supported_languages": ita},
               "config": {"launch": {"0": {"executable": "Game\\start_protected_game.exe"}}}},
-        502: {"common": {"name": "Primo Condiviso", "type": "Game", "supported_languages": ita},
+        502: {"common": {"name": "First Shared", "type": "Game", "supported_languages": ita},
               "config": {"launch": {"0": {"executable": "Shared.exe"}}}},
-        503: {"common": {"name": "Secondo Condiviso", "type": "Game", "supported_languages": ita},
+        503: {"common": {"name": "Second Shared", "type": "Game", "supported_languages": ita},
               "config": {"launch": {"0": {"executable": "Shared.exe"}}}},
         504: {"common": {"name": "Alpha", "type": "Game", "supported_languages": ita},
               "config": {"launch": {"0": {"executable": "Alpha.exe"}}}},
@@ -132,23 +132,23 @@ def main(base):
         506: {"common": {"name": "Dungeon Short", "type": "Game", "supported_languages": ita},
               "config": {"launch": {"0": {"executable": "Bin\\DDS.EXE"}}, "installdir": "Dungeon Short"},
               "depots": {"baselanguages": "english"}},
-        507: {"common": {"name": "Gioco Sette", "type": "Game", "supported_languages": ita},
-              "config": {"launch": {"0": {"executable": "SetteGame.exe"}}}},
-        508: {"common": {"name": "Gioco Steam", "type": "Game", "supported_languages": ita}},
+        507: {"common": {"name": "Game Seven", "type": "Game", "supported_languages": ita},
+              "config": {"launch": {"0": {"executable": "SevenGame.exe"}}}},
+        508: {"common": {"name": "Steam Game", "type": "Game", "supported_languages": ita}},
     }))
     redist = os.path.join(base, "Repack")
     write(os.path.join(redist, "_CommonRedist", "vcredist", "vc_redist.x64.exe"), b"MZ")
     write(os.path.join(redist, "MyRepack.exe"), b"MZ")
     check("Steam: installers in the folder and names outside the launch paths do not identify a game",
               steam.identify_from_executables(redist) is None)
-    shielded = os.path.join(base, "Protetto")
+    shielded = os.path.join(base, "Protected")
     write(os.path.join(shielded, "Game", "start_protected_game.exe"), b"MZ")
     check("Steam: generic launch name (start_protected_game.exe) ignored",
               steam.identify_from_executables(shielded) is None)
-    shared_dir = os.path.join(base, "Condiviso")
+    shared_dir = os.path.join(base, "Shared")
     write(os.path.join(shared_dir, "Shared.exe"), b"MZ")
     check("Steam: executable launched by two games -> none", steam.identify_from_executables(shared_dir) is None)
-    tied = os.path.join(base, "Pari")
+    tied = os.path.join(base, "Tied")
     write(os.path.join(tied, "Alpha.exe"), b"MZ")
     write(os.path.join(tied, "Beta.exe"), b"MZ")
     check("Steam: a tie -> no winner", steam.identify_from_executables(tied) is None)
@@ -165,16 +165,16 @@ def main(base):
     lines = official_language.message(r, "it", ["I have set Italian (it) in the game settings."], True)
     check("message: after a successful setting no contradictory instructions",
               not any("isn't a Steam installation" in x for x in lines))
-    rng = os.path.join(base, "CartellaACaso")
-    write(os.path.join(rng, "SetteGame.exe"), b"MZ")
+    rng = os.path.join(base, "RandomFolder")
+    write(os.path.join(rng, "SevenGame.exe"), b"MZ")
     r = official_language.detect(rng, "it")
     check("Steam: identification not confirmed by the folder name -> only a note, no block",
               r["present"] is None and r["notes"] and r["steam_known"]["appid"] == "507")
-    steam_game = os.path.join(library, "steamapps", "common", "Gioco Steam")
+    steam_game = os.path.join(library, "steamapps", "common", "Steam Game")
     os.makedirs(steam_game)
     write(os.path.join(library, "steamapps", "appmanifest_508.acf"),
-           b'"AppState"\n{\n\t"appid"\t\t"508"\n\t"name"\t\t"Gioco Steam"\n\t"installdir"\t\t"Gioco Steam"\n}\n')
-    link = os.path.join(base, "Collegamento")
+           b'"AppState"\n{\n\t"appid"\t\t"508"\n\t"name"\t\t"Steam Game"\n\t"installdir"\t\t"Steam Game"\n}\n')
+    link = os.path.join(base, "Junction")
     done = subprocess.run(["cmd", "/c", "mklink", "/J", link, steam_game], capture_output=True).returncode == 0
     if done:
         info = steam.game_installed(link)
@@ -215,7 +215,7 @@ def main(base):
     steam._CACHE.clear()
 
     # === Unreal =========================================================================================
-    ue = os.path.join(base, "GiocoUE")
+    ue = os.path.join(base, "GameUE")
     paks = os.path.join(ue, "Proj", "Content", "Paks")
     entries = [("UI", "Start", "Start")]
     write(os.path.join(paks, "Proj-WindowsNoEditor.pak"), pak_v9("../../../Proj/Content/Localization/Game/", [
@@ -228,7 +228,7 @@ def main(base):
     languages, prog = language_unreal.game_languages(ue)
     check("Unreal: pak v9 mounted in a subfolder read; engine plugins excluded",
               languages == {"en", "it"} and prog == "Proj")
-    ue11 = os.path.join(base, "GiocoUE5")
+    ue11 = os.path.join(base, "GameUE5")
     write(os.path.join(ue11, "Proj5", "Content", "Paks", "Proj5-Windows.pak"), pak_v11(
         "../../../Proj5/Content/Localization/Game/", ["en/Game.locres", "zh-Hant/Game.locres", "Game.locmeta"]))
     languages, prog = language_unreal.game_languages(ue11)
@@ -291,7 +291,7 @@ def main(base):
               done and outcome is False and official_language.is_set(ue) and b"Language=it" in read_file(gus))
     system.game_open = lambda c: False
     os.chmod(gus, stat.S_IREAD)
-    write(os.path.join(ue, "Proj", "Content", "Paks", "zz_Patchsmith_it_999_P.pak"), b"finto")
+    write(os.path.join(ue, "Proj", "Content", "Paks", "zz_Patchsmith_it_999_P.pak"), b"fake")
     messages = []
     try:
         automatic.restore(ue, messages.append)
@@ -346,10 +346,10 @@ def main(base):
               and language_unity.i2_entry(i2_entries, "zh-CN") == "Chinese (Simplified)"
               and language_unity.i2_entry(i2_entries, "it") == "Italiano"
               and language_unity.i2_entry([("English", "en"), ("Chinese", "zh-CN")], "zh-TW") is None)
-    un = os.path.join(base, "GiocoUnity")
-    data = os.path.join(un, "Gioco_Data")
+    un = os.path.join(base, "GameUnity")
+    data = os.path.join(un, "Game_Data")
     write(os.path.join(data, "globalgamemanagers"), b"x")
-    write(os.path.join(data, "app.info"), b"PatchsmithTest2\nGioco")
+    write(os.path.join(data, "app.info"), b"PatchsmithTest2\nGame")
     write(os.path.join(data, "Managed", "I2Localization.dll"), b"MZ I2.Loc\x00")
     aa = os.path.join(data, "StreamingAssets", "aa")
     write(os.path.join(aa, "catalog.bin"), b"\x00\x01UnityEngine.Localization.Locale\x00\x12Italian (it).asset\x00"
@@ -367,10 +367,10 @@ def main(base):
     write(os.path.join(data, "resources.assets"), b"\x00" * 64 + list_(("English", "en"), ("Italiano", "it")) +
            b"\x00" * 64)
     for k in range(4):
-        write(os.path.join(data, "level%d" % k), b"\x00" * 64 + list_(("English", "en"), ("Lingua%d" % k, "x%d" % k))
+        write(os.path.join(data, "level%d" % k), b"\x00" * 64 + list_(("English", "en"), ("Language%d" % k, "x%d" % k))
                + b"\x00" * 64)
     check("I2: after the first list only a few other files are read",
-              [n for n, _ in language_unity.i2_languages(data)] == ["English", "Italiano", "Lingua0", "Lingua1"])
+              [n for n, _ in language_unity.i2_languages(data)] == ["English", "Italiano", "Language0", "Language1"])
     real_i2 = language_unity.i2_languages
 
     def broken(_data):
@@ -381,7 +381,7 @@ def main(base):
     check("Unity: an error reading I2 does not lose Unity Localization",
               present == {"it"} and dm["found"])
     import winreg
-    key = "Software\\PatchsmithTest2\\Gioco"
+    key = "Software\\PatchsmithTest2\\Game"
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key) as k:
         winreg.SetValueEx(k, language_unity.pref_name("I2 Language"), 0, winreg.REG_SZ, "English")
     r = official_language.detect(un, "it", "Unity")
@@ -404,12 +404,12 @@ def main(base):
             pass
 
     # === GameMaker: translate anyway even if the game has the files in Italian ============================
-    gm = os.path.join(base, "Gioco GM")
+    gm = os.path.join(base, "GM Game")
     write(os.path.join(gm, "Localization", "english_ui.txt"), test_gamemaker.UI.encode())
     write(os.path.join(gm, "Localization", "italian", "ui.txt"), b"0 Combatti\r\n1 Cambia\r\n")
     latin = set(chr(c) for c in range(32, 127)) | set("àèéùÀÈÉÙíóúÍÓÚ")
-    write(os.path.join(gm, "data.win"), test_gamemaker.data_win([("fn_testo", latin)]))
-    write(os.path.join(gm, "Gioco.exe"), b"MZ")
+    write(os.path.join(gm, "data.win"), test_gamemaker.data_win([("fn_text", latin)]))
+    write(os.path.join(gm, "Game.exe"), b"MZ")
     path, outcome = automatic.prepare(gm, "auto", "it", "fake", silent)
     path2, _ = automatic.prepare(gm, "auto", "it", "fake", silent, translate_anyway=True)
     check("GameMaker: Italian in the files -> official language; with 'translate anyway' it translates",

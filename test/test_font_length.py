@@ -105,32 +105,32 @@ def test_font(base):
     # game with a font in the bundle (with the tree) and one in resources.assets (without), a dynamic one with its .ttf
     game = os.path.join(base, "font")
     fake.il2cpp_game(game, {"ui_assets_all.bundle": fake.bundle([("CAB-f", fake.font_file(
-        [("Titoli SDF", ASCII + "ü", 0)]))], compression="lz4", block=4096)}, extra={
-        "Gioco_Data/resources.assets": fake.font_file([("Testi SDF", ASCII + "à", 0)], trees=False)})
-    game_data = os.path.join(game, "Gioco_Data")
+        [("Titles SDF", ASCII + "ü", 0)]))], compression="lz4", block=4096)}, extra={
+        "Game_Data/resources.assets": fake.font_file([("Texts SDF", ASCII + "à", 0)], trees=False)})
+    game_data = os.path.join(game, "Game_Data")
     found = font_unity.game_fonts(game_data)
     names = sorted((f["name"], f["mode"]) for f in found["tmp"])
     check("game fonts: the one in the bundle (with the mode) and the one in resources.assets (without tree)",
-              names == [("Testi SDF", None), ("Titoli SDF", 0)] and found["complete"])
+              names == [("Texts SDF", None), ("Titles SDF", 0)] and found["complete"])
     allowed, reason = font_unity.allowed_chars(game_data)
     check("rule: a character is fine if at least one font has it (à from one, ü from the other), è is not",
               allowed is not None and {"à", "ü"} <= allowed and "è" not in allowed
               and "2 TextMeshPro fonts" in reason)
     # dynamic font: its .ttf counts
-    dynamic = os.path.join(base, "dinamico")
+    dynamic = os.path.join(base, "dynamic")
     fake.il2cpp_game(dynamic, {"fonts_assets_all.bundle": fake.bundle([("CAB-d", fake.font_file(
-        [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)], [("Corpo", ASCII + "àèéìòù")]))])})
-    allowed, reason = font_unity.allowed_chars(os.path.join(dynamic, "Gioco_Data"))
+        [("Body SDF", "", 1), ("Pixel SDF", ASCII, 0)], [("Body", ASCII + "àèéìòù")]))])})
+    allowed, reason = font_unity.allowed_chars(os.path.join(dynamic, "Game_Data"))
     check("dynamic font: the characters of its .ttf count too (è can be drawn)",
               allowed is not None and "è" in allowed and "dynamic" in reason)
-    without_ttf = os.path.join(base, "senza-ttf")
+    without_ttf = os.path.join(base, "without-ttf")
     fake.il2cpp_game(without_ttf, {"fonts_assets_all.bundle": fake.bundle([("CAB-d", fake.font_file(
-        [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)]))])})
-    empty_game = os.path.join(base, "senza-font")
+        [("Body SDF", "", 1), ("Pixel SDF", ASCII, 0)]))])})
+    empty_game = os.path.join(base, "without-font")
     fake.il2cpp_game(empty_game, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)])})
     check("unknown (no limit): dynamic fonts without .ttf, no TextMeshPro font",
-              font_unity.allowed_chars(os.path.join(without_ttf, "Gioco_Data"))[0] is None
-              and font_unity.allowed_chars(os.path.join(empty_game, "Gioco_Data"))[0] is None)
+              font_unity.allowed_chars(os.path.join(without_ttf, "Game_Data"))[0] is None
+              and font_unity.allowed_chars(os.path.join(empty_game, "Game_Data"))[0] is None)
     # the result stays in the cache file until the game files change
     cache = os.path.join(base, "cache", "font.json")
     first = font_unity.allowed_chars(game_data, cache=cache)
@@ -145,7 +145,7 @@ def test_font(base):
         font_unity.game_fonts = real
     bundle = os.path.join(game_data, "StreamingAssets", "aa", "StandaloneWindows64", "ui_assets_all.bundle")
     with open(bundle, "wb") as f:  # a game update: the font now also has è
-        f.write(fake.bundle([("CAB-f", fake.font_file([("Titoli SDF", ASCII + "üè", 0)]))]))
+        f.write(fake.bundle([("CAB-f", fake.font_file([("Titles SDF", ASCII + "üè", 0)]))]))
     third = font_unity.allowed_chars(game_data, cache=cache)
     check("cache: the second time the fonts are not read again; after a game update they are, and now è is fine",
               reread and second == first and "è" not in first[0] and third[0] is not None and "è" in third[0]
@@ -157,7 +157,7 @@ def _test_memory(profile):
 
 
 def test_unity_localization(base):
-    font = fake.bundle([("CAB-f", fake.font_file([("Testi SDF", ASCII + "é", 0)]))])
+    font = fake.bundle([("CAB-f", fake.font_file([("Texts SDF", ASCII + "é", 0)]))])
     game = os.path.join(base, "loc")
     folder = fake.il2cpp_game(game, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)]),
                                           TABLE_FR: fake.table_bundles([("UI_fr", "fr", FR)]),
@@ -196,10 +196,10 @@ def test_unity_localization(base):
     check("missing characters in the profile: adapted even if a font has them (perché -> perche')",
               texts[3] == "La porta e' chiusa. Trova prima la chiave, perche' serve.")
     # with a font that has all the letters: no change
-    good = os.path.join(base, "loc-buono")
+    good = os.path.join(base, "loc-good")
     folder_b = fake.il2cpp_game(good, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)]),
                                             "fonts_assets_all.bundle": fake.bundle([("CAB-f", fake.font_file(
-                                                [("Testi SDF", ASCII + "àèéìòù", 0)]))])})
+                                                [("Texts SDF", ASCII + "àèéìòù", 0)]))])})
     profile_b, _c, _e = automatic.analyze_and_translate(good, "en", "it", backend="fake", log=silent)
     memory_b = _test_memory(profile_b)
     data = read_json(memory_b)
@@ -253,7 +253,7 @@ def _fake_components(folder):
                 z.writestr(name, content)
         with open(path, "rb") as f:
             data = f.read()
-        return {"url": "file://non-usato", "file": os.path.basename(path), "size": len(data),
+        return {"url": "file://unused", "file": os.path.basename(path), "size": len(data),
                 "sha256": hashlib.sha256(data).hexdigest(), "version": "test", "license": "-"}
     components.FOLDER = folder
     os.makedirs(folder, exist_ok=True)
@@ -265,10 +265,10 @@ def _fake_components(folder):
 
 
 def test_log(base):
-    found = checks.missing_chars([os.path.join(SIGNALS, "unity-tmp-caratteri-mancanti.log")])
+    found = checks.missing_chars([os.path.join(SIGNALS, "unity-tmp-missing-chars.log")])
     check("real log: characters missing from the fonts (also outside the basic plane) with the font name",
               set(found) == {"\u00d9", "\u2011", "\U0001F41A", "\u10e6"} and found["\u00d9"] == {"slkscr"})
-    old = os.path.join(base, "vecchio.log")
+    old = os.path.join(base, "old.log")
     write(old, "Character with ASCII value of 232 was not found in the Font Asset Glyph Table.\n")
     check("old TextMeshPro log: 'ASCII value of 232' -> è",
               set(checks.missing_chars([old])) == {"è"})
@@ -278,14 +278,14 @@ def test_log(base):
               and chars.adapt_without("ok \U0001F41A", {"\U0001F41A"}, "it") is None
               and chars.adapt_without("niente", {"è"}, "it") == "niente")
     copy_dir = os.path.join(base, "copy_dir")
-    text = open(os.path.join(SIGNALS, "unity-tmp-caratteri-mancanti.log"), encoding="utf-8").read()
+    text = open(os.path.join(SIGNALS, "unity-tmp-missing-chars.log"), encoding="utf-8").read()
     check("game copy recognized even without 'Mono path' (IL2CPP games: 'Discovering subsystems')",
               checks.of_this_copy(text.replace("C:/Giochi/Cast n Chill",
                                                       copy_dir.replace("\\", "/")), copy_dir) is True
               and checks.of_this_copy(text, copy_dir) is False)
 
-    name = "pixel-prova"
-    game = os.path.join(base, "giochi", "Pixel")
+    name = "pixel-test"
+    game = os.path.join(base, "games", "Pixel")
     _unity_mono_game(game, "Pixel", "Studio Pixel", "Pixel")
     path = os.path.join(automatic.profiles_folder(), name + ".json")
     scan.save_json(path, {"name": name, "game_folder": game.replace(os.sep, "/"), "engine": "unity",
@@ -388,7 +388,7 @@ def test_log(base):
 
 def test_localization_log(base):
     """Unity Localization (IL2CPP, without BepInEx): the missing letters from the Player.log, then Reapply."""
-    game = os.path.join(base, "loc-registro")
+    game = os.path.join(base, "loc-log")
     folder = fake.il2cpp_game(game, {TABLE_EN: fake.table_bundles([("UI_en", "en", EN)])})
     profile, _c, _e = automatic.analyze_and_translate(game, "en", "it", backend="fake", log=silent)
     p = read_json(profile)
@@ -398,12 +398,12 @@ def test_localization_log(base):
     old = time.time() - 600
     for n in os.listdir(folder):
         os.utime(os.path.join(folder, n), (old, old))
-    text = open(os.path.join(SIGNALS, "unity-tmp-caratteri-mancanti.log"), encoding="utf-8").read()
+    text = open(os.path.join(SIGNALS, "unity-tmp-missing-chars.log"), encoding="utf-8").read()
     text = text.replace("C:/Giochi/Cast n Chill/castnchill_Data",
-                          os.path.join(game, "Gioco_Data").replace("\\", "/"))
-    text += ("The character with Unicode value \\u00F2 was not found in the [Testi SDF] font asset or any potential "
+                          os.path.join(game, "Game_Data").replace("\\", "/"))
+    text += ("The character with Unicode value \\u00F2 was not found in the [Texts SDF] font asset or any potential "
               "fallbacks. It was replaced by Unicode character \\u25A1 in text object [Text (TMP)].\n")
-    log_file = os.path.join(os.environ["USERPROFILE"], "AppData", "LocalLow", "Studio Finto", "Gioco Finto",
+    log_file = os.path.join(os.environ["USERPROFILE"], "AppData", "LocalLow", "Fake Studio", "Fake Game",
                             "Player.log")
     write(log_file, text, time.time() - 60)
     check("Player.log in the signals of games with Unity Localization (the check at startup sees it)",
@@ -440,7 +440,7 @@ def test_unreal(base):
               allowed is not None and set("àèìòù") <= allowed and "ゲ" not in allowed and "→" not in allowed)
     memory = {"Start Game": "Inizia la partita è ò", "Quit": "Esci", "Next -> page": "Pagina → successiva ★"}
     refused = {}
-    adapter_unreal.install(g, "it", "prova-ue", memory, silent, refused=refused)
+    adapter_unreal.install(g, "it", "test-ue", memory, silent, refused=refused)
     was_read = adapter_unreal.Pak(os.path.join(paks, adapter_unreal.pak_name("it")))
     texts = [s for s, _ in adapter_unreal.read_locres(was_read.read_file(
         "Proj/Content/Localization/Game/en/Game.locres"))["strings"]]
@@ -464,7 +464,7 @@ SHORT = {"Credits": "Crediti", "Main Menu": "Menu principale gioco", "Quest Log"
 class Labels(backend.Backend):
     """Fake translator that knows about a maximum space (like the local one): long the first time, short if the
     'width' context asks for it."""
-    name = "prova-etichette"
+    name = "test-labels"
     uses_context = True
     max_texts = 40
 
@@ -482,7 +482,7 @@ class Labels(backend.Backend):
 
 
 class NoContext(backend.Backend):
-    name = "prova-online"
+    name = "test-online"
 
     def __init__(self):
         self.requests = []
@@ -516,7 +516,7 @@ def test_length(base):
               and project.label_space("Credits", (), 20) == 20 and project.short_label("Main Menu")
               and not project.short_label("Open the chest to find the gold")
               and not project.short_label("Two\nlines"))
-    path = _profile(base, "etichette")
+    path = _profile(base, "labels")
     p = Project(path, silent)
     b = Labels()
     texts = list(LONG_LABELS)
@@ -563,14 +563,14 @@ def test_length(base):
     check("a long fix made by hand is not sent to the translator again", b3.requests == [])
     # translators that do not know about a maximum space: only noted, no extra requests
     _without_shared()
-    path2 = _profile(base, "etichette-online")
+    path2 = _profile(base, "labels-online")
     online = NoContext()
     p2 = Project(path2, silent)
     p2.translate_texts(texts, online, "en", "it")
     check("with an online translator: no extra requests, the long labels noted for 'Too long'",
               sorted(online.requests) == sorted(texts) and p2.problems().get("Credits", {}).get("where") == "length")
     # longer official translations: there is room
-    path3 = _profile(base, "etichette-ufficiali")
+    path3 = _profile(base, "labels-official")
     b4 = Labels()
     Project(path3, silent).translate_texts(["Credits"], b4, "en", "it", contexts={
         "Credits": {"key": "menu_credits", "references": {"de": "Mitwirkende Personen"}}})
@@ -595,7 +595,7 @@ def test_length(base):
               "too long: 21 characters, usually about 17 fit" in entry.problems["long"])
     # noted with an online translator, then with the local one: asked shorter once
     _without_shared()
-    path4 = _profile(base, "etichette-poi-locale")
+    path4 = _profile(base, "labels-then-local")
     Project(path4, silent).translate_texts(texts, NoContext(), "en", "it")
     b5 = Labels()
     p5 = Project(path4, silent)
@@ -621,7 +621,7 @@ def test_length(base):
             return super().translate_lines(lines, origin, dest_lang, contexts, rounds)
     _without_shared()
     log_lines = []
-    p8 = Project(_profile(base, "etichette-errore"), log_lines.append)
+    p8 = Project(_profile(base, "labels-error"), log_lines.append)
     remaining = p8.translate_texts(texts, Broken(), "en", "it")
     check("unexpected error while shortening the labels: translation finished, translations saved, one line "
               "in the log", remaining == 0 and p8.memory["Credits"] == "Riconoscimenti"
@@ -658,7 +658,7 @@ def test_local_length(base):
     _without_shared()
     server = ServerPrompt()
     b = backend.Local("4b", log=silent, server=server)
-    p = Project(_profile(base, "etichette-locale"), silent)
+    p = Project(_profile(base, "labels-local"), silent)
     p.translate_texts(["Credits", "Play"], b, "en", "it")
     check("real local translator (fake server): 'Credits' asked again with the maximum of 13 characters in the "
               "prompt, 'Crediti' stays", p.memory["Credits"] == "Crediti"
@@ -670,7 +670,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base, exist_ok=True)
-    for env_var, name in (("TEMP", "temp"), ("TMP", "temp"), ("USERPROFILE", "utente"),
+    for env_var, name in (("TEMP", "temp"), ("TMP", "temp"), ("USERPROFILE", "user"),
                             ("LOCALAPPDATA", "appdata"), ("APPDATA", "appdata-roaming")):
         os.environ[env_var] = os.path.join(base, name)
         os.makedirs(os.environ[env_var], exist_ok=True)
@@ -683,9 +683,9 @@ def main(base):
     from patchsmith import ollama
     ollama.folder = lambda: os.path.join(base, "ollama")  # log of the test live translator
     _fake_components(os.path.join(base, "components"))
-    for name, test in (("font", test_font), ("loc", test_unity_localization), ("registro", test_log),
-                        ("registro-loc", test_localization_log), ("unreal", test_unreal),
-                        ("length", test_length), ("lunghezza-locale", test_local_length)):
+    for name, test in (("font", test_font), ("loc", test_unity_localization), ("log", test_log),
+                        ("log-loc", test_localization_log), ("unreal", test_unreal),
+                        ("length", test_length), ("length-local", test_local_length)):
         folder = os.path.join(base, name)
         os.makedirs(folder)
         try:

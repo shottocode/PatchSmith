@@ -150,7 +150,7 @@ def main(base):
     check("Reapply and then Restore originals: folder identical to before", fingerprints(folder) == before)
 
     # the game's own override.cfg: kept and put back
-    another = os.path.join(base, "DrillConOverride")
+    another = os.path.join(base, "DrillWithOverride")
     game(another, override="[display]\nwindow/size/mode=3\n")
     before = fingerprints(another)
     automatic.analyze_and_translate(another, "auto", "it", "fake", lines.append)
@@ -161,7 +161,7 @@ def main(base):
               "window/size/mode=3" in merged and "PatchsmithTraduzione" in merged and fingerprints(another) == before)
 
     # Italian already in the game
-    ita = os.path.join(base, "DrillItaliano")
+    ita = os.path.join(base, "DrillItalian")
     game(ita, with_italian=True)
     before = fingerprints(ita)
     path, completed, outcome = automatic.analyze_and_translate(ita, "auto", "it", "fake", lines.append)

@@ -89,7 +89,7 @@ def google_echo(req):
     return Response(json.dumps([[["\n".join("[it] " + r for r in lines), q, None, None]]]).encode())
 
 
-def fake_limiter(folder, service="google", clock=None, name="stato.json"):
+def fake_limiter(folder, service="google", clock=None, name="state.json"):
     clock = clock or Clock()
     return limiter.Limiter(service, silent, os.path.join(folder, name), clock.current_time, clock.sleep,
                                  lambda: 0.5), clock
@@ -108,7 +108,7 @@ def main(base):
     backend.interruption.wait_for = lambda s: network_waits.append(s)  # waits for network errors: fake
 
     # --- 1. windows and pauses over 200 requests
-    lim, clock = fake_limiter(base, name="finestre.json")
+    lim, clock = fake_limiter(base, name="windows.json")
     timestamps = []
     for _ in range(200):
         lim.before_request(3600)
@@ -124,7 +124,7 @@ def main(base):
               max(sum(3600 for x in timestamps if t <= x < t + 60) for t in timestamps) <= 32_000)
 
     # --- 2. first 429 "Sorry": a single request, no waiting, pause remembered for 24 hours
-    lim, clock = fake_limiter(base, name="blocco.json")
+    lim, clock = fake_limiter(base, name="block.json")
     opener = Opener(lambda req: http_error(429, b"<html><title>Sorry...</title>automated queries</html>"), clock)
     g = backend.GoogleFree(log=silent, opener=opener, limiter=lim)
     try:
@@ -132,13 +132,13 @@ def main(base):
         message = ""
     except backend.Blocked as e:
         message = str(e)
-    state = json.load(open(os.path.join(base, "blocco.json"), encoding="utf-8"))["google"]["block"]
+    state = json.load(open(os.path.join(base, "block.json"), encoding="utf-8"))["google"]["block"]
     check("Google 429 on the first request: a single request, no 30/60/120 s wait",
               len(opener.requests) == 1 and not network_waits and sum(clock.expectations) < 10)
     check("... 'cold' block remembered for 24 hours, honest message (not 'too many requests')",
               state["kind"] == "cold" and abs(state["until"] - state["since"] - 86400) < 1
               and "it's not an exceeded limit" in message and "too many requests" not in message)
-    lim2, _ = fake_limiter(base, name="blocco.json", clock=clock)
+    lim2, _ = fake_limiter(base, name="block.json", clock=clock)
     opener2 = Opener(google_echo, clock)
     try:
         backend.GoogleFree(log=silent, opener=opener2, limiter=lim2).translate_lines(["hello"], "en", "it")
@@ -152,23 +152,23 @@ def main(base):
               .translate_lines(["hello"], "en", "it") == ["[it] hello"])
 
     # --- 3. levels: cold 1 -> 3 -> 7 days -> disabled; after traffic 1 hour
-    lim, clock = fake_limiter(base, name="livelli.json")
+    lim, clock = fake_limiter(base, name="levels.json")
     ends = []
     for _ in range(4):
         lim.blocked(429)
-        s = json.load(open(os.path.join(base, "livelli.json"), encoding="utf-8"))["google"]["block"]
+        s = json.load(open(os.path.join(base, "levels.json"), encoding="utf-8"))["google"]["block"]
         ends.append((round((s["until"] - s["since"]) / 86400), s["disabled"]))
         clock.t = s["until"] + 1
     check("repeated cold blocks: 1, 3, 7 days, then disabled until you re-enable it",
               ends[:3] == [(1, False), (3, False), (7, False)] and ends[3][1] is True and lim.pause())
     lim.reset()
     check("manual re-enabling ('smith services --reset google')", lim.pause() is None)
-    lim, clock = fake_limiter(base, name="traffico.json")
+    lim, clock = fake_limiter(base, name="traffic.json")
     for _ in range(3):
         lim.before_request(100)
         lim.ok()
     lim.blocked(429)
-    s = json.load(open(os.path.join(base, "traffico.json"), encoding="utf-8"))["google"]["block"]
+    s = json.load(open(os.path.join(base, "traffic.json"), encoding="utf-8"))["google"]["block"]
     check("block after successful requests: 'after traffic', one-hour pause",
               s["kind"] == "after_traffic" and abs(s["until"] - s["since"] - 3600) < 1)
 
@@ -180,7 +180,7 @@ def main(base):
             ("consent webpage", lambda r: Response(b"x", "text/html", "https://consent.google.com/m"),
              backend.BackendError),
             ("400 (locale)", lambda r: http_error(400, b"bad"), backend.BackendError)):
-        lim, clock = fake_limiter(base, name="segnali-%s.json" % len(name))
+        lim, clock = fake_limiter(base, name="signals-%s.json" % len(name))
         try:
             backend.GoogleFree(log=silent, opener=Opener(response, clock), limiter=lim).translate_lines(
                 ["hello"], "en", "it")
@@ -191,7 +191,7 @@ def main(base):
                   and (expected is backend.Blocked) == bool(lim.pause()))
 
     # --- 5. misaligned lines: split in half, no burst
-    lim, clock = fake_limiter(base, name="allinea.json")
+    lim, clock = fake_limiter(base, name="align.json")
 
     def misaligned(req):
         q = urllib.parse.parse_qs(req.data.decode("utf-8"))["q"][0]
@@ -206,8 +206,8 @@ def main(base):
               len(opener.requests) <= 15 and all(t == "" for t in outcome))
 
     # --- 6. network errors: 2 retries (10 s, 30 s) and then stop
-    lim, clock = fake_limiter(base, name="rete.json")
-    opener = Opener(lambda r: urllib.error.URLError("rete assente"), clock)
+    lim, clock = fake_limiter(base, name="network.json")
+    opener = Opener(lambda r: urllib.error.URLError("network down"), clock)
     del network_waits[:]
     try:
         backend.GoogleFree(log=silent, opener=opener, limiter=lim).translate_lines(["hello"], "en", "it")
@@ -218,7 +218,7 @@ def main(base):
               and network_waits == [10, 30] and lim.pause() is None)
 
     # --- 7. Stop during a long pause of the limiter (real wait, interrupted)
-    lim = limiter.Limiter("google", silent, os.path.join(base, "ferma.json"), sleep=real_sleep)
+    lim = limiter.Limiter("google", silent, os.path.join(base, "stop.json"), sleep=real_sleep)
     lim.before_request(100)
     for _ in range(7):
         s = lim._read()
@@ -235,21 +235,21 @@ def main(base):
     check("Stop during a limiter pause: it stops at once", stopped and time.monotonic() - start < 3)
 
     # --- 8. estimate
-    lim, _ = fake_limiter(base, name="stima.json")
+    lim, _ = fake_limiter(base, name="estimate.json")
     forager = lim.estimate([3600] * 12)
     big = lim.estimate([3600] * 113)
     check("estimate: Forager (~42,000 characters, 12 requests) in a few minutes; 406,000 characters over an hour",
               60 <= forager <= 300 and big >= 3600)
 
     # --- 9. state file damaged or with absurd dates
-    broken = os.path.join(base, "rotto.json")
-    open(broken, "w").write("{non json")
-    lim, clock = fake_limiter(base, name="rotto.json")
+    broken = os.path.join(base, "broken.json")
+    open(broken, "w").write("{not json")
+    lim, clock = fake_limiter(base, name="broken.json")
     lim.before_request(10)
-    future = os.path.join(base, "futuro.json")
+    future = os.path.join(base, "future.json")
     json.dump({"google": {"requests": [], "block": {"since": 1, "until": 4_000_000_000, "level": 1,
                                                       "kind": "cold"}}}, open(future, "w"))
-    lim, clock = fake_limiter(base, name="futuro.json")
+    lim, clock = fake_limiter(base, name="future.json")
     lim.pause()
     data = json.load(open(future, encoding="utf-8")) if os.path.exists(future) else {}
     check("damaged state: no error; absurd date reduced to 8 days",
@@ -258,8 +258,8 @@ def main(base):
 
     # --- 10. two limiters on the same file count together (interface + command line)
     clock = Clock()
-    a, _ = fake_limiter(base, name="condiviso.json", clock=clock)
-    b, _ = fake_limiter(base, name="condiviso.json", clock=clock)
+    a, _ = fake_limiter(base, name="shared.json", clock=clock)
+    b, _ = fake_limiter(base, name="shared.json", clock=clock)
     a.before_request(100)
     b.before_request(100)
     check("shared state: the second limiter waits for the pause of the first", clock.expectations and
@@ -316,12 +316,12 @@ def main(base):
         q = urllib.parse.parse_qs(urllib.parse.urlparse(req.full_url).query)
         return Response(json.dumps({"responseData": {"translatedText": "IT " + q["q"][0]},
                                     "responseStatus": 200, "quotaFinished": False}).encode())
-    m = backend.MyMemory("io@example.com", log=silent, opener=Opener(mymemory, clock), limiter=lim)
+    m = backend.MyMemory("me@example.com", log=silent, opener=Opener(mymemory, clock), limiter=lim)
     line_len = "Frase numero uno. " * 60
     outcome = m.translate_lines(["hello", line_len], "en", "it")
     params = urllib.parse.parse_qs(urllib.parse.urlparse(url_mm[0]).query)
     check("MyMemory: one request per line, email sent, long lines split under 500 bytes",
-              outcome[0] == "IT hello" and params.get("de") == ["io@example.com"] and params["langpair"] == ["en|it"]
+              outcome[0] == "IT hello" and params.get("de") == ["me@example.com"] and params["langpair"] == ["en|it"]
               and all(len(urllib.parse.parse_qs(urllib.parse.urlparse(u).query)["q"][0].encode()) <= 500
                       for u in url_mm) and len(url_mm) > 2)
     used_up = Opener(lambda r: Response(json.dumps({"responseData": {"translatedText": "MYMEMORY WARNING: YOU USED ALL "
@@ -343,18 +343,18 @@ def main(base):
               and backend.create_backend("mymemory", silent).email == "a@b.it")
 
     # --- 14. project: service paused -> no request; groups by characters; fallbacks in one request
-    profile = os.path.join(base, "profilo.json")
+    profile = os.path.join(base, "profile.json")
     json.dump({"name": "test", "game_folder": base, "source_language": "en", "target_language": "it",
                "file": []}, open(profile, "w"))
     p = Project(profile, silent)
-    lim, clock = fake_limiter(base, name="progetto.json")
+    lim, clock = fake_limiter(base, name="project.json")
     lim.blocked(429)
     opener = Opener(google_echo, clock)
     failed = p.translate_texts(["hello", "world"], backend.GoogleFree(log=silent, opener=opener, limiter=lim),
                               "en", "it")
     check("project: Google paused -> translation not started, zero requests", failed == 2
               and not opener.requests)
-    lim, clock = fake_limiter(base, name="progetto2.json")
+    lim, clock = fake_limiter(base, name="project2.json")
     opener = Opener(google_echo, clock)
     texts = ["A sentence that is quite long, number %d, to fill the groups." % i for i in range(1690)]
     lines = []
@@ -367,7 +367,7 @@ def main(base):
               and any("Expected requests" in r and "estimated time" in r for r in lines))
 
     class Damager(backend.Backend):
-        name = "rovina"
+        name = "damager"
 
         def __init__(self):
             self.calls = 0
@@ -387,7 +387,7 @@ def main(base):
     mixed = "あ" * 170 + " Press A to continue." + "い" * 200
     check("MyMemory: pieces always within 480 bytes even with Japanese + English",
               all(len(p.encode("utf-8")) <= 480 for p in backend._split_bytes(mixed)))
-    lim, clock = fake_limiter(base, name="orologio.json")
+    lim, clock = fake_limiter(base, name="clock.json")
     lim.blocked(429, now=clock.t + 365 * 86400)  # clock one year ahead when the block arrives
     lim.pause()
     clock.t += 9 * 86400
@@ -395,25 +395,25 @@ def main(base):
               lim.pause() is None)
     clean_deepl = backend.DeepL("abcd-1234\r\nefgh:fx", log=silent)
     try:
-        backend.DeepL("abcd-SEGRETA:fxé", log=silent)
+        backend.DeepL("abcd-SECRET:fxé", log=silent)
         message = ""
     except backend.BackendError as e:
         message = str(e)
     check("DeepL: key pasted with a line break cleaned up; strange characters -> error without showing it",
-              clean_deepl.key == "abcd-1234efgh:fx" and "invalid characters" in message and "SEGRETA" not in message)
+              clean_deepl.key == "abcd-1234efgh:fx" and "invalid characters" in message and "SECRET" not in message)
 
     def broken_urlopen(req, timeout):
-        raise ValueError("Invalid header value b'DeepL-Auth-Key abcd-SEGRETA:fx'")
+        raise ValueError("Invalid header value b'DeepL-Auth-Key abcd-SECRET:fx'")
     lim, clock = fake_limiter(base, "deepl", name="deepl2.json")
     del network_waits[:]
     try:
-        backend.DeepL("abcd-SEGRETA:fx", log=silent, opener=broken_urlopen,
+        backend.DeepL("abcd-SECRET:fx", log=silent, opener=broken_urlopen,
                       limiter=lim).translate_lines(["one"], "en", "it")
         message = ""
     except backend.BackendError as e:
         message = str(e)
     check("DeepL: error preparing the request -> no new attempt and the key never in the message",
-              message and "SEGRETA" not in message and not network_waits)
+              message and "SECRET" not in message and not network_waits)
     for name, response in (("503 (HTML web page)", http_error(503, b"<html>Our systems have detected unusual traffic",
                                                                header={"Content-Type": "text/html"})),
                            ("403 (non-HTML)", http_error(403, b"Forbidden"))):
@@ -425,7 +425,7 @@ def main(base):
         except backend.BackendError as e:
             acquired = type(e)
         check("Google %s: block, a single request" % name, acquired is backend.Blocked and len(opener.requests) == 1)
-    lim, clock = fake_limiter(base, name="formato.json")
+    lim, clock = fake_limiter(base, name="format.json")
     try:
         backend.GoogleFree(log=silent, opener=Opener(lambda r: Response(b'{"x": 1}'), clock),
                              limiter=lim).translate_lines(["hello"], "en", "it")
@@ -451,24 +451,24 @@ def main(base):
     check("MyMemory: quota used up halfway through a group -> the 3 sentences already translated stay saved",
               sorted(p.memory) == ["frase 0", "frase 1", "frase 2"])
     check("MyMemory: quota used up without email -> with the email you can continue at once",
-              backend.MyMemory("io@example.com", log=silent, limiter=lim).pause() is None)
+              backend.MyMemory("me@example.com", log=silent, limiter=lim).pause() is None)
     lines = []
     p.log = lines.append
-    lim, clock = fake_limiter(base, "mymemory", name="mm-stima.json")
+    lim, clock = fake_limiter(base, "mymemory", name="mm-estimate.json")
     p.translate_texts(["frase lunga numero %d con parecchie parole dentro" % i for i in range(150)],
                     backend.MyMemory(None, log=silent, opener=Opener(mymemory, clock), limiter=lim), "en", "it")
     check("MyMemory: expected requests = one per line, warning if the daily quota is exceeded",
               any("Expected requests: about 150" in r for r in lines)
               and any("per day" in r for r in lines))
-    lim, clock = fake_limiter(base, name="messaggio.json")
+    lim, clock = fake_limiter(base, name="message.json")
     lim.before_request(10)
     lim.ok()
     clock.t += 3 * 3600
-    lim2, _ = fake_limiter(base, name="messaggio.json", clock=clock)
+    lim2, _ = fake_limiter(base, name="message.json", clock=clock)
     check("block message without 'after 0 translations'", "after 0" not in lim2.blocked(429))
 
     from patchsmith import cli
-    cli_profile = os.path.join(project.PROJECT_FOLDER, "profilo-cli.json")
+    cli_profile = os.path.join(project.PROJECT_FOLDER, "profile-cli.json")
     json.dump({"name": "cli", "game_folder": base, "source_language": "en", "target_language": "it",
                "file": [], "backend": "deepl"}, open(cli_profile, "w"))
     os.remove(os.path.join(project.PROJECT_FOLDER, "settings.json"))
@@ -476,7 +476,7 @@ def main(base):
     try:
         code = cli.main(["translate", cli_profile, "--backend", "deepl"])
     except Exception:
-        code = "eccezione"
+        code = "exception"
     check("command line: DeepL without a key -> explained error (exit 1), no traceback", code == 1)
 
     # --- "Check" button: DeepL key (monthly usage, no text) and MyMemory email
@@ -488,15 +488,15 @@ def main(base):
     ok, message = backend.verify_translator("deepl", "abc-123:fx", opener=Opener(fake_usage))
     check("Check DeepL: good key -> usage of the month (1,234 of 500,000), with /v2/usage",
               ok and "1,234" in message and "500,000" in message and asked == ["https://api-free.deepl.com/v2/usage"])
-    ok, message = backend.verify_translator("deepl", "sbagliata:fx", opener=Opener(lambda r: http_error(403)))
+    ok, message = backend.verify_translator("deepl", "wrong:fx", opener=Opener(lambda r: http_error(403)))
     check("Check DeepL: key rejected -> explained (HTTP 403)", not ok and "doesn't accept the key" in message)
-    ok, message = backend.verify_translator("mymemory", "nome@", opener=Opener(lambda r: 1 / 0))
+    ok, message = backend.verify_translator("mymemory", "name@", opener=Opener(lambda r: 1 / 0))
     check("Check MyMemory: badly written email -> said at once, without network", not ok and "doesn't seem" in message)
     response_mm = Response(json.dumps({"responseStatus": 200, "responseData": {"translatedText": "Ciao"}}).encode())
-    ok, message = backend.verify_translator("mymemory", "nome@esempio.it", opener=Opener(lambda r: response_mm))
+    ok, message = backend.verify_translator("mymemory", "name@example.it", opener=Opener(lambda r: response_mm))
     check("Check MyMemory: email accepted -> 50,000 characters per day, no account",
               ok and "50,000" in message)
-    ok, message = backend.verify_translator("mymemory", "", opener=Opener(lambda r: OSError("rete")))
+    ok, message = backend.verify_translator("mymemory", "", opener=Opener(lambda r: OSError("network")))
     check("Check MyMemory without network: explained, no exceptions",
               not ok and ("connection" in message or "not responding" in message))
 

@@ -18,7 +18,7 @@ from patchsmith import adapter_unity, components, project  # noqa: E402
 import fake_unity as fake  # noqa: E402
 
 OUTCOMES = []
-NAME = "prova-unity-test"
+NAME = "unity-test-game"
 
 
 def check(name, condition):
@@ -31,21 +31,21 @@ def silent(_):
 
 
 def create_game(folder, conflict=None):
-    os.makedirs(os.path.join(folder, "Gioco_Data", "Managed"))
+    os.makedirs(os.path.join(folder, "Game_Data", "Managed"))
     pe = bytearray(512)
     pe[0:2] = b"MZ"
     struct.pack_into("<I", pe, 0x3C, 0x80)
     pe[0x80:0x84] = b"PE\x00\x00"
     struct.pack_into("<H", pe, 0x84, 0x8664)
-    open(os.path.join(folder, "Gioco.exe"), "wb").write(bytes(pe))
-    open(os.path.join(folder, "UnityPlayer.dll"), "wb").write(b"finto")
-    open(os.path.join(folder, "Gioco_Data", "globalgamemanagers"), "wb").write(b"\x00" * 48 + b"6000.3.12f1\x00")
+    open(os.path.join(folder, "Game.exe"), "wb").write(bytes(pe))
+    open(os.path.join(folder, "UnityPlayer.dll"), "wb").write(b"fake")
+    open(os.path.join(folder, "Game_Data", "globalgamemanagers"), "wb").write(b"\x00" * 48 + b"6000.3.12f1\x00")
     sentences = ["Start a new game", "Welcome to the old mine. Collect all the gems!", "Press any key to continue",
              "The door is locked. Find the key first.", "Settings and options"]
     code = b"".join(f.encode("utf-16-le") + b"\x00\x00" for f in sentences)
-    open(os.path.join(folder, "Gioco_Data", "Managed", "Assembly-CSharp.dll"), "wb").write(b"MZ" + code)
+    open(os.path.join(folder, "Game_Data", "Managed", "Assembly-CSharp.dll"), "wb").write(b"MZ" + code)
     if conflict:
-        open(os.path.join(folder, conflict), "wb").write(b"altro loader")
+        open(os.path.join(folder, conflict), "wb").write(b"other loader")
 
 
 def create_zip(path, entries):
@@ -53,7 +53,7 @@ def create_zip(path, entries):
         for name, content in entries.items():
             z.writestr(name, content)
     data = open(path, "rb").read()
-    return {"url": "file://non-usato", "file": os.path.basename(path), "size": len(data),
+    return {"url": "file://unused", "file": os.path.basename(path), "size": len(data),
             "sha256": hashlib.sha256(data).hexdigest(), "version": "test", "license": "-"}
 
 
@@ -79,7 +79,7 @@ def config(folder):
 def test_bundle_extraction(game):
     """extract_texts with the pieces of today's Unity games (fake bundles, see fake_unity.py)."""
     create_game(game)
-    data = os.path.join(game, "Gioco_Data")
+    data = os.path.join(game, "Game_Data")
     managed = os.path.join(data, "Managed")
 
     def write(rel, byte):
@@ -87,7 +87,7 @@ def test_bundle_extraction(game):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "wb").write(byte)
     # game code in a module of its own (like SunHaven.Core.dll) and a third-party library (not game texts)
-    write("Managed/Gioco.Core.dll", fake.dll(["Harvest the golden wheat before winter", "Talk to the mayor"]))
+    write("Managed/Game.Core.dll", fake.dll(["Harvest the golden wheat before winter", "Talk to the mayor"]))
     write("Managed/Newtonsoft.Json.dll", fake.dll(["Unexpected end when reading the JSON document"]))
     # compressed data.unity3d (LZ4 in small blocks): a text straddling two blocks; not the images (.resS)
     long_text = "The ancient bridge collapsed behind you, there is no way back now"
@@ -105,10 +105,10 @@ def test_bundle_extraction(game):
         [("CAB-items", fake.serialized_strings(["Iron Pickaxe", "A sturdy pickaxe for the mines"]))],
         compression="lzma"))
     write(aa + "localization-string-tables-english_assets_all.bundle",
-           fake.table_bundles([("Dialoghi_en", "en", ["Welcome home, traveler!", dialogue])]))
+           fake.table_bundles([("Dialogues_en", "en", ["Welcome home, traveler!", dialogue])]))
     write(aa + "localization-string-tables-french_assets_all.bundle",
-           fake.table_bundles([("Dialoghi_fr", "fr", ["Bienvenue chez toi, voyageur !"])]))
-    write(aa + "rotto.bundle", b"UnityFS\x00non proprio")
+           fake.table_bundles([("Dialogues_fr", "fr", ["Bienvenue chez toi, voyageur !"])]))
+    write(aa + "broken.bundle", b"UnityFS\x00non proprio")
     # a large file read in pieces: a text straddling two pieces
     old_piece = adapter_unity._PIECE
     adapter_unity._PIECE = 4096
@@ -193,7 +193,7 @@ def main(base):
     open(os.path.join(game, "BepInEx", "LogOutput.log"), "w", encoding="utf-8").write(
         "[Message:   BepInEx] Chainloader started\n[Info   :   BepInEx] Loading [XUnity Auto Translator 5.6.3.1]\n"
         "[Message:   BepInEx] Chainloader startup complete\n")
-    open(os.path.join(game, "preloader_20261013.log"), "w").write("artefatto")
+    open(os.path.join(game, "preloader_20261013.log"), "w").write("artifact")
     open(os.path.join(game, *adapter_unity.SERVICE_STATE.split("/")), "w", encoding="utf-8").write(
         "# Scritto dal plugin di PatchSmith a ogni avvio del gioco\r\nEsito=python-mancante\r\n"
         "Data=2026-10-18 04:29:33\r\nProcesso=1234\r\nProgramma=C:\\Python311\\pythonw.exe\r\nDettaglio=\r\n")
@@ -231,10 +231,10 @@ def main(base):
               and "corretta a mano" in open(alive, encoding="utf-8").read())
 
     # 3d) mod added by the user inside BepInEx: it must not be deleted
-    os.makedirs(os.path.join(game, "BepInEx", "plugins", "ModUtente"))
-    open(os.path.join(game, "BepInEx", "plugins", "ModUtente", "ModUtente.dll"), "wb").write(b"mod")
+    os.makedirs(os.path.join(game, "BepInEx", "plugins", "UserMod"))
+    open(os.path.join(game, "BepInEx", "plugins", "UserMod", "UserMod.dll"), "wb").write(b"mod")
     adapter_unity.uninstall(game, NAME, silent)
-    mod = os.path.join(game, "BepInEx", "plugins", "ModUtente", "ModUtente.dll")
+    mod = os.path.join(game, "BepInEx", "plugins", "UserMod", "UserMod.dll")
     remaining = [os.path.relpath(os.path.join(r, f), game)
                  for r, _, fs in os.walk(os.path.join(game, "BepInEx")) for f in fs]
     check("user's mod left, everything else removed", os.path.exists(mod) and len(remaining) == 1
@@ -255,14 +255,14 @@ def main(base):
               and "corretta a mano" in open(returned, encoding="utf-8").read())
 
     # 6) file in the root replaced by someone else: not deleted
-    open(os.path.join(game, "doorstop_config.ini"), "w").write("modificato a mano")
+    open(os.path.join(game, "doorstop_config.ini"), "w").write("modified by hand")
     adapter_unity.uninstall(game, NAME, silent)
     check("file modified by others: left", os.path.exists(os.path.join(game, "doorstop_config.ini"))
               and not os.path.exists(os.path.join(game, "BepInEx")))
     os.remove(os.path.join(game, "doorstop_config.ini"))
 
     # 7) another loader already present: no writing
-    game2 = os.path.join(base, "gioco-con-mod")
+    game2 = os.path.join(base, "game-with-mod")
     create_game(game2, conflict="winhttp.dll")
     before2 = sorted(os.listdir(game2))
     try:
@@ -272,18 +272,18 @@ def main(base):
         check("conflict: installation rejected", sorted(os.listdir(game2)) == before2)
 
     # 8) package with a malicious path: rejected before writing
-    game3 = os.path.join(base, "gioco-zip-malevolo")
+    game3 = os.path.join(base, "game-malicious-zip")
     create_game(game3)
     before3 = sorted(os.listdir(game3))
     good = components.CATALOG["xunity_bepinex5"]
-    components.CATALOG["xunity_bepinex5"] = create_zip(os.path.join(base, "components", "cattivo.zip"),
-                                                      {"../fuori.dll": b"x", "BepInEx/plugins/a.dll": b"y"})
+    components.CATALOG["xunity_bepinex5"] = create_zip(os.path.join(base, "components", "bad.zip"),
+                                                      {"../outside.dll": b"x", "BepInEx/plugins/a.dll": b"y"})
     try:
         adapter_unity.install(game3, "en", "it", NAME, silent)
         check("malicious zip: rejected", False)
     except adapter_unity.UnityError:
         check("malicious zip: rejected without writing", sorted(os.listdir(game3)) == before3
-                  and not os.path.exists(os.path.join(base, "fuori.dll")))
+                  and not os.path.exists(os.path.join(base, "outside.dll")))
     components.CATALOG["xunity_bepinex5"] = good
 
     # 9) interruption halfway: everything undone
@@ -323,19 +323,19 @@ def main(base):
     check("hard interruption: the restore cleans everything up", sorted(os.listdir(game3)) == before3)
 
     # 9c) tampered manifest: nothing is deleted
-    game4 = os.path.join(base, "gioco-manifesto-alterato")
+    game4 = os.path.join(base, "game-tampered-manifest")
     create_game(game4)
-    forged = {"version": 2, "patchsmith": True, "root_before": [], "created_folders": ["Gioco_Data"],
-             "file": {"../fuori.txt": "0" * 64}, "in_progress": False}
+    forged = {"version": 2, "patchsmith": True, "root_before": [], "created_folders": ["Game_Data"],
+             "file": {"../outside.txt": "0" * 64}, "in_progress": False}
     open(os.path.join(game4, adapter_unity.MANIFEST), "w").write(json.dumps(forged))
     try:
         adapter_unity.uninstall(game4, NAME, silent)
         check("tampered manifest: rejected", False)
     except adapter_unity.UnityError:
-        check("tampered manifest: nothing deleted", os.path.isdir(os.path.join(game4, "Gioco_Data")))
+        check("tampered manifest: nothing deleted", os.path.isdir(os.path.join(game4, "Game_Data")))
 
     # 9d) pre-translation: extraction from the assets (length + UTF-8) with the filters
-    game5 = os.path.join(base, "gioco-pretraduzione")
+    game5 = os.path.join(base, "game-pretranslation")
     create_game(game5)
 
     def serialize(t):
@@ -346,7 +346,7 @@ def main(base):
         "Start a new game", "Back to Game", "Paper (17)", "EyeTreeLevel_Grass_0", "Base Layer.Run",
         "저택에 오신 것을 환영합니다.", "joystick 4 analog 1",
         "Tudo vai acabar bem, não se preocupe!", "Don't forget, you still have unfinished business.", "English"])
-    open(os.path.join(game5, "Gioco_Data", "resources.assets"), "wb").write(b"\x07\x00" + content)
+    open(os.path.join(game5, "Game_Data", "resources.assets"), "wb").write(b"\x07\x00" + content)
     texts = adapter_unity.extract_texts(game5, adapter_unity.analyze(game5), "en", silent)
     expected_list = {"Start a new game", "Back to Game", "Don't forget, you still have unfinished business.", "English"}
     check("pre-translation: right texts extracted, junk excluded", expected_list <= set(texts)
@@ -354,7 +354,7 @@ def main(base):
                                                "joystick 4 analog 1")))
 
     # 9f) pre-translation in today's Unity games: code in other DLLs, compressed data.unity3d, bundles, tables
-    test_bundle_extraction(os.path.join(base, "gioco-bundle"))
+    test_bundle_extraction(os.path.join(base, "game-bundle"))
 
     # 9e) XUnity cache: adds only what is missing, keeps the fixes, does not translate the language names
     cache = os.path.join(game5, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
@@ -393,7 +393,7 @@ def _fake_plugin(folder, info):
     """Instead of compiling with csc (the fake game's libraries are not real): a fake plugin."""
     dest = os.path.join(folder, *adapter_unity.SERVICE_PLUGIN.split("/"))
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    open(dest, "wb").write(b"MZ plugin finto")
+    open(dest, "wb").write(b"MZ fake plugin")
 
 
 def test_live(base):
@@ -402,7 +402,7 @@ def test_live(base):
     paused."""
     from patchsmith import (auto as automatic, backend, outcome, limiter, ollama,
                             scan)
-    prepare_components(os.path.join(base, "componenti-dal-vivo"))  # the earlier ones were rejected by test 10
+    prepare_components(os.path.join(base, "live-components"))  # the earlier ones were rejected by test 10
     automatic.PROFILES_FOLDER = os.path.join(base, "profiles")
     real_state, real_compile, real_csc, real_create = (ollama.state, adapter_unity._compile_plugin, adapter_unity._csc,
                                                      automatic.create_backend)
@@ -410,7 +410,7 @@ def test_live(base):
     state = limiter.state_path()
 
     def unity(name, profile=None):
-        game = os.path.join(base, "dal-vivo", name)
+        game = os.path.join(base, "live", name)
         create_game(game)
         path = os.path.join(automatic.PROFILES_FOLDER, name + ".json")
         scan.save_json(path, dict({"name": name, "game_folder": game.replace(os.sep, "/"),
@@ -426,7 +426,7 @@ def test_live(base):
     try:
         ollama.state = lambda: "ready"
         adapter_unity._compile_plugin = _fake_plugin
-        game, path = unity("con-servizio", {"backend": "xunity-google"})  # game profile from an earlier version
+        game, path = unity("with-service", {"backend": "xunity-google"})  # game profile from an earlier version
         e = full(path, backend="google")
         c = config(game)
         check("Google chosen, local translator installed: new phrases to PatchSmith's translator "
@@ -447,8 +447,8 @@ def test_live(base):
                   "Endpoint=CustomTranslate" in config(game) and adapter_unity.service_installed(game)
                   and d["outcome"].live == "local")
 
-        ollama.state = lambda: "non installato"
-        game, path = unity("senza-locale")
+        ollama.state = lambda: "not installed"
+        game, path = unity("no-local")
         e = full(path, backend="google")
         check("without the local translator: PatchSmith's translator anyway (with Google and its pauses), "
                   "outcome 'online'", "Endpoint=CustomTranslate" in config(game) and e.live == "online")
@@ -460,19 +460,19 @@ def test_live(base):
 
         adapter_unity._compile_plugin = real_compile
         adapter_unity._csc = lambda: None  # the C# compiler is missing: the plugin cannot be prepared
-        game, path = unity("senza-csc-in-pausa")
+        game, path = unity("no-csc-paused")
         e = full(path, backend="google")
         c = config(game)
         check("without compiler and with Google paused: no GoogleTranslateV2 (empty Endpoint), outcome "
                   "'none' with 'Create report'", "GoogleTranslateV2" not in c and "\nEndpoint=\n" in c
                   and e.live == "none" and "create_report" in e.actions
                   and not adapter_unity.service_installed(game))
-        game, path = unity("installa-in-pausa")
-        adapter_unity.install(game, "en", "it", "installa-in-pausa", silent, local=path)
+        game, path = unity("install-paused")
+        adapter_unity.install(game, "en", "it", "install-paused", silent, local=path)
         check("installation without plugin with Google paused: XUnity without translator, never GoogleTranslateV2",
                   "GoogleTranslateV2" not in config(game) and "\nEndpoint=\n" in config(game))
         os.remove(state)
-        game, path = unity("senza-csc")
+        game, path = unity("no-csc")
         e = full(path, backend="google")
         check("without compiler, Google free: XUnity with Google alone, outcome 'google' with the explanation",
                   "Endpoint=GoogleTranslateV2" in config(game) and e.live == "google"
@@ -486,8 +486,8 @@ def test_live(base):
                 return super().translate_lines(lines, origin, dest_lang)
 
         automatic.create_backend = lambda name, log=print: BlockGoogle()
-        game, path = unity("bloccato-durante")
-        open(os.path.join(game, "Gioco_Data", "resources.assets"), "wb").write(b"\x07\x00" + b"".join(
+        game, path = unity("blocked-during")
+        open(os.path.join(game, "Game_Data", "resources.assets"), "wb").write(b"\x07\x00" + b"".join(
             struct.pack("<i", len(t)) + t.encode("utf-8") for t in ("Start a new game", "Back to the main menu")))
         e = full(path, backend="google")
         check("Google blocked during the pre-translation: XUnity does not use it for new phrases (empty Endpoint)",
@@ -497,9 +497,9 @@ def test_live(base):
             os.remove(state)
 
         # the game's names in the game profile, from app.info (prepare)
-        game = os.path.join(base, "dal-vivo", "con-nomi")
+        game = os.path.join(base, "live", "with-names")
         create_game(game)
-        with open(os.path.join(game, "Gioco_Data", "app.info"), "w", encoding="utf-8") as f:
+        with open(os.path.join(game, "Game_Data", "app.info"), "w", encoding="utf-8") as f:
             f.write("Cup Dog Games LLC\nRubinite")
         path, _ = automatic.prepare(game, "auto", "it", "google", silent)
         with open(path, encoding="utf-8") as f:
@@ -508,14 +508,14 @@ def test_live(base):
                   "not to be translated",
                   stored.get("do_not_translate", [])[:3] == ["Cup Dog Games LLC", "Cup Dog Games", "Rubinite"])
         # a name removed by hand (a title one wants translated) does not come back; one added by hand stays
-        stored["do_not_translate"] = [n for n in stored["do_not_translate"] if n != "Rubinite"] + ["Lanterna"]
+        stored["do_not_translate"] = [n for n in stored["do_not_translate"] if n != "Rubinite"] + ["Lantern"]
         with open(path, "w", encoding="utf-8") as f:
             json.dump(stored, f)
         automatic.prepare(game, "auto", "it", "google", silent)
         with open(path, encoding="utf-8") as f:
             stored = json.load(f)
         check("prepare: a name removed by hand from 'do_not_translate' does not come back, one added by hand stays",
-                  "Rubinite" not in stored["do_not_translate"] and "Lanterna" in stored["do_not_translate"]
+                  "Rubinite" not in stored["do_not_translate"] and "Lantern" in stored["do_not_translate"]
                   and "Cup Dog Games" in stored["do_not_translate"] and "Rubinite" in stored.get("found_names", []))
 
         test_live_cache(base, unity, full)
@@ -544,9 +544,9 @@ def test_live_cache(base, unity, full):
                     for r in lines]
 
     automatic.create_backend = lambda name, log=print: DictTranslator()
-    game, path = unity("cache-da-correggere")
+    game, path = unity("cache-to-fix")
     full(path, backend="google")  # installation and pre-translation
-    name = "cache-da-correggere"
+    name = "cache-to-fix"
     memory = project.memory_path({"name": name, "target_language": "it"})
     saved_count = {"Collect {{A}} coins": "Raccogli monete"}  # machine-written, but it lost the {{A}}
     os.makedirs(os.path.dirname(memory), exist_ok=True)

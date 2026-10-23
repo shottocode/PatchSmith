@@ -6,7 +6,7 @@ Usage from the tests: fake_web_game.create(folder) -> relative path of the JSON 
 import json
 import os
 
-TEXTS_FILE = "data/testi.json"
+TEXTS_FILE = "data/texts.json"
 
 TEXTS = {
     "title": "Lantern Keeper",
@@ -16,7 +16,7 @@ TEXTS = {
         "options": "Options and settings",
         "quit": "Quit to the desktop",
     },
-    "dialoghi": [
+    "dialogues": [
         {"id": 1, "text": "Welcome back, keeper. The lanterns are fading again."},
         {"id": 2, "text": "Bring the oil from the old mill before the night falls."},
         {"id": 3, "text": "The bridge is broken: you need a rope and two planks."},
@@ -43,7 +43,7 @@ PAGE = """<!doctype html>
     <button>Start a new game</button>
     <button>Options and settings</button>
     <p>Press <kbd>Delete</kbd> to remove a saved game.</p>
-    <script src="gioco.js"></script>
+    <script src="game.js"></script>
   </body>
 </html>
 """
@@ -56,7 +56,7 @@ def create(folder):
     os.makedirs(os.path.join(folder, "data"), exist_ok=True)
     with open(os.path.join(folder, "index.html"), "w", encoding="utf-8", newline="\n") as f:
         f.write(PAGE)
-    with open(os.path.join(folder, "gioco.js"), "w", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(folder, "game.js"), "w", encoding="utf-8", newline="\n") as f:
         f.write(CODE)
     with open(os.path.join(folder, *TEXTS_FILE.split("/")), "w", encoding="utf-8", newline="\n") as f:
         json.dump(TEXTS, f, ensure_ascii=False, indent=2)

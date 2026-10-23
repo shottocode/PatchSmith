@@ -12,7 +12,7 @@ copy of the game in another folder that reuses its translations; the "Re-transla
 startup. From step 6: "Fix translations…" (a line fixed in the window and saved: valid translation memory, Reapply on
 its own) and the "Fix translations" button in the end dialog (the rest in test/test_corrections.py).
 Game profile, translation memory and settings go to the PATCHSMITH_DATA folder (test/run_all.py creates a temporary
-one); without it, to "dati-prova-gui" next to the test game: never among PatchSmith's real data. The settings that
+one); without it, to "data-gui-test" next to the test game: never among PatchSmith's real data. The settings that
 were already in that folder are put back as they were at the end (even if PATCHSMITH_DATA points to the real data).
 """
 import glob
@@ -71,21 +71,21 @@ def main(folder):
     theme.ask = lambda _g, _c, title_text, text: print("QUESTION (answer: no):", title_text) or False
     theme.choose = _choose
     gui.show_file = lambda _p: None
-    reports = os.path.join(os.path.dirname(os.path.abspath(folder)), "rapporti-prova-gui")
+    reports = os.path.join(os.path.dirname(os.path.abspath(folder)), "reports-gui-test")
     report.desktop_folder = lambda: reports  # never the real Desktop
     # the report must not copy the real logs of the live translator (components/ollama)
-    ollama.folder = lambda: os.path.join(os.path.dirname(os.path.abspath(folder)), "ollama-prova-gui")
+    ollama.folder = lambda: os.path.join(os.path.dirname(os.path.abspath(folder)), "ollama-gui-test")
     automatic.GAME_SPACE = automatic.DATA_SPACE = 0  # the free space of the test disk does not count here
     # the graphics card (for the proposed model) is simulated: 8 GB -> Quality (12B)
     ollama.recommended_model = lambda gb=None: ("12b", "Your graphics card has 8 GB of memory: I recommend the "
                                                   "Quality model (12B).")
     if not os.environ.get("PATCHSMITH_DATA"):
-        project.DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(folder)), "dati-prova-gui")
+        project.DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(folder)), "data-gui-test")
     gui.SETTINGS = None  # those of the test data folder
     settings_before = _read_bytes(gui._settings())  # the window rewrites them: they are put back at the end
     # the options of GameMaker games are in %LOCALAPPDATA%\<game name>: a test copy shares them with the real game,
     # so the test uses a folder of its own
-    os.environ["LOCALAPPDATA"] = os.path.join(os.path.dirname(os.path.abspath(folder)), "appdata-prova-gui")
+    os.environ["LOCALAPPDATA"] = os.path.join(os.path.dirname(os.path.abspath(folder)), "appdata-gui-test")
     try:
         path, outcome_ok = _trial(folder, reports)
         _trial_saved_languages()
@@ -144,13 +144,13 @@ def _trial_saved_languages():
     app = gui.App(root)
     app.translator.set(gui.TRANSLATORS["deepl"])
     app._change_translator(just_chosen=True)
-    app.credential.set(" chiave-di-prova:fx ")
+    app.credential.set(" test-key:fx ")
     app._close()
     root = tk.Tk()
     try:
         app = gui.App(root)
         check("DeepL translator and key chosen, window closed: still chosen when it is reopened",
-                  app._chosen == "deepl" and app.credential.get() == "chiave-di-prova:fx")
+                  app._chosen == "deepl" and app.credential.get() == "test-key:fx")
     finally:
         root.destroy()
 
@@ -158,7 +158,7 @@ def _trial_saved_languages():
 def _trial_live_journal():
     """During play: the new lines of the translator's journal summarized in the log (only those from now on)."""
     from patchsmith import xunity_service
-    name = "gioco-dal-vivo-prova"
+    name = "live-game-test"
     journal = xunity_service.journal_path(name)
     os.makedirs(os.path.dirname(journal), exist_ok=True)
     lines = [{"text": "Old line", "outcome": "ok", "backend": "local", "response": "Riga vecchia"}]
@@ -205,7 +205,7 @@ def _trial(folder, reports):
     app._translate()
     # while it works: no second job, no change of translator or installation halfway
     first = app.work
-    app._start("Secondo lavoro", lambda _c: None)
+    app._start("Second job", lambda _c: None)
     one_job = app.work is first and all(w.instate(["disabled"]) for w in (
         app.btn_install, app.translator_choice, app.model_choice, app.btn_translate, app.btn_report))
     print("one job at a time, controls disabled:", "OK" if one_job else "NO")
@@ -231,7 +231,7 @@ def _trial(folder, reports):
     wrong_seeds = []
     for code, expected in TITLES.items():
         before = len(WINDOWS)
-        app._show_outcome("Analysis and translation", outcome.Outcome(code, "Motivo di prova.", engine="gamemaker",
+        app._show_outcome("Analysis and translation", outcome.Outcome(code, "Test reason.", engine="gamemaker",
                                                               written=code in ("OK", "PARTIAL"), translated_items=3,
                                                               remaining=1 if code == "PARTIAL" else 0,
                                                               remaining_examples=["Quit"]))
@@ -285,7 +285,7 @@ def _trial(folder, reports):
     windows = len(WINDOWS)
 
     def permissions():
-        raise PermissionError(13, "Accesso negato", "C:/prova/bloccato.json")
+        raise PermissionError(13, "Accesso negato", "C:/test/blocked.json")
 
     root.after(0, permissions)
     for _ in range(10):
@@ -305,12 +305,12 @@ def _trial(folder, reports):
 
     automatic.find_profile = broken_profile
     try:
-        app._start("Prova del registro", lambda _c: True)
+        app._start("Log test", lambda _c: True)
         _wait_for(app, root)
     finally:
         automatic.find_profile = real
     check("log: a damaged profile does not block the operation (buttons active again, log open)",
-              app.btn_translate.instate(["!disabled"]) and "Prova del registro" in _read_text(_logs()[-1]))
+              app.btn_translate.instate(["!disabled"]) and "Log test" in _read_text(_logs()[-1]))
 
     # "Use the local translator" after an error (which has no choices in the outcome): Analyze and translate again
     # with the same choices as last time (e.g. "Translate anyway")
@@ -320,7 +320,7 @@ def _trial(folder, reports):
     app._change_translator = lambda first=False: None
     app._translate_choices = {"force": True, "translate_anyway": True}
     try:
-        app._action("use_local", outcome.Outcome("TRANSLATOR_MISSING", "Prova", actions=["install_local"]))
+        app._action("use_local", outcome.Outcome("TRANSLATOR_MISSING", "Test", actions=["install_local"]))
     finally:
         del app._translate, app._local_ready, app._change_translator
         app._translate_choices = {"force": False, "translate_anyway": False}
@@ -352,7 +352,7 @@ def _trial(folder, reports):
               and "settings.json" in names and any(n.startswith("profile/") for n in names))
 
     # Desktop that cannot be written to (e.g. controlled folder access): the report goes to the logs
-    blocked = os.path.join(reports, "non-una-cartella")
+    blocked = os.path.join(reports, "not-a-folder")
     open(blocked, "w").close()  # a file instead of the folder: nothing can be written inside
     already_present = set(glob.glob(os.path.join(glob.escape(gui.logs_folder()), "*.zip")))
     report.desktop_folder = lambda: blocked
@@ -390,7 +390,7 @@ def _trial_check(app, root, folder):
     check("check: log on disk with the result", "Check after playing" in _read_text(
         _logs()[-1]) and "Result: OK" in _read_text(_logs()[-1]))
     # at startup, with a problem to do in another game: no dialog, the line with 'Last session details'
-    other = os.path.join(os.path.dirname(os.path.abspath(folder)), "Altro Gioco")
+    other = os.path.join(os.path.dirname(os.path.abspath(folder)), "Other Game")
     real = checks.check
 
     def fake(path, apply=True, log=print, translator=None, events=None, **_k):
@@ -401,15 +401,15 @@ def _trial_check(app, root, folder):
 
     real_as_outcome = checks.as_outcome
     checks.check = fake
-    checks.as_outcome = lambda problems, path=None, title_text=None: real_as_outcome(problems, None, "Altro Gioco")
+    checks.as_outcome = lambda problems, path=None, title_text=None: real_as_outcome(problems, None, "Other Game")
     try:
         windows = len(WINDOWS)
-        app._check(["profilo-finto"])
+        app._check(["fake-profile"])
         _wait_for(app, root)
     finally:
         checks.check, checks.as_outcome = real, real_as_outcome
     check("check at startup: no dialog, line '1 problem fixed, 1 to do' and 'Last session details'",
-              len(WINDOWS) == windows and app.check_status.get() == "After the last session of Altro Gioco: "
+              len(WINDOWS) == windows and app.check_status.get() == "After the last session of Other Game: "
               "1 problem fixed, 1 to do" and app.btn_details.winfo_manager() == "pack")
     names = [os.path.basename(p) for p in _logs()]
     check("check at startup: 'controllo' log", names[-1].endswith("-controllo.log"))
@@ -433,13 +433,13 @@ def _trial_check(app, root, folder):
               and ("Restore originals", "restore") in WINDOWS[-1][2] and choices == [os.path.normpath(other)])
     # a game that cannot be checked (unexpected error) does not stop the others: "to do" with the report
     def broken(path, apply=True, log=print, translator=None, events=None, **_k):
-        if path == "rotto":
+        if path == "broken":
             raise KeyError("game_folder")
         return []
 
     checks.check = broken
     try:
-        app._check(["rotto", "buono"])
+        app._check(["broken", "good"])
         _wait_for(app, root)
     finally:
         checks.check = real
@@ -453,11 +453,11 @@ def _trial_check(app, root, folder):
     app._check = lambda profiles=None, at_open=None: redone_calls.append((profiles, at_open))
     try:
         app._action("close_game", outcome.Outcome("GAME_OPEN", actions=["close_game"],
-                                                extra={"checks": [], "profile": "profilo-x"}))
+                                                extra={"checks": [], "profile": "profile-x"}))
     finally:
         app._check = real_check
     check("'Try again' after a check with the game open: redoes the check of that game, with the dialog",
-              redone_calls == [(["profilo-x"], False)])
+              redone_calls == [(["profile-x"], False)])
     # at startup, but you have already started something: it does not start right away, the line says so; it starts
     # by itself as soon as that finishes
     work_before = app.work
@@ -465,7 +465,7 @@ def _trial_check(app, root, folder):
     app._check = lambda profiles=None, at_open=None: redone_calls.append((profiles, at_open))
     try:
         redone_calls.clear()
-        app._start_initial_check(["profilo-finto"])
+        app._start_initial_check(["fake-profile"])
         line = app.check_status.get()
         for _ in range(10):
             root.update()
@@ -482,11 +482,11 @@ def _trial_check(app, root, folder):
     del app._check
     check("check at startup during another operation: the line says so and it starts as soon as that finishes "
               "(%s)" % redone_calls, "as soon as the current operation finishes" in line and during == []
-              and redone_calls == [(["profilo-finto"], None)])
+              and redone_calls == [(["fake-profile"], None)])
     # "Create report" from the Last session details of another game: the report is for that game, with its outcome
     requested_reports, real_create_report = [], report.create
     report.create = lambda c, dest_lang=None, outcome=None, **_k: requested_reports.append((c, outcome)) or \
-        os.path.join(dest_lang or "", "rapporto-finto.zip")
+        os.path.join(dest_lang or "", "fake-report.zip")
     e_other = outcome.Outcome("PARTIAL", actions=["create_report"], extra={"checks": [], "folder": other})
     try:
         app._action("create_report", e_other)
@@ -501,9 +501,9 @@ def _trial_check(app, root, folder):
     gui.code_fingerprint = lambda: ("9.9.9", 0)
     try:
         before = len(WARNINGS)
-        app._start("Prova", lambda _c: None, needs_folder=False, keep_log=False)
+        app._start("Test", lambda _c: None, needs_folder=False, keep_log=False)
         _wait_for(app, root)
-        app._start("Prova", lambda _c: None, needs_folder=False, keep_log=False)
+        app._start("Test", lambda _c: None, needs_folder=False, keep_log=False)
         _wait_for(app, root)
     finally:
         gui.code_fingerprint = real_fingerprint
@@ -524,13 +524,13 @@ def _trial_retranslate(app, root):
                                    "untranslated.", action="retranslate", state="to_do", extra={"sentences": 3})]
 
     def fake_as_outcome(problems, path=None, title_text=None):
-        e = real_as_outcome(problems, None, "Gioco Diario")
+        e = real_as_outcome(problems, None, "Journal Game")
         e.extra["profile"] = path
         return e
 
     checks.check, checks.as_outcome = fake, fake_as_outcome
     try:
-        app._check(["profilo-diario"])
+        app._check(["journal-profile"])
         _wait_for(app, root)
     finally:
         checks.check, checks.as_outcome = real, real_as_outcome
@@ -546,7 +546,7 @@ def _trial_retranslate(app, root):
     finally:
         del app._check
     check("'Re-translate' (line and Last session details): the check of that game with re-translation and dialogs",
-              redone_calls == [(["profilo-diario"], False, True)] * 2)
+              redone_calls == [(["journal-profile"], False, True)] * 2)
     app.check_outcomes = []
     app._update_check_line()
 
@@ -655,7 +655,7 @@ def _trial_preflight(app, root, folder):
         theme.choose = real_choose
 
     # a copy of the game (same folder name, elsewhere): "Yes, use them again" -> the original's translation memory
-    copy_dir = os.path.join(os.path.dirname(os.path.abspath(folder)), "copia-prova-gui",
+    copy_dir = os.path.join(os.path.dirname(os.path.abspath(folder)), "copy-gui-test",
                          os.path.basename(os.path.normpath(folder)))
     shutil.rmtree(os.path.dirname(copy_dir), ignore_errors=True)
     for p, prof in list(automatic.list_profiles()):  # (from a previous run of the test launched on its own)
@@ -702,24 +702,24 @@ def _trial_install(app, root):
         {"ok": True, "message": "ready, on the graphics card: \"Start game\" -> \"Inizia\".", "gpu": 1.0},
         {"ok": False, "message": "the translation test failed: the local translator is not responding.",
          "gpu": None}]
-    ollama.download_description = lambda selected: ["finto da scaricare"]
+    ollama.download_description = lambda selected: ["fake to download"]
     ollama.install = lambda selected, log=print: True
     backend.probe_local = lambda model=None, log=print, **_k: tests.append(model) or trial_outcomes.pop(0)
     theme.ask = lambda *_a: True
     try:
         warnings = len(WARNINGS)
-        app._install_local(then=lambda: redone.append("di nuovo"))
+        app._install_local(then=lambda: redone.append("again"))
         _wait_for(app, root)
         first_result = (list(redone), app.state.get(), len(WARNINGS) - warnings)
-        app._install_local(then=lambda: redone.append("di nuovo"))
+        app._install_local(then=lambda: redone.append("again"))
         _wait_for(app, root)
     finally:
         ollama.download_description, ollama.install, backend.probe_local, theme.ask = actual
     check("installation requested before starting: test sentence succeeded -> the operation restarts by itself",
-              first_result[0] == ["di nuovo"] and "Local translator installed: ready" in first_result[1]
+              first_result[0] == ["again"] and "Local translator installed: ready" in first_result[1]
               and not first_result[2] and len(tests) == 2)
     check("test sentence failed: dialog with the reason, the waiting operation does not start",
-              redone == ["di nuovo"] and WARNINGS[-1] == "Local translator test failed"
+              redone == ["again"] and WARNINGS[-1] == "Local translator test failed"
               and "not responding" in app.state.get())
     # already installed: "Install now" runs the waiting operation right away; preliminary checks that fail
     # (unexpected error): it starts anyway, and the log says so
@@ -727,7 +727,7 @@ def _trial_install(app, root):
     immediate, real_cp = [], automatic.preflight_checks
     automatic.preflight_checks = lambda *_a, **_k: 1 / 0
     try:
-        app._install_local(then=lambda: immediate.append("subito"))
+        app._install_local(then=lambda: immediate.append("immediately"))
         choices = app._preflight("translate", lambda: None, "fake")
         for _ in range(10):
             root.update()
@@ -735,7 +735,7 @@ def _trial_install(app, root):
     finally:
         ollama.download_description, automatic.preflight_checks = actual[0], real_cp
     check("local translator already installed: the waiting operation starts right away; pre-start checks "
-              "failed: it starts anyway, with a line in the log", immediate == ["subito"]
+              "failed: it starts anyway, with a line in the log", immediate == ["immediately"]
               and choices == {"reuse": None}
               and "Pre-start checks failed" in app.text.get("1.0", "end"))
 
@@ -746,7 +746,7 @@ def _trial_install(app, root):
     app.work = None
     app._check = lambda profiles=None, **_k: check_list.append(profiles)
     try:
-        app._start_initial_check(["profilo-in-attesa"])
+        app._start_initial_check(["waiting-profile"])
         for _ in range(25):
             root.update()
             time.sleep(0.02)
@@ -764,7 +764,7 @@ def _trial_install(app, root):
         del app._check
         app.work = work
     check("check at startup with a dialog open: it starts only after the dialog is closed",
-              during == [] and immediate == [] and check_list == [["profilo-in-attesa"]])
+              during == [] and immediate == [] and check_list == [["waiting-profile"]])
     # dialog closed with a choice that starts an operation right after (e.g. "Try again"): the check does not start
     # right away, it waits for the operation to finish
     window = tk.Toplevel(root)
@@ -773,7 +773,7 @@ def _trial_install(app, root):
     app.work = None
     app._check = lambda profiles=None, **_k: check_list.append(profiles)
     try:
-        app._start_initial_check(["profilo-in-attesa"])
+        app._start_initial_check(["waiting-profile"])
         for _ in range(20):
             root.update()
             time.sleep(0.02)

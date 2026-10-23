@@ -52,16 +52,16 @@ def unity_il2cpp_game(folder, tables=False, crc=0):
     """Fake Unity IL2CPP game; with tables=True also the English Unity Localization bundle and the Addressables
     catalog (crc: the value of m_Crc in the bundle options)."""
     test_unity.create_game(folder)
-    os.rename(os.path.join(folder, "Gioco_Data", "Managed"), os.path.join(folder, "Gioco_Data", "nonusata"))
-    os.makedirs(os.path.join(folder, "Gioco_Data", "il2cpp_data", "Metadata"))
-    open(os.path.join(folder, "Gioco_Data", "il2cpp_data", "Metadata", "global-metadata.dat"), "wb").write(
+    os.rename(os.path.join(folder, "Game_Data", "Managed"), os.path.join(folder, "Game_Data", "unused"))
+    os.makedirs(os.path.join(folder, "Game_Data", "il2cpp_data", "Metadata"))
+    open(os.path.join(folder, "Game_Data", "il2cpp_data", "Metadata", "global-metadata.dat"), "wb").write(
         b"\xaf\x1b\xb1\xfa" + b"\x00" * 64)
-    open(os.path.join(folder, "GameAssembly.dll"), "wb").write(b"MZ finto")
+    open(os.path.join(folder, "GameAssembly.dll"), "wb").write(b"MZ fake")
     if tables:
-        aa = os.path.join(folder, "Gioco_Data", "StreamingAssets", "aa")
+        aa = os.path.join(folder, "Game_Data", "StreamingAssets", "aa")
         os.makedirs(os.path.join(aa, "StandaloneWindows64"))
         open(os.path.join(aa, "StandaloneWindows64", "localization-string-tables-english(en)_assets_all.bundle"),
-             "wb").write(b"finto")
+             "wb").write(b"fake")
         options = '{"m_Hash":"8f2c","m_Crc":%d,"m_Timeout":0}' % crc
         json.dump({"m_LocatorId": "AddressablesMainContentCatalog", "m_InternalIds": [],
                    "m_ExtraDataString": base64.b64encode(b"\x07\x00" + options.encode("utf-16-le")).decode("ascii")},
@@ -75,8 +75,8 @@ def gamemaker_game(folder, italian=False):
                        ("Localization/french/ui.txt", test_gamemaker.FR_UI)):
         open(os.path.join(folder, *rel.split("/")), "wb").write(text.encode("utf-8"))
     latin = set(chr(c) for c in range(32, 127)) | set("àèéùÀÈÉÙíóúÍÓÚ")
-    open(os.path.join(folder, "data.win"), "wb").write(test_gamemaker.data_win([("fn_testo", latin)]))
-    open(os.path.join(folder, "Gioco.exe"), "wb").write(b"MZ")
+    open(os.path.join(folder, "data.win"), "wb").write(test_gamemaker.data_win([("fn_text", latin)]))
+    open(os.path.join(folder, "Game.exe"), "wb").write(b"MZ")
     if italian:
         os.makedirs(os.path.join(folder, "Localization", "italian"))
         open(os.path.join(folder, "Localization", "italian", "ui.txt"), "wb").write(
@@ -108,13 +108,13 @@ def test_web(base):
               completed and path and e and e.code == "OK" and e.written and e.engine == "web"
               and e.translated_items > 10 and e.remaining == 0)
     f = outcome.window(e, "translate")
-    check("web translated: window 'Traduzione installata' (previously there was no window)",
+    check("web translated: window 'Translation installed' (previously there was no window)",
               f["title"] == "Translation installed" and "Start the game" in f["text"]
               and "Translated texts: %d." % e.translated_items in f["text"] and f["buttons"] == [("OK", None)])
 
     d = {}
     done = automatic.reapply(game, silent, test=True, outcome=d)
-    check("reapply: outcome OK and window 'Traduzione riapplicata'", done and outcome_of(d).code == "OK"
+    check("reapply: outcome OK and window 'Translation reapplied'", done and outcome_of(d).code == "OK"
               and outcome.window(outcome_of(d), "reapply")["title"] == "Translation reapplied")
 
     # game open: restore refused, no file touched
@@ -133,7 +133,7 @@ def test_web(base):
               and f["title"] == "The game is open" and ("Try again", "close_game") in f["buttons"])
 
     d = {}
-    check("restore: outcome OK, 'Originali ripristinati'", automatic.restore(game, silent, outcome=d)
+    check("restore: outcome OK, 'Originals restored'", automatic.restore(game, silent, outcome=d)
               and outcome_of(d).code == "OK" and outcome.window(outcome_of(d), "restore")["title"]
               == "Originals restored" and fingerprints(game).keys() == before.keys())
     d = {}
@@ -141,7 +141,7 @@ def test_web(base):
     check("restore again: ALREADY_ORIGINAL", outcome_of(d).code == "ALREADY_ORIGINAL"
               and outcome.window(outcome_of(d), "restore")["title"] == "Game already original")
 
-    empty = os.path.join(base, "nessun-gioco")
+    empty = os.path.join(base, "no-game")
     os.makedirs(empty)
     d = {}
     check("reapply without saved translations: NOTHING_TO_DO",
@@ -196,7 +196,7 @@ def test_google_blocked(base, game):
 
 
 def test_gamemaker_open(base):
-    game = os.path.join(base, "gm", "Gioco GM")
+    game = os.path.join(base, "gm", "GM Game")
     gamemaker_game(game)
     before = fingerprints(game)
     actual = system.game_open, project.game_open
@@ -211,12 +211,12 @@ def test_gamemaker_open(base):
               not completed and e.code == "GAME_OPEN" and not e.written and fingerprints(game) == before
               and "reapply" in e.actions and f["title"] == "The game is open")
 
-    italian = os.path.join(base, "gm-it", "Gioco GM")
+    italian = os.path.join(base, "gm-it", "GM Game")
     gamemaker_game(italian, italian=True)
     before = fingerprints(italian)
     path, completed, d = automatic.analyze_and_translate(italian, "auto", "it", "fake", silent)
     e = outcome_of(d)
-    check("GameMaker with official Italian: UFFICIALE (with the lines for the question about the official language), "
+    check("GameMaker with official Italian: OFFICIAL (with the lines for the question about the official language), "
               "nothing touched", not path and e.code == "OFFICIAL" and e.extra.get("official_language")
               and e.extra.get("lines") and fingerprints(italian) == before and "Italian" in e.reason)
     # if the official language escapes the first check, the search of the GameMaker files finds it
@@ -231,7 +231,7 @@ def test_unity_games(base):
     test_unity.prepare_components(os.path.join(base, "components"))
     adapter_unity.is_running = lambda *_: False
 
-    il2cpp = os.path.join(base, "il2cpp", "Gioco")
+    il2cpp = os.path.join(base, "il2cpp", "Game")
     unity_il2cpp_game(il2cpp)
     before = fingerprints(il2cpp)
     path, _, d = automatic.analyze_and_translate(il2cpp, "auto", "it", "fake", silent)
@@ -241,7 +241,7 @@ def test_unity_games(base):
               not path and e.code == "NOT_SUPPORTED" and "IL2CPP" in e.reason and fingerprints(il2cpp) == before
               and ("Create report", "create_report") in f["buttons"] and "I haven't made any changes" in f["text"])
 
-    crc = os.path.join(base, "crc", "Gioco")
+    crc = os.path.join(base, "crc", "Game")
     unity_il2cpp_game(crc, tables=True, crc=2737410034)
     before = fingerprints(crc)
     path, _, d = automatic.analyze_and_translate(crc, "auto", "it", "fake", silent)
@@ -250,7 +250,7 @@ def test_unity_games(base):
               not path and e.code == "NOT_SUPPORTED" and "BepInEx 6" not in e.reason and "CRC" in e.reason
               and e.engine == "unity-localization" and fingerprints(crc) == before)
 
-    anticheat = os.path.join(base, "anticheat", "Gioco")
+    anticheat = os.path.join(base, "anticheat", "Game")
     test_unity.create_game(anticheat)
     open(os.path.join(anticheat, "BEService.exe"), "wb").write(b"MZ")
     before = fingerprints(anticheat)
@@ -259,12 +259,12 @@ def test_unity_games(base):
     check("Unity with anti-cheat: ANTICHEAT, nothing touched", not path and e.code == "ANTICHEAT"
               and fingerprints(anticheat) == before and outcome.window(e)["title"] == "Game with anti-cheat")
 
-    mono = os.path.join(base, "mono", "Gioco")
+    mono = os.path.join(base, "mono", "Game")
     test_unity.create_game(mono)
     path, completed, d = automatic.analyze_and_translate(mono, "auto", "it", "fake", silent)
     e = outcome_of(d)
     f = outcome.window(e, "translate")
-    check("Unity Mono (test): OK, XUnity installed, new phrases to Google, window with ALT+T and 'Frasi nuove'",
+    check("Unity Mono (test): OK, XUnity installed, new phrases to Google, window with ALT+T and 'New phrases'",
               completed and e.code == "OK" and e.written and e.engine == "unity" and e.live == "google"
               and "ALT+T" in f["text"] and "New phrases while playing: XUnity, with free Google access" in f["text"])
     with open(path, encoding="utf-8") as fp:
@@ -280,7 +280,7 @@ def test_exceptions():
         (backend.BackendError(backend.NOT_INSTALLED, "TRANSLATOR_MISSING", command=backend.INSTALL_COMMAND),
          "TRANSLATOR_MISSING"),
         (backend.BackendError("Google is unavailable"), "TRANSLATOR_BLOCKED"),
-        (PermissionError(13, "Accesso negato", "D:/gioco/file.json"), "PERMISSIONS"),
+        (PermissionError(13, "Accesso negato", "D:/game/file.json"), "PERMISSIONS"),
         (system.SysError("I'm having trouble checking if the game is open"), "GAME_OPEN"),
         (RuntimeError("The backup doesn't match"), "ERROR"),
         (KeyError("game_folder"), "ERROR"),
@@ -312,7 +312,7 @@ def test_exceptions():
               ("Install the local translator", "install_local") in f["buttons"])
     # operations that do not touch the game: no "Try again" (it would repeat the last operation on the game) nor advice
     # about the open game or the Program Files folder
-    permissions = outcome.from_exception(PermissionError(13, "Accesso negato", "C:/Utente/Desktop/rapporto.zip"))
+    permissions = outcome.from_exception(PermissionError(13, "Accesso negato", "C:/User/Desktop/report.zip"))
     f = outcome.window(permissions, "report")
     check("report not created: its own window, with the reason, without 'Try again' or 'Create report'",
               f["title"] == "Report not created" and "Accesso negato" in f["text"] and f["kind"] == "error"
@@ -347,7 +347,7 @@ def test_windows():
     check("Unity Localization: window with 'leave English selected'",
               "English" in outcome.window(e)["text"] and outcome.window(e)["title"] == "Translation installed")
     try:
-        outcome.Outcome("INVENTATO")
+        outcome.Outcome("INVENTED")
         check("unknown code rejected", False)
     except ValueError:
         check("unknown code rejected", True)
@@ -366,7 +366,7 @@ def test_windows():
     e = outcome.Outcome("PARTIAL", engine="gamemaker", written=True, translated_items=20, remaining=3,
                         remaining_examples=["A", "B"], actions=["use_local"], extra={"discarded": 1, "retried": 1})
     f = outcome.window(e, "reapply", local_ready=True, current="local")
-    check("remaining texts and translations rejected by the game: 'Rimasti in originale', and the text also names "
+    check("remaining texts and translations rejected by the game: 'Left untranslated', and the text also names "
               "the other list; one retried text in the singular", outcome.fixes_filter(e) == "remaining"
               and "Not written to the game" in f["text"]
               and "One text rejected by the checks has already been retried" in f["text"])
@@ -374,7 +374,7 @@ def test_windows():
 
 def test_report(base, mono):
     """Create report: the useful files are there, DeepL key and email are not (not even if they ended up in a log)."""
-    key, email = "chiave-segreta-1234567:fx", "giocatore.segreto@example.com"
+    key, email = "secret-key-1234567:fx", "secret.player@example.com"
     with open(project.data_folder("settings.json"), "w", encoding="utf-8") as f:
         json.dump({"version": 2, "backend": "deepl", "deepl_key": key, "email_mymemory": email,
                    "theme": "auto", "folder": mono}, f)
@@ -396,14 +396,14 @@ def test_report(base, mono):
     # logs of the game, of BepInEx and of Unity (company and product from app.info), crashes, live translator
     open(os.path.join(mono, "BepInEx", "LogOutput.log"), "w", encoding="utf-8").write(
         "[Message:   BepInEx] Chainloader startup complete\n")
-    open(os.path.join(mono, "Gioco_Data", "app.info"), "w", encoding="utf-8").write("Azienda Finta\nGioco Finto")
+    open(os.path.join(mono, "Game_Data", "app.info"), "w", encoding="utf-8").write("Fake Company\nFake Game")
     user = os.environ["USERPROFILE"]
-    locallow = os.path.join(user, "AppData", "LocalLow", "Azienda Finta", "Gioco Finto")
+    locallow = os.path.join(user, "AppData", "LocalLow", "Fake Company", "Fake Game")
     os.makedirs(locallow)
     open(os.path.join(locallow, "Player.log"), "w", encoding="utf-8").write("Mono path[0] = '%s'\n" % mono)
     open(os.path.join(locallow, "Player-prev.log"), "w", encoding="utf-8").write("NullReferenceException\n")
-    crash = os.path.join(os.environ["TEMP"], "Azienda Finta", "Gioco Finto", "Crashes")
-    for n, (folder, text) in enumerate((("Crash_vecchio", "vecchio"), ("Crash_nuovo", "crash nuovo"))):
+    crash = os.path.join(os.environ["TEMP"], "Fake Company", "Fake Game", "Crashes")
+    for n, (folder, text) in enumerate((("Crash_old", "old"), ("Crash_new", "crash new"))):
         os.makedirs(os.path.join(crash, folder))
         open(os.path.join(crash, folder, "Player.log"), "w").write(text)
         os.utime(os.path.join(crash, folder), (time.time() - 100 + n * 50,) * 2)
@@ -430,7 +430,7 @@ def test_report(base, mono):
               "logs/" + os.path.basename(log_file), "profile/%s.json" % name, "game/BepInEx/LogOutput.log",
               "game/" + adapter_unity.CONFIG_XUNITY, "game/" + adapter_unity.CONFIG_BEPINEX,
               "game/patchsmith-unity.json", "local-translator/servizio-xunity.log", "unity/Player.log",
-              "unity/Player-prev.log", "unity/crash-Crash_nuovo-Player.log",
+              "unity/Player-prev.log", "unity/crash-Crash_new-Player.log",
               "translations/" + os.path.basename(text_problems)}
     check("report: log, profile, settings, state, detection, BepInEx/XUnity, Unity, crashes, "
               "manifest, remaining texts with the reason (problemi.json)", expected_list <= names)
@@ -443,7 +443,7 @@ def test_report(base, mono):
               "deepl_key" not in prefs and "email_mymemory" not in prefs and prefs.get("backend") == "deepl")
     check("report: version and last outcome in the summary, most recent crash, end of the long log",
               __version__ in content["summary.txt"] and "PARTIAL" in content["summary.txt"]
-              and content["unity/crash-Crash_nuovo-Player.log"] == "crash nuovo"
+              and content["unity/crash-Crash_new-Player.log"] == "crash new"
               and "traduzione interrotta" in content["local-translator/servizio-xunity.log"]
               and len(content["local-translator/servizio-xunity.log"]) < report.MAX_BYTES + 200)
     check("report: the user folder becomes %USERPROFILE% (even inside a JSON)",
@@ -454,7 +454,7 @@ def test_report(base, mono):
     cleaned = report.clean("GET https://api.mymemory.translated.net/get?q=Start&de=%s&x=%s" % (
         email.replace("@", "%40"), email.replace("@", "%40").upper()), [email, key])
     check("report: the email disappears even when written as in a web address (%40)",
-              "segreto" not in cleaned.lower() and cleaned.count("<removed>") == 2)
+              "secret" not in cleaned.lower() and cleaned.count("<removed>") == 2)
 
 
 def test_live(mono):
@@ -467,9 +467,9 @@ def test_live(mono):
         original = f.read()
     results = [adapter_unity.live_translator(mono)]
     os.makedirs(os.path.dirname(plugin), exist_ok=True)
-    open(plugin, "wb").write(b"finto")
+    open(plugin, "wb").write(b"fake")
     with open(service, "w", encoding="utf-8") as f:
-        f.write('Argomenti=-I "smith.py" servizio-xunity --profilo "prova.json" --porta 51234\n')
+        f.write('Argomenti=-I "smith.py" servizio-xunity --profilo "test.json" --porta 51234\n')
     results.append(adapter_unity.live_translator(mono))
     os.remove(plugin)
     with open(config, "w", encoding="utf-8") as f:
@@ -535,14 +535,14 @@ def test_command_line(base):
 def test_corrupted_profiles(base):
     """A file in profiles/ that is not a game profile (e.g. a list) is skipped like an unreadable one: it does not
     block the search for the game profile (nor the interface, which does it before every operation)."""
-    broken = os.path.join(automatic.profiles_folder(), "rotto.json")
+    broken = os.path.join(automatic.profiles_folder(), "broken.json")
     with open(broken, "w", encoding="utf-8") as f:
         json.dump(["non", "un", "profile"], f)
     try:
         names = [os.path.basename(p) for p, _ in automatic.list_profiles()]
         located = automatic.find_profile(os.path.join(base, "web", "Lantern Keeper"))
         check("broken profile (a list): skipped, the others are still found",
-                  "rotto.json" not in names and names and located)
+                  "broken.json" not in names and names and located)
     except Exception as e:  # noqa: BLE001
         check("broken profile (a list): skipped (%s: %s)" % (type(e).__name__, e), False)
     finally:
@@ -572,11 +572,11 @@ def test_ui_texts():
     check("interface texts without 'smith.py' (outside cli.py)%s" % (
         ": " + ", ".join(found) if found else ""), not found)
     from patchsmith import limiter
-    lim = limiter.Limiter("google", log=None, path=os.path.join(project.data_folder(), "stato-prova.json"),
+    lim = limiter.Limiter("google", log=None, path=os.path.join(project.data_folder(), "test-state.json"),
                                 current_time=lambda: 1_000_000.0)
     for _ in range(4):
         message = lim.blocked(429)
-    check("limiter: block and disable messages with the 'Riattiva' button, without commands",
+    check("limiter: block and disable messages with the 'Reactivate' button, without commands",
               "Reactivate" in message and "Reactivate" in lim.pause() and without_smith(message + lim.pause()))
 
 
@@ -590,8 +590,8 @@ def main(base):
     automatic.PROFILES_FOLDER = None
     for d in ("profiles", "memory"):
         os.makedirs(os.path.join(project.DATA_ROOT, d))
-    for env_var, rel in (("USERPROFILE", "utente"), ("TEMP", "utente/Temp"), ("TMP", "utente/Temp"),
-                           ("LOCALAPPDATA", "utente/AppData/Local"), ("APPDATA", "utente/AppData/Roaming")):
+    for env_var, rel in (("USERPROFILE", "user"), ("TEMP", "user/Temp"), ("TMP", "user/Temp"),
+                           ("LOCALAPPDATA", "user/AppData/Local"), ("APPDATA", "user/AppData/Roaming")):
         os.environ[env_var] = os.path.join(base, *rel.split("/"))
         os.makedirs(os.environ[env_var], exist_ok=True)
     for v in ("PATCHSMITH_DEEPL", "PATCHSMITH_EMAIL"):

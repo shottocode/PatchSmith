@@ -79,7 +79,7 @@ def create_game(folder):
     open(os.path.join(folder, "Image", "dt", "kh2_first.hed"), "wb").write(entries)
     for n in kh.EXECUTABLES:
         open(os.path.join(folder, n), "wb").write(fake_pe(signature=n.encode()))
-    open(os.path.join(folder, "KINGDOM HEARTS HD 1.5+2.5 ReMIX.exe"), "wb").write(b"MZ protezione")
+    open(os.path.join(folder, "KINGDOM HEARTS HD 1.5+2.5 ReMIX.exe"), "wb").write(b"MZ protection")
 
 
 def byte_diff(a, b):
@@ -102,12 +102,12 @@ def main(base, real_game=None):
     steam.steam_folder = lambda: None
     system.game_open = lambda c: False
     configurator.smart_app_control = lambda: 0
-    saves = os.path.join(base, "Documenti", "My Games", kh.NAME, "Steam", "123")
+    saves = os.path.join(base, "Documents", "My Games", kh.NAME, "Steam", "123")
     os.makedirs(saves)
-    open(os.path.join(saves, "KHFM_WW.png"), "wb").write(b"salvataggio")
+    open(os.path.join(saves, "KHFM_WW.png"), "wb").write(b"save")
     kh.SAVES = os.path.dirname(os.path.dirname(saves))
 
-    outer = os.path.join(base, "giochi", "kingdom hearts hd")
+    outer = os.path.join(base, "games", "kingdom hearts hd")
     game = os.path.join(outer, "KH")
     create_game(game)
     originals = fingerprints(game)
@@ -139,7 +139,7 @@ def main(base, real_game=None):
               and not any("I can't set it myself" in x for x in outcome["official_language_lines"]))
     fake = dict(r, steam_known={"appid": "1", "name": "x", "executable": "x.exe"})
     check("message: if the sheet explains the refusal, no contradictory 'I can't set it myself'",
-              not any("I can't" in x for x in official_language.message(fake, "it", ["motivo e rimedio"], False)))
+              not any("I can't" in x for x in official_language.message(fake, "it", ["reason and remedy"], False)))
 
     # --- refusals: nothing written
     configurator.smart_app_control = lambda: 1
@@ -166,7 +166,7 @@ def main(base, real_game=None):
         calls = []
 
         def failing_write(path, data, final=final, calls=calls):
-            if path.endswith(final) and "patchsmith" + os.sep + "configurazioni" not in path:
+            if path.endswith(final) and "patchsmith" + os.sep + "configurations" not in path:
                 calls.append(path)
                 if len(calls) == 3:
                     raise OSError("disk full (simulated)")
@@ -203,7 +203,7 @@ def main(base, real_game=None):
               and any("already active" in x for x in outcome["official_language_lines"]))
 
     # --- game update: an executable goes back to original but different; with the saved consent it is reapplied
-    new = fake_pe(signature=b"versione 2")
+    new = fake_pe(signature=b"version 2")
     open(os.path.join(game, kh.EXECUTABLES[1]), "wb").write(new)
     path, outcome = automatic.prepare(game, "auto", "it", "fake", silent)
     p1 = os.path.join(game, kh.EXECUTABLES[1])
@@ -232,7 +232,7 @@ def main(base, real_game=None):
 
     # --- cases found by the review
     automatic.prepare(game, "auto", "it", "fake", silent)  # consent already given: activates
-    new2 = fake_pe(signature=b"versione 3")
+    new2 = fake_pe(signature=b"version 3")
     p2 = os.path.join(game, kh.EXECUTABLES[2])
     open(p2, "wb").write(new2)
     check("executable updated by the game, then Restore: done at the first try, the new file stays",
@@ -300,7 +300,7 @@ def main(base, real_game=None):
               and any("Still to put back" in m for m in messages))
     check("... repeating completes it", automatic.restore(game, silent) is True and fingerprints(game) == expectations)
 
-    one_folder = os.path.join(base, "una cartella")
+    one_folder = os.path.join(base, "a folder")
     os.makedirs(one_folder)
     try:
         adapter_webjson.write_atomic(one_folder, b"x")
@@ -308,7 +308,7 @@ def main(base, real_game=None):
         pass
     check("failed atomic write: no temp file left",
               not os.path.exists(one_folder + adapter_webjson.TMP_SUFFIX))
-    read_only = os.path.join(base, "sola lettura.json")
+    read_only = os.path.join(base, "read only.json")
     open(read_only, "wb").write(b"{}")
     os.chmod(read_only, stat.S_IREAD)
     project.create_backup(read_only)
@@ -327,10 +327,10 @@ def main(base, real_game=None):
               cli.main(["auto", game, "--a", "it", "--backend", "fake", "--modifica-eseguibili"]) == 2)
     configurator.smart_app_control = lambda: 0
 
-    two_copies = os.path.join(base, "due copie")
-    create_game(os.path.join(two_copies, "copia A"))
-    create_game(os.path.join(two_copies, "copia B"))
-    before = {d: fingerprints(os.path.join(two_copies, d)) for d in ("copia A", "copia B")}
+    two_copies = os.path.join(base, "two copies")
+    create_game(os.path.join(two_copies, "copy A"))
+    create_game(os.path.join(two_copies, "copy B"))
+    before = {d: fingerprints(os.path.join(two_copies, d)) for d in ("copy A", "copy B")}
     path, outcome = automatic.prepare(two_copies, "auto", "it", "fake", silent, consent=True)
     check("two copies of the game in the folder: no change, asks to choose one",
               outcome.get("language_set") is False
@@ -338,7 +338,7 @@ def main(base, real_game=None):
               and all(fingerprints(os.path.join(two_copies, d)) == before[d] for d in before))
 
     import test_official_language as plu
-    steam_root, library = os.path.join(base, "Steam"), os.path.join(base, "Libreria")
+    steam_root, library = os.path.join(base, "Steam"), os.path.join(base, "Library")
     os.makedirs(os.path.join(steam_root, "appcache"))
     os.makedirs(os.path.join(steam_root, "steamapps"))
     open(os.path.join(steam_root, "steamapps", "libraryfolders.vdf"), "w").write(
@@ -371,7 +371,7 @@ def main(base, real_game=None):
 
     # --- test on copies of the real executables (the game's folder is not touched)
     if real_game:
-        copy_dir = os.path.join(base, "copia del gioco")
+        copy_dir = os.path.join(base, "game copy")
         os.makedirs(os.path.join(copy_dir, "Image", "dt"))
         shutil.copy2(os.path.join(real_game, "Image", "dt", "kh2_first.hed"), os.path.join(copy_dir, "Image", "dt"))
         for n in kh.EXECUTABLES:

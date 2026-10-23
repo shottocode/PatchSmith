@@ -190,7 +190,7 @@ Useful options:
 - `--backend locale` / `deepl` / `mymemory` / `google`: the translator to use. If you do not give it: the local one; if it is not installed, the error gives the command to install it. The DeepL key, the MyMemory email and the local model are read from `settings.json` (the interface saves them) or from the variables `PATCHSMITH_DEEPL` / `PATCHSMITH_EMAIL` / `PATCHSMITH_MODEL` (`4b` or `12b`);
 - `python -I smith.py local`: state of the local translator and, if it is not installed, the model suggested for your graphics card; `--install 12b` (or `4b`, or both) downloads and installs it, then translates a test sentence (exits with 2 if the test fails);
 - `python -I smith.py services`: state of the translators (pauses after a block); `--reset google` turns it back on (for a disabled translator the list says so too);
-- `--backend finto`: technical test offline, prefixes `[it]` to the texts. Only available from the command line, not in the graphical interface;
+- `--backend fake`: technical test offline, prefixes `[it]` to the texts. Only available from the command line, not in the graphical interface;
 - `--force` (for `auto`): also tries with engines that are not supported;
 - `--regenerate`: recreates the profile from scratch.
 
@@ -652,11 +652,11 @@ The individual tests:
   - the log saved in `logs/`, also with an injected unexpected error ("Unexpected error" dialog, traceback in the file) and with an error in a window command (`interfaccia` log also after installing the local translator, dialog without "Try again");
   - that a damaged profile does not leave the buttons disabled and that "Use the local translator" after an error repeats "Analyze and translate" with the same choices;
   - the chosen game's check (end dialog), the check at opening (no dialog, the bottom buttons only when there is something to do, `controllo` log; if you already started something else it starts as soon as that ends), "Details" with "Restore originals" and "Create report" for that game's folder, the warning about PatchSmith updated with the window open (only once);
-  - "Restore originals" and "Create report" (the zip goes into `rapporti-prova-gui`, next to the copy, never on the real Desktop; with that folder locked it goes into `logs/`);
-  - the first start without a saved translator ("Local translator" to install with "Install…" and the model for the simulated graphics card), the checks before starting (game open and "Try again", protected folder, language, Google paused, local translator to install: the operation does not start), a copy of the game in `copia-prova-gui` reusing the translations and the "Re-translate N phrases" button after the check at opening; the install requested before starting (with the test sentence working the operation starts again, otherwise a dialog and no operation) and the check at opening waiting for an open dialog to close;
+  - "Restore originals" and "Create report" (the zip goes into `reports-gui-test`, next to the copy, never on the real Desktop; with that folder locked it goes into `logs/`);
+  - the first start without a saved translator ("Local translator" to install with "Install…" and the model for the simulated graphics card), the checks before starting (game open and "Try again", protected folder, language, Google paused, local translator to install: the operation does not start), a copy of the game in `copy-gui-test` reusing the translations and the "Re-translate N phrases" button after the check at opening; the install requested before starting (with the test sentence working the operation starts again, otherwise a dialog and no operation) and the check at opening waiting for an open dialog to close;
   - "Fix translations…": a line fixed in the window and saved (valid memory with the new value, "Reapply" on its own changing the game's file) and the "Fix translations" button in the end dialog with texts left.
 
-  Without `PATCHSMITH_DATA` profile and settings go into `dati-prova-gui`, next to the copy. The settings that were already in that folder go back to how they were at the end.
+  Without `PATCHSMITH_DATA` profile and settings go into `data-gui-test`, next to the copy. The settings that were already in that folder go back to how they were at the end.
 - `python -I test/test_package.py <empty-folder>`: the release package (about 40 seconds): program, `PatchSmith.exe` and portable Python with Tkinter, without any user's data or downloaded components; the zip with only the `PatchSmith` folder; `smith.py` with the portable Python; `PatchSmith.exe` choosing the portable Python even with an installed Python; a package with data inside that is not deleted.
 - `python -I test/test_paths.py <empty-folder>`: the complete paths of someone using only the interface, from start to end, with fake games and fake translators (no network, no Ollama, no real game); PatchSmith's window opens for a few seconds, and halfway it closes and reopens. Covers:
   - a new web game: "Analyze and translate", the after-play check, "Fix translations" with the correction written into the game, "Restore originals" (identical files) and "Reapply", "Create report";
@@ -757,7 +757,7 @@ The individual tests:
   - "translate anyway" with GameMaker and Unreal;
   - restore from the command line with the folder.
 - `python -I test/test_cjk.py`: recognition of Japanese, Chinese and Korean texts. It also checks that nothing changes for the Latin script.
-- `python -I test/test_safety.py <copy-of-a-game> <file.json>`: critical scenarios, to run after `smith auto <copy> --backend finto` (better with `run_all.py --safety`, which does everything; if the profile is missing, the test creates it). Covers the parent folder, the game update, the altered backup and the complete restore. Without `PATCHSMITH_DATA` profile and memory go into `dati-prova-sicurezza`, next to the copy.
+- `python -I test/test_safety.py <copy-of-a-game> <file.json>`: critical scenarios, to run after `smith auto <copy> --backend fake` (better with `run_all.py --safety`, which does everything; if the profile is missing, the test creates it). Covers the parent folder, the game update, the altered backup and the complete restore. Without `PATCHSMITH_DATA` profile and memory go into `safety-test-data`, next to the copy.
 
 **These tests must only be used on copies, never on a real game.**
 

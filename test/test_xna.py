@@ -76,37 +76,37 @@ TEXTS_EN = {"Menu_Start": "Start the adventure", "Menu_Quit": "Quit game", "Tip_
 def create_game(base, work):
     os.makedirs(os.path.join(base, "de"))
     os.makedirs(os.path.join(base, "Content", "Fonts"))
-    neutral_resources = os.path.join(work, "neutre.resources")
+    neutral_resources = os.path.join(work, "neutral.resources")
     open(neutral_resources, "wb").write(resources(TEXTS_EN))
-    open(os.path.join(work, "Gioco.cs"), "w").write(
+    open(os.path.join(work, "Game.cs"), "w").write(
         "[assembly: System.Reflection.AssemblyVersion(\"1.2.0.0\")]\n"
-        "class Gioco { static void Main() {} }\n")
-    csc("/target:exe", "/platform:x86", "/out:" + os.path.join(base, "Gioco.exe"),
-        "/resource:%s,Gioco.Testi.resources" % neutral_resources, "Gioco.cs", cwd=work)
+        "class Game { static void Main() {} }\n")
+    csc("/target:exe", "/platform:x86", "/out:" + os.path.join(base, "Game.exe"),
+        "/resource:%s,Game.Texts.resources" % neutral_resources, "Game.cs", cwd=work)
     german_res = os.path.join(work, "de.resources")
     open(german_res, "wb").write(resources({"Menu_Start": "Das Abenteuer beginnen"}))
     open(os.path.join(work, "Sat.cs"), "w").write(
         "[assembly: System.Reflection.AssemblyCulture(\"de\")]\n[assembly: System.Reflection.AssemblyVersion(\"1.2.0.0\")]\n")
-    csc("/target:library", "/out:" + os.path.join(base, "de", "Gioco.resources.dll"),
-        "/resource:%s,Gioco.Testi.de.resources" % german_res, "Sat.cs", cwd=work)
+    csc("/target:library", "/out:" + os.path.join(base, "de", "Game.resources.dll"),
+        "/resource:%s,Game.Texts.de.resources" % german_res, "Sat.cs", cwd=work)
     ascii_ = [chr(c) for c in range(32, 127)]
     open(os.path.join(base, "Content", "Fonts", "Pixel.xnb"), "wb").write(font_xnb(ascii_))
-    open(os.path.join(base, "Content", "Fonts", "Numeri.xnb"), "wb").write(font_xnb(list("0123456789")))
+    open(os.path.join(base, "Content", "Fonts", "Numbers.xnb"), "wb").write(font_xnb(list("0123456789")))
     # probe: uses the real .NET ResourceManager on the copy of the game
-    open(os.path.join(work, "Sonda.cs"), "w").write(
+    open(os.path.join(work, "Probe.cs"), "w").write(
         "using System; using System.Globalization; using System.Reflection; using System.Resources;\n"
-        "class Sonda { static void Main(string[] a) {\n"
+        "class Probe { static void Main(string[] a) {\n"
         "  Console.OutputEncoding = System.Text.Encoding.UTF8;\n"
-        "  var rm = new ResourceManager(\"Gioco.Testi\", Assembly.LoadFrom(a[0]));\n"
+        "  var rm = new ResourceManager(\"Game.Texts\", Assembly.LoadFrom(a[0]));\n"
         "  foreach (var c in new[] {\"en-US\", \"it-IT\", \"de-DE\", \"fr-FR\"})\n"
         "    Console.WriteLine(c + \"=\" + rm.GetString(\"Menu_Start\", new CultureInfo(c)));\n"
         "}}\n")
-    os.makedirs(os.path.join(work, "sonda"))
-    csc("/target:exe", "/platform:x86", "/out:" + os.path.join(work, "sonda", "Sonda.exe"), "Sonda.cs", cwd=work)
+    os.makedirs(os.path.join(work, "probe"))
+    csc("/target:exe", "/platform:x86", "/out:" + os.path.join(work, "probe", "Probe.exe"), "Probe.cs", cwd=work)
 
 
 def probe(work, game):
-    outcome = subprocess.run([os.path.join(work, "sonda", "Sonda.exe"), os.path.join(game, "Gioco.exe")],
+    outcome = subprocess.run([os.path.join(work, "probe", "Probe.exe"), os.path.join(game, "Game.exe")],
                            capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW)
     return dict(r.split("=", 1) for r in outcome.stdout.splitlines() if "=" in r)
 
@@ -125,19 +125,19 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("The test folder must be empty: %s" % base)
     adapter_xna.game_open = lambda c: False
-    game, work = os.path.join(base, "game"), os.path.join(base, "lavoro")
+    game, work = os.path.join(base, "game"), os.path.join(base, "work")
     os.makedirs(work)
     create_game(game, work)
     before = fingerprints(game)
 
     # satellite version: [SatelliteContractVersion("1.0")] means 1.0.0.0, as for csc
-    open(os.path.join(work, "Contratto.cs"), "w").write(
+    open(os.path.join(work, "Contract.cs"), "w").write(
         "[assembly: System.Resources.SatelliteContractVersion(\"1.0\")]\nclass C {}\n")
-    csc("/target:library", "/out:" + os.path.join(work, "Contratto.dll"), "Contratto.cs", cwd=work)
+    csc("/target:library", "/out:" + os.path.join(work, "Contract.dll"), "Contract.cs", cwd=work)
     check("SatelliteContractVersion \"1.0\" -> 1.0.0.0",
-              dotnet.Assembly(os.path.join(work, "Contratto.dll")).satellite_version() == "1.0.0.0")
+              dotnet.Assembly(os.path.join(work, "Contract.dll")).satellite_version() == "1.0.0.0")
     # names with the same hash: they are rewritten identical and all read back
-    entries = {"K!!!": "uno", "K!>^": "due", "K\"B!": "tre", "Altro": "quattro"}
+    entries = {"K!!!": "one", "K!>^": "two", "K\"B!": "three", "Other": "four"}
     check("names with the same hash (valid test)", len({dotnet.hash_name(k) for k in list(entries)[:3]}) == 1)
     data = resources(entries)
     was_read = dotnet.read_resources(data)
@@ -145,8 +145,8 @@ def main(base):
               dotnet.write_resources(was_read) == data and dotnet.resources_strings(was_read) == entries)
 
     resource_sets = adapter_xna.find_resources(game)
-    check("finds the localized resources (base Gioco.Testi, satellite de)",
-              len(resource_sets) == 1 and resource_sets[0]["bases"] == {"Gioco.Testi": ["de"]}
+    check("finds the localized resources (base Game.Texts, satellite de)",
+              len(resource_sets) == 1 and resource_sets[0]["bases"] == {"Game.Texts": ["de"]}
               and resource_sets[0]["version"] == "1.2.0.0")
     _, texts = adapter_xna.texts_to_translate(game, silent)
     check("texts to translate (without the numbers)", "Start the adventure" in texts and "100" not in texts)
@@ -175,10 +175,10 @@ def main(base):
     check("manifest with the PatchSmith version (for the check after playing)",
               adapter_xna.read_manifest(game).get("patchsmith_version") == __version__)
     check("en and it satellites created (4 translated texts + language entry)", n == 5
-              and os.path.exists(os.path.join(game, "en", "Gioco.resources.dll"))
-              and os.path.exists(os.path.join(game, "it", "Gioco.resources.dll")))
-    sat = dotnet.Assembly(os.path.join(game, "en", "Gioco.resources.dll"))
-    translated_count = dotnet.resources_strings(dotnet.read_resources(sat.read_resource("Gioco.Testi.en.resources")))
+              and os.path.exists(os.path.join(game, "en", "Game.resources.dll"))
+              and os.path.exists(os.path.join(game, "it", "Game.resources.dll")))
+    sat = dotnet.Assembly(os.path.join(game, "en", "Game.resources.dll"))
+    translated_count = dotnet.resources_strings(dotnet.read_resources(sat.read_resource("Game.Texts.en.resources")))
     check("language menu entry 'English' -> 'Italiano'; placeholders intact", translated_count["Lang_En"] == "Italiano"
               and translated_count["Tip_1"] == "Premi [Input:12] per saltare\\nveloce"
               and translated_count["Only_Number"] == "100")
@@ -206,32 +206,32 @@ def main(base):
 
     # en satellite already present and not ours: it is not overwritten
     os.makedirs(os.path.join(game, "en"))
-    open(os.path.join(game, "en", "Gioco.resources.dll"), "wb").write(b"di qualcun altro")
+    open(os.path.join(game, "en", "Game.resources.dll"), "wb").write(b"someone else's")
     try:
         adapter_xna.install(game, "en", "it", "test", memory, silent)
         check("foreign satellite: not overwritten", False)
     except adapter_xna.XnaError:
-        check("foreign satellite: not overwritten", open(os.path.join(game, "en", "Gioco.resources.dll"), "rb").read()
-                  == b"di qualcun altro" and not os.path.exists(os.path.join(game, adapter_xna.MANIFEST)))
-    os.remove(os.path.join(game, "en", "Gioco.resources.dll"))
+        check("foreign satellite: not overwritten", open(os.path.join(game, "en", "Game.resources.dll"), "rb").read()
+                  == b"someone else's" and not os.path.exists(os.path.join(game, adapter_xna.MANIFEST)))
+    os.remove(os.path.join(game, "en", "Game.resources.dll"))
     os.rmdir(os.path.join(game, "en"))
 
     # tampered manifest: nothing deleted
-    sat_de = os.path.join(game, "de", "Gioco.resources.dll")
+    sat_de = os.path.join(game, "de", "Game.resources.dll")
     forged = {"patchsmith": True,
-              "file": {"de/Gioco.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
+              "file": {"de/Game.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
               "created_folders": ["de"]}
     open(os.path.join(game, adapter_xna.MANIFEST), "w").write(json.dumps(forged))
     adapter_xna.uninstall(game, silent)
     check("manifest pointing to the game's satellite with the right fingerprint: intact (it lacks the marker)",
               os.path.exists(sat_de) and fingerprints(game) == before)
-    forged = {"patchsmith": True, "file": {"../Gioco.exe": "0" * 64}}
+    forged = {"patchsmith": True, "file": {"../Game.exe": "0" * 64}}
     open(os.path.join(game, adapter_xna.MANIFEST), "w").write(json.dumps(forged))
     try:
         adapter_xna.uninstall(game, silent)
         check("manifest with an out-of-place path: rejected", False)
     except adapter_xna.XnaError:
-        check("manifest with an out-of-place path: rejected", os.path.exists(os.path.join(game, "Gioco.exe")))
+        check("manifest with an out-of-place path: rejected", os.path.exists(os.path.join(game, "Game.exe")))
     os.remove(os.path.join(game, adapter_xna.MANIFEST))
 
     # installation interrupted before moving the files into place: the restore removes everything
@@ -257,7 +257,7 @@ def main(base):
     adapter_xna.install(game, "en", "it", "test", memory, silent)
     os.remove(os.path.join(game, adapter_xna.MANIFEST))
     check("without manifest: our satellites do not count as game languages",
-              adapter_xna.find_resources(game)[0]["bases"] == {"Gioco.Testi": ["de"]})
+              adapter_xna.find_resources(game)[0]["bases"] == {"Game.Texts": ["de"]})
     lines = []
     adapter_xna.state(game, lines.append)
     check("without manifest: the status reports them", any("without a manifest" in r for r in lines))
@@ -274,20 +274,20 @@ def main(base):
         adapter_xna.os.replace = real_replace
     adapter_xna.install(game, "en", "es", "test", {"Start the adventure": "Empezar"}, silent)
     check("language change after an interruption: only the es satellite is there (besides en)",
-              os.path.exists(os.path.join(game, "es", "Gioco.resources.dll"))
+              os.path.exists(os.path.join(game, "es", "Game.resources.dll"))
               and not os.path.exists(os.path.join(game, "it")))
     adapter_xna.uninstall(game, silent)
     check("... and the restore brings everything back as it was", fingerprints(game) == before)
 
     # manifest that lists the official satellite with its fingerprint: a new installation does not touch it
     forged = {"patchsmith": True,
-              "file": {"de/Gioco.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
+              "file": {"de/Game.resources.dll": hashlib.sha256(open(sat_de, "rb").read()).hexdigest()},
               "created_folders": ["de"]}
     open(os.path.join(game, adapter_xna.MANIFEST), "w").write(json.dumps(forged))
     adapter_xna.install(game, "en", "it", "test", memory, silent)
     check("install with a tampered manifest: the official de satellite stays", os.path.exists(sat_de)
-              and fingerprints(game)["de" + os.sep + "Gioco.resources.dll"]
-              == before["de" + os.sep + "Gioco.resources.dll"])
+              and fingerprints(game)["de" + os.sep + "Game.resources.dll"]
+              == before["de" + os.sep + "Game.resources.dll"])
     adapter_xna.uninstall(game, silent)
 
     # invalid hand-typed language: error before writing anything
@@ -341,7 +341,7 @@ def main(base):
 
     # game update: the status reports it
     adapter_xna.install(game, "en", "it", "test", memory, silent)
-    open(os.path.join(game, "Gioco.exe"), "ab").write(b"\x00")
+    open(os.path.join(game, "Game.exe"), "ab").write(b"\x00")
     lines = []
     adapter_xna.state(game, lines.append)
     check("game updated: reported", any("has been updated" in r for r in lines))

@@ -76,8 +76,8 @@ Method = .cctor
 # Default value: true
 Enabled = true
 
-[Altro]
-Type = NonToccare
+[Other]
+Type = DoNotTouch
 """
 
 
@@ -95,7 +95,7 @@ def _section(text, name):
 def test_entrypoint(base):
     cfg = lambda g: os.path.join(g, *adapter_unity.CONFIG_BEPINEX.split("/"))  # noqa: E731
 
-    new = os.path.join(base, "unity6-nuovo")
+    new = os.path.join(base, "unity6-new")
     os.makedirs(new)
     check("Unity 6 without configuration: set", adapter_unity.bepinex_entrypoint(new, "6000.6.0f1"))
     entries = _section(read_file(cfg(new)), "Preloader.Entrypoint")
@@ -103,7 +103,7 @@ def test_entrypoint(base):
               "Type = MonoBehaviour" in entries and "Assembly = UnityEngine.CoreModule.dll" in entries
               and "Method = .cctor" in entries)
 
-    existing = os.path.join(base, "unity6-esistente")
+    existing = os.path.join(base, "unity6-existing")
     write(cfg(existing), CFG_BEPINEX)
     check("Unity 6 with BepInEx configuration: set",
               adapter_unity.bepinex_entrypoint(existing, "6000.3.12f1"))
@@ -115,11 +115,11 @@ def test_entrypoint(base):
               "# Default value: Application" in entries and "Assembly = UnityEngine.CoreModule.dll" in entries
               and "Method = .cctor" in entries and "EnableAssemblyCache = true" in _section(text, "Caching")
               and "Enabled = true" in _section(text, "Logging.Disk")
-              and _section(text, "Altro") == ["Type = NonToccare"])
+              and _section(text, "Other") == ["Type = DoNotTouch"])
     adapter_unity.bepinex_entrypoint(existing, "6000.3.12f1")
     check("existing configuration: repeating changes nothing", read_file(cfg(existing)) == text)
 
-    without_section = os.path.join(base, "unity6-senza-sezione")
+    without_section = os.path.join(base, "unity6-without-section")
     write(cfg(without_section), "[Caching]\nEnableAssemblyCache = true\n")
     adapter_unity.bepinex_entrypoint(without_section, "6000.0.23f1")
     text = read_file(cfg(without_section))
@@ -131,7 +131,7 @@ def test_entrypoint(base):
     write(cfg(old), CFG_BEPINEX)
     check("Unity 2022: not touched", not adapter_unity.bepinex_entrypoint(old, "2022.3.10f1")
               and read_file(cfg(old)) == CFG_BEPINEX)
-    empty_game = os.path.join(base, "unity2022-vuoto")
+    empty_game = os.path.join(base, "unity2022-empty")
     os.makedirs(empty_game)
     check("Unity 2022 without configuration: no file created",
               not adapter_unity.bepinex_entrypoint(empty_game, "2022.3.10f1") and not os.path.exists(cfg(empty_game)))
@@ -142,14 +142,14 @@ def test_entrypoint(base):
 # --- Unity: IMGUI and XUnity configuration ---------------------------------------------------------
 
 def unity_game(folder, code):
-    """Fake Unity Mono game: Gioco.exe, Gioco_Data/Managed/Assembly-CSharp.dll with these bytes (None = without)."""
-    managed = os.path.join(folder, "Gioco_Data", "Managed")
+    """Fake Unity Mono game: Game.exe, Game_Data/Managed/Assembly-CSharp.dll with these bytes (None = without)."""
+    managed = os.path.join(folder, "Game_Data", "Managed")
     os.makedirs(managed)
-    with open(os.path.join(folder, "Gioco.exe"), "wb") as f:
+    with open(os.path.join(folder, "Game.exe"), "wb") as f:
         f.write(b"MZ")
     if code is not None:
         with open(os.path.join(managed, "Assembly-CSharp.dll"), "wb") as f:
-            f.write(b"MZ\x00" + code + b"\x00fine")
+            f.write(b"MZ\x00" + code + b"\x00end")
     return folder
 
 
@@ -159,44 +159,44 @@ def test_imgui(base):
     check("IMGUI: OnGUI + GUIContent -> yes",
               adapter_unity.uses_imgui(unity_game(os.path.join(base, "imgui-content"), b"OnGUI\x00GUIContent")))
     check("IMGUI: OnGUI alone (just a method with that name) -> no",
-              not adapter_unity.uses_imgui(unity_game(os.path.join(base, "solo-ongui"), b"OnGUI\x00Update")))
+              not adapter_unity.uses_imgui(unity_game(os.path.join(base, "ongui-only"), b"OnGUI\x00Update")))
     check("IMGUI: UGUI/TextMeshPro interface -> no",
               not adapter_unity.uses_imgui(unity_game(os.path.join(base, "ugui"), b"TextMeshProUGUI\x00GUIStyle")))
     check("IMGUI: without Assembly-CSharp.dll -> no",
-              not adapter_unity.uses_imgui(unity_game(os.path.join(base, "senza-codice"), None)))
+              not adapter_unity.uses_imgui(unity_game(os.path.join(base, "without-code"), None)))
     check("IMGUI: folder that is not a Unity game -> no", not adapter_unity.uses_imgui(base))
     # the interface in a module of the game (asmdef, like SunHaven.Core.dll or Mouse.dll), not in Assembly-CSharp
-    module = unity_game(os.path.join(base, "imgui-modulo"), b"Update\x00TextMeshProUGUI")
-    with open(os.path.join(module, "Gioco_Data", "Managed", "Gioco.Interfaccia.dll"), "wb") as f:
-        f.write(b"MZ\x00OnGUI\x00GUILayout\x00fine")
+    module = unity_game(os.path.join(base, "imgui-module"), b"Update\x00TextMeshProUGUI")
+    with open(os.path.join(module, "Game_Data", "Managed", "Game.Interface.dll"), "wb") as f:
+        f.write(b"MZ\x00OnGUI\x00GUILayout\x00end")
     check("IMGUI: OnGUI + GUILayout in a module of the game (not Assembly-CSharp) -> yes",
               adapter_unity.uses_imgui(module))
-    third_party = unity_game(os.path.join(base, "imgui-terzi"), b"Update\x00TextMeshProUGUI")
+    third_party = unity_game(os.path.join(base, "imgui-third-party"), b"Update\x00TextMeshProUGUI")
     for name in ("Sirenix.Utilities.dll", "UnityEngine.IMGUIModule.dll", "QFSW.QC.dll", "UnityGLTFScripts.dll"):
-        with open(os.path.join(third_party, "Gioco_Data", "Managed", name), "wb") as f:
-            f.write(b"MZ\x00OnGUI\x00GUIStyle\x00fine")
+        with open(os.path.join(third_party, "Game_Data", "Managed", name), "wb") as f:
+            f.write(b"MZ\x00OnGUI\x00GUIStyle\x00end")
     check("IMGUI: OnGUI only in the engine or in third-party libraries (Sirenix, console, GLTF) -> no",
               not adapter_unity.uses_imgui(third_party))
-    managed_folder = os.path.join(third_party, "Gioco_Data", "Managed")
+    managed_folder = os.path.join(third_party, "Game_Data", "Managed")
     for name in ("Assembly-CSharp-firstpass.dll", "SunHaven.Core.dll", "Mouse.dll", "Newtonsoft.Json.dll",
-                 "System.Core.dll", "mscorlib.dll", "I2Localization.dll", "Rewired_Core.dll", "Gioco.Editor.dll"):
+                 "System.Core.dll", "mscorlib.dll", "I2Localization.dll", "Rewired_Core.dll", "Game.Editor.dll"):
         with open(os.path.join(managed_folder, name), "wb") as f:
             f.write(b"MZ")
     check("game DLLs: Assembly-CSharp first, then the game's modules; engine, .NET, third-party and editor ones: no",
-              [os.path.basename(p) for p in adapter_unity.game_assembly(os.path.join(third_party, "Gioco_Data"))]
+              [os.path.basename(p) for p in adapter_unity.game_assembly(os.path.join(third_party, "Game_Data"))]
               == ["Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Mouse.dll", "SunHaven.Core.dll"])
     # old Unity games written in UnityScript: their code is Assembly-UnityScript (almost always with OnGUI);
     # UnityScript.Lang.dll and Boo.Lang.dll are the language's libraries
     old = unity_game(os.path.join(base, "imgui-unityscript"), None)
-    managed_folder = os.path.join(old, "Gioco_Data", "Managed")
-    for name, byte in (("Assembly-UnityScript.dll", b"MZ\x00OnGUI\x00GUIStyle\x00fine"),
+    managed_folder = os.path.join(old, "Game_Data", "Managed")
+    for name, byte in (("Assembly-UnityScript.dll", b"MZ\x00OnGUI\x00GUIStyle\x00end"),
                        ("Assembly-UnityScript-firstpass.dll", b"MZ"), ("UnityScript.Lang.dll", b"MZ"),
-                       ("Boo.Lang.dll", b"MZ\x00OnGUI\x00GUIStyle\x00fine")):
+                       ("Boo.Lang.dll", b"MZ\x00OnGUI\x00GUIStyle\x00end")):
         with open(os.path.join(managed_folder, name), "wb") as f:
             f.write(byte)
     check("game DLLs: Assembly-UnityScript (old games) yes, the UnityScript and Boo libraries no; IMGUI "
               "in Assembly-UnityScript -> yes",
-              [os.path.basename(p) for p in adapter_unity.game_assembly(os.path.join(old, "Gioco_Data"))]
+              [os.path.basename(p) for p in adapter_unity.game_assembly(os.path.join(old, "Game_Data"))]
               == ["Assembly-UnityScript.dll", "Assembly-UnityScript-firstpass.dll"]
               and adapter_unity.uses_imgui(old))
     text = read_file(adapter_unity.configure(imgui, "en", "it"))
@@ -264,23 +264,23 @@ def test_crc(base):
     with_crc = _catalog(os.path.join(base, "crc-utf16"), b"\x07\x00" + (options % 2737410034).encode("utf-16-le"))
     check("CRC: hash checked (UTF-16, as Unity writes it) -> yes",
               adapter_unity_loc.checked_crc(with_crc) is True)
-    odd = _catalog(os.path.join(base, "crc-dispari"), b"\x07" + (options % 2737410034).encode("utf-16-le"))
+    odd = _catalog(os.path.join(base, "crc-odd"), b"\x07" + (options % 2737410034).encode("utf-16-le"))
     check("CRC: hash checked also with the UTF-16 text at an odd position -> yes",
               adapter_unity_loc.checked_crc(odd) is True)
     utf8 = _catalog(os.path.join(base, "crc-utf8"), (options % 12345).encode("utf-8"))
     check("CRC: hash checked (plain text) -> yes", adapter_unity_loc.checked_crc(utf8) is True)
     zero = _catalog(os.path.join(base, "crc-zero"), (options % 0).encode("utf-16-le") + (options % 0).encode("utf-8"))
     check("CRC: m_Crc 0 (not checked) -> no", adapter_unity_loc.checked_crc(zero) is False)
-    unlabeled = _catalog(os.path.join(base, "crc-senza"), b"")
+    unlabeled = _catalog(os.path.join(base, "crc-no-options"), b"")
     check("CRC: no options -> no", adapter_unity_loc.checked_crc(unlabeled) is False)
-    no_live = os.path.join(base, "crc-nessun-catalogo", "StandaloneWindows64", "x.bundle")
+    no_live = os.path.join(base, "crc-no-catalog", "StandaloneWindows64", "x.bundle")
     write(no_live, "")
     check("CRC: missing catalog -> unknown (None)", adapter_unity_loc.checked_crc(no_live) is None)
-    broken = _catalog(os.path.join(base, "crc-rotto"), b"")
-    write(os.path.join(base, "crc-rotto", "catalog.json"), "{non e' json")
+    broken = _catalog(os.path.join(base, "crc-broken"), b"")
+    write(os.path.join(base, "crc-broken", "catalog.json"), "{not json")
     check("CRC: unreadable catalog -> unknown (None)", adapter_unity_loc.checked_crc(broken) is None)
     broken_base64 = _catalog(os.path.join(base, "crc-base64"), b"")
-    write(os.path.join(base, "crc-base64", "catalog.json"), json.dumps({"m_ExtraDataString": "@@@ non base64 @@@"}))
+    write(os.path.join(base, "crc-base64", "catalog.json"), json.dumps({"m_ExtraDataString": "@@@ not base64 @@@"}))
     check("CRC: extra data not in base64 -> unknown (None)",
               adapter_unity_loc.checked_crc(broken_base64) is None)
 
@@ -384,7 +384,7 @@ def test_keys(base):
         '  similar_class: probe("Delete", el("SPAN", ["keyboard-help"], body)),',
         '  menu: probe("Start Game", el("BUTTON", [], body))}));',
     ])
-    path = os.path.join(base, "tasti.js")
+    path = os.path.join(base, "keys.js")
     write(path, script)
     r = subprocess.run([node, path], capture_output=True, timeout=60)
     try:
@@ -405,7 +405,7 @@ def test_keys(base):
 EXPECTED_SIGNALS = {
     "unity-player.log": [r"Mono path\[0\] = '.+_Data/Managed'", r"Chainloader startup complete",
                          r"Loading \[Patchsmith traduttore locale", r"Initialize engine version: 6000\."],
-    "unity-player-errore-google.log": [r"NullReferenceException", r"GoogleTranslateEndpointV2",
+    "unity-player-google-error.log": [r"NullReferenceException", r"GoogleTranslateEndpointV2",
                                        r"\[Error  :XUnity\.AutoTranslator\] Failed: 'MASTER'"],
     "unity-crash-player.log": [r"^Crash!!!$", r"Application:\.cctor", r"GameObject:AddComponent",
                                r"BepInEx\.Bootstrap\.Chainloader:Start", r"Mono path\[0\]"],
@@ -413,12 +413,12 @@ EXPECTED_SIGNALS = {
     # LogOutput.log of the session that ended in the crash: BepInEx started but never reached "startup complete"
     "bepinex-logoutput-crash.log": [r"Chainloader started", r"Loading \[XUnity Auto Translator",
                                     r"\A(?![\s\S]*startup complete)"],
-    "servizio-xunity.log": [r"in ascolto su http://127\.0\.0\.1:\d+/translate \(gioco: ",
+    "xunity-service.log": [r"in ascolto su http://127\.0\.0\.1:\d+/translate \(gioco: ",
                             r"! traduzione interrotta", r"Il gioco si e' chiuso"],
     "unreal-dds.log": [r"Mounting pak file .*zz_Patchsmith_it_999_P\.pak",
                        r"Overriding language with game user settings language configuration option \(en\)"],
     # characters the TextMeshPro fonts lack (also outside the basic plane), IL2CPP game without "Mono path"
-    "unity-tmp-caratteri-mancanti.log": [r"Unicode value \\u00D9 was not found in the \[slkscr\] font asset",
+    "unity-tmp-missing-chars.log": [r"Unicode value \\u00D9 was not found in the \[slkscr\] font asset",
                                          r"Unicode value \\U0001F41A was not found", r"Discovering subsystems at path",
                                          r"\A(?![\s\S]*Mono path)"],
 }
@@ -441,7 +441,7 @@ def test_signals():
         check("%s: anonymous%s" % (name, " (found: %s)" % personal[:3] if personal else ""),
                   text and not personal)
     # the other real signals of the after-play check: Windows event log entries and the translator's journal
-    for name in ("evento-crash-1000.xml", "evento-crash-1026.xml", "diario-richieste.jsonl"):
+    for name in ("event-crash-1000.xml", "event-crash-1026.xml", "journal-requests.jsonl"):
         try:
             with open(os.path.join(SIGNALS, name), "rb") as f:
                 text = f.read().decode("utf-8", "replace")

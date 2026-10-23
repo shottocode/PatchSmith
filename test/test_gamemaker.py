@@ -71,15 +71,15 @@ def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("The test folder must be empty: %s" % base)
-    game = os.path.join(base, "Gioco GM")
+    game = os.path.join(base, "Game GM")
     os.makedirs(os.path.join(game, "Localization", "french"))
     for rel, text in (("Localization/english_ui.txt", UI), ("Localization/english_npc.txt", NPC),
                        ("Localization/french/ui.txt", FR_UI)):
         open(os.path.join(game, *rel.split("/")), "wb").write(text.encode("utf-8"))
     latin = set(chr(c) for c in range(32, 127)) | set("àèéùÀÈÉÙíóúÍÓÚ")
-    open(os.path.join(game, "data.win"), "wb").write(data_win([("fn_testo", latin), ("fn_altro", latin - set("ù")),
-                                                                ("fn_numeri", set("0123456789"))]))
-    open(os.path.join(game, "Gioco.exe"), "wb").write(b"MZ")
+    open(os.path.join(game, "data.win"), "wb").write(data_win([("fn_text", latin), ("fn_other", latin - set("ù")),
+                                                                ("fn_numbers", set("0123456789"))]))
+    open(os.path.join(game, "Game.exe"), "wb").write(b"MZ")
     before = fingerprints(game)
 
     # line format and block format
@@ -141,7 +141,7 @@ def main(base):
               chars.adapt_chars("Così può più \u201cciao\u201d", allowed, "it") == 'Cosí puó piú "ciao"')
     check("gamemaker.font: names read",
               [f["name"] for f in gamemaker.font(open(os.path.join(game, "data.win"), "rb").read())[0]]
-              == ["fn_testo", "fn_altro", "fn_numeri"])
+              == ["fn_text", "fn_other", "fn_numbers"])
     check("Italian: à è stay if the font has them; the acute accent only for i o u",
               chars.adapt_chars("è già", set(chars.ASCII) | set("áéíóú"), "it") == "e' gia'")
     # font policy: an ASCII-only font counts; a Korean one without accents does not; an uppercase-only one also covers

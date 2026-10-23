@@ -188,7 +188,7 @@ Opzioni utili:
 - `--backend locale` / `deepl` / `mymemory` / `google`: traduttore da usare. Se non lo indichi: quello locale; se non è installato, l'errore dice il comando per installarlo. La chiave DeepL, l'email per MyMemory e il modello locale si leggono da `settings.json` (le salva l'interfaccia) o dalle variabili `PATCHSMITH_DEEPL` / `PATCHSMITH_EMAIL` / `PATCHSMITH_MODEL` (`4b` o `12b`);
 - `python -I smith.py local`: stato del traduttore locale e, se non è installato, il modello consigliato per la tua scheda video; `--install 12b` (oppure `4b`, o entrambi) lo scarica e installa, poi traduce una frase di prova (esce con 2 se la prova non riesce);
 - `python -I smith.py services`: stato dei traduttori (pause dopo un blocco); `--reset google` lo riattiva (per un traduttore disattivato lo ricorda anche l'elenco);
-- `--backend finto`: prova tecnica senza rete, antepone `[it]` ai testi. Disponibile solo da riga di comando, non nell'interfaccia grafica;
+- `--backend fake`: prova tecnica senza rete, antepone `[it]` ai testi. Disponibile solo da riga di comando, non nell'interfaccia grafica;
 - `--force` (per `auto`): prova anche con i motori non supportati;
 - `--regenerate`: ricrea il profilo da zero.
 
@@ -650,12 +650,12 @@ Le singole prove:
   - il registro salvato in `logs/`, anche con un errore imprevisto iniettato (finestra "Errore imprevisto", traceback nel file) e con un errore in un comando della finestra (registro `interfaccia` anche dopo l'installazione del traduttore locale, finestra senza "Riprova");
   - che un profilo rovinato non lasci i pulsanti disattivati e che "Usa il traduttore locale" dopo un errore ripeta "Analizza e traduci" con le stesse scelte;
   - il controllo del gioco scelto (finestra di fine), il controllo all'apertura (nessuna finestra, i pulsanti in fondo solo con qualcosa da fare, registro `controllo`; se hai già avviato altro parte appena finisce), "Dettagli" con "Ripristina originali" e "Crea rapporto" per la cartella di quel gioco, l'avviso di PatchSmith aggiornato con la finestra aperta (una volta sola);
-  - "Ripristina originali" e "Crea rapporto" (lo zip va in `rapporti-prova-gui`, accanto alla copia, mai sul Desktop vero; con quella cartella bloccata va in `logs/`);
-  - il primo avvio senza traduttore salvato ("Traduttore locale" da installare con "Installa…" e il modello per la scheda video simulata), i controlli prima di partire (gioco aperto e "Riprova", cartella protetta, lingua, Google in pausa, traduttore locale da installare: l'operazione non parte), una copia del gioco in `copia-prova-gui` che riusa le traduzioni e il pulsante "Ritraduci N frasi" dopo il controllo all'apertura; l'installazione chiesta prima di partire (con la frase di prova riuscita l'operazione riparte, altrimenti una finestra e niente operazione) e il controllo all'apertura che aspetta la chiusura di una finestra aperta.
+  - "Ripristina originali" e "Crea rapporto" (lo zip va in `reports-gui-test`, accanto alla copia, mai sul Desktop vero; con quella cartella bloccata va in `logs/`);
+  - il primo avvio senza traduttore salvato ("Traduttore locale" da installare con "Installa…" e il modello per la scheda video simulata), i controlli prima di partire (gioco aperto e "Riprova", cartella protetta, lingua, Google in pausa, traduttore locale da installare: l'operazione non parte), una copia del gioco in `copy-gui-test` che riusa le traduzioni e il pulsante "Ritraduci N frasi" dopo il controllo all'apertura; l'installazione chiesta prima di partire (con la frase di prova riuscita l'operazione riparte, altrimenti una finestra e niente operazione) e il controllo all'apertura che aspetta la chiusura di una finestra aperta.
 
   - "Correggi traduzioni…": una riga corretta nella finestra e salvata (memoria valida con il valore nuovo, "Riapplica" da sola che cambia il file del gioco) e il pulsante "Correggi traduzioni" nella finestra di fine con testi rimasti.
 
-  Senza `PATCHSMITH_DATA` profilo e impostazioni vanno in `dati-prova-gui`, accanto alla copia. Le impostazioni che c'erano già in quella cartella tornano com'erano alla fine.
+  Senza `PATCHSMITH_DATA` profilo e impostazioni vanno in `data-gui-test`, accanto alla copia. Le impostazioni che c'erano già in quella cartella tornano com'erano alla fine.
 - `python -I test/test_package.py <cartella-vuota>`: il pacchetto da pubblicare (circa 40 secondi): programma, `PatchSmith.exe` e Python portatile con Tkinter, senza dati di chi lo usa né componenti scaricati; lo zip con la sola cartella `PatchSmith`; `smith.py` con il Python portatile; `PatchSmith.exe` che sceglie il Python portatile anche con un Python installato; un pacchetto con dei dati dentro che non si cancella.
 - `python -I test/test_paths.py <cartella-vuota>`: i percorsi completi di chi usa solo l'interfaccia, dall'inizio alla fine, con giochi finti e traduttori finti (nessuna rete, nessun Ollama, nessun gioco vero); si apre per qualche secondo la finestra di PatchSmith, che a metà si chiude e si riapre. Copre:
   - un gioco web nuovo: "Analizza e traduci", il controllo dopo aver giocato, "Correggi traduzioni" con la correzione scritta nel gioco, "Ripristina originali" (file identici) e "Riapplica", "Crea rapporto";
@@ -756,7 +756,7 @@ Le singole prove:
   - "traduci comunque" con GameMaker e Unreal;
   - ripristino dalla riga di comando con la cartella.
 - `python -I test/test_cjk.py`: riconoscimento dei testi in giapponese, cinese e coreano. Verifica anche che nulla cambi per l'alfabeto latino.
-- `python -I test/test_safety.py <copia-di-un-gioco> <file.json>`: scenari critici, da lanciare dopo `smith auto <copia> --backend finto` (meglio con `run_all.py --safety`, che fa tutto; se il profilo manca, la prova lo crea). Copre la cartella superiore, l'aggiornamento del gioco, il backup alterato e il ripristino completo. Senza `PATCHSMITH_DATA` profilo e memoria vanno in `dati-prova-sicurezza`, accanto alla copia.
+- `python -I test/test_safety.py <copia-di-un-gioco> <file.json>`: scenari critici, da lanciare dopo `smith auto <copia> --backend fake` (meglio con `run_all.py --safety`, che fa tutto; se il profilo manca, la prova lo crea). Copre la cartella superiore, l'aggiornamento del gioco, il backup alterato e il ripristino completo. Senza `PATCHSMITH_DATA` profilo e memoria vanno in `safety-test-data`, accanto alla copia.
 
 **Questi test vanno usati solo su copie, mai su un gioco vero.**
 

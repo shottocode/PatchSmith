@@ -45,7 +45,7 @@ def fingerprints(folder):
 
 
 def fake_game(folder):
-    for name, data in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "drago.exe": b"MZ",
+    for name, data in {"chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "dragon.exe": b"MZ",
                        "resources/app/main.js": MAIN, "resources/app/preload.js": PRELOAD,
                        "resources/app/package.json": '{"main": "main.js"}',
                        "resources/app/gemshell-assets": b"GS02\x16\x00drago" + bytes(range(64))}.items():
@@ -105,11 +105,11 @@ def test_script(base, preload, port):
     start = script.index("var CFG = ") + len("var CFG = ")
     end = script.index(";", start)
     script = ";(function () { //" + script[:start] + json.dumps(config) + script[end:]
-    page = os.path.join(os.path.dirname(preload), "prova-pagina.js")
+    page = os.path.join(os.path.dirname(preload), "test-page.js")
     write(page, script)
-    write(os.path.join(base, "nodo.js"), NODE)
-    output = os.path.join(base, "nodi.json")
-    subprocess.run([node, os.path.join(base, "nodo.js"), page, str(port), output], timeout=30)
+    write(os.path.join(base, "runner.js"), NODE)
+    output = os.path.join(base, "nodes.json")
+    subprocess.run([node, os.path.join(base, "runner.js"), page, str(port), output], timeout=30)
     os.remove(page)
     with open(output, encoding="utf-8") as f:
         r = json.load(f)
@@ -128,7 +128,7 @@ def main(base):
     os.makedirs(base)
     project.DATA_ROOT = os.path.join(base, "data_folder")
     automatic.PROFILES_FOLDER = os.path.join(project.DATA_ROOT, "profiles")
-    game = os.path.join(base, "Drago")
+    game = os.path.join(base, "Dragon")
     fake_game(game)
     before = fingerprints(game)
     lines = []

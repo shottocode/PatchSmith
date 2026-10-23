@@ -70,20 +70,20 @@ def _dialog_answer(title_text, default_language=None):
 
 
 def _choose(_g, _c, title_text, text, buttons, kind="info"):
-    WINDOWS.append(("scegli", title_text, text, list(buttons)))
+    WINDOWS.append(("choose", title_text, text, list(buttons)))
     print("WINDOW [%s] %s | %s | %s" % (kind, title_text, " ".join(text.split()), [p for p, _ in buttons]))
     return _dialog_answer(title_text)
 
 
 def _ask(_g, _c, title_text, text):
-    WINDOWS.append(("chiedi", title_text, text, [("Yes", True), ("No", False)]))
+    WINDOWS.append(("ask", title_text, text, [("Yes", True), ("No", False)]))
     response = bool(_dialog_answer(title_text, False))
     print("QUESTION %s | %s | answer: %s" % (title_text, " ".join(text.split()), "yes" if response else "no"))
     return response
 
 
 def _inform(_g, _c, title_text, text):
-    WINDOWS.append(("informa", title_text, text, [("OK", None)]))
+    WINDOWS.append(("inform", title_text, text, [("OK", None)]))
     print("WARNING %s | %s" % (title_text, " ".join(text.split())))
 
 
@@ -177,7 +177,7 @@ def prepare(base):
     if not os.environ.get("PATCHSMITH_DATA"):
         project.DATA_ROOT = os.path.join(base, "data_folder")
     gui.SETTINGS = None
-    for v, rel in (("LOCALAPPDATA", "appdata"), ("USERPROFILE", "utente"), ("TEMP", "temp")):
+    for v, rel in (("LOCALAPPDATA", "appdata"), ("USERPROFILE", "user"), ("TEMP", "temp")):
         if not os.environ.get("PATCHSMITH_DATA"):  # (with run_all they are already test folders)
             os.environ[v] = os.path.join(base, rel)
         os.makedirs(os.environ[v], exist_ok=True)
@@ -225,7 +225,7 @@ def open_window():
 # --- 1. web game -------------------------------------------------------------------------------------------
 
 def web_path(app, root, base):
-    game = os.path.join(base, "giochi", "Lantern Keeper")
+    game = os.path.join(base, "games", "Lantern Keeper")
     fake_web_game.create(game)
     originals = fingerprints(game)
     app.folder.set(game)
@@ -297,7 +297,7 @@ def web_path(app, root, base):
 # --- 2. game open, translator paused or blocked, local one not installed, texts left untranslated -------------
 
 def unexpected_path(app, root, base):
-    game = os.path.join(base, "giochi", "Ember Road")
+    game = os.path.join(base, "games", "Ember Road")
     fake_web_game.create(game)
     app.folder.set(game)
     real_is_open = system.game_open
@@ -319,7 +319,7 @@ def unexpected_path(app, root, base):
               and end[1] == "Translation installed")
 
     # online translator paused before starting: "Continue anyway" -> only the saved translations
-    other = os.path.join(base, "giochi", "Frost Hollow")
+    other = os.path.join(base, "games", "Frost Hollow")
     fake_web_game.create(other)
     app.folder.set(other)
     app.translator.set(gui.TRANSLATORS["google"])
@@ -347,7 +347,7 @@ def unexpected_path(app, root, base):
               app._chosen == "local" and end[1] == "Translation installed")
 
     # Google blocked halfway through the work: "Translation interrupted", the translations done stay
-    third = os.path.join(base, "giochi", "Moss Gate")
+    third = os.path.join(base, "games", "Moss Gate")
     fake_web_game.create(third)
     app.folder.set(third)
     app.translator.set(gui.TRANSLATORS["google"])
@@ -369,8 +369,8 @@ def unexpected_path(app, root, base):
     # (fake) -> the translation starts again on its own
     app.translator.set(gui.TRANSLATORS["local"])
     app._change_translator()
-    STATE["local"] = "non installato"
-    fourth = os.path.join(base, "giochi", "Salt Marsh")
+    STATE["local"] = "not installed"
+    fourth = os.path.join(base, "games", "Salt Marsh")
     fake_web_game.create(fourth)
     originals = fingerprints(fourth)
     app.folder.set(fourth)
@@ -391,14 +391,14 @@ def unexpected_path(app, root, base):
         STATE["local"] = "ready"
         return True
 
-    ollama.download_description = lambda selected: ["Ollama (finto)", "modello Veloce (finto)"]
+    ollama.download_description = lambda selected: ["Ollama (fake)", "Fast model (fake)"]
     ollama.install = install
     backend.probe_local = lambda model=None, log=print, **_k: {
         "ok": True, "message": "ready, on the graphics card: \"Start game\" -> \"Inizia\".", "gpu": 1.0}
     ANSWERS["Install the local translator?"] = True
     ANSWERS["Local translator to install"] = ["install_local"]
     try:
-        STATE["local"] = "non installato"
+        STATE["local"] = "not installed"
         n = len(WINDOWS)
         app._translate()
         wait_for(app, root)  # the installation
@@ -411,7 +411,7 @@ def unexpected_path(app, root, base):
               % end[1], end[1] == "Translation installed")
 
     # a text left untranslated (the translator never translates it): "Show remaining" and "Fix translations"
-    fifth = os.path.join(base, "giochi", "Tide Bell")
+    fifth = os.path.join(base, "games", "Tide Bell")
     fake_web_game.create(fifth)
     app.folder.set(fifth)
     Translator.ODD = {"Rest here to save your progress and recover your strength.": ""}
@@ -443,7 +443,7 @@ def unexpected_path(app, root, base):
 # --- 3. GameMaker game -------------------------------------------------------------------------------------
 
 def gamemaker_path(app, root, base):
-    game = os.path.join(base, "giochi", "Porta finta")
+    game = os.path.join(base, "games", "Fake Door")
     pf.door_game(game)
     originals = fingerprints(game)
     app.folder.set(game)
@@ -500,12 +500,12 @@ def gamemaker_path(app, root, base):
 
 # --- 4. Unity Mono game ------------------------------------------------------------------------------------
 
-COMPANY, PRODUCT = "Studio Finto", "Lumen Mine"
+COMPANY, PRODUCT = "Fake Studio", "Lumen Mine"
 
 
 def create_unity(game):
     pc.create_unity_game(game, PRODUCT, "2022.3.10f1", COMPANY, PRODUCT)
-    open(os.path.join(game, "UnityPlayer.dll"), "wb").write(b"finto")
+    open(os.path.join(game, "UnityPlayer.dll"), "wb").write(b"fake")
     sentences = ["Start a new game", "Welcome to the old mine. Collect all the gems!", "Press any key to continue",
              "The door is locked. Find the key first.", "Settings and options", "Your lantern is running out of oil."]
     with open(os.path.join(game, PRODUCT + "_Data", "Managed", "Assembly-CSharp.dll"), "wb") as f:
@@ -516,7 +516,7 @@ UNITY_ORIGINALS = {}
 
 
 def unity_path(app, root, base):
-    game = os.path.join(base, "giochi", PRODUCT)
+    game = os.path.join(base, "games", PRODUCT)
     create_unity(game)
     originals = fingerprints(game)
     UNITY_ORIGINALS.update(originals)
@@ -566,15 +566,15 @@ def unity_path(app, root, base):
     after = time.time() - 0.5  # (after PatchSmith's last write to the game, before the check)
     user = os.environ["USERPROFILE"]
     locallow = os.path.join(user, "AppData", "LocalLow", COMPANY, PRODUCT)
-    google_error = pc.with_path(pc.read_file(os.path.join(pc.SIGNALS, "unity-player-errore-google.log")),
+    google_error = pc.with_path(pc.read_file(os.path.join(pc.SIGNALS, "unity-player-google-error.log")),
                                     pc.NEW_COPY, game)
     google_error = google_error.replace("One Million Coins_Data", PRODUCT + "_Data")
     pc.write(os.path.join(locallow, "Player-prev.log"), google_error, after)
     letters = ("Mono path[0] = '%s/%s_Data/Managed'\n" % (game.replace("\\", "/"), PRODUCT) +
                "The character with Unicode value \\u00E8 was not found in the [LiberationSans SDF] font asset or any "
-               "potential fallbacks. It was replaced by Unicode character \\u25A1 in text object [Testo].\n")
+               "potential fallbacks. It was replaced by Unicode character \\u25A1 in text object [Text].\n")
     pc.write(os.path.join(locallow, "Player.log"), letters, after)
-    pc.write(xunity_service.journal_path(name), pc.read_file(os.path.join(pc.SIGNALS, "diario-richieste.jsonl")))
+    pc.write(xunity_service.journal_path(name), pc.read_file(os.path.join(pc.SIGNALS, "journal-requests.jsonl")))
     os.utime(xunity_service.journal_path(name), (after, after))
     return game, name, path
 

@@ -94,7 +94,7 @@ def entry(items, text):
 class DictTranslator(backend.Backend):
     """Fake but "real" translator (not the test translation memory): a small dictionary, the rest an Italian sentence
     with the same codes; the bridge is not translated (left untranslated)."""
-    name = "prova-correzioni"
+    name = "corrections-test"
     ENTRIES = {"Start a new game": "Inizia una nuova partita", "Lantern Keeper": "Il guardiano delle lanterne antiche",
             "Delete": "Eliminare", "Quit to the desktop": "Esci al desktop",
             "Continue your journey": "Continua il tuo viaggio", "Options and settings": "Opzioni e impostazioni",
@@ -183,7 +183,7 @@ def test_functions(base):
               and problems("Collect {0} coins", "Raccogli {0} monete")["placeholders"] == ""
               and "long" in problems("Credits", "Ringraziamenti finali")
               and "long" not in problems("Save", "Salva"))
-    profile = {"name": "funzioni", "target_language": "it"}
+    profile = {"name": "functions", "target_language": "it"}
     corrections.mark_to_write(profile, {"Start": ("Inizia", "Nuova partita")})
     corrections.mark_to_write(profile, {"Start": ("Nuova partita", "Gioca"), "Quit": (None, "Esci")})
     pending = corrections.to_write(profile)
@@ -191,7 +191,7 @@ def test_functions(base):
     check("cache lines to write: a second fix keeps the earlier line; the written ones are removed",
               pending["Start"]["before"] == "Inizia" and pending["Start"]["value"] == "Gioca"
               and pending["Quit"]["before"] is None and list(corrections.to_write(profile)) == ["Quit"]
-              and corrections.to_write_path(profile).endswith("funzioni.it.da_scrivere.json"))
+              and corrections.to_write_path(profile).endswith("functions.it.da_scrivere.json"))
     os.remove(corrections.to_write_path(profile))
     # "Open the file (advanced)" on a PC with no program for .json files: Notepad, with the full path
     launched, real_start, real_popen = [], getattr(os, "startfile", None), gui.subprocess.Popen
@@ -202,7 +202,7 @@ def test_functions(base):
     os.startfile = without_program
     gui.subprocess.Popen = lambda command, *a, **k: launched.append(command)
     try:
-        gui._open(os.path.join(base, "memoria.json"))
+        gui._open(os.path.join(base, "memory.json"))
     finally:
         os.startfile, gui.subprocess.Popen = real_start, real_popen
     check("'Open the file (advanced)' with no program for .json files: Windows Notepad, never from the current "
@@ -342,7 +342,7 @@ def test_web(base, root, app):
               "The bridge is broken: you need a rope and two planks." not in problems)
     check("Reapply on its own after saving: the game's file has changed, with the fixes",
               fingerprint(texts_file) != game_before and texts["menu"]["start"] == "Nuova partita"
-              and texts["dialoghi"][2]["text"].startswith("Il ponte") and WINDOWS[-1][0] == "Translation reapplied"
+              and texts["dialogues"][2]["text"].startswith("Il ponte") and WINDOWS[-1][0] == "Translation reapplied"
               and not f.top.winfo_exists())
     items = corrections.load(path)
     check("reopened: 'Fixed by hand' (2), none left untranslated", items.counts()["by_hand"] == 2
@@ -579,9 +579,9 @@ def test_pages(app, root):
         x = corrections.Entry("Text number %d of the game" % i)
         x.memory = "Testo numero %d del gioco" % i
         if i % 100 == 0:
-            x.problems["suspicious"] = "da guardare"
+            x.problems["suspicious"] = "to look at"
         entries.append(x)
-    items = corrections.Items("profilo-finto.json", {"name": "lungo", "target_language": "it"}, entries, False,
+    items = corrections.Items("fake-profile.json", {"name": "long", "target_language": "it"}, entries, False,
                               "en", (), True)
     start = time.perf_counter()
     f = gui_corrections.Window(app, items)
@@ -608,7 +608,7 @@ def test_pages(app, root):
 # --- GameMaker: the line space and the translations the game cannot display ---------------------------------
 
 def test_gamemaker_space(base, root, app):
-    game = os.path.join(base, "Forager finto")
+    game = os.path.join(base, "Fake Forager")
     local = os.path.join(game, "local")
     os.makedirs(local)
     for name, data in (("english", test_gamemaker_json.EN), ("french", test_gamemaker_json.FR),
@@ -677,10 +677,10 @@ def test_unity_cache(base, root, app):
     real_state, real_running = ollama.state, adapter_unity.is_running
     ollama.state = lambda: "ready"
     adapter_unity.is_running = lambda *_a: False
-    name = "unity-correzioni"
+    name = "unity-corrections"
     game = os.path.join(base, "Unity", name)
     test_unity.create_game(game)
-    with open(os.path.join(game, "Gioco_Data", "resources.assets"), "wb") as f:  # asset texts (pre-translation)
+    with open(os.path.join(game, "Game_Data", "resources.assets"), "wb") as f:  # asset texts (pre-translation)
         f.write(b"\x07\x00" + b"".join(struct.pack("<i", len(t.encode("utf-8"))) + t.encode("utf-8") + b"\x00" * (
             (4 - len(t.encode("utf-8")) % 4) % 4) for t in ("Start a new game", "Settings and options",
                                                            "Back to the main menu")))
@@ -808,9 +808,9 @@ def test_old_memory(base):
     shared translation memory and the translations to redo), not fixes made by hand. Separate data: new shared
     translation memory."""
     real_root = project.DATA_ROOT
-    project.DATA_ROOT = os.path.join(base, "dati-memoria-vecchia")
+    project.DATA_ROOT = os.path.join(base, "old-memory-data")
     try:
-        game = os.path.join(base, "Gioco vecchio")
+        game = os.path.join(base, "Old Game")
         fake_web_game.create(game)
         automatic.create_backend = lambda name, log=print: DictTranslator()
         path, _, _ = automatic.analyze_and_translate(game, "auto", "it", "local", silent)

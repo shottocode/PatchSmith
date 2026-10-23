@@ -33,7 +33,7 @@ def main(base):
         print("Windows only: nothing to test.")
         return 0
     lines = []
-    folder, archive = package.prepare(os.path.join(base, "rilascio"), log=lines.append)
+    folder, archive = package.prepare(os.path.join(base, "release"), log=lines.append)
     print("\n".join(lines))
     runtime = os.path.join(folder, "runtime")
     expected_list = ["PatchSmith.exe", "PatchSmith.pyw", "smith.py", "LEGGIMI.md", "README.md", "LICENSE",
@@ -67,9 +67,9 @@ def main(base):
     check("smith.py with the portable Python", r.returncode == 0 and b"pacchetto" in r.stdout)
     # PatchSmith.exe: with an installed Python it still chooses the package's one
     with open(os.path.join(folder, "PatchSmith.pyw"), "w", encoding="utf-8") as f:
-        f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'partito.txt'), 'w')"
+        f.write("import os, sys\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'started.txt'), 'w')"
                 ".write(sys.executable)\n")
-    started_file = os.path.join(folder, "partito.txt")
+    started_file = os.path.join(folder, "started.txt")
     subprocess.run([os.path.join(folder, "PatchSmith.exe")], timeout=30)
     for _ in range(60):
         if os.path.isfile(started_file):
@@ -81,18 +81,18 @@ def main(base):
     # a package someone has worked in: its data stays
     os.makedirs(os.path.join(folder, "profiles"))
     try:
-        package.prepare(os.path.join(base, "rilascio"), log=lambda _r: None)
+        package.prepare(os.path.join(base, "release"), log=lambda _r: None)
         was_refused = False
     except package.PackageError:
         was_refused = True
     try:
-        package.prepare(os.path.join(package.PROGRAM, "rilascio"), log=lambda _r: None)
+        package.prepare(os.path.join(package.PROGRAM, "release"), log=lambda _r: None)
         inside = False
     except package.PackageError:
         inside = True
     check("a package with data inside is not deleted; never inside the program's folder",
               was_refused and os.path.isdir(os.path.join(folder, "profiles")) and inside
-              and not os.path.exists(os.path.join(package.PROGRAM, "rilascio")))
+              and not os.path.exists(os.path.join(package.PROGRAM, "release")))
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return 1 if failed else 0

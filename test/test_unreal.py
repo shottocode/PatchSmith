@@ -87,7 +87,7 @@ def create_game(base):
     file = [("Proj/Content/Localization/Game/Game.locmeta", locmeta("en")),
             ("Proj/Content/Localization/Game/en/Game.locres", locres_v2(entries_en)),
             ("Proj/Content/Localization/Game/de/Game.locres", locres_v2([("UI", "Start", "Spiel starten")])),
-            ("Proj/Content/Maps/Level.umap", b"mappa" * 100)]
+            ("Proj/Content/Maps/Level.umap", b"map" * 100)]
     open(os.path.join(paks, "Proj-WindowsNoEditor.pak"), "wb").write(pak_v9(file))
     return paks
 
@@ -148,12 +148,12 @@ def main(base):
     check("uninstall: folders identical to before", sorted(os.listdir(paks)) + sorted(os.listdir(game)) == before)
 
     # pak with the same name not created by us: not overwritten
-    open(new_pak, "wb").write(b"di qualcun altro")
+    open(new_pak, "wb").write(b"someone else's")
     try:
         adapter_unreal.install(game, "it", "test", memory, silent)
         check("someone else's pak: not overwritten", False)
     except adapter_unreal.UnrealError:
-        check("someone else's pak: not overwritten", open(new_pak, "rb").read() == b"di qualcun altro")
+        check("someone else's pak: not overwritten", open(new_pak, "rb").read() == b"someone else's")
     os.remove(new_pak)
 
     # pak changed by others after the install: left in place
@@ -199,7 +199,7 @@ def main(base):
 
     # signed paks (.sig): refused
     sig = os.path.join(paks, "Proj-WindowsNoEditor.sig")
-    open(sig, "wb").write(b"firma")
+    open(sig, "wb").write(b"signature")
     try:
         adapter_unreal.install(game, "it", "test", memory, silent)
         check("signed paks: refused", False)

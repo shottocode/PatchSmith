@@ -37,7 +37,7 @@ def fingerprint(p):
 
 # --- minimal data.win ------------------------------------------------------------------------------------------
 
-def data_win(strings, sprite, code=True, name="FintoGame"):
+def data_win(strings, sprite, code=True, name="FakeGame"):
     """FORM with GEN8 (name), STRG (strings), SPRT (sprites: [(name, frames)]) and, if 'code', an empty CODE
     (game for the virtual machine: the code's strings are in STRG)."""
     all_items = [name] + list(strings) + [n for n, _ in sprite]
@@ -125,7 +125,7 @@ def main(base):
     check("data.win: sprites with their frames, game name, strings",
               gamemaker.sprite(vm) == [{"name": "sprFont", "frames": len(CHAR_MAP)},
                                        {"name": "sprPlayer", "frames": 4}]
-              and gamemaker.names_of_game(vm) == ["FintoGame"] and "local/*.json" in gamemaker.strings(vm))
+              and gamemaker.names_of_game(vm) == ["FakeGame"] and "local/*.json" in gamemaker.strings(vm))
     check("sprite font: the character map (as many characters as frames) and the 'local/*.json' mask",
               gamemaker.font_sprite_maps(game, vm) == [("sprFont", CHAR_MAP)]
               and gamemaker.folder_mask(game, "local", ".json", vm)
@@ -133,7 +133,7 @@ def main(base):
     yyc = data_win([], [("sprFont", len(CHAR_MAP))], code=False)
     yyc_folder = os.path.join(base, "yyc")
     os.makedirs(yyc_folder)
-    open(os.path.join(yyc_folder, "Gioco.exe"), "wb").write(
+    open(os.path.join(yyc_folder, "Game.exe"), "wb").write(
         b"MZ\x00" + b"local/*.json\x00" + CHAR_MAP.encode() + b"\x00")
     open(os.path.join(yyc_folder, "unins000.exe"), "wb").write(b"MZ\x00lang/*.json\x00")
     check("YYC-compiled game: mask and map searched in the executable (not in the uninstallers)",
@@ -195,10 +195,10 @@ def main(base):
               and automatic.analyze_and_translate(game, "auto", "it", "fake", silent)[0] == path)
 
     # --- 4. language set in the game's saved options, and restore
-    options_dir = os.path.join(base, "appdata", "FintoGame")
+    options_dir = os.path.join(base, "appdata", "FakeGame")
     os.makedirs(options_dir)
     config = os.path.join(options_dir, "config.txt")
-    text = '{ "mvc": "1.2", "config": "%s", "altro": "x" }' % ds_map(
+    text = '{ "mvc": "1.2", "config": "%s", "other": "x" }' % ds_map(
         [("extrasUnlocked", 10), ("options", ds_list(["english", 0, 1, "yes"])), ("totalFeats", 3)])
     open(config, "w", encoding="utf-8", newline="").write(text)
     languages = automatic.folder_languages(game, "local/english.json")
@@ -209,17 +209,17 @@ def main(base):
               and after.replace(json.loads(after)["config"], "") == text.replace(json.loads(text)["config"], ""))
     double = '{ "a": "%s", "b": "%s" }' % (ds_map([("options", ds_list(["english"]))]),
                                           ds_map([("lang", ds_list(["french"]))]))
-    open(os.path.join(options_dir, "altro.txt"), "w", encoding="utf-8").write(double)
+    open(os.path.join(options_dir, "other.txt"), "w", encoding="utf-8").write(double)
     check("language in more than one place in the options: nothing is touched",
               language_gamemaker.search(game, languages | {"italiano"})[0] is None)
-    os.remove(os.path.join(options_dir, "altro.txt"))
+    os.remove(os.path.join(options_dir, "other.txt"))
     check("restore: added language removed, English identical, options back on 'english' (identical file)",
               automatic.restore(game, silent) and not os.path.exists(italian) and fingerprint(english) == before
               and open(config, encoding="utf-8").read() == text
               and not [n for n in os.listdir(os.path.join(game, "local")) if "patchsmith" in n])
 
     # --- 5. from a previous version: english.json translated in place and information with the old name
-    old = os.path.join(base, "vecchio")
+    old = os.path.join(base, "old")
     shutil.copytree(game, old)
     shutil.rmtree(os.path.join(old, "local"))
     os.makedirs(os.path.join(old, "local"))
@@ -241,7 +241,7 @@ def main(base):
               and os.path.exists(os.path.join(old, "local", "italiano.json")))
 
     # --- 6. hard cases: other people's files, fixes made by hand, options without a log, Reapply, player's choice
-    other = os.path.join(base, "altro")
+    other = os.path.join(base, "other")
     shutil.copytree(old, other)
     for n in os.listdir(os.path.join(other, "local")):
         if "patchsmith" in n or n == "italiano.json":
@@ -269,15 +269,15 @@ def main(base):
     open(config, "w", encoding="utf-8", newline="").write(text.replace(
         json.loads(text)["config"], ds_map([("extrasUnlocked", 10), ("options", ds_list(["italiano", 0, 1, "yes"])),
                                              ("totalFeats", 3)])))
-    os.rename(options_dir, options_dir + "-tmp")  # the options of 'game', not of 'altro'
-    other_options = os.path.join(base, "appdata", "FintoGame")
+    os.rename(options_dir, options_dir + "-tmp")  # the options of 'game', not of 'other'
+    other_options = os.path.join(base, "appdata", "FakeGame")
     os.rename(options_dir + "-tmp", other_options)
     automatic.restore(other, silent)
     check("restore without a log for this folder (e.g. a copy of the game, which shares the options with "
               "the real one): the options are not touched",
               language_gamemaker.find(open(config, encoding="utf-8").read(), {"italiano"})
               == [("config", "options", 0, "italiano")] and not os.path.exists(other_italian))
-    automatic.reapply(other, silent)  # PatchSmith sets the language for 'altro' (log)
+    automatic.reapply(other, silent)  # PatchSmith sets the language for 'other' (log)
     open(config, "w", encoding="utf-8", newline="").write(text.replace(
         json.loads(text)["config"], ds_map([("extrasUnlocked", 10), ("options", ds_list(["italiano", 0, 1, "yes"])),
                                              ("totalFeats", 3)])))

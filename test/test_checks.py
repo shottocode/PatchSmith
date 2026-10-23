@@ -121,7 +121,7 @@ def _zip(path, entries):
         for name, content in entries.items():
             z.writestr(name, content)
     data = open(path, "rb").read()
-    return {"url": "file://non-usato", "file": os.path.basename(path), "size": len(data),
+    return {"url": "file://unused", "file": os.path.basename(path), "size": len(data),
             "sha256": hashlib.sha256(data).hexdigest(), "version": "test", "license": "-"}
 
 
@@ -144,7 +144,7 @@ def _fake_plugin(folder, info):
     """In place of the compilation with csc (the fake game's libraries are not real)."""
     dest = os.path.join(folder, *adapter_unity.SERVICE_PLUGIN.split("/"))
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    open(dest, "wb").write(b"MZ plugin finto")
+    open(dest, "wb").write(b"MZ fake plugin")
 
 
 def unity_profile(name, game, **other):
@@ -171,8 +171,8 @@ class DictTranslator(backend.Backend):
 # --- Unity -----------------------------------------------------------------------------------------------
 
 def test_unity(base):
-    name = "one-million-coins-prova"
-    game = os.path.join(base, "giochi", "One Million Coins")
+    name = "one-million-coins-test"
+    game = os.path.join(base, "games", "One Million Coins")
     create_unity_game(game, "One Million Coins", "2022.3.10f1", "OyenUmiGames", "One Million Coins")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
@@ -183,7 +183,7 @@ def test_unity(base):
     after = time.time() - 120  # the play session: 2 minutes ago
     cfg = os.path.join(game, *adapter_unity.SERVICE_CONFIG.split("/"))
     command = read_file(cfg)
-    write(cfg, command.replace("Program=", "Program=C:\\non-esiste\\python\\pythonw.exe#"), before)
+    write(cfg, command.replace("Program=", "Program=C:\\does-not-exist\\python\\pythonw.exe#"), before)
     for rel in (adapter_unity.MANIFEST, adapter_unity.SERVICE_PLUGIN):
         os.utime(os.path.join(game, *rel.split("/")), (before, before))
     # the first start: BepInEx writes its configuration; XUnity with Google and a debug option on
@@ -199,9 +199,9 @@ def test_unity(base):
     write(os.path.join(crashes, "Crash_2026-10-17_211234219", "Player.log"),
            with_path(real_crash, OLD_COPY, game), after)
     write(os.path.join(crashes, "Crash_2026-10-17_211331065", "Player.log"), real_crash, after)
-    locallow = os.path.join(base, "utente", "AppData", "LocalLow", "OyenUmiGames", "One Million Coins")
+    locallow = os.path.join(base, "user", "AppData", "LocalLow", "OyenUmiGames", "One Million Coins")
     write(os.path.join(locallow, "Player-prev.log"),
-           with_path(read_file(os.path.join(SIGNALS, "unity-player-errore-google.log")), NEW_COPY, game), after)
+           with_path(read_file(os.path.join(SIGNALS, "unity-player-google-error.log")), NEW_COPY, game), after)
     write(os.path.join(locallow, "Player.log"),
            read_file(os.path.join(SIGNALS, "unity-player.log")), after)  # other copy
     write(os.path.join(game, *adapter_unity.BEPINEX_LOG.split("/")),
@@ -210,7 +210,7 @@ def test_unity(base):
     memory = project.memory_path({"name": name, "target_language": "it"})
     write(memory, json.dumps({"Tea and maintenance bench": "Tavolo per il tè e per la manutenzione"}))
     # (plus a sentence given by the translation memory that you then removed by hand from it: it must not come back)
-    write(xunity_service.journal_path(name), read_file(os.path.join(SIGNALS, "diario-richieste.jsonl")) + "\n" +
+    write(xunity_service.journal_path(name), read_file(os.path.join(SIGNALS, "journal-requests.jsonl")) + "\n" +
            json.dumps({"ts": "2026-10-18T04:30:24", "text": "Pool entry tread 3", "outcome": "ok",
                        "backend": "memory", "response": "Piattaforma della piscina 3"}) + "\n" +
            # (and a piece already in Italian left as it was by the service: it is not a translation to save)
@@ -221,7 +221,7 @@ def test_unity(base):
                   "Continuous glove=Guanto (a mano)\nTea and maintenance bench=Tavolo per il tè e per la manutenzione\n")
     temp_file = memory + ".tmp"
     write(temp_file, "", before)
-    of_others = os.path.join(os.path.dirname(memory), "altro-gioco.it.json.tmp")  # of another game: not touched
+    of_others = os.path.join(os.path.dirname(memory), "other-game.it.json.tmp")  # of another game: not touched
     write(of_others, "", before)
 
     # adapter_unity.state: the crash is not "BepInEx started"
@@ -279,7 +279,7 @@ def test_unity(base):
               and "EnableTextPathLogging=True" not in c)
     command = adapter_unity.read_service_command(game)
     check("translator command redone with the current Python",
-              os.path.exists(command.get("Program", "")) and "non-esiste" not in read_file(cfg))
+              os.path.exists(command.get("Program", "")) and "does-not-exist" not in read_file(cfg))
     entries = adapter_unity.xunity_cache_entries(game, "it")
     check("cache: provisional lines replaced with the new translation (refused, deferred, relaxed)",
               entries.get("MASTER") == "GENERALE"
@@ -346,7 +346,7 @@ def test_unity(base):
     output = r.stdout.decode("utf-8", "replace")
     check("command line: 'smith.py check --solo-leggi' -> code 2, the crash to do, nothing written",
               r.returncode == 2 and "doesn't accept" in output and "(read-only" in output and snapshot(base) == whole)
-    empty = os.path.join(base, "nessun-gioco")
+    empty = os.path.join(base, "no-game")
     os.makedirs(empty)
     r = subprocess.run([sys.executable, "-I", SMITH, "check", empty], capture_output=True, env=environment,
                        timeout=300)
@@ -358,8 +358,8 @@ def test_unity(base):
     check("<name>.controllo.json: not a profile and stays after Project",
               os.path.exists(checks.state_path(path))
               and all(not p.endswith(".controllo.json") for p, _ in automatic.list_profiles()))
-    report.desktop_folder = lambda: os.path.join(base, "rapporti")
-    report_zip = report.create(game, os.path.join(base, "rapporti"))
+    report.desktop_folder = lambda: os.path.join(base, "reports")
+    report_zip = report.create(game, os.path.join(base, "reports"))
     check("report: the check's result is there", "profile/%s.controllo.json" % name
               in zipfile.ZipFile(report_zip).namelist())
     return game
@@ -368,15 +368,15 @@ def test_unity(base):
 def test_crash_only(base):
     """Only the crash at startup (nothing else to fix): after the fix the old crash no longer counts, even if the
     fix does not rewrite the manifest (what counts is the time of the fix saved in the status)."""
-    name = "solo-crash-prova"
-    game = os.path.join(base, "giochi", "Solo Crash")
-    create_unity_game(game, "One Million Coins", "2022.3.10f1", "Studio Prova", "Solo Crash")
+    name = "crash-only-test"
+    game = os.path.join(base, "games", "Crash Only")
+    create_unity_game(game, "One Million Coins", "2022.3.10f1", "Test Studio", "Crash Only")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
     before, after = time.time() - 600, time.time() - 120
     for rel in (adapter_unity.MANIFEST, adapter_unity.SERVICE_PLUGIN, adapter_unity.SERVICE_CONFIG):
         os.utime(os.path.join(game, *rel.split("/")), (before, before))
-    write(os.path.join(base, "temp", "Studio Prova", "Solo Crash", "Crashes", "Crash_2026-10-17_211234219",
+    write(os.path.join(base, "temp", "Test Studio", "Crash Only", "Crashes", "Crash_2026-10-17_211234219",
                         "Player.log"), with_path(read_file(os.path.join(SIGNALS, "unity-crash-player.log")),
                                                     OLD_COPY, game), after)
     problems = checks.check(path, apply=True, log=silent)
@@ -391,8 +391,8 @@ def test_old_version(base):
     """Like Rubinite: installed by an old version (no version in the manifest, no PatchSmith translator, XUnity
     with Google) and Google paused."""
     from patchsmith import limiter
-    name = "rubinite-prova"
-    game = os.path.join(base, "giochi", "Rubinite")
+    name = "rubinite-test"
+    game = os.path.join(base, "games", "Rubinite")
     create_unity_game(game, "Rubinite", "6000.3.12f1", "Cup Dog Games", "Rubinite")
     path = unity_profile(name, game, backend="xunity-google")
     adapter_unity.install(game, "en", "it", name, silent, local=False)
@@ -442,7 +442,7 @@ def test_old_version(base):
 # --- games with translated files, Windows crashes ------------------------------------------------------
 
 def test_file(base):
-    game = os.path.join(base, "giochi", "Lantern Keeper")
+    game = os.path.join(base, "games", "Lantern Keeper")
     rel = fake_web_game.create(game)
     open(os.path.join(game, "Lantern Keeper.exe"), "wb").write(b"MZ")
     path, _ = automatic.prepare(game, "auto", "it", "google", silent)
@@ -459,13 +459,13 @@ def test_file(base):
     problems = checks.check(path, apply=True, log=silent, events=[])
     check("web game just translated: nothing to do", problems == [])
     # the info files with the name used up to 0.12 (.patchsmith-info.json) count as the last write
-    old = os.path.join(base, "giochi", "vecchio")
+    old = os.path.join(base, "games", "old")
     os.makedirs(old)
-    write(os.path.join(old, "testi.json"), "{}")
-    write(os.path.join(old, "testi.json" + project.OLD_INFO_SUFFIX),
+    write(os.path.join(old, "texts.json"), "{}")
+    write(os.path.join(old, "texts.json" + project.OLD_INFO_SUFFIX),
            json.dumps({"original_hash": "x", "written_hashes": []}), time.time() - 3600)
-    c = checks._Context(os.path.join(base, "vecchio.json"), {"game_folder": old,
-                                                                 "file": [{"path": "testi.json"}]}, {}, None, False,
+    c = checks._Context(os.path.join(base, "old.json"), {"game_folder": old,
+                                                                 "file": [{"path": "texts.json"}]}, {}, None, False,
                             None)
     check("last write also from the info with the old name (.patchsmith-info.json)",
               abs(checks.reference(c) - (time.time() - 3600)) < 5)
@@ -479,7 +479,7 @@ def test_file(base):
               and "Inizia una nuova partita" in read_file(texts))
     # an update with new texts: the user is told to press "Analyze and translate", without touching anything
     data = json.loads(read_file(texts + project.BACKUP_SUFFIX))
-    data["menu"]["nuovo"] = "A brand new menu entry"
+    data["menu"]["new"] = "A brand new menu entry"
     write(texts, json.dumps(data))
     whole = snapshot(game)
     problems = checks.check(path, apply=True, log=silent, events=[])
@@ -489,7 +489,7 @@ def test_file(base):
     # crash in the Windows event log after the translation: to confirm, it is not restored automatically
     event = {"id": "999", "instant": time.time() + 5, "code": 1000, "app": "Lantern Keeper.exe",
               "path": os.path.join(game, "Lantern Keeper.exe"), "text": ""}
-    other = dict(event, id="998", path=os.path.join(base, "altro", "Lantern Keeper.exe"))
+    other = dict(event, id="998", path=os.path.join(base, "other", "Lantern Keeper.exe"))
     check("Windows crash of the game: to check at startup",
               path in checks.to_check(events=[event, other]))
     problems = checks.check(path, apply=True, log=silent, events=[event, other])
@@ -502,13 +502,13 @@ def test_file(base):
 
     # real events (reduced): 1000 with the executable's path, 1026 (.NET) with only the name, in the Windows
     # encoding
-    events = checks.read_events(open(os.path.join(SIGNALS, "evento-crash-1000.xml"), "rb").read())
+    events = checks.read_events(open(os.path.join(SIGNALS, "event-crash-1000.xml"), "rb").read())
     check("real event 1000: read, of the right game (not of the other copy)",
               len(events) == 1 and events[0]["app"] == "One Million Coins.exe"
               and len(checks.game_crash(OLD_COPY, events, 0)) == 1
               and not checks.game_crash(NEW_COPY, events, 0))
-    events = checks.read_events(open(os.path.join(SIGNALS, "evento-crash-1026.xml"), "rb").read())
-    with_exe = os.path.join(base, "giochi", "dotnet")
+    events = checks.read_events(open(os.path.join(SIGNALS, "event-crash-1026.xml"), "rb").read())
+    with_exe = os.path.join(base, "games", "dotnet")
     os.makedirs(with_exe)
     open(os.path.join(with_exe, "EtwHostServiceUpdater.exe"), "wb").write(b"MZ")
     check("real event 1026 (Windows encoding): the executable's name from the text, recognized in the folder",
@@ -520,7 +520,7 @@ def test_file(base):
 def test_gamemaker(base):
     """Added language (local/italian.json): another language chosen in the game is only reported; if the game
     removed the language file, Reapply and then the language is put back (the game changed it, not the player)."""
-    game = os.path.join(base, "giochi", "Forager")
+    game = os.path.join(base, "games", "Forager")
     os.makedirs(os.path.join(game, "local"))
     original = os.path.join(game, "local", "english.json")
     write(original, json.dumps({"a": "Hello"}))
@@ -528,15 +528,15 @@ def test_gamemaker(base):
     write(new_value, json.dumps({"a": "Ciao"}))
     info = project.create_backup(original, {"created_only": True, "created": ["italiano.json"]})
     project.save_info(original, info)
-    path = os.path.join(automatic.profiles_folder(), "forager-prova.json")
-    scan.save_json(path, {"name": "forager-prova", "game_folder": game.replace(os.sep, "/"),
+    path = os.path.join(automatic.profiles_folder(), "forager-test.json")
+    scan.save_json(path, {"name": "forager-test", "game_folder": game.replace(os.sep, "/"),
                                     "engine": "gamemaker", "source_language": "en", "target_language": "it",
                                     "backend": "google",
                                     "file": [{"path": "local/english.json", "format": "json",
                                               "new_language": "local/italiano.json"}]})
-    official_language._save_log(game, {"kind": "gamemaker_options", "file": "opzioni", "written": "italiano",
+    official_language._save_log(game, {"kind": "gamemaker_options", "file": "options", "written": "italiano",
                                              "previous": "english"})
-    options = os.path.join(base, "opzioni-forager.txt")
+    options = os.path.join(base, "forager-options.txt")
     write(options, "x")
     real_search, real_reapply = language_gamemaker.search, automatic.reapply
     real_set = official_language.set_added_language
@@ -544,7 +544,7 @@ def test_gamemaker(base):
     language_gamemaker.search = lambda _c, languages: (options, ("k", "m", 0, "english"))
     automatic.reapply = lambda folder, log, test=False, outcome=None: calls.append("reapply") or \
         outcome.update(outcome=outcome_mod.Outcome("OK", written=True, translated_items=1))
-    official_language.set_added_language = lambda *a, **k: calls.append(("imposta", k.get("force")))
+    official_language.set_added_language = lambda *a, **k: calls.append(("set", k.get("force")))
     try:
         problems = checks.check(path, apply=True, log=silent, events=[])
         check("GameMaker: another language chosen in the game -> only reported (the player's choice stays)",
@@ -554,7 +554,7 @@ def test_gamemaker(base):
         problems = checks.check(path, apply=True, log=silent, events=[])
         check("GameMaker: added language removed by the game -> Reapply and language put back (forced)",
                   codes(problems) == ["RESTORED_BY_GAME"] and problems[0].state == "fixed"
-                  and calls == ["reapply", ("imposta", True)])
+                  and calls == ["reapply", ("set", True)])
     finally:
         language_gamemaker.search, automatic.reapply = real_search, real_reapply
         official_language.set_added_language = real_set
@@ -565,17 +565,17 @@ outcome_mod = outcome
 
 def test_unreal_xna(base):
     from patchsmith import adapter_unreal, adapter_xna
-    game = os.path.join(base, "giochi", "Dungeon Defenders Awakened")
+    game = os.path.join(base, "games", "Dungeon Defenders Awakened")
     pak = os.path.join(game, "DDS", "Content", "Paks", "zz_Patchsmith_it_999_P.pak")
     os.makedirs(os.path.dirname(pak))
-    open(pak, "wb").write(b"pak finto")
+    open(pak, "wb").write(b"fake pak")
     rel = "DDS/Content/Paks/zz_Patchsmith_it_999_P.pak"
     before = time.time() - 600
     write(os.path.join(game, adapter_unreal.MANIFEST), json.dumps({
-        "version": 1, "patchsmith": True, "language": "it", "profile": "dda-prova",
-        "file": {rel: hashlib.sha256(b"pak finto").hexdigest()}, "prior": {}, "sources": {"x": "y"}}), before)
-    path = os.path.join(automatic.profiles_folder(), "dda-prova.json")
-    scan.save_json(path, {"name": "dda-prova", "game_folder": game.replace(os.sep, "/"),
+        "version": 1, "patchsmith": True, "language": "it", "profile": "dda-test",
+        "file": {rel: hashlib.sha256(b"fake pak").hexdigest()}, "prior": {}, "sources": {"x": "y"}}), before)
+    path = os.path.join(automatic.profiles_folder(), "dda-test.json")
+    scan.save_json(path, {"name": "dda-test", "game_folder": game.replace(os.sep, "/"),
                                     "engine": "unreal", "source_language": "en", "target_language": "it",
                                     "backend": "google", "file": []})
     log_file = os.path.join(base, "appdata", "DDS", "Saved", "Logs", "DDS.log")
@@ -588,7 +588,7 @@ def test_unreal_xna(base):
     problems = checks.check(path, apply=False, log=silent, events=[])
     check("Unreal: PatchSmith's pak not loaded -> report", codes(problems) == ["PAK_NOT_LOADED"]
               and problems[0].action == "create_report")
-    with zipfile.ZipFile(report.create(game, os.path.join(base, "rapporti-unreal"))) as z:
+    with zipfile.ZipFile(report.create(game, os.path.join(base, "reports-unreal"))) as z:
         names = z.namelist()
     check("Unreal: the proposed report has the game's log (DDS.log) the check learned it from",
               "unreal/DDS.log" in names and "game/patchsmith-unreal.json" in names)
@@ -597,15 +597,15 @@ def test_unreal_xna(base):
     check("Unreal: pak removed from the game -> put back (Reapply)", "TRANSLATION_REMOVED" in codes(problems)
               and by_code(problems, "TRANSLATION_REMOVED").safe)
 
-    xna = os.path.join(base, "giochi", "Rogue Legacy")
+    xna = os.path.join(base, "games", "Rogue Legacy")
     os.makedirs(xna)
-    open(os.path.join(xna, "RogueLegacy.exe"), "wb").write(b"MZ nuovo")
+    open(os.path.join(xna, "RogueLegacy.exe"), "wb").write(b"MZ new")
     write(os.path.join(xna, adapter_xna.MANIFEST), json.dumps({
-        "version": 1, "patchsmith": True, "language": "it", "profile": "rl-prova",
+        "version": 1, "patchsmith": True, "language": "it", "profile": "rl-test",
         "file": {"it/RogueLegacy.resources.dll": "abc"}, "created_folders": ["it"],
-        "sources": {"RogueLegacy.exe": hashlib.sha256(b"MZ vecchio").hexdigest()}}))
-    path = os.path.join(automatic.profiles_folder(), "rl-prova.json")
-    scan.save_json(path, {"name": "rl-prova", "game_folder": xna.replace(os.sep, "/"), "engine": "xna",
+        "sources": {"RogueLegacy.exe": hashlib.sha256(b"MZ old").hexdigest()}}))
+    path = os.path.join(automatic.profiles_folder(), "rl-test.json")
+    scan.save_json(path, {"name": "rl-test", "game_folder": xna.replace(os.sep, "/"), "engine": "xna",
                                     "source_language": "en", "target_language": "it", "backend": "google",
                                     "file": []})
     problems = checks.check(path, apply=False, log=silent, events=[])
@@ -619,9 +619,9 @@ def test_after_verify(base):
     game profile, live translator without translators."""
     import datetime
     from patchsmith import adapter_unreal
-    name = "lunga-prova"
-    game = os.path.join(base, "giochi", "Partita Lunga")
-    create_unity_game(game, "Partita Lunga", "2022.3.10f1", "Studio Lungo", "Partita Lunga")
+    name = "long-session-test"
+    game = os.path.join(base, "games", "Long Session")
+    create_unity_game(game, "Long Session", "2022.3.10f1", "Long Studio", "Long Session")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
     before, after = time.time() - 600, time.time() - 120
@@ -633,9 +633,9 @@ def test_after_verify(base):
                      for i in range(40000))
     write(os.path.join(game, *adapter_unity.BEPINEX_LOG.split("/")),
            read_file(os.path.join(SIGNALS, "bepinex-logoutput.log")) + warnings, after)
-    lines = with_path(read_file(os.path.join(SIGNALS, "unity-player-errore-google.log")), NEW_COPY,
+    lines = with_path(read_file(os.path.join(SIGNALS, "unity-player-google-error.log")), NEW_COPY,
                          game).split("\n")
-    write(os.path.join(base, "utente", "AppData", "LocalLow", "Studio Lungo", "Partita Lunga", "Player.log"),
+    write(os.path.join(base, "user", "AppData", "LocalLow", "Long Studio", "Long Session", "Player.log"),
            "\n".join(lines[:20]) + "\n" + warnings + "\n".join(lines[20:]), after)
     # the live translator started without translators (service log, shared by all games)
     current_time = datetime.datetime.fromtimestamp(after).strftime("%Y-%m-%d %H:%M:%S")
@@ -652,7 +652,7 @@ def test_after_verify(base):
               "1 problem fixed." in checks.as_outcome([corrected], path).reason)
 
     # PatchSmith updated: Unity games are checked again at startup (version to reconcile)
-    other = os.path.join(automatic.profiles_folder(), "solo-crash-prova.json")
+    other = os.path.join(automatic.profiles_folder(), "crash-only-test.json")
     real_version = checks.__version__
     before_sel = other in checks.to_check(events=[])
     checks.__version__ = "99.0.0"
@@ -664,10 +664,10 @@ def test_after_verify(base):
               not before_sel and after_sel)
 
     # installation interrupted halfway: no automatic fix, Restore originals is proposed
-    interrupted = os.path.join(base, "giochi", "Interrotta")
-    create_unity_game(interrupted, "Interrotta", "2022.3.10f1", "Studio", "Interrotta")
-    p_interrupted = unity_profile("interrotta-prova", interrupted)
-    adapter_unity.install(interrupted, "en", "it", "interrotta-prova", silent, local=p_interrupted)
+    interrupted = os.path.join(base, "games", "Interrupted")
+    create_unity_game(interrupted, "Interrupted", "2022.3.10f1", "Studio", "Interrupted")
+    p_interrupted = unity_profile("interrupted-test", interrupted)
+    adapter_unity.install(interrupted, "en", "it", "interrupted-test", silent, local=p_interrupted)
     m = json.loads(read_file(os.path.join(interrupted, adapter_unity.MANIFEST)))
     m["in_progress"] = True
     write(os.path.join(interrupted, adapter_unity.MANIFEST), json.dumps(m))
@@ -680,8 +680,8 @@ def test_after_verify(base):
               and snapshot(interrupted) == whole)
 
     # game profile without the game's folder: nothing to check (not the program's current folder)
-    unlabeled = os.path.join(automatic.profiles_folder(), "senza-cartella.json")
-    scan.save_json(unlabeled, {"name": "senza-cartella", "engine": "gamemaker", "file": [{"path": "x.json"}]})
+    unlabeled = os.path.join(automatic.profiles_folder(), "no-folder.json")
+    scan.save_json(unlabeled, {"name": "no-folder", "engine": "gamemaker", "file": [{"path": "x.json"}]})
     lines = []
     problems = checks.check(unlabeled, apply=False, log=lines.append)
     check("profile without folder: nothing to check, without using the current folder",
@@ -690,7 +690,7 @@ def test_after_verify(base):
 
     # Unreal: the game's log is found even if the chosen folder is the project's
     expected_list = [os.path.join(os.environ["LOCALAPPDATA"], "DDS", "Saved", "Logs", "DDS.log")]
-    root = os.path.join(base, "giochi", "Dungeon Defenders Awakened")
+    root = os.path.join(base, "games", "Dungeon Defenders Awakened")
     pak = "zz_Patchsmith_it_999_P.pak"
     check("Unreal: game log from the game's folder and from the project's",
               checks._unreal_logs(root, {"file": {"DDS/Content/Paks/" + pak: "h"}}) == expected_list
@@ -699,23 +699,23 @@ def test_after_verify(base):
 
     # Windows crash from before the last check (not its own: e.g. from before a Reapply): it is not checked again at
     # every startup
-    web = automatic.find_profile(os.path.join(base, "giochi", "Lantern Keeper"))
+    web = automatic.find_profile(os.path.join(base, "games", "Lantern Keeper"))
     since = checks.read_state(web).get("events_since")
     old = {"id": "997", "instant": since - 30, "code": 1000, "app": "Lantern Keeper.exe",
-               "path": os.path.join(base, "giochi", "Lantern Keeper", "Lantern Keeper.exe"), "text": ""}
+               "path": os.path.join(base, "games", "Lantern Keeper", "Lantern Keeper.exe"), "text": ""}
     check("Windows crash from before the last check: not to check at startup",
               web and since and web not in checks.to_check(events=[old]))
 
     # command line on all games with a broken game profile: the others are checked, code 1
-    broken = os.path.join(automatic.profiles_folder(), "rotto-prova.json")
-    scan.save_json(broken, {"name": "rotto-prova", "game_folder": game.replace(os.sep, "/"),
+    broken = os.path.join(automatic.profiles_folder(), "broken-test.json")
+    scan.save_json(broken, {"name": "broken-test", "game_folder": game.replace(os.sep, "/"),
                                  "engine": "gamemaker", "file": [{"path": 5}]})
     r = subprocess.run([sys.executable, "-I", SMITH, "check", "--solo-leggi"], capture_output=True,
                        env=dict(os.environ), timeout=600)
     output = r.stdout.decode("utf-8", "replace")
     os.remove(broken)
     check("command line with a broken profile: error reported, the other games checked, code 1",
-              r.returncode == 1 and "ERROR while checking rotto-prova.json" in output
+              r.returncode == 1 and "ERROR while checking broken-test.json" in output
               and output.count("Check after playing:") >= 6 and "Traceback" not in output
               and "Traceback" not in r.stderr.decode("utf-8", "replace"))
 
@@ -724,9 +724,9 @@ def test_retranslate_and_startup(base):
     """Point 5: at startup the journal's sentences are not re-translated (they remain to do, with the "Re-translate"
     button), the lost sentences are saved anyway; "does not accept mods" only with a real crash (not with just the
     incomplete LogOutput.log of a Unity 6 game that already starts at the first MonoBehaviour)."""
-    name = "diario-rimandato-prova"
-    game = os.path.join(base, "giochi", "Diario Rimandato")
-    create_unity_game(game, "Diario Rimandato", "2022.3.10f1", "Studio Diario", "Diario Rimandato")
+    name = "postponed-journal-test"
+    game = os.path.join(base, "games", "Postponed Journal")
+    create_unity_game(game, "Postponed Journal", "2022.3.10f1", "Journal Studio", "Postponed Journal")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
     before = time.time() - 600
@@ -734,7 +734,7 @@ def test_retranslate_and_startup(base):
         os.utime(os.path.join(game, *rel.split("/")), (before, before))
     memory = project.memory_path({"name": name, "target_language": "it"})
     write(memory, json.dumps({"Tea and maintenance bench": "Tavolo per il tè e per la manutenzione"}))
-    write(xunity_service.journal_path(name), read_file(os.path.join(SIGNALS, "diario-richieste.jsonl")))
+    write(xunity_service.journal_path(name), read_file(os.path.join(SIGNALS, "journal-requests.jsonl")))
     cache = os.path.join(game, "BepInEx", "Translation", "it", "Text", "_AutoGeneratedTranslations.txt")
     write(cache, "MASTER=MASTER\nWarm pool of light=Warm piscina di luce\n")
     calls, real = [], checks.create_backend
@@ -771,24 +771,24 @@ def test_retranslate_and_startup(base):
         checks.create_backend = real
 
     # Unity 6, already with the MonoBehaviour entry point: incomplete LogOutput.log without a crash = only for info
-    name = "avvio-lento-prova"
-    game = os.path.join(base, "giochi", "Avvio Lento")
-    create_unity_game(game, "Avvio Lento", "6000.3.12f1", "Studio Sei", "Avvio Lento")
+    name = "slow-start-test"
+    game = os.path.join(base, "games", "Slow Start")
+    create_unity_game(game, "Slow Start", "6000.3.12f1", "Studio Six", "Slow Start")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
     before, after = time.time() - 600, time.time() - 120
     for rel in (adapter_unity.MANIFEST, adapter_unity.SERVICE_PLUGIN, adapter_unity.SERVICE_CONFIG):
         os.utime(os.path.join(game, *rel.split("/")), (before, before))
     write(os.path.join(game, *adapter_unity.BEPINEX_LOG.split("/")),
-           "[Message:   BepInEx] BepInEx 5.4.23.2 - Avvio Lento\n[Info   :   BepInEx] Running under Unity "
+           "[Message:   BepInEx] BepInEx 5.4.23.2 - Slow Start\n[Info   :   BepInEx] Running under Unity "
            "v6000.3.12f1\n[Message:   BepInEx] Preloader started\n", after)
     problems = checks.check(path, apply=False, log=silent, events=[])
     incomplete = by_code(problems, "INCOMPLETE_STARTUP")
     check("Unity 6 with MonoBehaviour, incomplete LogOutput.log and no crash: only for info, no 'doesn't accept "
               "mods' (%s)" % ", ".join(codes(problems)), adapter_unity.current_entrypoint(game) == "MonoBehaviour"
               and incomplete and incomplete.state == "info" and not by_code(problems, "MOD_CRASH"))
-    event = {"id": "5001", "instant": after + 1, "code": 1000, "app": "Avvio Lento.exe",
-              "path": os.path.join(game, "Avvio Lento.exe"), "text": ""}
+    event = {"id": "5001", "instant": after + 1, "code": 1000, "app": "Slow Start.exe",
+              "path": os.path.join(game, "Slow Start.exe"), "text": ""}
     problems = checks.check(path, apply=False, log=silent, events=[event])
     mod = by_code(problems, "MOD_CRASH")
     check("...with a real crash (Windows log): 'doesn't accept mods' to confirm, without 'even after the "
@@ -807,9 +807,9 @@ def test_pending_fixes(base):
     stays. Installed with a previous version and configuration to put back: a single message (CONFIGURATION that
     states the version), not VERSION as well."""
     from patchsmith import corrections
-    name = "correzioni-in-attesa"
-    game = os.path.join(base, "giochi", "Correzioni In Attesa")
-    create_unity_game(game, "Attesa", "2022.3.10f1", "Studio Attesa", "Correzioni In Attesa")
+    name = "pending-fixes"
+    game = os.path.join(base, "games", "Pending Fixes")
+    create_unity_game(game, "Pending", "2022.3.10f1", "Pending Studio", "Pending Fixes")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
     profile = json.loads(read_file(path))
@@ -868,7 +868,7 @@ def test_pending_fixes(base):
     corrections.mark_to_write(profile, {"Quit": ("Esci", "Esci dal gioco")})
     font = project.data_folder("memory", "%s.unity" % name, "font.json")
     write(font, json.dumps({"description": "test"}))
-    zip_ = report.create(game, os.path.join(base, "rapporti-attesa"))
+    zip_ = report.create(game, os.path.join(base, "reports-pending"))
     with zipfile.ZipFile(zip_) as z:
         names = z.namelist()
     check("report: the fixes not yet written into the game and the fonts' letters",
@@ -880,15 +880,15 @@ def test_pending_fixes(base):
 def test_retranslate_without_translator(base):
     """Revision 0.16: "Re-translate" with the local translator chosen but not installed: the lost sentences are saved
     anyway and the button to fix it is "Install the local translator" (before, only "Analyze and translate")."""
-    name = "ritraduci-senza-traduttore"
-    game = os.path.join(base, "giochi", "Senza Traduttore")
-    create_unity_game(game, "Senza Traduttore", "2022.3.10f1", "Studio Senza", "Senza Traduttore")
+    name = "retranslate-no-translator"
+    game = os.path.join(base, "games", "No Translator")
+    create_unity_game(game, "No Translator", "2022.3.10f1", "Studio Without", "No Translator")
     path = unity_profile(name, game)
     adapter_unity.install(game, "en", "it", name, silent, local=path)
     before = time.time() - 600
     for rel in (adapter_unity.MANIFEST, adapter_unity.SERVICE_PLUGIN, adapter_unity.SERVICE_CONFIG):
         os.utime(os.path.join(game, *rel.split("/")), (before, before))
-    write(xunity_service.journal_path(name), read_file(os.path.join(SIGNALS, "diario-richieste.jsonl")))
+    write(xunity_service.journal_path(name), read_file(os.path.join(SIGNALS, "journal-requests.jsonl")))
 
     def absent(_name, log=print):
         raise backend.BackendError(backend.NOT_INSTALLED, "TRANSLATOR_MISSING", command=backend.INSTALL_COMMAND)
@@ -915,7 +915,7 @@ def main(base):
     if os.path.exists(base) and os.listdir(base):
         raise SystemExit("The test folder must be empty: %s" % base)
     os.makedirs(base, exist_ok=True)
-    for env_var, name in (("TEMP", "temp"), ("TMP", "temp"), ("USERPROFILE", "utente"),
+    for env_var, name in (("TEMP", "temp"), ("TMP", "temp"), ("USERPROFILE", "user"),
                             ("LOCALAPPDATA", "appdata"), ("APPDATA", "appdata-roaming")):
         os.environ[env_var] = os.path.join(base, name)
         os.makedirs(os.environ[env_var], exist_ok=True)

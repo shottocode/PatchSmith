@@ -342,13 +342,13 @@ def il2cpp_game(folder, bundle_aa, aa_catalog=None, extra=None):
     """Fake Unity IL2CPP game. bundle_aa: {file name: bytes} in StreamingAssets/aa/StandaloneWindows64;
     aa_catalog: (name, bytes) of the catalog in aa (catalog.json or catalog.bin); extra: {relative path: bytes}.
     Returns the bundle folder."""
-    _write(os.path.join(folder, "Gioco.exe"), x64_executable())
-    _write(os.path.join(folder, "UnityPlayer.dll"), b"finto")
-    _write(os.path.join(folder, "GameAssembly.dll"), b"finto")
-    data = os.path.join(folder, "Gioco_Data")
+    _write(os.path.join(folder, "Game.exe"), x64_executable())
+    _write(os.path.join(folder, "UnityPlayer.dll"), b"fake")
+    _write(os.path.join(folder, "GameAssembly.dll"), b"fake")
+    data = os.path.join(folder, "Game_Data")
     _write(os.path.join(data, "globalgamemanagers"), b"\x00" * 48 + b"2022.3.62f2\x00")
-    _write(os.path.join(data, "il2cpp_data", "Metadata", "global-metadata.dat"), b"\xaf\x1b\xb1\xfa finto")
-    _write(os.path.join(data, "app.info"), b"Studio Finto\nGioco Finto")
+    _write(os.path.join(data, "il2cpp_data", "Metadata", "global-metadata.dat"), b"\xaf\x1b\xb1\xfa fake")
+    _write(os.path.join(data, "app.info"), b"Fake Studio\nFake Game")
     aa = os.path.join(data, "StreamingAssets", "aa")
     bundle_folder = os.path.join(aa, "StandaloneWindows64")
     os.makedirs(bundle_folder, exist_ok=True)

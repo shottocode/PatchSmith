@@ -75,8 +75,8 @@ def environment(base, data=None):
     """Environment of the child processes: test user folders, PATCHSMITH_DATA only if given."""
     test_env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PATCHSMITH_", "OLLAMA_"))}
     for env_var, rel in (("LOCALAPPDATA", "Local"), ("APPDATA", "Roaming"), ("TEMP", "Temp"), ("TMP", "Temp"),
-                           ("USERPROFILE", "utente")):
-        test_env[env_var] = os.path.join(base, "ambiente", rel)
+                           ("USERPROFILE", "user")):
+        test_env[env_var] = os.path.join(base, "env", rel)
         os.makedirs(test_env[env_var], exist_ok=True)
     if data:
         test_env["PATCHSMITH_DATA"] = data
@@ -108,17 +108,17 @@ def fingerprints(folder):
 
 
 def test_paths(base):
-    data = os.path.join(base, "dati-variabile")
+    data = os.path.join(base, "data-variable")
     os.makedirs(data)
     with open(os.path.join(data, "settings.json"), "w", encoding="utf-8") as f:
-        json.dump({"deepl_key": "chiave-di-prova"}, f)
+        json.dump({"deepl_key": "test-key"}, f)
     with_data = paths(base, data)
     respected = bool(with_data) and all(inside(p, data) for p in with_data["data"].values())
     check("PATCHSMITH_DATA: all the user's data in its folder", respected)
     if with_data and not respected:
         print("   outside:", {k: p for k, p in with_data["data"].items() if not inside(p, data)})
     check("PATCHSMITH_DATA: settings (DeepL key) read from there",
-              with_data and with_data["deepl_key"] == "chiave-di-prova")
+              with_data and with_data["deepl_key"] == "test-key")
     check("PATCHSMITH_DATA: components, plugin, local translator and rules stay next to the program",
               with_data and all(inside(p, project.PROJECT_FOLDER) for p in with_data["program"].values()))
     unlabeled = paths(base, None)
@@ -129,17 +129,17 @@ def test_paths(base):
     # whoever moves PROJECT_FOLDER (old test scripts) also moves the data, if the variable is not set
     saved_items = project.PROJECT_FOLDER, project.DATA_ROOT
     try:
-        project.PROJECT_FOLDER, project.DATA_ROOT = os.path.join(base, "altrove"), None
+        project.PROJECT_FOLDER, project.DATA_ROOT = os.path.join(base, "elsewhere"), None
         check("DATA_ROOT empty: the data follows PROJECT_FOLDER",
-                  project.data_folder("memory") == os.path.join(base, "altrove", "memory"))
+                  project.data_folder("memory") == os.path.join(base, "elsewhere", "memory"))
     finally:
         project.PROJECT_FOLDER, project.DATA_ROOT = saved_items
     return respected
 
 
 def test_command_line(base):
-    data = os.path.join(base, "dati-cli")
-    game = os.path.join(base, "giochi", "Lantern Keeper")
+    data = os.path.join(base, "data-cli")
+    game = os.path.join(base, "games", "Lantern Keeper")
     rel = fake_web_game.create(game)
     originals = fingerprints(game)
     code, output = smith(base, data, "auto", game, "--backend", "fake", "--a", "it")
@@ -161,12 +161,12 @@ def test_xunity_service(base):
     """The command written into the game: smith.py and the program's folder, even with the data elsewhere."""
     game = os.path.join(base, "unity")
     os.makedirs(os.path.join(game, "BepInEx", "config"))
-    profile = os.path.join(base, "dati-servizio", "profiles", "gioco.json")
+    profile = os.path.join(base, "data-service", "profiles", "gioco.json")
     compile_plugin = adapter_unity._compile_plugin
     saved = project.DATA_ROOT
     try:
         adapter_unity._compile_plugin = lambda *_: None  # no compiler: only the command matters here
-        project.DATA_ROOT = os.path.join(base, "dati-servizio")
+        project.DATA_ROOT = os.path.join(base, "data-service")
         adapter_unity.enable_service(game, {"data_folder": game}, profile, "game")
     finally:
         adapter_unity._compile_plugin = compile_plugin
@@ -181,17 +181,17 @@ def test_xunity_service(base):
 def test_gui_settings(base):
     """_save_settings with a data folder that does not exist yet (first time with PATCHSMITH_DATA)."""
     saved = project.DATA_ROOT
-    project.DATA_ROOT = os.path.join(base, "dati-gui", "nuova")
+    project.DATA_ROOT = os.path.join(base, "data-gui", "new")
     try:
         mock = types.SimpleNamespace(
-            _chosen="local", folder=types.SimpleNamespace(get=lambda: "C:/Giochi/Finto"),
+            _chosen="local", folder=types.SimpleNamespace(get=lambda: "C:/Games/Fake"),
             src_lang=types.SimpleNamespace(get=lambda: "auto"), _target_lang=lambda: "it", theme_choice="auto",
             deepl_key="", email_mymemory="", _model_key=lambda: "4b")
         gui.App._save_settings(mock)
         with open(os.path.join(project.DATA_ROOT, "settings.json"), encoding="utf-8") as f:
             saved_count = json.load(f)
         check("interface: settings saved in the data folder (created if missing)",
-                  saved_count.get("folder") == "C:/Giochi/Finto" and saved_count.get("backend") == "local")
+                  saved_count.get("folder") == "C:/Games/Fake" and saved_count.get("backend") == "local")
     except OSError as e:
         check("interface: settings saved in the data folder (created if missing): %s" % e, False)
     finally:
@@ -203,9 +203,9 @@ def test_english_names(base):
     until a folder is moved the old one is used; a game that asks for the game profile with the old path finds it
     again."""
     from patchsmith import cli
-    root = os.path.join(base, "nomi-di-prima")
+    root = os.path.join(base, "old-names")
     old_files = {"profili/gioco.json": "{}", "memoria/gioco.it.json": '{"a": "b"}',
-              "memoria/copie/vecchia/x.json": "{}",
+              "memoria/copie/old/x.json": "{}",
               "registri/op.log": "log", "impostazioni.json": '{"tema": "scuro"}', "stato_servizi.json": "{}",
               "componenti/ollama/ollama.exe": "exe", "componenti/plugin/Patchsmith.UIToolkit.dll": "dll",
               "components/plugin/PatchsmithServizio.cs": "cs"}  # (components/plugin is already there: the new sources)
@@ -224,7 +224,7 @@ def test_english_names(base):
             p = os.path.join(root, *rel.split("/"))
             return open(p, encoding="utf-8").read() if os.path.isfile(p) else None
         new_items = {"profiles/gioco.json": "{}", "memory/gioco.it.json": '{"a": "b"}',
-                 "memory/copies/vecchia/x.json": "{}",
+                 "memory/copies/old/x.json": "{}",
                  "logs/op.log": "log", "services.json": "{}",
                  # settings.json with the English names (migrate_formats), the original kept next to it
                  "settings.json": '{\n  "theme": "dark"\n}', "settings.json.italian-keys": '{"tema": "scuro"}',
@@ -236,7 +236,7 @@ def test_english_names(base):
                   % (sorted(moved_names), leftovers), all(read_file(r) == t for r, t in new_items.items())
                   and not leftovers and before == os.path.join(root, "profili", "gioco.json"))
         again = project.migrate_data()
-        located = cli._profile(os.path.join("C:\\", "vecchio", "PatchSmith", "profili", "gioco.json"))
+        located = cli._profile(os.path.join("C:\\", "old", "PatchSmith", "profili", "gioco.json"))
         check("English names: nothing to do the second time; the game profile asked for with the old path "
                   "(from the command inside an already translated game) is found", again == []
                   and located == os.path.join(root, "profiles", "gioco.json"))
