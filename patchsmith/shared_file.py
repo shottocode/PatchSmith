@@ -112,7 +112,7 @@ def read_json(path):
 def _read(path):
     data = read_json(path)
     if not isinstance(data, dict):
-        raise ValueError("non e' un elenco di traduzioni")
+        raise ValueError("this is not a list of translations")
     return data
 
 

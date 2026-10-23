@@ -445,7 +445,7 @@ def test_csv(base):
               "scrivono", written == "id,english,french\nchest,Open the old chest,Ouvrir le vieux coffre\n"
               "bag,La tua borsa è piena,Ton sac est plein\nplay,Gioca,Jouer\nquit,ESCI,QUITTER\n"
               "shop,Ciao viaggiatore; benvenuto nel negozio,Bonjour voyageur\n"
-              and any("lasciate in originale" in r and "Open the old chest" in r for r in log_file))
+              and any("left untranslated" in r and "Open the old chest" in r for r in log_file))
 
     with_it = os.path.join(base, "Megaloot con italiano")
     megaloot_game(with_it, italian=True)
@@ -633,7 +633,7 @@ def test_web(base):
     finally:
         adapter_webui.MAX_SIZE = real
     check("file troppo grandi saltati: scritti nel registro con quanti sono",
-              any("troppo grandi" in r and "index.html" in r for r in lines))
+              any("too large" in r and "index.html" in r for r in lines))
 
 
 # --- 7. Unreal -----------------------------------------------------------------------------------
@@ -652,7 +652,7 @@ def test_unreal(base):
     reason = result[1]["esito"].reason
     check("Unreal senza .locres: non supportato con il motivo, nessun profilo lasciato",
               result[0] is None and result[1]["esito"].code == "NON_SUPPORTATO" and ".locres" in reason
-              and "non sa tradurre" in reason and sorted(os.listdir(automatic.profiles_folder()) if os.path.isdir(
+              and "can't translate yet" in reason and sorted(os.listdir(automatic.profiles_folder()) if os.path.isdir(
                   automatic.profiles_folder()) else []) == profiles_before)
     mixed = os.path.join(base, "Unreal con pak rotto")
     fake_unreal.create_game(mixed)
@@ -664,7 +664,7 @@ def test_unreal(base):
     check("un pak illeggibile si salta: il .locres degli altri si trova e il profilo si crea",
               [s[1] for s in sources] == ["Proj/Content/Localization/Game/en/Game.locres"]
               and len(skipped) == 1 and "Proj-Rotto.pak" in skipped[0] and path and os.path.exists(path)
-              and any("archivi non letti" in r and "Proj-Rotto.pak" in r for r in log_file))
+              and any("archives not read" in r and "Proj-Rotto.pak" in r for r in log_file))
 
     # small pak mounted in a deeper folder (Remnant: '../../../Remnant/Content/'), language in the .locmeta of
     # another pak
@@ -705,7 +705,8 @@ def test_unreal(base):
                 fake_unreal.locres_v2(entries))
     _, outcome = automatic._prepare_unreal(loose, None, "auto", "it", {"risultati": []}, silent)
     check("Unreal con i .locres fuori dagli archivi: il motivo non dice che non ci sono testi localizzati",
-              outcome["esito"].code == "NON_SUPPORTATO" and "non sa ancora tradurre" in outcome["esito"].reason)
+              outcome["esito"].code == "NON_SUPPORTATO"
+              and "doesn't yet know how to translate" in outcome["esito"].reason)
 
 
 def mounted_pak(mount, file):
@@ -741,14 +742,14 @@ def test_log(base):
     finally:
         scan.MAX_JSON_SIZE = real
     check("ricerca generica: JSON non validi e troppo grandi scritti nel registro con quanti sono",
-              any("non sono JSON validi" in r and "rotto.json" in r for r in lines)
-              and any("troppo grandi" in r and "testi.json" in r for r in lines))
+              any("not valid JSON" in r and "rotto.json" in r for r in lines)
+              and any("too large" in r and "testi.json" in r for r in lines))
     candidates, _ = scan.scan_folder(folder, silent)
     lines = []
     profile = scan.create_profile("saltati", folder, candidates, "auto", "it", "finto", log=lines.append)
     check("file con pochi testi fuori dal profilo, scritti nel registro con i numeri",
               [v["percorso"] for v in profile["file"]] == ["testi.json"]
-              and any("pochi.json (1 testi" in r for r in lines))
+              and any("pochi.json (1 texts" in r for r in lines))
 
 
 def main(base):

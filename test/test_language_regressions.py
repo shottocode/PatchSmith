@@ -161,10 +161,10 @@ def main(base):
     lines = official_language.message(r, "it")
     check("cartella riconosciuta e confermata: lingua presente; menu Lingua di Steam solo se c'e'",
               r["presente"] is True and r["selezionabile_steam"] is False
-              and not any("Proprieta'" in x for x in lines) and any("non e' un'installazione" in x for x in lines))
-    lines = official_language.message(r, "it", ["Ho impostato l'italiano."], True)
+              and not any("Properties" in x for x in lines) and any("isn't a Steam installation" in x for x in lines))
+    lines = official_language.message(r, "it", ["I have set Italian (it) in the game settings."], True)
     check("messaggio: dopo un'impostazione riuscita niente istruzioni contraddittorie",
-              not any("non e' un'installazione" in x for x in lines))
+              not any("isn't a Steam installation" in x for x in lines))
     rng = os.path.join(base, "CartellaACaso")
     write(os.path.join(rng, "SetteGame.exe"), b"MZ")
     r = official_language.detect(rng, "it")
@@ -295,7 +295,7 @@ def main(base):
     messages = []
     try:
         automatic.restore(ue, messages.append)
-        ok = official_language.is_set(ue) and any("lingua del gioco" in m for m in messages)
+        ok = official_language.is_set(ue) and any("game language" in m for m in messages)
     except Exception as e:
         ok = False
         messages.append(repr(e))
@@ -308,8 +308,8 @@ def main(base):
     done, lines = official_language.set_(ue, detection, "it", silent)
     done2, lines2 = official_language.set_(ue, detection, "it", silent)
     check("Unreal: impostazioni non trovate -> 'avvialo una volta' solo la prima volta, poi il menu",
-              not done and any("avvialo una volta" in x for x in lines)
-              and not done2 and not any("avvialo una volta" in x for x in lines2) and any("menu" in x for x in lines2))
+              not done and any("start it once" in x for x in lines)
+              and not done2 and not any("start it once" in x for x in lines2) and any("menu" in x for x in lines2))
     write(gus, original_gus)
 
     # translate anyway: no detection, and the language set before goes back to how it was
@@ -334,7 +334,7 @@ def main(base):
     path, outcome = automatic.prepare(ue, "auto", "it", "finto", silent)
     check("Lingua ufficiale con una traduzione di PatchSmith ancora installata: lo dice",
               outcome.get("traduzione_installata")
-              and any("ancora installata" in x for x in outcome["lingua_ufficiale_righe"]))
+              and any("is still installed" in x for x in outcome["lingua_ufficiale_righe"]))
     os.remove(os.path.join(ue, "patchsmith-unreal.json"))
     automatic.restore(ue, silent)
 
@@ -386,7 +386,7 @@ def main(base):
         winreg.SetValueEx(k, language_unity.pref_name("I2 Language"), 0, winreg.REG_SZ, "English")
     r = official_language.detect(un, "it", "Unity")
     done, lines = official_language.set_(un, r, "it", silent)
-    check("Unity: impostazione descritta come tentativo ('dovrebbe')", done and any("dovrebbe" in x for x in lines))
+    check("Unity: impostazione descritta come tentativo ('dovrebbe')", done and any("should" in x for x in lines))
     official_language.restore(un, silent)
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
         value_, kind = winreg.QueryValueEx(k, language_unity.pref_name("I2 Language"))

@@ -259,7 +259,7 @@ def main(base):
               adapter_xna.find_resources(game)[0]["basi"] == {"Gioco.Testi": ["de"]})
     lines = []
     adapter_xna.state(game, lines.append)
-    check("senza manifesto: lo stato li segnala", any("senza manifesto" in r for r in lines))
+    check("senza manifesto: lo stato li segnala", any("without a manifest" in r for r in lines))
     check("senza manifesto: il ripristino li toglie",
               adapter_xna.uninstall(game, silent) and fingerprints(game) == before)
 
@@ -343,7 +343,7 @@ def main(base):
     open(os.path.join(game, "Gioco.exe"), "ab").write(b"\x00")
     lines = []
     adapter_xna.state(game, lines.append)
-    check("gioco aggiornato: segnalato", any("aggiornato" in r for r in lines))
+    check("gioco aggiornato: segnalato", any("has been updated" in r for r in lines))
     adapter_xna.uninstall(game, silent)
 
     failed = [n for n, ok in OUTCOMES if not ok]

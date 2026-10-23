@@ -297,7 +297,7 @@ def test_decimals():
               and not corrections.warnings("Speed 1.5M", "Velocita' 1.500.000")
               and not corrections.warnings("Run 5m", "Corri 5 metri")
               and corrections.warnings("Delivers 50k iridium", "Consegna 5.000 iridio")
-              == ["numeri diversi dall'originale (manca 50k; in più 5.000)"])
+              == ["different numbers from the original (missing 50k; extra 5.000)"])
     check("numeri con simboli e unita' ('$5k', '+$0,01/s', 'x 2', 'v1.0') non si traducono; le parole si' "
               "('2/3 artifact set pieces', 'OK', 'Level 1')",
               not any(_to_translate(t) for t in ("$5k", "+$0,01/s", "x 2", "1920 x 1080", "v1.0", "$200m"))
@@ -312,7 +312,7 @@ def test_decimals():
         error = e
     check("'2.5' scritto in lettere: nessun errore, non vale come numero in lettere",
               error is None and missing_one is False and additional is False)
-    check("'2.5' perso nella traduzione: scartata come numeri diversi", problems and "numeri diversi" in problems)
+    check("'2.5' perso nella traduzione: scartata come numeri diversi", problems and "different numbers" in problems)
     check("'2.5' con la virgola italiana: traduzione buona",
               not backend.translation_problems("Speed x2.5 for 10 seconds", "Velocità x2,5 per 10 secondi", "it"))
     check("interi in lettere: ancora riconosciuti",

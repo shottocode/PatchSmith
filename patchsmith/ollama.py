@@ -29,10 +29,10 @@ ZIP_SIZE = 1469916992
 SHA256_ZIP = "7485a1172f8527db4342a63521b9342fc466185ff0855da378cc864ecf6354cf"
 MODELS = {
     "4b": {"nome": "translategemma:4b-it-q4_K_M", "impronta": "c49d986b0764", "gb": 3.3,
-           "etichetta": "Veloce (TranslateGemma 4B)", "secondi_per_testo": 0.25, "secondi_avvio": 30,
+           "etichetta": "Fast (TranslateGemma 4B)", "secondi_per_testo": 0.25, "secondi_avvio": 30,
            "parallele": 4},  # test on RTX 3060 Ti: 4 lines together 0.10 s per line against 0.14
     "12b": {"nome": "translategemma:12b-it-q4_K_M", "impronta": "c2f9a9ca1ec7", "gb": 8.1,
-            "etichetta": "Qualità (TranslateGemma 12B)", "secondi_per_testo": 2.5, "secondi_avvio": 80},
+            "etichetta": "Quality (TranslateGemma 12B)", "secondi_per_testo": 2.5, "secondi_avvio": 80},
 }
 MODEL_LICENSE = "https://ai.google.dev/gemma/terms"
 _NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -174,13 +174,13 @@ def recommended_model(gb=None):
     at least THRESHOLD_12B GB of memory, otherwise the 4B (the 12B outside the video card becomes very slow)."""
     gb = video_memory() if gb is None else gb
     if gb is None:
-        return "4b", ("Non riesco a sapere quanta memoria ha la tua scheda video: ti propongo il modello Veloce (4B), "
-                      "che va bene su quasi tutti i PC.")
+        return "4b", ("I can't tell how much memory your graphics card has: I recommend the Fast model (4B), which "
+                      "works on almost all PCs.")
     if gb >= THRESHOLD_12B:
-        return "12b", ("La tua scheda video ha %s GB di memoria: ti propongo il modello Qualità (12B), che sbaglia meno "
-                       "(è più lento del Veloce)." % _gb(gb))
-    return "4b", ("La tua scheda video ha %s GB di memoria: ti propongo il modello Veloce (4B). Il Qualità (12B) ne "
-                  "vuole almeno 8 e senza diventerebbe molto lento." % _gb(gb))
+        return "12b", ("Your graphics card has %s GB of memory: I recommend the Quality model (12B), which makes fewer "
+                       "mistakes (it's slower than the Fast option)." % _gb(gb))
+    return "4b", ("Your graphics card has %s GB of memory: I recommend the Fast model (4B). The Quality model (12B) "
+                  "needs at least 8 GB, and with less it would become very slow." % _gb(gb))
 
 
 CARD_THRESHOLD = 3.5  # GB: below this (integrated graphics or old card) the model runs almost entirely on the CPU
@@ -217,20 +217,22 @@ def performance_warning(gb_video=None, gb_ram=None):
     gb_ram = pc_memory() if gb_ram is None else gb_ram
     warnings = []
     if gb_video is not None and gb_video < CARD_THRESHOLD:
-        warnings.append("La scheda video di questo PC ha %s GB di memoria (o è la grafica integrata nel processore): "
-                      "il traduttore locale userà soprattutto il processore e sarà molto più lento, anche 10-20 volte. "
-                      "Un gioco con 2.000 frasi può richiedere un'ora o più invece di pochi minuti." % _gb(gb_video))
+        warnings.append("The graphics card in this PC has %s GB of memory (or it's the integrated graphics in the "
+                        "processor): the local translator will primarily use the processor, and will be much slower, "
+                        "possibly 10-20 times slower. A game with 2,000 sentences could take an hour or more instead "
+                        "of just a few minutes." % _gb(gb_video))
     if gb_ram is not None and gb_ram < MIN_RAM:
-        warnings.append("Il PC ha %s GB di memoria (RAM): mentre traduce il modello ne usa circa 4, e il resto del PC "
-                      "può rallentare." % _gb(gb_ram))
+        warnings.append("Your PC has %s GB of memory (RAM): while translating, the model uses about 4, and the rest of "
+                        "the PC may slow down." % _gb(gb_ram))
     if not warnings:
         return ""
-    return " ".join(warnings) + (" Funziona lo stesso; in alternativa puoi usare DeepL con la tua chiave gratuita "
-                               "(500.000 caratteri al mese, nessun programma da installare).")
+    return " ".join(warnings) + (" It works anyway; alternatively you can use DeepL with your free key (500,000 "
+                                 "characters per month, nothing to install).")
 
 
 def _gb(value_):
-    return ("%.1f" % value_).replace(".", ",").replace(",0", "")
+    text = "%.1f" % value_
+    return text[:-2] if text.endswith(".0") else text
 
 
 def default_model():
@@ -243,9 +245,9 @@ def default_model():
 def state():
     """'pronto', 'manca il modello' or 'non installato' (for the interface)."""
     if not installed():
-        return "non installato"
+        return "not installed"
     present = [k for k in MODELS if model_present(k)]
-    return "pronto" if present else "manca il modello"
+    return "pronto" if present else "the model is missing"
 
 
 # --- Job Object: the server dies with PatchSmith ---------------------------------------------------
@@ -320,7 +322,7 @@ def _free_port():
             continue
         finally:
             s.close()
-    raise LocalError("Nessuna porta libera per il traduttore locale (11435-11444).")
+    raise LocalError("No free port available for the local translator (11435-11444).")
 
 
 _LOG_LIMIT = 5 * 1024 * 1024
@@ -360,8 +362,7 @@ class Server:
         if self.active:
             return
         if not os.path.isfile(self.command[0]):
-            raise LocalError("Il traduttore locale non e' installato: scegli 'Traduttore locale' e premi "
-                               "'Installa'.")
+            raise LocalError("The local translator is not installed: choose 'Local translator' and press 'Install'.")
         os.makedirs(models_folder(), exist_ok=True)
         temp_path = os.path.join(folder(), "tmp")
         os.makedirs(temp_path, exist_ok=True)
@@ -394,7 +395,7 @@ class Server:
             while time.monotonic() < limit:
                 interruption.check()
                 if self.process.poll() is not None:
-                    raise LocalError("Il traduttore locale non si e' avviato:\n%s" % _log_tail(self._log_start))
+                    raise LocalError("The local translator didn't start:\n%s" % _log_tail(self._log_start))
                 try:
                     version = self.call("/api/version", timeout=2).get("version")
                 except (OSError, ValueError, AttributeError):
@@ -404,7 +405,7 @@ class Server:
                 if version == VERSION and self.process.poll() is None:
                     return
                 time.sleep(0.25)
-            raise LocalError("Il traduttore locale non risponde dopo %d secondi:\n%s"
+            raise LocalError("The local translator is not responding after %d seconds:\n%s"
                                % (self.startup_wait, _log_tail(self._log_start)))
         except BaseException:  # error, Stop or Ctrl+C during startup: no server left on
             self.close()
@@ -459,9 +460,9 @@ def _log_tail(from_pos=0, lines=15):
             f.seek(0, os.SEEK_END)
             f.seek(max(from_pos, f.tell() - 65536))
             text = f.read().decode("utf-8", "replace").splitlines()[-lines:]
-        return "\n".join(text) or "(il server non ha scritto nulla)"
+        return "\n".join(text) or "(The server hasn't written anything)"
     except OSError:
-        return "(registro del server non disponibile)"
+        return "(server log not available)"
 
 
 # --- installation (only with the user's consent) --------------------------------------------------------
@@ -478,12 +479,12 @@ def download_description(selected):
     """Text to show BEFORE downloading (file, source, size, license)."""
     lines = []
     if not installed():
-        lines.append("Ollama %s: ollama-windows-amd64.zip, %.2f GB, da github.com/ollama/ollama (release ufficiale, "
-                     "licenza MIT, impronta SHA-256 controllata)" % (VERSION, ZIP_SIZE / 1e9))
+        lines.append("Ollama %s: ollama-windows-amd64.zip, %.2f GB, from github.com/ollama/ollama (official release, "
+                     "MIT license, SHA-256 hash verified)" % (VERSION, ZIP_SIZE / 1e9))
     for k in selected:
         if not model_present(k):
-            lines.append("%s: %s, %.1f GB, dal registro ufficiale di Ollama (ollama.com). Licenza Gemma Terms of "
-                         "Use (%s): scaricandolo la accetti" % (MODELS[k]["etichetta"], MODELS[k]["nome"],
+            lines.append("%s: %s, %.1f GB, from the official Ollama registry (ollama.com). Gemma Terms of Use License "
+                         "(%s): by downloading it, you agree to the terms" % (MODELS[k]["etichetta"], MODELS[k]["nome"],
                                                                 MODELS[k]["gb"], MODEL_LICENSE))
     return lines
 
@@ -495,15 +496,15 @@ def install(selected, log=print):
                                                                   if not model_present(k))
     os.makedirs(folder(), exist_ok=True)
     if shutil.disk_usage(folder()).free < needed + 1e9:
-        raise LocalError("Spazio insufficiente: servono circa %.0f GB liberi su %s." % ((needed + 1e9) / 1e9,
-                                                                                       os.path.splitdrive(folder())[0]))
+        raise LocalError("Insufficient space: you need approximately %.0f GB of free space on %s."
+                         % ((needed + 1e9) / 1e9, os.path.splitdrive(folder())[0]))
     try:
         if not installed():
             _install_program(log)
         _download_models(selected, log)
     except (OSError, ValueError) as e:  # network, disk, unexpected response: an understandable message, not a traceback
-        raise LocalError("Installazione non riuscita (%s: %s). Controlla la connessione e riprova: gli "
-                           "scaricamenti riprendono da dove erano." % (type(e).__name__, e)) from None
+        raise LocalError("Installation failed (%s: %s). Check your connection and try again: downloads will resume "
+                         "from where they left off." % (type(e).__name__, e)) from None
     return True
 
 
@@ -511,13 +512,13 @@ def _download_models(selected, log):
     with Server(log) as server:
         for k in selected:
             if model_present(k):
-                log("  %s: gia' scaricato" % MODELS[k]["etichetta"])
+                log("  %s: Already downloaded" % MODELS[k]["etichetta"])
                 continue
-            log("  Scarico %s (%.1f GB)..." % (MODELS[k]["etichetta"], MODELS[k]["gb"]))
+            log("  Downloading %s (%.1f GB)..." % (MODELS[k]["etichetta"], MODELS[k]["gb"]))
             parts, last = {}, -10.0
             for pull_state in server.stream("/api/pull", {"model": MODELS[k]["nome"], "stream": True}):
                 if "error" in pull_state:
-                    raise LocalError("Scaricamento del modello non riuscito: %s" % pull_state["error"])
+                    raise LocalError("Model download failed: %s" % pull_state["error"])
                 if pull_state.get("digest") and pull_state.get("total"):
                     parts[pull_state["digest"]] = (pull_state.get("completed", 0), pull_state["total"])
                     done = 100 * sum(c for c, _ in parts.values()) / max(1, sum(t for _, t in parts.values()))
@@ -526,15 +527,15 @@ def _download_models(selected, log):
                         log("    %.0f%%" % done)
             present = {m.get("name"): m.get("digest", "") for m in server.call("/api/tags").get("models", [])}
             if not present.get(MODELS[k]["nome"], "").startswith(MODELS[k]["impronta"]):
-                log("  ! %s: impronta diversa da quella attesa (il modello e' stato aggiornato?)" % MODELS[k]["nome"])
-            log("  %s pronto." % MODELS[k]["etichetta"])
+                log("  ! %s: hash different from the expected one (has the model been updated?)" % MODELS[k]["nome"])
+            log("  %s ready." % MODELS[k]["etichetta"])
 
 
 def _install_program(log):
     zip_ = os.path.join(os.path.dirname(folder()), "ollama-windows-amd64-%s.zip" % VERSION)
     if not (os.path.exists(zip_) and os.path.getsize(zip_) == ZIP_SIZE and _sha256(zip_) == SHA256_ZIP):
         partial = zip_ + ".scaricamento"
-        log("  Scarico Ollama %s (%.2f GB) da github.com..." % (VERSION, ZIP_SIZE / 1e9))
+        log("  Downloading Ollama %s (%.2f GB) from github.com..." % (VERSION, ZIP_SIZE / 1e9))
         for attempt in range(3):
             try:
                 _download_zip(partial, log)
@@ -544,17 +545,17 @@ def _install_program(log):
             except OSError as e:  # network: the part already downloaded stays, it resumes from there
                 if attempt == 2:
                     raise
-                log("    connessione interrotta (%s): riprovo tra %d secondi..."
+                log("    connection lost (%s): retrying in %d seconds..."
                     % (type(e).__name__, 10 * (attempt + 1)))
                 interruption.wait_for(10 * (attempt + 1))
         if os.path.getsize(partial) != ZIP_SIZE or _sha256(partial) != SHA256_ZIP:
             os.remove(partial)
-            raise LocalError("Ollama scaricato non corrisponde all'impronta pubblicata: file scartato. Aggiorna "
-                               "PatchSmith o riprova piu' tardi.")
+            raise LocalError("The downloaded Ollama doesn't match the published hash: file discarded. Update "
+                             "PatchSmith or try again later.")
         os.replace(partial, zip_)
     _extract(zip_, os.path.join(folder(), VERSION))
     os.remove(zip_)
-    log("  Ollama %s installato in %s" % (VERSION, os.path.join(folder(), VERSION)))
+    log("  Ollama %s installed in %s" % (VERSION, os.path.join(folder(), VERSION)))
 
 
 def _download_zip(partial, log):
@@ -562,14 +563,14 @@ def _download_zip(partial, log):
     already = os.path.getsize(partial) if os.path.exists(partial) else 0
     if already >= ZIP_SIZE:
         return
-    http_headers = {"User-Agent": "PatchSmith (installazione traduttore locale)"}
+    http_headers = {"User-Agent": "PatchSmith (local translator installation)"}
     if already:
         http_headers["Range"] = "bytes=%d-" % already
     with urllib.request.urlopen(urllib.request.Request(ZIP_URL, headers=http_headers), timeout=60) as r:
         if already and r.status != 206:  # the server does not resume: start again from zero
             already = 0
         if already:
-            log("    riprendo da %.0f%%" % (100 * already / ZIP_SIZE))
+            log("    resuming from %.0f%%" % (100 * already / ZIP_SIZE))
         read_items, next_mark = already, (already // (ZIP_SIZE // 10) + 1) * (ZIP_SIZE // 10)
         with open(partial, "ab" if already else "wb") as f:
             for block in iter(lambda: r.read(1 << 20), b""):
@@ -579,7 +580,7 @@ def _download_zip(partial, log):
                 if read_items > ZIP_SIZE + 1024:
                     f.close()
                     os.remove(partial)
-                    raise LocalError("Il file scaricato e' piu' grande del previsto: interrotto.")
+                    raise LocalError("The downloaded file is larger than expected: download aborted.")
                 if read_items >= next_mark:
                     log("    %.0f%%" % (100 * read_items / ZIP_SIZE))
                     next_mark += ZIP_SIZE // 10
@@ -598,13 +599,13 @@ def _extract(zip_, dest_lang):
             if name.startswith("/") or ":" in name or ".." in name.split("/") or \
                     not (path == root or path.startswith(root + os.sep)):
                 shutil.rmtree(temp_path, ignore_errors=True)
-                raise LocalError("Lo zip di Ollama contiene un percorso non sicuro (%s): installazione annullata."
+                raise LocalError("The Ollama zip contains an insecure path (%s): installation cancelled."
                                    % name)
         z.extractall(temp_path)
     if not os.path.isfile(os.path.join(temp_path, "ollama.exe")) or \
             not os.path.isdir(os.path.join(temp_path, "lib", "ollama")):
         shutil.rmtree(temp_path, ignore_errors=True)
-        raise LocalError("Lo zip di Ollama non contiene il programma atteso: installazione annullata.")
+        raise LocalError("The Ollama zip file does not contain the expected program: installation cancelled.")
     try:
         if os.path.exists(dest_lang):  # damaged installation (e.g. ollama.exe removed by the antivirus): redo it
             old_copy = dest_lang + ".vecchia"
@@ -614,5 +615,5 @@ def _extract(zip_, dest_lang):
         os.replace(temp_path, dest_lang)
     except OSError as e:
         shutil.rmtree(temp_path, ignore_errors=True)
-        raise LocalError("Non riesco a sostituire la cartella %s (%s): chiudi i programmi che la usano, oppure "
-                           "cancellala a mano, e riprova." % (dest_lang, e)) from None
+        raise LocalError("I can't replace the folder %s (%s): close the programs that are using it, or delete it by "
+                         "hand, and try again." % (dest_lang, e)) from None

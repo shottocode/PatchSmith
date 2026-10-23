@@ -96,7 +96,7 @@ def _read(path, tail=True):
             f.seek(max(0, size - MAX_BYTES))
             data = f.read()
             if size > MAX_BYTES:
-                data = ("[... tenuti solo gli ultimi %d KB di %d KB ...]\n" % (MAX_BYTES // 1024, size // 1024)
+                data = ("[... only the last %d KB of %d KB kept ...]\n" % (MAX_BYTES // 1024, size // 1024)
                         ).encode("utf-8") + data
         else:
             data = f.read()
@@ -231,7 +231,7 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
             detection.print_summary(detection.detect(root), lines.append)
             texts["rilevamento.txt"] = "\n".join(lines)
         except Exception as e:  # the report is made anyway: it is exactly when something goes wrong that it is needed
-            problems.append("rilevamento: %s: %s" % (type(e).__name__, e))
+            problems.append("detection: %s: %s" % (type(e).__name__, e))
         unity = adapter_unity.find_root(root) or root
         for rel in (adapter_unity.BEPINEX_LOG, adapter_unity.CONFIG_XUNITY, adapter_unity.CONFIG_BEPINEX,
                     adapter_unity.SERVICE_CONFIG, adapter_unity.SERVICE_STATE):
@@ -249,32 +249,32 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
             for p in checks._unreal_logs(root, manifest) if manifest else []:
                 add("unreal/" + os.path.basename(p), p)
         except Exception as e:  # noqa: BLE001 - the report is made anyway, without these
-            problems.append("registro di Unreal: %s: %s" % (type(e).__name__, e))
+            problems.append("Unreal log: %s: %s" % (type(e).__name__, e))
         try:
             modified = [os.path.relpath(p, root).replace(os.sep, "/") for p in find_info(root)]
         except OSError:
             pass
     overview = [
-        "Rapporto di PatchSmith %s" % __version__,
-        "Creato: %s" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Sistema: %s, Python %s" % (platform.platform(), platform.python_version()),
-        "Cartella scelta: %s" % (folder or "(nessuna)"),
-        "Cartella del gioco: %s" % (root or "(nessuna)"),
-        "Profilo: %s (motore %s)" % (name or "(nessuno)", profile.get("motore") or "-"),
-        "File del gioco modificati da PatchSmith: %s" % (", ".join(modified[:50]) or "nessuno"),
+        "PatchSmith Report %s" % __version__,
+        "Created: %s" % datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "System: %s, Python %s" % (platform.platform(), platform.python_version()),
+        "Selected folder: %s" % (folder or "(none)"),
+        "Game folder: %s" % (root or "(none)"),
+        "Profile: %s (engine %s)" % (name or "(none)", profile.get("motore") or "-"),
+        "Game files modified by PatchSmith: %s" % (", ".join(modified[:50]) or "none"),
     ]
     if outcome is not None:
-        overview.append("Ultimo esito: %s" % json.dumps(outcome.as_dict(), ensure_ascii=False, default=str))
+        overview.append("Last result: %s" % json.dumps(outcome.as_dict(), ensure_ascii=False, default=str))
     overview += list(extra or [])
     if problems:
-        overview.append("Non inclusi: " + "; ".join(problems))
-    overview.append("Contenuto: " + ", ".join(sorted(texts)))
+        overview.append("Not included: " + "; ".join(problems))
+    overview.append("Content: " + ", ".join(sorted(texts)))
     texts["riepilogo.txt"] = "\n".join(overview)
 
     dest_lang = dest_lang or desktop_folder()
     os.makedirs(dest_lang, exist_ok=True)
     now = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = os.path.join(dest_lang, "PatchSmith-rapporto-%s%s.zip" % (name + "-" if name else "", now))
+    path = os.path.join(dest_lang, "PatchSmith-report-%s%s.zip" % (name + "-" if name else "", now))
     temp_file = path + ".tmp"
     try:
         with zipfile.ZipFile(temp_file, "w", zipfile.ZIP_DEFLATED) as z:

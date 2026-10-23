@@ -272,7 +272,7 @@ def font_chars(folder, log=None, officials=None, source=None):
         items, unreadable = gamemaker.font(gamemaker.read_file(path))
     except (gamemaker.GameMakerError, OSError, ValueError, IndexError, struct.error):
         if log:
-            log("  ! Font del gioco non leggibili: per sicurezza uso solo caratteri ASCII")
+            log("  ! Game fonts not readable: to be safe, I only use ASCII characters")
         return set(ASCII)
     common = None
     for f in items:
@@ -285,12 +285,12 @@ def font_chars(folder, log=None, officials=None, source=None):
             continue  # font for another language (e.g. Korean, or Japanese with ç ê ñ Œ œ)
         if _FALLBACK_FONT.search(f.get("nome") or ""):
             if log:
-                log("  Font %s non considerato: e' il font di ripiego di una libreria" % f.get("nome"))
+                log("  Font %s ignored: it's a library's fallback font" % f.get("nome"))
             continue
         if len(officials) >= 3 and not (chars & officials) and not _language_font(f.get("nome"), source):
             if log:
-                log("  Font %s non considerato: le traduzioni ufficiali del gioco non lo usano (non ha le loro "
-                    "lettere accentate)" % f.get("nome"))
+                log("  Font %s ignored: the game's official translations don't use it (it lacks their accented letters)"
+                    % f.get("nome"))
             continue
         if not any(c.islower() for c in letters):
             chars |= {c.lower() for c in chars}
@@ -300,11 +300,12 @@ def font_chars(folder, log=None, officials=None, source=None):
     if unreadable:
         common = set(ASCII) if common is None else common & ASCII
         if log:
-            log("  ! %d font del gioco non leggibili: per sicurezza uso solo caratteri ASCII" % unreadable)
+            log("  ! %d game fonts not readable: to be safe, I only use ASCII characters" % unreadable)
     elif common is None and items:
         common = set(ASCII)
         if log:
-            log("  ! Nessun font del gioco (data.win) sembra quello dei testi: per sicurezza uso solo caratteri ASCII")
+            log("  ! None of the game's fonts (data.win) seem to match the text: for safety, I only use ASCII "
+                "characters")
     return common
 
 
@@ -326,7 +327,7 @@ def _values(data):
     for v in (data.values() if section else data):
         if isinstance(v, (dict, list)):
             if not section:
-                raise ValueError("elenco di oggetti")
+                raise ValueError("item list")
             yield from _values(v)
         else:
             yield v
@@ -413,7 +414,7 @@ def language_json_files(folder, log=None):
                 continue
             try:
                 if os.path.getsize(p) > _MAXIMUM:
-                    unreadable.append("%s (%d MB: troppo grande)" % (rel, os.path.getsize(p) // (1024 * 1024)))
+                    unreadable.append("%s (%d MB: too large)" % (rel, os.path.getsize(p) // (1024 * 1024)))
                     continue
                 if _strings(read_original(p, _read_json)) is None:
                     continue
@@ -426,7 +427,7 @@ def language_json_files(folder, log=None):
         if len(set(group.values())) >= 2:
             found.update(group)
     if log and unreadable:
-        log("  ! %d file di lingua JSON non letti: %s" % (len(unreadable), "; ".join(unreadable[:3])))
+        log("  ! %d JSON language files not read: %s" % (len(unreadable), "; ".join(unreadable[:3])))
     return found
 
 
@@ -787,7 +788,7 @@ def caps_style(texts):
         if cased:
             valid_spots.append(t)
     if len(valid_spots) < 30 or cased_letters < 0.5 * max(1, letters):
-        return "non applicabile"
+        return "not applicable"
     no_lowercase = sum(1 for t in valid_spots if not any(c.islower() for c in t))
     if no_lowercase >= 0.95 * len(valid_spots):
         return "maiuscolo"

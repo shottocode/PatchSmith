@@ -124,7 +124,7 @@ class Faulty:
 
     def translate_lines(self, lines, origin, dest_lang):
         self.calls += 1
-        raise BackendError("non risponde (simulato)")
+        raise BackendError("not responding (simulated)")
 
 
 class Counting(Fake):
@@ -157,7 +157,7 @@ class Repeats(Fake):
 
     def translate_lines(self, lines, origin, dest_lang):
         for r in lines:
-            self.rejects[r] = (r, ["lunghezza anomala"])
+            self.rejects[r] = (r, ["abnormal length"])
         return ["" for _ in lines]
 
 
@@ -213,7 +213,7 @@ def test_service(tmp):
         check("processo del gioco chiuso", not xunity_service.process_alive(game.pid))
         thread.join(timeout=10)
         check("il servizio si chiude con il gioco", not thread.is_alive())
-        check("registro della chiusura", any("si e' chiuso" in r for r in log_file))
+        check("registro della chiusura", any("The game has closed" in r for r in log_file))
     finally:
         if game.poll() is None:
             game.kill()
@@ -290,7 +290,7 @@ def test_queue(tmp):
         check("il primo traduttore non risponde: traduce il secondo (200), il diario lo dice",
                   (code, translated) == (200, "[it] Open the gate") and faulty.calls == 1
                   and (latest["esito"], latest["backend"]) == ("ok", "google"))
-    paused, after = Counting("[pausa]", pause="Google e' in pausa (simulato)"), Counting("[mm]")
+    paused, after = Counting("[pausa]", pause="Google is paused (simulated)"), Counting("[mm]")
     with Running(tmp, "pausa", [("google", paused), ("mymemory", after)]) as a:
         check("traduttore in pausa: non lo si chiama nemmeno, traduce il prossimo",
                   translate(a.port, "Open the gate") == (200, "[mm] Open the gate") and paused.calls == 0)
@@ -298,7 +298,7 @@ def test_queue(tmp):
         code, _ = translate(a.port, "Open the gate")
         latest = journal("nessuno")[-1]
         check("nessun traduttore raggiungibile: 500 (solo in questo caso), nel diario 'errore' con i motivi",
-                  code == 500 and latest["esito"] == "errore" and "non risponde" in latest["motivo"])
+                  code == 500 and latest["esito"] == "errore" and "not responding" in latest["motivo"])
     with Running(tmp, "vuota", []) as a:
         check("nessun traduttore disponibile: 500", translate(a.port, "Open the gate")[0] == 500)
     counting = Counting()
@@ -327,7 +327,7 @@ def test_rejects(tmp):
                   and responses[0].startswith("Tieni premuto"))
         check("risposta di ripiego: NON in memoria, nel diario come 'rilassata' (da ritradurre dopo)",
                   XUNITY not in a.service.project.memory and lines and all(r["esito"] == "rilassata" for r in lines)
-                  and lines[0]["risposta"] == responses[0] and "scartata" in lines[0]["motivo"])
+                  and lines[0]["risposta"] == responses[0] and "rejected" in lines[0]["motivo"])
 
     def in_pieces(text, _opts):  # the sentence with codes is wrong, the pieces between codes are translated well
         if "[[" in text:
@@ -453,7 +453,7 @@ def test_expected(tmp):
         os.remove(settings)
         limiter.Limiter("google", log=None).blocked(429, "prova")
         paused = xunity_service.expected_translators({"backend": "google"})
-        ollama.state = lambda: "non installato"
+        ollama.state = lambda: "not installed"
         nothing = xunity_service.expected_translators({"backend": "google"})
         os.remove(limiter.state_path())  # Google free again
         s = xunity_service.Service(make_test_profile(tmp, "fila-vera", "google"), free_port(), None, silent,

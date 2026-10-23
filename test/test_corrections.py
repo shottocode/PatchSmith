@@ -34,6 +34,7 @@ from patchsmith import (adapter_unity, auto as automatic, backend, corrections, 
 from patchsmith import ollama, project, scan, steam, theme  # noqa: E402
 
 OUTCOMES = []
+INSTALLED = ("Translation installed", "Translation partially installed")  # titles of the end dialog (OK, PARZIALE)
 WINDOWS = []  # (titolo, testo, pulsanti) of the choice dialogs and of the notices
 ANSWERS = []  # the answers to the next choice dialogs (None: OK / Cancel)
 
@@ -135,12 +136,13 @@ class WithSeeds(DictTranslator):
 def test_functions(base):
     a = corrections.warnings
     check("controlli mentre scrivi: segnaposto mancante o in piu', numeri, righe, vuota",
-              a("Collect {0} coins", "Raccogli monete")[0].startswith("manca {0}")
-              and a("Collect {0} coins", "Raccogli {0} {1} monete") == ["in più: {1}"]
-              and a("Level 2", "Livello 3") == ["numeri diversi dall'originale (manca 2; in più 3)"]
-              and a("Line one\nLine two", "Riga uno riga due") == ["righe: 1 invece di 2"]
-              and a("Quit", "  ") == ["la traduzione è vuota"] and a("Collect {0} coins", "Raccogli {0} monete") == []
-              and a("max H", "massimo H", ("H",)) == [] and a("max H", "massimo", ("H",))[0].startswith("manca H"))
+              a("Collect {0} coins", "Raccogli monete")[0].startswith("missing {0}")
+              and a("Collect {0} coins", "Raccogli {0} {1} monete") == ["extra: {1}"]
+              and a("Level 2", "Livello 3") == ["different numbers from the original (missing 2; extra 3)"]
+              and a("Line one\nLine two", "Riga uno riga due") == ["lines: 1 instead of 2"]
+              and a("Quit", "  ") == ["the translation is empty"]
+              and a("Collect {0} coins", "Raccogli {0} monete") == []
+              and a("max H", "massimo H", ("H",)) == [] and a("max H", "massimo", ("H",))[0].startswith("missing H"))
     x = corrections.Entry("iron*ore")
     x.space = ("iron*ore", "*", "U", 11, 2, 0)
     check("lunghezza come la scrive il gioco (a capo ridistribuiti nello spazio delle righe)",
@@ -156,12 +158,12 @@ def test_functions(base):
         return v.problems
 
     check("sospetti: verbo all'infinito in un pulsante (con la forma giusta), una parola diventata frase",
-              "\"Esporta\", non \"Esportare\"" in problems("Export", "Esportare").get("sospetti", "")
+              "\"Esporta\", not \"Esportare\"" in problems("Export", "Esportare").get("sospetti", "")
               and "Chiudi" in problems("Close", "Chiudere").get("sospetti", "")
-              and "l'imperativo (\"Rifare\"" in problems("Redo", "Rifare").get("sospetti", "")
+              and "the imperative (\"Rifare\"" in problems("Redo", "Rifare").get("sospetti", "")
               and "sospetti" not in problems("None", "— Nessuno —")
               and "sospetti" not in problems("Chest", "Forziere") and "sospetti" not in problems("Save", "Salva")
-              and "una frase" in problems("Inventory", "Il tuo inventario personale").get("sospetti", "")
+              and "a phrase" in problems("Inventory", "Il tuo inventario personale").get("sospetti", "")
               and "sospetti" not in problems("Export", "Esportare", dest="fr"))
     check("filtri dai problemi annotati: rimasto (senza traduzione), non scritto nel gioco, sospetto; corretta a "
               "mano; un problema di una traduzione di prima non conta",
@@ -170,14 +172,14 @@ def test_functions(base):
               == "font"
               and "gioco" not in problems("Sword", "Spada", problem={"dove": "gioco", "valore": "Spada→"})
               and "sospetti" in problems("Wood", "Legna", problem={"dove": "memoria", "valore": "Legna"})
-              and problems("Wood", "Legno", machine={"Wood": "Legna"}).get("mano") == "corretta a mano"
+              and problems("Wood", "Legno", machine={"Wood": "Legna"}).get("mano") == "fixed by hand"
               and "mano" not in problems("Wood", "Legno", machine={"Wood": "Legno"}))
     check("filtri dai controlli: uguale all'originale, un'altra lingua, numeri e segnaposto (anche solo da "
               "guardare), etichetta corta diventata molto piu' lunga",
               problems("Open the door to the castle", "Open the door to the castle").get("rimasti")
-              == "uguale all'originale"
+              == "identical to the original"
               and "lingua" in problems("Open the door", "Abre la puerta de la casa y el castillo")
-              and problems("Collect {0} coins", "Raccogli monete")["segnaposto"].startswith("manca {0}")
+              and problems("Collect {0} coins", "Raccogli monete")["segnaposto"].startswith("missing {0}")
               and problems("Collect {0} coins", "Raccogli {0} monete")["segnaposto"] == ""
               and "lunghi" in problems("Credits", "Ringraziamenti finali")
               and "lunghi" not in problems("Save", "Salva"))
@@ -212,13 +214,13 @@ def test_functions(base):
     rejected = outcome.Outcome("PARZIALE", written=True, translated_items=5, extra={"corrette_a_mano_scartate": 1})
     check("fine operazione: 'Correggi traduzioni' con testi rimasti o non scritti nel gioco (con l'elenco giusto), "
               "non se e' tutto tradotto ne' per un errore imprevisto",
-              ("Correggi traduzioni", "correggi") in f["pulsanti"] and "Correggi traduzioni" not in str(ok["pulsanti"])
-              and ("Correggi traduzioni", "correggi") in outcome.window(rejected, "riapplica")["pulsanti"]
+              ("Fix translations", "correggi") in f["pulsanti"] and "Fix translations" not in str(ok["pulsanti"])
+              and ("Fix translations", "correggi") in outcome.window(rejected, "riapplica")["pulsanti"]
               and outcome.fixes_filter(rejected) == "gioco"
               and outcome.fixes_filter(outcome.Outcome("PARZIALE", remaining=1)) == "rimasti"
               and not outcome.to_fix(outcome.Outcome("ERRORE", remaining=1, extra={"imprevisto": True}))
-              and "elenco \"Non scritte nel gioco\"" in outcome.window(rejected, "riapplica")["testo"]
-              and "Ho scritto nel gioco la tua correzione." in outcome.window(outcome.Outcome(
+              and "list \"Not written to the game\"" in outcome.window(rejected, "riapplica")["testo"]
+              and "I wrote your correction to the game." in outcome.window(outcome.Outcome(
                   "OK", written=True, translated_items=5, extra={"correzioni_scritte": 1}), "riapplica")["testo"])
 
 
@@ -238,7 +240,7 @@ def test_web(base, root, app):
     check("elenco: tutti i testi del gioco (anche quello rimasto in originale), con i filtri",
               occurrences["tutte"] == 19 and occurrences["rimasti"] == 1 and occurrences["mano"] == 0
               and entry(items, "The bridge is broken: you need a rope and two planks.").problems.get("rimasti", "")
-              .startswith("senza traduzione")
+              .startswith("without translation")
               and "lunghi" in entry(items, "Lantern Keeper").problems
               and "\"Elimina\"" in entry(items, "Delete").problems.get("sospetti", ""))
     found = [x.text for x in items.apply_filter("tutte", "LANTERN")]
@@ -253,8 +255,8 @@ def test_web(base, root, app):
     f = app._fix()
     check("finestra: titolo con il gioco, menu 'Mostra' con i conteggi, colonne Originale/Traduzione/Problema "
               "(Limite solo se il gioco fa conoscere lo spazio dei testi)", f is not None
-              and f.top.title() == "Correggi traduzioni - lantern-keeper"
-              and "Rimasti in originale (1)" in f.filter_choice.cget("values")
+              and f.top.title() == "Fix translations - lantern-keeper"
+              and "Left untranslated (1)" in f.filter_choice.cget("values")
               and len(f.tree.get_children()) == 19
               and tuple(f.tree.cget("displaycolumns")) == ("originale", "traduzione", "problema"))
     f.choose_filter("rimasti")
@@ -265,14 +267,14 @@ def test_web(base, root, app):
               len(lines) == 1 and f.changes == {"The bridge is broken: you need a rope and two planks.":
                                                   "Il ponte è rotto: ti servono una corda e due assi."}
               and "modificata" in f.tree.item(lines[0], "tags")
-              and f.tree.item(lines[0], "values")[3] == "modificata, da salvare" and f.top.title().endswith("*"))
+              and f.tree.item(lines[0], "values")[3] == "modified, to be saved" and f.top.title().endswith("*"))
     f.choose_filter("tutte")
     f._go_to("Quit to the desktop")
     write(f, "Esci {0} al desktop")
     warning = f.warning.get()
     f._undo_line()
     check("controlli mentre scrivi (segnaposto in più) ed Esc che rimette la traduzione di prima",
-              "in più: {0}" in warning and "Quit to the desktop" not in f.changes
+              "extra: {0}" in warning and "Quit to the desktop" not in f.changes
               and f.translation_text.get("1.0", "end-1c") == "Esci al desktop")
     f._go_to("Start a new game")
     write(f, "Nuova partita")
@@ -297,10 +299,10 @@ def test_web(base, root, app):
     root.update()
     check("tastiera: Invio/F2, Ctrl+Invio passa alla riga dopo, Ctrl+F cerca, Ctrl+S salva, Alt+frecce pagine; "
               "lunghezza mentre scrivi", hotkeys_bound and before != after and len(after) == 1
-              and "Lunghezza: 13 caratteri (originale: 16)" == length)
+              and "Length: 13 characters (original: 16)" == length)
     f._go_to("Delete")
     check("il problema della riga scelta per intero sotto la traduzione (es. 'Elimina', non 'Eliminare')",
-              f.problem.get().startswith("Problema: verbo all'infinito") and "\"Elimina\"" in f.problem.get())
+              f.problem.get().startswith("Problem: infinitive verb") and "\"Elimina\"" in f.problem.get())
     # empty text or text with a wrong placeholder: it is not saved without saying so
     f._go_to("Continue your journey")
     write(f, "")
@@ -310,8 +312,8 @@ def test_web(base, root, app):
     ANSWERS[:] = [None]  # "Go back to editing"
     f.save()
     check("salvataggio con una traduzione vuota o un segnaposto in piu': prima lo dice, la finestra resta aperta",
-              empty == "Traduzione vuota" and WINDOWS[-1][0] == "Controlla le correzioni"
-              and ("Salva lo stesso", "salva") in WINDOWS[-1][2] and f.top.winfo_exists()
+              empty == "Empty translation" and WINDOWS[-1][0] == "Check the corrections"
+              and ("Save anyway", "salva") in WINDOWS[-1][2] and f.top.winfo_exists()
               and read_file(memory)["Start a new game"] == "Inizia una nuova partita")
     f._undo_line()
     # save: valid translation memory with the new value, machine translations as they were, shared translation
@@ -340,7 +342,7 @@ def test_web(base, root, app):
               "The bridge is broken: you need a rope and two planks." not in problems)
     check("Riapplica da sola dopo il salvataggio: il file del gioco e' cambiato, con le correzioni",
               fingerprint(texts_file) != game_before and texts["menu"]["start"] == "Nuova partita"
-              and texts["dialoghi"][2]["testo"].startswith("Il ponte") and WINDOWS[-1][0] == "Traduzione riapplicata"
+              and texts["dialoghi"][2]["testo"].startswith("Il ponte") and WINDOWS[-1][0] == "Translation reapplied"
               and not f.top.winfo_exists())
     items = corrections.load(path)
     check("riaperta: 'Corrette a mano' (2), niente piu' rimasti", items.counts()["mano"] == 2
@@ -356,7 +358,7 @@ def test_web(base, root, app):
     ANSWERS[:] = ["esci"]
     f.close()
     check("chiudere con correzioni non salvate: lo chiede ('Annulla' resta aperta, 'Non salvare' esce senza "
-              "salvare)", modal_open and not f.top.winfo_exists() and WINDOWS[-1][0] == "Salvare le correzioni?"
+              "salvare)", modal_open and not f.top.winfo_exists() and WINDOWS[-1][0] == "Save the changes?"
               and read_file(memory)["Quit to the desktop"] == "Esci al desktop")
 
     # Re-translate selected: new requests (round 1) also for the line fixed by hand, then into the game
@@ -380,16 +382,16 @@ def test_web(base, root, app):
         corrections.create_translator = real_create
         ollama.state, ollama.model_present = real_state, real_present
     check("Ritraduci selezionati: senza traduttore locale lo dice; con il traduttore locale si sceglie il modello "
-              "(solo quelli scaricati)", without_local == ("Traduttore locale da installare", True)
-              and models == [("Traduttore locale: Veloce (4B)", "4b"), ("Annulla", None)])
+              "(solo quelli scaricati)", without_local == ("Local translator to install", True)
+              and models == [("Local translator: Fast (4B)", "4b"), ("Cancel", None)])
     mem, auto, texts = read_file(memory), read_file(auto_file), read_file(texts_file)
     check("Ritraduci selezionati: anche la riga corretta a mano, con domande nuove (giro 1), poi scritte nel gioco",
               mem["Start a new game"] == "Comincia una partita nuova" and mem["Continue your journey"] ==
               "Prosegui il viaggio" and auto["Start a new game"] == "Comincia una partita nuova"
               and new.rounds and all(g and min(g) >= 1 for g in new.rounds)
               and texts["menu"]["start"] == "Comincia una partita nuova" and to_ask == [("locale", "4b")])
-    check("Ritraduci: la finestra di fine 'Traduzioni rifatte' con quante", WINDOWS[-1][0] == "Traduzioni rifatte"
-              and "Ho ritradotto 2 testi su 2." in WINDOWS[-1][1])
+    check("Ritraduci: la finestra di fine 'Traduzioni rifatte' con quante", WINDOWS[-1][0] == "Translations redone"
+              and "I re-translated 2 of 2 texts." in WINDOWS[-1][1])
     # pressing "Re-translate selected" again on the same line the requests are new again (random round, never 0):
     # with a fixed round the local translator would give the previous answer
     sequence, real_round = iter([5, 9]), corrections._new_round
@@ -426,7 +428,7 @@ def test_web(base, root, app):
     mem = read_file(memory)
     check("Ritraduci tutto con Qualita' (12B): il modello Qualita', le correzioni a mano restano (anche nella "
               "domanda), le traduzioni automatiche rifatte con le domande normali",
-              to_ask[-1] == ("locale", "12b") and "Le tue correzioni a mano (2) restano" in question[1]
+              to_ask[-1] == ("locale", "12b") and "Your manual corrections (2) stay" in question[1]
               and mem["Options and settings"] == "Opzioni varie" and mem["Quit to the desktop"] == "Torna al desktop"
               and mem["Lantern Keeper"] == "Guardiano" and "Options and settings" not in quality.asked
               and all(not g or not any(g) for g in quality.rounds))
@@ -441,7 +443,7 @@ def test_web(base, root, app):
     finally:
         app._install_12b_and_retranslate = real_install
     check("Ritraduci tutto senza il modello Qualita': 'Modello Qualità da installare', poi installazione e "
-              "ritraduzione", install == [True] and WINDOWS[-1][0] == "Modello Qualità da installare"
+              "ritraduzione", install == [True] and WINDOWS[-1][0] == "Quality model to install"
               and not f.top.winfo_exists())
     # and the model choice in the interface: Quality chosen, then the installation with the re-translation after
     then, real_install_local = [], app._install_local
@@ -462,7 +464,7 @@ def test_web(base, root, app):
     check("'Correggi traduzioni' da una finestra di fine: la finestra con l'elenco 'Non scritte nel gioco'; "
               "'Mostra i rimasti' propone 'Correggi traduzioni'",
               len(open_toplevels) == 1 and f_game is not None and f_game.filter_ == "gioco"
-              and ("Correggi traduzioni", "correggi") in WINDOWS[-1][2])
+              and ("Fix translations", "correggi") in WINDOWS[-1][2])
     f_game.close()
 
     # damaged translations file (edited by hand with an error): it says so and offers to open it
@@ -476,8 +478,8 @@ def test_web(base, root, app):
         with open(memory, "wb") as fm:
             fm.write(good)
     check("file delle traduzioni rovinato: 'Traduzioni non leggibili' con 'Apri il file (avanzato)', in parole "
-              "semplici", modal_open is None and WINDOWS[-1][0] == "Traduzioni non leggibili"
-              and ("Apri il file (avanzato)", "apri") in WINDOWS[-1][2] and "JSON" not in WINDOWS[-1][1])
+              "semplici", modal_open is None and WINDOWS[-1][0] == "Unreadable translations"
+              and ("Open the file (advanced)", "apri") in WINDOWS[-1][2] and "JSON" not in WINDOWS[-1][1])
 
     # Start over: original game, backup copy, shared translation memory without the game's machine translations
     shared_before = read_file(project.shared_path("en", "it"))
@@ -491,7 +493,7 @@ def test_web(base, root, app):
 
     class Paused(DictTranslator):
         def pause(self):
-            return "Google e' in pausa fino a domani."
+            return "Google is paused until tomorrow."
 
     for create in (backend.create_backend, lambda name, log=print: Paused()):
         automatic.create_backend = create
@@ -530,7 +532,7 @@ def test_web(base, root, app):
     calls, real_restart = [], automatic.start_over
 
     def paused(*_a, **_k):
-        raise backend.BackendError("Google e' in pausa fino a domani.", "TRADUTTORE_BLOCCATO")
+        raise backend.BackendError("Google is paused until tomorrow.", "TRADUTTORE_BLOCCATO")
 
     try:
         app._translate()
@@ -558,10 +560,11 @@ def test_web(base, root, app):
         project.data_folder("memory", "copies", n)))
     check("dopo 'Ricomincia da zero', 'Riprova' continua la traduzione nuova senza rimetterla da parte; se non era "
               "partito (traduttore in pausa), 'Usa il traduttore locale' ricomincia da zero",
-              to_retry[0] == [] and to_retry[1].startswith("Traduzione installata") and len(copies) == 2
+              to_retry[0] == [] and to_retry[1].startswith(INSTALLED) and len(copies) == 2
               and not_started == ("TRADUTTORE_BLOCCATO", True))
     check("'Ricomincia da zero…' dalla finestra: chiede conferma, mette da parte la memoria e traduce di nuovo",
-              "Ricominciare da zero?" in titles and titles[-1].startswith("Traduzione installata") and len(copies) == 2
+              "Start over from scratch?" in titles and titles[-1].startswith(INSTALLED)
+              and len(copies) == 2
               and any(n.endswith(".prova.json") for n in os.listdir(project.data_folder("memory", "copies",
                                                                                           copies[-1])))
               and os.path.exists(project.memory_path(profile, test=True)))
@@ -597,8 +600,8 @@ def test_pages(app, root):
     f.close()
     check("elenco lungo a pagine (%.2f s): %d righe alla volta, Pagina dopo fino all'ultima, ricerca e filtro; con "
               "una pagina sola la riga delle pagine non c'e'" % (seconds, gui_corrections.PAGE),
-              page1 == (300, "Pagina 1 di 3 (righe 1–300 di 750)")
-              and page3 == (150, "Pagina 3 di 3 (righe 601–750 di 750)", True)
+              page1 == (300, "Page 1 of 3 (lines 1–300 of 750)")
+              and page3 == (150, "Page 3 of 3 (lines 601–750 of 750)", True)
               and wanted == 61 and suspects == 8 and pages_with_few == "" and seconds < 5)
 
 
@@ -623,8 +626,8 @@ def test_gamemaker_space(base, root, app):
     steel = entry(items, "royal steel")
     check("GameMaker: 'Troppo lunghi' con lo spazio che il testo ha nel gioco (riga piu' lunga delle sue "
               "versioni), colonna Limite", steel.space and steel.space[3] == 11 and "lunghi" in steel.problems
-              and steel.problems["lunghi"].startswith("riga più lunga:")
-              and "ce ne stanno circa 11" in steel.problems["lunghi"]
+              and steel.problems["lunghi"].startswith("longest line:")
+              and "about 11 fit in the game" in steel.problems["lunghi"]
               and "lunghi" not in entry(items, "wood").problems)
     app.folder.set(game)
     f = app._fix("lunghi")
@@ -640,8 +643,8 @@ def test_gamemaker_space(base, root, app):
     f.close()
     check("GameMaker: la finestra aperta su 'Troppo lunghi', il limite in colonna e mentre scrivi",
               filter_ == "lunghi" and values[0] == "royal steel" and re.fullmatch(r"\d+/11", values[2]) and with_limit
-              and short.startswith("Riga più lunga: 7 caratteri (nel gioco ce ne stanno circa 11)")
-              and line_len.endswith("troppo lunga"))
+              and short.startswith("Longest line: 7 characters (about 11 fit in the game)")
+              and line_len.endswith("too long"))
     # a fix with a character the game's fonts lack: it is not written, it goes in "Not written to the game"; a
     # suspicious translation fixed by hand leaves the suspicious ones at once (even without Reapply, as for Unity)
     problems_file = project.problems_path(read_file(path))
@@ -661,7 +664,7 @@ def test_gamemaker_space(base, root, app):
               "motivo, e la finestra di fine propone 'Correggi traduzioni' su quell'elenco",
               "→" in coal.problems.get("gioco", "") and e["esito"].extra.get("corrette_a_mano_scartate") == 1
               and outcome.fixes_filter(e["esito"]) == "gioco"
-              and ("Correggi traduzioni", "correggi") in outcome.window(e["esito"], "riapplica")["pulsanti"])
+              and ("Fix translations", "correggi") in outcome.window(e["esito"], "riapplica")["pulsanti"])
     automatic.restore(game, silent)
 
 
@@ -701,7 +704,7 @@ def test_unity_cache(base, root, app):
         check("Unity: nell'elenco anche le righe della cache di XUnity (quello che il gioco mostra): una rimasta "
                   "uguale all'originale, una tradotta mentre giocavi senza tutti i controlli",
                   port.cache == port.text and port.memory is None and "rimasti" in port.problems
-                  and "mentre giocavi" in entry(items, "Hold {{A}} to leap").problems.get("sospetti", "")
+                  and "while you were playing" in entry(items, "Hold {{A}} to leap").problems.get("sospetti", "")
                   and entry(items, "Start a new game").cache == "Inizia una nuova partita"
                   and "English" not in [x.text for x in items.entries])
         with open(cache, encoding="utf-8-sig") as f:
@@ -732,7 +735,7 @@ def test_unity_cache(base, root, app):
                   and entry(corrections.load(path), "Open the door to the castle").by_hand
                   and not corrections.to_write({"nome": name, "lingua_destinazione": "it"}))
         check("Unity: la finestra di fine dice quante correzioni ha scritto nel gioco",
-                  "Ho scritto nel gioco 2 tue correzioni." in WINDOWS[-1][1])
+                  "I wrote your 2 corrections to the game." in WINDOWS[-1][1])
         # game open: the fix waits (saved), and is written at the next Reapply
         profile = read_file(path)
         corrections.save(path, {"Talk to the guard": "Parla con la sentinella"}, {"Talk to the guard":

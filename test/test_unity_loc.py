@@ -335,8 +335,8 @@ def test_refusals(base):
     e = outcome["esito"]
     check("tabelle senza la lingua di partenza: motivo chiaro con le lingue del gioco (per nome) e cosa scegliere, "
               "nessun file modificato",
-              profile is None and e.code == "NON_SUPPORTATO" and "tabelle dei testi" in e.reason
-              and "lingua di partenza" in e.reason and "Francese (fr)" in e.reason and '"Da:"' in e.reason
+              profile is None and e.code == "NON_SUPPORTATO" and "text tables" in e.reason
+              and "original language" in e.reason and "French (fr)" in e.reason and '"From:"' in e.reason
               and "IL2CPP" not in e.reason and "BepInEx" not in e.reason and _unchanged(bundle_folder, before))
     # with the language the game has as source language chosen: its table is translated
     game, bundle_folder, profile, outcome, before = _flow(

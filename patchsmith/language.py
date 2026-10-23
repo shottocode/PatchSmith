@@ -12,14 +12,14 @@ AUTO = "auto"
 
 # Google Translate codes with their Italian name.
 NAMES = {
-    "en": "Inglese", "it": "Italiano", "ja": "Giapponese", "zh-CN": "Cinese semplificato",
-    "zh-TW": "Cinese tradizionale", "ko": "Coreano", "fr": "Francese", "de": "Tedesco", "es": "Spagnolo",
-    "pt": "Portoghese", "ru": "Russo", "pl": "Polacco", "tr": "Turco", "nl": "Olandese", "sv": "Svedese",
-    "da": "Danese", "no": "Norvegese", "fi": "Finlandese", "cs": "Ceco", "hu": "Ungherese", "ro": "Rumeno",
-    "el": "Greco", "uk": "Ucraino", "ar": "Arabo", "he": "Ebraico", "th": "Thailandese", "vi": "Vietnamita",
-    "id": "Indonesiano", "hi": "Hindi",
+    "en": "English", "it": "Italian", "ja": "Japanese", "zh-CN": "Simplified Chinese",
+    "zh-TW": "Traditional Chinese", "ko": "Korean", "fr": "French", "de": "German", "es": "Spanish",
+    "pt": "Portuguese", "ru": "Russian", "pl": "Polish", "tr": "Turkish", "nl": "Dutch", "sv": "Swedish",
+    "da": "Danish", "no": "Norwegian", "fi": "Finnish", "cs": "Czech", "hu": "Hungarian", "ro": "Romanian",
+    "el": "Greek", "uk": "Ukrainian", "ar": "Arabic", "he": "Hebrew", "th": "Thai", "vi": "Vietnamese",
+    "id": "Indonesian", "hi": "Hindi",
 }
-AUTO_LABEL = "Rileva automaticamente"
+AUTO_LABEL = "Detect automatically"
 
 # Language names written in their own language: in language selection menus they must not be translated.
 ENDONYMS = {
@@ -90,16 +90,23 @@ def labels(with_auto=False):
     return ([AUTO_LABEL] if with_auto else []) + [label(c) for c in main_languages + other_ones]
 
 
+def _italian():
+    """The Italian interface texts (names typed or saved in Italian are still understood)."""
+    from .ui_language import texts_of
+    return texts_of("it")
+
+
 def code(text):
-    """From a label ('Italiano (it)'), name ('italiano') or code ('it') to the code."""
+    """From a label ('Italian (it)'), name ('italian', also the Italian 'italiano') or code ('it') to the code."""
     t = (text or "").strip()
-    if not t or t.lower() in (AUTO_LABEL.lower(), AUTO):
+    italian = _italian()
+    if not t or t.lower() in (AUTO_LABEL.lower(), italian.get(AUTO_LABEL, AUTO_LABEL).lower(), AUTO):
         return AUTO
     m = re.search(r"\(([A-Za-z]{2,3}(?:-[A-Za-z]{2,4})?)\)\s*$", t)
     if m:
         return m.group(1)
     for c, name in NAMES.items():
-        if t.lower() in (name.lower(), c.lower()):
+        if t.lower() in (name.lower(), c.lower(), italian.get(name, name).lower()):
             return c
     return t
 
@@ -195,28 +202,28 @@ def detect(texts, maximum=200_000):
             counts[s] = counts.get(s, 0) + 1
     letters = sum(counts.values())
     if not letters:
-        return "en", "nessun testo: uso l'inglese"
+        return "en", "no text: I will use English"
 
     kana, han = counts.get("kana", 0), counts.get("han", 0)
     if (kana + han) / letters > 0.3:
         if kana > 0.05 * (kana + han):
-            return "ja", "caratteri giapponesi (kana)"
-        return "zh-CN", "ideogrammi cinesi"
+            return "ja", "Japanese characters (kana)"
+        return "zh-CN", "Chinese ideograms"
     for language in ("ko", "el", "ar", "he", "th", "hi"):
         if counts.get(language, 0) / letters > 0.3:
             return language, "alfabeto"
     if counts.get("cirillico", 0) / letters > 0.3:
         ukrainian = sum(sample.count(c) for c in "ієїґІЄЇҐ")
-        return ("uk" if ukrainian > 0.005 * counts["cirillico"] else "ru"), "alfabeto cirillico"
+        return ("uk" if ukrainian > 0.005 * counts["cirillico"] else "ru"), "Cyrillic alphabet"
 
     words = re.findall(r"[^\W\d_]+", sample.lower())
     if not words:
-        return "en", "testo non riconosciuto: uso l'inglese"
+        return "en", "unrecognized text: I will use English"
     scores = {language: sum(1 for p in words if p in item_set) for language, item_set in _WORDS.items()}
     best = max(scores, key=scores.get)
     quota = scores[best] / len(words)
     if quota < 0.03:
-        return "en", "parole non riconosciute: uso l'inglese"
+        return "en", "unknown words: I'll use English"
     second = sorted(scores.values())[-2]
     confidence = "alta" if scores[best] > 1.5 * max(second, 1) else "media"
-    return best, "parole frequenti (affidabilità %s)" % confidence
+    return best, "common words (reliability %s)" % confidence

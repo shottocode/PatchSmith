@@ -96,8 +96,8 @@ def smart_app_control():
 def executable_checks():
     """Reasons NOT to modify executables on this PC (empty list = it is allowed)."""
     if smart_app_control() in (1, 2):
-        return ["Smart App Control di Windows e' attivo (o in valutazione): bloccherebbe gli eseguibili modificati, "
-                "perche' la loro firma digitale non sarebbe piu' valida. Non modifico nulla."]
+        return ["Smart App Control for Windows is active (or under evaluation): it would block modified executables "
+                "because their digital signature would no longer be valid. I am not modifying anything."]
     return []
 
 
@@ -111,10 +111,10 @@ def _backup_ready(path, current_data, lever_name, log):
         return project.create_backup(path, {"configuratore": lever_name}), True
     info = project.read_info(path)
     if not info:
-        raise ConfiguratorError("%s ha un backup senza informazioni: controllalo a mano prima di procedere."
+        raise ConfiguratorError("%s has a backup with no information: please check it manually before proceeding."
                                   % os.path.basename(path))
     if project._hash_file(backup) != info["hash_originale"]:
-        raise ConfiguratorError("Il backup di %s non corrisponde all'originale registrato: mi fermo."
+        raise ConfiguratorError("The backup of %s doesn't match the recorded original: stopping."
                                   % os.path.basename(path))
     current = project._hash_bytes(current_data)
     if current == info["hash_originale"] or current in info.get("hash_scritti", []):
@@ -130,7 +130,7 @@ def _backup_ready(path, current_data, lever_name, log):
     except BaseException:
         os.replace(old_path, backup)  # the old backup goes back in its place, with its info
         raise
-    log("  %s e' cambiato (aggiornamento del gioco?): e' il nuovo originale, il precedente e' in %s"
+    log("  %s has changed (game update?): it's the new original, the previous one is in %s"
         % (os.path.basename(path), old))
     return new_lines, False
 
@@ -162,8 +162,8 @@ def apply_bytes(folder, lever_name, plans, log=print, value_=None, description=N
             if current_count == bytes(after):
                 continue
             if current_count != bytes(before):
-                raise ConfiguratorError("%s: a 0x%X ci sono byte inattesi (%s invece di %s): non e' la versione "
-                                          "prevista del file, non modifico nulla." % (
+                raise ConfiguratorError("%s: unexpected bytes at 0x%X (%s instead of %s): this is not the expected "
+                                        "version of the file, I'm not changing anything." % (
                                               os.path.basename(path), offset, current_count.hex(), bytes(before).hex()))
             new_items[offset:offset + len(after)] = after
         if bytes(new_items) != data:
@@ -174,12 +174,12 @@ def apply_bytes(folder, lever_name, plans, log=print, value_=None, description=N
         return 0
     for path, _, _ in prepared:
         if not os.access(path, os.W_OK):
-            raise ConfiguratorError("%s e' di sola lettura: togli la sola lettura e riprova. Non ho modificato "
-                                      "nulla." % os.path.basename(path))
+            raise ConfiguratorError("%s is read-only: remove the read-only protection and try again. I haven't made "
+                                    "any changes." % os.path.basename(path))
     needed = sum(len(d) for p, d, _ in prepared if _needs_backup(p, d))
     if shutil.disk_usage(folder).free < needed + SPACE_MARGIN:
-        raise ConfiguratorError("Spazio libero insufficiente per i backup (servono %.0f MB): non ho modificato "
-                                  "nulla." % ((needed + SPACE_MARGIN) / 1048576))
+        raise ConfiguratorError("Insufficient free space for backups (requires %.0f MB): I haven't made any changes."
+                                % ((needed + SPACE_MARGIN) / 1048576))
     _game_closed(folder)
     previous = lever(folder, lever_name)
     _record_lever(folder, lever_name, "in_corso", value_, rel, description)
@@ -199,7 +199,7 @@ def apply_bytes(folder, lever_name, plans, log=print, value_=None, description=N
             writes.append(path)
             adapter_webjson.write_atomic(path, new_items)
             if project._hash_file(path) != project._hash_bytes(new_items):
-                raise ConfiguratorError("%s: la scrittura non si rilegge uguale" % os.path.basename(path))
+                raise ConfiguratorError("%s: what was written doesn't read back the same" % os.path.basename(path))
     except BaseException as e:
         remaining = _roll_back(prepared, new_backups, writes, log)
         try:
@@ -212,10 +212,10 @@ def apply_bytes(folder, lever_name, plans, log=print, value_=None, description=N
         if not isinstance(e, (OSError, ConfiguratorError, RuntimeError)):
             raise  # interruption (Ctrl+C...): the files have already been put back as they were
         if remaining:
-            raise ConfiguratorError("Modifica non riuscita (%s). Non sono riuscito a rimettere com'erano: %s. "
-                                      "Chiudi i programmi che li usano e premi 'Ripristina originali'."
+            raise ConfiguratorError("Change failed (%s). I couldn't put these back as they were: %s. Close the "
+                                    "programs that use them and press 'Restore originals'."
                                       % (e, ", ".join(remaining))) from e
-        raise ConfiguratorError("Modifica non riuscita (%s): ho rimesso tutto com'era prima." % e) from e
+        raise ConfiguratorError("Change failed (%s): I've put everything back as it was." % e) from e
     _record_lever(folder, lever_name, "applicata", value_, rel, description)
     return len(prepared)
 
@@ -238,7 +238,7 @@ def _roll_back(prepared, new_backups, writes, log):
                         remaining.append(name)
         except (OSError, RuntimeError) as e:
             remaining.append(name)
-            log("  ! %s non rimesso com'era (%s)" % (name, e))
+            log("  ! %s hasn't been restored to its original condition (%s)" % (name, e))
     return remaining
 
 
@@ -246,7 +246,8 @@ def repair_interrupted(folder, log=print):
     """If an operation was interrupted halfway (record 'in_corso'), puts back the originals of that lever."""
     for name, data in list(read_file(folder).get("leve", {}).items()):
         if isinstance(data, dict) and data.get("stato") == "in_corso":
-            log("  L'operazione precedente (%s) era stata interrotta a meta': rimetto gli originali." % name)
+            log("  The previous operation (%s) was interrupted halfway through: I'm reverting to the original state."
+                % name)
             restore(folder, name, log)
 
 
@@ -256,7 +257,7 @@ def _game_closed(folder):
     except system.SysError as e:
         raise ConfiguratorError(str(e)) from e
     if is_open:
-        raise ConfiguratorError("Il gioco e' aperto: chiudilo e riprova. Non ho modificato nulla.")
+        raise ConfiguratorError("The game is open: close it and try again. I haven't made any changes.")
 
 
 def _record_lever(folder, name, state, value_, file, description):
@@ -303,7 +304,7 @@ def restore(folder, lever_name, log=print):
                 ok = False
         except OSError as e:
             ok = False
-            log("  ! %s non rimesso com'era (%s)" % (os.path.basename(path), e))
+            log("  ! %s hasn't been restored to its original condition (%s)" % (os.path.basename(path), e))
     if ok:
         _remove_lever(folder, lever_name)
     return ok

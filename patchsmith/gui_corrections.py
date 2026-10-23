@@ -19,8 +19,8 @@ from . import corrections, ui_language as ui, theme
 
 PAGE = 300  # list lines shown together
 CELL_WIDTH = 160  # characters shown in a cell (the whole text is below, in the chosen line)
-COLUMNS = (("originale", "Originale", 280), ("traduzione", "Traduzione", 280), ("limite", "Limite", 70),
-           ("problema", "Problema", 230))
+COLUMNS = (("originale", "Original", 280), ("traduzione", "Translation", 280), ("limite", "Limit", 70),
+           ("problema", "Problem", 230))
 
 
 def _in_cell(text):
@@ -33,7 +33,7 @@ def _number(n):
 
 
 def _count_label(n, one, many):
-    """'1 riga', '2 righe'."""
+    """'1 line', '2 lines'."""
     return "%d %s" % (n, one if n == 1 else many)
 
 
@@ -66,12 +66,12 @@ class Window:
 
         bar = ttk.Frame(frame)
         bar.grid(row=1, column=0, sticky="ew", pady=(8, 6))
-        ttk.Label(bar, text="Cerca:").pack(side="left")
+        ttk.Label(bar, text="Search:").pack(side="left")
         self.search = tk.StringVar()
         self.search_entry = ttk.Entry(bar, textvariable=self.search, width=34)
         self.search_entry.pack(side="left", padx=(4, 14))
         self.search.trace_add("write", lambda *_a: self._search_later())
-        ttk.Label(bar, text="Mostra:").pack(side="left")
+        ttk.Label(bar, text="Show:").pack(side="left")
         self.filter_choice = ttk.Combobox(bar, state="readonly", width=34, values=self._filter_labels())
         self.filter_choice.pack(side="left", padx=(4, 0))
         self.filter_choice.current(self.filter_keys.index(filter_) if filter_ in self.filter_keys else 0)
@@ -106,20 +106,20 @@ class Window:
         # are no lines
         pages = self.pages_row = ttk.Frame(frame)
         pages.grid(row=3, column=0, sticky="ew", pady=(4, 0))
-        self.btn_prev = ttk.Button(pages, text="◀ Pagina prima", command=lambda: self.change_page(-1))
+        self.btn_prev = ttk.Button(pages, text="◀ Previous page", command=lambda: self.change_page(-1))
         self.position = ui.TextVar()
         self.position_label = ttk.Label(pages, textvariable=self.position, style="Stato.TLabel")
-        self.btn_next = ttk.Button(pages, text="Pagina dopo ▶", command=lambda: self.change_page(1))
+        self.btn_next = ttk.Button(pages, text="Next page ▶", command=lambda: self.change_page(1))
 
         editor = ttk.Frame(frame)
         editor.grid(row=4, column=0, sticky="ew", pady=(10, 0))
         editor.columnconfigure(1, weight=1)
-        ttk.Label(editor, text="Originale:").grid(row=0, column=0, sticky="nw", padx=(0, 8))
+        ttk.Label(editor, text="Original:").grid(row=0, column=0, sticky="nw", padx=(0, 8))
         self.original_text = tk.Text(editor, height=3, wrap="word", font=("Segoe UI", 10), state="disabled",
                                        takefocus=False)
         theme.color_text(self.original_text, self.c)
         self.original_text.grid(row=0, column=1, sticky="ew")
-        ttk.Label(editor, text="Traduzione:").grid(row=1, column=0, sticky="nw", padx=(0, 8), pady=(6, 0))
+        ttk.Label(editor, text="Translation:").grid(row=1, column=0, sticky="nw", padx=(0, 8), pady=(6, 0))
         self.translation_text = tk.Text(editor, height=3, wrap="word", font=("Segoe UI", 10), undo=True)
         theme.color_text(self.translation_text, self.c)
         self.translation_text.grid(row=1, column=1, sticky="ew", pady=(6, 0))
@@ -143,13 +143,13 @@ class Window:
 
         buttons = ttk.Frame(frame)
         buttons.grid(row=5, column=0, sticky="ew", pady=(10, 0))
-        self.btn_save = ttk.Button(buttons, text="Salva e applica al gioco", underline=0, command=self.save)
+        self.btn_save = ttk.Button(buttons, text="Save and apply to the game", underline=0, command=self.save)
         self.btn_save.pack(side="left")
-        self.btn_retranslate = ttk.Button(buttons, text="Ritraduci selezionati…", underline=0,
+        self.btn_retranslate = ttk.Button(buttons, text="Re-translate selected…", underline=0,
                                         command=self.retranslate_selected)
         self.btn_retranslate.pack(side="left", padx=6)
-        ttk.Button(buttons, text="Chiudi", command=self.close).pack(side="right")
-        ttk.Button(buttons, text="Apri il file (avanzato)", command=self.open_file).pack(side="right", padx=6)
+        ttk.Button(buttons, text="Close", command=self.close).pack(side="right")
+        ttk.Button(buttons, text="Open the file (advanced)", command=self.open_file).pack(side="right", padx=6)
 
         for hotkey in ("<Control-f>", "<Control-F>"):
             top.bind(hotkey, self._go_to_search)
@@ -184,7 +184,7 @@ class Window:
     # --- list --------------------------------------------------------------------------------------------
 
     def _title(self):
-        return "Correggi traduzioni - %s%s" % (self.items.name, " *" if self.changes else "")
+        return "Fix translations - %s%s" % (self.items.name, " *" if self.changes else "")
 
     def _filter_labels(self):
         occurrences = self.items.counts()
@@ -234,14 +234,14 @@ class Window:
         for w in (self.btn_prev, self.position_label, self.btn_next):
             w.pack_forget()
         if multi_page:
-            self.position.set("Pagina %d di %d (righe %s–%s di %s)" % (
+            self.position.set("Page %d of %d (lines %s–%s of %s)" % (
                 self.page + 1, self._pages(), _number(start + 1),
                 _number(min(start + PAGE, len(self.shown))), _number(len(self.shown))))
             self.btn_prev.pack(side="left")
             self.position_label.pack(side="left", padx=10)
             self.btn_next.pack(side="left")
         elif not self.shown:
-            self.position.set("Nessuna riga" + (" con questa ricerca" if self.search.get().strip() else ""))
+            self.position.set("No rows" + (" with this search" if self.search.get().strip() else ""))
             self.position_label.pack(side="left")
         if multi_page or not self.shown:
             self.pages_row.grid()
@@ -266,7 +266,7 @@ class Window:
         limit = "%d/%d" % measured if measured and measured[0] is not None else ""
         problem = x.reasons()
         if x.text in self.changes:
-            problem = "; ".join(["modificata, da salvare"] + self._warnings(x))
+            problem = "; ".join(["modified, to be saved"] + self._warnings(x))
         return _in_cell(x.text), _in_cell(translated), limit, problem
 
     def _warnings(self, x):
@@ -310,15 +310,15 @@ class Window:
         if x is None:
             self._set_text(self.original_text, "", active=False)
             self._set_text(self.translation_text, "", active=False)
-            self.length.set("Hai scelto %d righe: puoi ritradurle con \"Ritraduci selezionati…\"." % choices
-                               if choices > 1 else "Scegli una riga dell'elenco.")
+            self.length.set("You've selected %d lines: you can re-translate them using \"Re-translate selected…\"."
+                            % choices if choices > 1 else "Choose a row from the list.")
             self.warning.set("")
             self.problem.set("")
             return
         self._set_text(self.original_text, x.text, active=False)
         self._set_text(self.translation_text, self.translation_of(x))
         self.current = x
-        self.problem.set("Problema: %s" % x.reasons() if x.reasons() else "")
+        self.problem.set("Problem: %s" % x.reasons() if x.reasons() else "")
         self._update_info()
 
     def _edited(self):
@@ -348,14 +348,14 @@ class Window:
         measured = corrections.measure(x, translated) if translated.strip() else None
         if measured and measured[0] is not None:
             line_len, width = measured
-            self.length.set("Riga più lunga: %d caratteri (nel gioco ce ne stanno circa %d)%s" % (
-                line_len, width, ": troppo lunga" if corrections.too_long(line_len, width) else ""))
+            self.length.set("Longest line: %d characters (about %d fit in the game)%s" % (
+                line_len, width, ": too long" if corrections.too_long(line_len, width) else ""))
         elif measured:
-            self.length.set("Non ha la forma dell'originale (paragrafi o a capo diversi)")
+            self.length.set("It doesn't have the same format as the original (different paragraphs or line breaks)")
         else:
-            self.length.set("Lunghezza: %d caratteri (originale: %d)" % (len(translated), len(x.text)))
+            self.length.set("Length: %d characters (original: %d)" % (len(translated), len(x.text)))
         warnings = self._warnings(x) if translated.strip() or x.text in self.changes else []
-        self.warning.set(("Attenzione: " + "; ".join(warnings)) if warnings else "")
+        self.warning.set(("Warning: " + "; ".join(warnings)) if warnings else "")
 
     def _go_to_translation(self, _event=None):
         if self.current is not None:
@@ -449,10 +449,10 @@ class Window:
 
     def close(self):
         if self.changes:
-            choice = self._choose("Salvare le correzioni?", "Hai %s. Salvare e scrivere nel gioco le "
-                                  "correzioni?" % _count_label(len(self.changes), "correzione non salvata",
-                                                          "correzioni non salvate"),
-                                  [("Salva", "salva"), ("Non salvare", "esci"), ("Annulla", None)])
+            choice = self._choose("Save the changes?",
+                                  "You have %s. Save the corrections and write them into the game?"
+                                  % _count_label(len(self.changes), "unsaved correction", "unsaved changes"),
+                                  [("Save", "salva"), ("Don't save", "esci"), ("Cancel", None)])
             if choice == "salva":
                 return self.save()
             if choice != "esci":
@@ -464,8 +464,9 @@ class Window:
         """The fixes ready to save (None if one is empty or if you chose to go back to fixing)."""
         blanks = [t for t, v in self.changes.items() if not v.strip()]
         if blanks:
-            self._warn("Traduzione vuota", "La traduzione di \"%s\" è vuota: scrivila, oppure premi Esc per tenere "
-                         "quella di prima. Per farla rifare a PatchSmith usa \"Ritraduci selezionati…\"."
+            self._warn("Empty translation", 'The translation for "%s" is empty: write it, or press Esc to keep the '
+                                           'previous translation. To re-translate using PatchSmith, use "Re-translate '
+                                           'selected…".'
                          % _in_cell(blanks[0])[:80])
             self._go_to(blanks[0])
             return None
@@ -473,10 +474,11 @@ class Window:
         doubts = [(t, a) for t, a in doubts if a]
         if doubts:
             lines = "\n".join("- \"%s\": %s" % (_in_cell(t)[:50], "; ".join(a)) for t, a in doubts[:5])
-            choice = self._choose("Controlla le correzioni", "Alcune correzioni hanno qualcosa che non torna:\n%s%s\n\n"
-                                  "Il gioco potrebbe mostrarle male (per esempio un segnaposto come {0} va copiato "
-                                  "così com'è). Salvare lo stesso?" % (lines, "\n…" if len(doubts) > 5 else ""),
-                                  [("Torna a correggere", None), ("Salva lo stesso", "salva")], "avviso")
+            choice = self._choose("Check the corrections", "Something looks wrong in some fixes:\n%s%s\n\nThe game "
+                                                             "might display them incorrectly (for example, a "
+                                                             "placeholder like {0} must be copied exactly as it is). "
+                                                             "Save anyway?" % (lines, "\n…" if len(doubts) > 5 else ""),
+                                  [("Go back to editing", None), ("Save anyway", "salva")], "avviso")
             if choice != "salva":
                 self._go_to(doubts[0][0])
                 return None
@@ -504,8 +506,8 @@ class Window:
             corrections.save(self.items.profile_path, changes, seen, test=self.items.test,
                              log=self.app._log)
         except (OSError, RuntimeError, ValueError) as e:
-            self._warn("Correzioni non salvate", "Non sono riuscito a salvare le correzioni: %s\n\nLe correzioni "
-                         "sono ancora qui: riprova tra un attimo (per esempio dopo aver chiuso il gioco)." % e)
+            self._warn("Unsaved changes", "I wasn't able to save the changes: %s\n\nThe fixes are still there: "
+                                                 "try again in a moment (for example, after closing the game)." % e)
             return False
         self.changes = {}
         return True
@@ -514,8 +516,8 @@ class Window:
         """"Save and apply to the game": the fixes in the translation memory, then (window closed) "Reapply" by
         itself."""
         if not self.changes:
-            self._warn("Niente da salvare", "Non hai ancora corretto nessuna traduzione: scegli una riga, scrivi la "
-                         "traduzione qui sotto e poi premi \"Salva e applica al gioco\".")
+            self._warn("Nothing to save", "You haven't yet corrected any translations: choose a line, write the "
+                                            'translation below, and then press "Save and apply to the game".')
             return False
         changes = self._to_save()
         if changes is None or not self._save_changes(changes):
@@ -528,9 +530,9 @@ class Window:
         """Before an operation of the main window: the unsaved fixes are saved (or it is cancelled)."""
         if not self.changes:
             return True
-        choice = self._choose("Correzioni non salvate", "Hai %s: salvo le correzioni prima di continuare?"
-                              % _count_label(len(self.changes), "correzione non salvata", "correzioni non salvate"),
-                              [("Salva e continua", "salva"), ("Annulla", None)])
+        choice = self._choose("Unsaved changes", "You have %s: save the corrections before continuing?"
+                              % _count_label(len(self.changes), "unsaved correction", "unsaved changes"),
+                              [("Save and continue", "salva"), ("Cancel", None)])
         if choice != "salva":
             return False
         changes = self._to_save()
@@ -539,14 +541,14 @@ class Window:
     def _current_translator(self):
         from .gui import TRANSLATORS
         name = self.app._backend()
-        return name, TRANSLATORS.get(name, "il traduttore di prova" if name == "finto" else name)
+        return name, TRANSLATORS.get(name, "the test translator" if name == "finto" else name)
 
     def retranslate_selected(self):
         from . import ollama
         lines = self.selected_lines()
         if not lines:
-            self._warn("Nessuna riga scelta", "Scegli nell'elenco le righe da ritradurre (con Maiusc o Ctrl ne "
-                         "scegli più di una; Ctrl+A tutte quelle della pagina).")
+            self._warn("No row selected", "Choose the lines to re-translate in the list (with Shift or Ctrl you "
+                                              "can choose more than one; Ctrl+A selects all those on the page).")
             return False
         name, label = self._current_translator()
         buttons = []
@@ -557,23 +559,25 @@ class Window:
                 is_ready = False
             if is_ready:
                 from .gui import LOCAL_MODELS
-                buttons += [("Traduttore locale: %s" % LOCAL_MODELS[k], k) for k in ("12b", "4b")
+                buttons += [("Local translator: %s" % LOCAL_MODELS[k], k) for k in ("12b", "4b")
                              if ollama.model_present(k)]
             if name == "locale" and not buttons:
-                self._warn("Traduttore locale da installare", "Per ritradurre serve un traduttore: il traduttore "
-                             "locale non è ancora installato. Installalo con \"Installa…\" nella finestra principale, "
-                             "oppure scegli lì un altro traduttore.")
+                self._warn("Local translator to install", "To re-translate, you'll need a translator: the local "
+                                                              "translator hasn't been installed yet. Install it using "
+                                                              '"Install…" in the main window, or choose a different '
+                                                              "translator there.")
                 return False
         if name != "locale":
-            buttons.append(("Con %s" % label, "attuale"))
-        text = ("Ritraduco %s con domande nuove, così la traduzione può venire diversa da quella di adesso "
-                 "(anche per le righe che hai corretto a mano: le hai scelte tu). Se la traduzione nuova non passa i "
-                 "controlli resta quella di prima. Poi la scrivo nel gioco."
-                 % _count_label(len(lines), "riga", "righe"))
+            buttons.append(("With %s" % label, "attuale"))
+        text = ("I'm re-translating %s with new requests, so the translation can come out different from the current "
+                "one (even for the lines you fixed by hand: you chose them). If the new translation doesn't pass the "
+                "checks, the previous one stays. Then I write it into the game."
+                 % _count_label(len(lines), "line", "lines"))
         if name in ("google", "deepl", "mymemory") and not any(k in ("12b", "4b") for _, k in buttons):
-            text += ("\n\nCon %s di solito la traduzione torna uguale: per una diversa serve il traduttore locale."
+            text += ("\n\nWith %s the translation usually comes back the same: for a different one you need the local "
+                     "translator."
                       % label)
-        choice = self._choose("Ritraduci le righe scelte", text, buttons + [("Annulla", None)])
+        choice = self._choose("Re-translate the selected lines", text, buttons + [("Cancel", None)])
         if choice is None or not self._save_first():
             return False
         self._close_window()
@@ -589,12 +593,16 @@ class Window:
         except OSError:
             present_value = False
         if not present_value:
-            choice = self._choose("Modello Qualità da installare", "Per ritradurre con il modello Qualità (12B) "
-                                  "bisogna prima installarlo: PatchSmith ti dice quanto scarica e parte solo dopo il "
-                                  "tuo sì. Finita l'installazione ritraduco da solo. Da quel momento il traduttore "
-                                  "scelto è il traduttore locale con il modello Qualità (puoi cambiarlo nella finestra "
-                                  "principale).",
-                                  [("Installa il modello Qualità", "installa"), ("Annulla", None)])
+            choice = self._choose("Quality model to install", 'To re-translate using the "Quality" model (12B), '
+                                                                   "you need to install it first: PatchSmith will tell "
+                                                                   "you how much data needs to be downloaded and will "
+                                                                   "only start after you confirm. Once the "
+                                                                   "installation is complete, it will automatically "
+                                                                   "re-translate. From that point on, the selected "
+                                                                   "translator will be the local translator using the "
+                                                                   '"Quality" model (you can change this in the main '
+                                                                   "window).",
+                                  [("Install the Quality model", "installa"), ("Cancel", None)])
             if choice != "installa" or not self._save_first():
                 return False
             self._close_window()
@@ -602,25 +610,26 @@ class Window:
             return True
         texts, by_hand = corrections.texts_to_retranslate(self.items)
         if not texts:
-            self._warn("Niente da ritradurre", "Tutte le traduzioni di questo gioco sono corrette a mano: restano "
-                         "come sono.")
+            self._warn("Nothing to re-translate", "All translations of this game were fixed by hand: they stay as they "
+                                               "are.")
             return False
         estimate = backend.Local("12b", log=None).estimate([len(t) for t in texts])
-        text = ("Ritraduco con il modello Qualità (12B) %d testi di questo gioco: le traduzioni automatiche e i testi "
-                 "rimasti in originale. " % len(texts))
+        text = ("Retranslating with the Quality model (12B) %d texts of this game: the machine translations and the "
+                "texts left untranslated. " % len(texts))
         if self.items.known_machine:
-            text += ("Le tue correzioni a mano (%d) restano come sono. " % by_hand) if by_hand else ""
+            text += ("Your manual corrections (%d) stay as they are. " % by_hand) if by_hand else ""
             if self.items.unannotated:
-                text += ("%s di una versione vecchia di PatchSmith, che non ricordava quali hai corretto a "
-                          "mano: ritraduco anche %s. " % (
-                              _count_label(self.items.unannotated, "traduzione è", "traduzioni sono"),
+                text += ("%s from an old version of PatchSmith, which didn't remember which ones you fixed by hand: "
+                         "I'll re-translate %s too. " % (
+                              _count_label(self.items.unannotated, "translation is", "translations are"),
                               "quella" if self.items.unannotated == 1 else "quelle"))
         else:
-            text += ("Questo gioco è stato tradotto con una versione vecchia di PatchSmith, che non ricordava quali "
-                      "traduzioni hai corretto a mano: ritraduco anche quelle. ")
-        text += ("Se una traduzione nuova non riesce resta quella di prima. Tempo stimato: %s (il gioco deve restare "
-                  "chiuso). Poi le scrivo nel gioco." % describe_duration(estimate))
-        choice = self._choose("Ritraduci tutto con Qualità (12B)", text, [("Annulla", None), ("Ritraduci", "si")])
+            text += ("This game has been translated using an older version of PatchSmith, which doesn't remember which "
+                     "translations you corrected manually. I will also re-translate those. ")
+        text += ("If a new translation fails, the previous one stays. Estimated time: %s (the game must stay closed). "
+                 "Then I write them into the game." % describe_duration(estimate))
+        choice = self._choose("Re-translate everything with Quality (12B)", text,
+                              [("Cancel", None), ("Re-translate", "si")])
         if choice != "si" or not self._save_first():
             return False
         self._close_window()
@@ -631,13 +640,13 @@ class Window:
         by_hand = sum(1 for x in self.items.entries if x.by_hand)
         translated_count = sum(1 for x in self.items.entries if x.memory is not None or x.cache is not None)
         choice = self._choose(
-            "Ricominciare da zero?",
-            "Il gioco torna com'era (come con \"Ripristina originali\"), tutte le sue traduzioni (%d%s) vengono messe "
-            "da parte in una copia di sicurezza, nella cartella memory\\copies di PatchSmith, e il gioco si traduce di "
-            "nuovo da capo con il traduttore scelto. Serve solo se le traduzioni sono venute male in blocco: per "
-            "qualche frase basta correggerla qui.\n\nIl gioco deve essere chiuso." % (
-                translated_count, ", comprese %d corrette a mano" % by_hand if by_hand else ""),
-            [("Annulla", None), ("Ricomincia da zero", "si")], "avviso")
+            "Start over from scratch?",
+            'The game goes back to how it was (as with "Restore originals"), all its translations (%d%s) are set aside '
+            "in a backup copy, in PatchSmith's memory\\copies folder, and the game is translated again from scratch "
+            "with the chosen translator. Only needed if the translations came out badly across the board: for a few "
+            "phrases, just fix them here.\n\nThe game must be closed." % (
+                translated_count, ", including %d corrected by hand" % by_hand if by_hand else ""),
+            [("Cancel", None), ("Start over", "si")], "avviso")
         if choice != "si":
             return False
         self._close_window()

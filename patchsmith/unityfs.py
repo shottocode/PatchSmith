@@ -47,7 +47,7 @@ def lz4_decompress(src, size):
         distance = src[i] | (src[i + 1] << 8)
         i += 2
         if distance == 0:
-            raise UnityError("LZ4 non valido")
+            raise UnityError("LZ4 is invalid")
         length = token & 15
         if length == 15:
             while True:
@@ -59,14 +59,14 @@ def lz4_decompress(src, size):
         length += 4
         start = len(dst) - distance
         if start < 0:
-            raise UnityError("LZ4 non valido")
+            raise UnityError("LZ4 is invalid")
         if distance >= length:
             dst += dst[start:start + length]
         else:
             for k in range(length):
                 dst.append(dst[start + k])
     if len(dst) != size:
-        raise UnityError("LZ4: dimensione diversa da quella attesa")
+        raise UnityError("LZ4: Size different from expected")
     return bytes(dst)
 
 
@@ -81,7 +81,7 @@ def _decompress(data, kind, size):
         dictionary = struct.unpack_from("<I", data, 1)[0]
         filters = [{"id": lzma.FILTER_LZMA1, "lc": lc, "lp": lp, "pb": pb, "dict_size": dictionary}]
         return lzma.LZMADecompressor(lzma.FORMAT_RAW, filters=filters).decompress(data[5:])[:size]
-    raise UnityError("compressione non supportata (%d)" % kind)
+    raise UnityError("unsupported compression (%d)" % kind)
 
 
 def _cstring(data, p):
@@ -97,7 +97,7 @@ def _header(read_file, file_size):
     nodes = [(nome, inizio, dimensione, segni)] with the positions in the decompressed data."""
     head = read_file(0, 1024)
     if not head.startswith(b"UnityFS\x00"):
-        raise UnityError("non e' un AssetBundle UnityFS")
+        raise UnityError("this is not a UnityFS AssetBundle")
     try:
         p = 8
         version = struct.unpack_from(">I", head, p)[0]
@@ -106,7 +106,7 @@ def _header(read_file, file_size):
         unity_version, p = _cstring(head, p)
         _readable_size, compressed, decompressed, markers = struct.unpack_from(">qIII", head, p)
     except (struct.error, ValueError) as e:
-        raise UnityError("intestazione del bundle non valida") from e
+        raise UnityError("bundle header is invalid") from e
     p += 20
     if version >= 7:
         p = (p + 15) // 16 * 16
@@ -117,11 +117,11 @@ def _header(read_file, file_size):
         info = read_file(p, compressed)
         data_start = p + compressed
     if len(info) != compressed:
-        raise UnityError("bundle troncato")
+        raise UnityError("truncated bundle")
     try:
         info = _decompress(info, markers & 0x3F, decompressed)
     except (lzma.LZMAError, IndexError, struct.error) as e:
-        raise UnityError("indice del bundle non valido (%s)" % type(e).__name__) from e
+        raise UnityError("invalid bundle index (%s)" % type(e).__name__) from e
     if markers & 0x200:
         data_start = (data_start + 15) // 16 * 16
     try:
@@ -141,7 +141,7 @@ def _header(read_file, file_size):
             name, q = _cstring(info, q)
             nodes.append((name, shift, size, node_flags))
     except (struct.error, ValueError) as e:
-        raise UnityError("indice del bundle non valido") from e
+        raise UnityError("invalid bundle index") from e
     return version, player_version, unity_version, markers, blocks, nodes, data_start
 
 
@@ -157,7 +157,7 @@ class Bundle:
                 pieces.append(_decompress(data[p:p + compressed_b], flags_b & 0x3F, decompressed_b))
                 p += compressed_b
         except (lzma.LZMAError, IndexError, struct.error) as e:
-            raise UnityError("blocco del bundle non valido (%s)" % type(e).__name__) from e
+            raise UnityError("invalid bundle block (%s)" % type(e).__name__) from e
         whole = b"".join(pieces)
         self.nodes = [(name, markers) for name, _, _, markers in nodes]
         self.file = {name: whole[s:s + d] for name, s, d, _ in nodes}
@@ -241,7 +241,7 @@ class Index:
         if kind == 1 and decompressed > _LZMA_PIECE:  # large LZMA (old Unity versions): in pieces, reading too
             head = self._read(position, 5)
             if len(head) < 5:
-                raise UnityError("bundle troncato")
+                raise UnityError("truncated bundle")
             props = head[0]
             filters = [{"id": lzma.FILTER_LZMA1, "lc": props % 9, "lp": (props // 9) % 5, "pb": (props // 9) // 5,
                        "dict_size": struct.unpack_from("<I", head, 1)[0]}]
@@ -262,7 +262,7 @@ class Index:
                     break
             return
         if decompressed > MAX_BLOCK:
-            raise UnityError("blocco troppo grande (%d MB)" % (decompressed // (1024 * 1024)))
+            raise UnityError("block too large (%d MB)" % (decompressed // (1024 * 1024)))
         yield _decompress(self._read(position, compressed), kind, decompressed)
 
     def pieces(self, start=0, end=None):
@@ -289,7 +289,7 @@ class Index:
                             yield a, piece[a - p:b - p]
                         p += len(piece)
                 except (lzma.LZMAError, IndexError, struct.error) as e:  # corrupted data
-                    raise UnityError("blocco del bundle non valido (%s)" % type(e).__name__) from e
+                    raise UnityError("invalid bundle block (%s)" % type(e).__name__) from e
             pos_c += compressed
             pos_u += decompressed
 
@@ -358,9 +358,9 @@ class SerializedFile:
         ms, fs, version, data_start = struct.unpack_from(">IIII", data, 0)
         self.version = version
         if not 17 <= version <= 22:
-            raise UnityError("versione del file serializzato non supportata (%d)" % version)
+            raise UnityError("unsupported serialized file version (%d)" % version)
         if data[16] != 0:
-            raise UnityError("file serializzato big endian non supportato")
+            raise UnityError("big-endian serialized file not supported")
         p = 20
         if version >= 22:
             ms, fs, data_start, _ = struct.unpack_from(">IqqQ", data, p)
@@ -440,7 +440,7 @@ class SerializedFile:
         numeric fields, e.g. 'm_Unicode') also [(percorso, 'valore', numero)] of those fields."""
         tree = self.kinds[o.kind]["albero"]
         if tree is None:
-            raise UnityError("il file non ha gli alberi dei campi (type tree)")
+            raise UnityError("the file does not contain the field trees (type tree)")
         output = []
         try:
             _read(tree, self.object_data(o), 0, [], output, set(values))

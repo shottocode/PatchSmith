@@ -280,7 +280,7 @@ def main(base):
     messages = []
     automatic.analyze_and_translate(game, "auto", "it", "dizionario", messages.append)
     check("file tradotto e poi corretto a mano: riconosciuto (non scambiato per un aggiornamento)",
-              any("modificato a mano" in m for m in messages) and not any("nuovo originale" in m for m in messages))
+              any("modified by hand" in m for m in messages) and not any("new original" in m for m in messages))
     automatic.restore(game, silent)
     check("... e il ripristino rimette l'inglese originale", fingerprints(local) == before)
 
@@ -304,7 +304,7 @@ def main(base):
     automatic.analyze_and_translate(game, "auto", "it", "dizionario", messages.append)
     check("profilo precedente con french.json tradotto: rimesso l'originale, non piu' nel profilo",
               open(french, "rb").read() == open(french + ".orig-test", "rb").read()
-              and any("rimesso l'originale" in m for m in messages)
+              and any("original put back" in m for m in messages)
               and [v["percorso"] for v in json.load(open(old_profile, encoding="utf-8"))["file"]]
               == ["local/english.json"])
     os.remove(french + ".orig-test")

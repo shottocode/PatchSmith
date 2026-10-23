@@ -189,11 +189,11 @@ def _read(path):
         if raw[:2] == b"\xff\xfe":
             return raw[2:].decode("utf-16-le"), "utf-16-le", b"\xff\xfe"
         if raw[:2] == b"\xfe\xff":
-            raise UnrealLanguageError("file delle impostazioni in una codifica non prevista (UTF-16 BE)")
+            raise UnrealLanguageError("settings file in an unexpected encoding (UTF-16 BE)")
         if raw[:3] == b"\xef\xbb\xbf":
             return raw[3:].decode("utf-8"), "utf-8", b"\xef\xbb\xbf"
     except UnicodeDecodeError as e:
-        raise UnrealLanguageError("file delle impostazioni illeggibile (%s)" % e) from e
+        raise UnrealLanguageError("settings file is unreadable (%s)" % e) from e
     return raw.decode("utf-8", "surrogateescape"), "utf-8", b""
 
 
@@ -261,7 +261,7 @@ def set_culture(path, tag):
     lines), ['aggiunta', 'Culture'] for the added line, ['sezione', [added lines], line ending added]
     if the section was not there. Empty list if everything was already in place."""
     if not os.access(path, os.W_OK):
-        raise UnrealLanguageError("il file delle impostazioni e' di sola lettura: non lo tocco")
+        raise UnrealLanguageError("the settings file is read-only: I don't modify it")
     text, encoding, bom = _read(path)
     line_break = _line_break(text)
     lines = _lines(text)
@@ -328,7 +328,7 @@ def restore_culture(path, changes, tag):
     if not os.path.exists(path):
         return 0
     if not os.access(path, os.W_OK):
-        raise UnrealLanguageError("il file delle impostazioni e' di sola lettura")
+        raise UnrealLanguageError("the settings file is read-only")
     changes = [list(m) for m in changes]
     if changes and changes[0][0] not in ("riga", "aggiunta", "sezione"):
         changes = _from_old_log(changes)

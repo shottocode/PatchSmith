@@ -59,14 +59,15 @@ def _portable_python(python, runtime, log):
         dll = [n for n in os.listdir(python)
                if fnmatch.fnmatch(n.lower(), "python3?*.dll") and n.lower() != "python3.dll"]
         if not dll:
-            raise PackageError("in %s non c'e' la DLL di Python (python3XX.dll)" % python)
+            raise PackageError("in directory %s, the Python DLL (python3XX.dll) is not found" % python)
         version = dll[0][len("python"):-len(".dll")]
     for name in ("python.exe", "pythonw.exe", "python3.dll", "python%s.dll" % version):
         if not os.path.isfile(os.path.join(python, name)):
-            raise PackageError("in %s manca %s: serve un Python installato da python.org" % (python, name))
+            raise PackageError("%s is missing %s: you need a Python installed from python.org" % (python, name))
     if not (os.path.isfile(os.path.join(python, "DLLs", "_tkinter.pyd"))
             and os.path.isdir(os.path.join(python, "tcl"))):
-        raise PackageError("il Python in %s non ha Tkinter (la parte grafica): installalo con \"tcl/tk and IDLE\""
+        raise PackageError("the Python version in %s doesn't include Tkinter (the graphical interface): install it "
+                           'using the "tcl/tk and IDLE" option'
                               % python)
     os.makedirs(runtime)
     for name in os.listdir(python):
@@ -78,7 +79,7 @@ def _portable_python(python, runtime, log):
     # the ._pth: only these paths, no PYTHONPATH/PYTHONHOME nor registry (another installed Python does not count)
     with open(os.path.join(runtime, "python%s._pth" % version), "w", encoding="utf-8") as f:
         f.write("Lib\nDLLs\n.\n")
-    log("  Python portatile %s.%s da %s" % (version[0], version[1:], python))
+    log("  Portable Python %s.%s from %s" % (version[0], version[1:], python))
 
 
 def _try_runtime(folder):
@@ -94,7 +95,8 @@ def _try_runtime(folder):
                        cwd=os.path.join(windows, "System32"), creationflags=0x08000000)
     lines = r.stdout.decode("utf-8", "replace").split()
     if r.returncode != 0 or len(lines) < 2:
-        raise PackageError("il Python portatile non parte: %s" % r.stderr.decode("utf-8", "replace").strip()[-300:])
+        raise PackageError("the portable Python isn't starting: %s"
+                           % r.stderr.decode("utf-8", "replace").strip()[-300:])
     return lines[0], lines[1]
 
 
@@ -103,22 +105,22 @@ def prepare(output=None, python=None, log=print):
     PatchSmith-rilascio next to the program's; python: the folder of an installed Python (by default the one
     PatchSmith runs with). Returns (cartella, zip)."""
     if not sys.platform.startswith("win"):
-        raise PackageError("il pacchetto con il Python portatile e' per Windows")
+        raise PackageError("the package with the portable Python version is for Windows")
     python = os.path.abspath(python or sys.base_prefix)
     output = os.path.abspath(output or os.path.join(os.path.dirname(PROGRAM), "PatchSmith-rilascio"))
     if os.path.normcase(output).startswith(os.path.normcase(PROGRAM) + os.sep):
-        raise PackageError("il pacchetto non puo' stare dentro la cartella del programma")
+        raise PackageError("the package cannot be placed inside the program folder")
     folder = os.path.join(output, "PatchSmith")
     if os.path.exists(folder):
         data = [n for n in project.USER_DATA + project.USER_DATA_BEFORE if os.path.exists(os.path.join(folder, n))]
         if data:  # someone used the package from here: their data is not deleted
-            raise PackageError("in %s ci sono dati di chi lo usa (%s): spostali o scegli un'altra cartella"
+            raise PackageError("%s contains user data (%s): move it or choose another folder"
                                   % (folder, ", ".join(data)))
         if not os.path.isfile(os.path.join(folder, "PatchSmith.pyw")):
-            raise PackageError("%s c'e' gia' e non e' un pacchetto di PatchSmith: scegli un'altra cartella"
+            raise PackageError("%s already exists, and it's not a PatchSmith package: please choose a different folder"
                                   % folder)
         shutil.rmtree(folder)  # the previous package
-    log("Pacchetto di PatchSmith %s in %s" % (__version__, folder))
+    log("PatchSmith %s package in %s" % (__version__, folder))
     os.makedirs(folder)
     for name in PROGRAM_FILES:
         shutil.copy2(os.path.join(PROGRAM, name), os.path.join(folder, name))
@@ -126,9 +128,9 @@ def prepare(output=None, python=None, log=print):
         _copy_tree(os.path.join(PROGRAM, rel), os.path.join(folder, rel), SKIP, take)
     _portable_python(python, os.path.join(folder, "runtime"), log)
     if not icon.executable(folder):
-        raise PackageError("non sono riuscito a compilare PatchSmith.exe (compilatore C# di Windows)")
+        raise PackageError("I wasn't able to compile PatchSmith.exe (the Windows C# compiler)")
     executable, tcl = _try_runtime(folder)
-    log("  Prova: il Python portatile parte da solo (%s, Tcl/Tk %s)" % (executable, tcl))
+    log("  Test: The portable Python interpreter starts automatically (%s, Tcl/Tk %s)" % (executable, tcl))
     archive = os.path.join(output, "PatchSmith-%s-windows.zip" % __version__)
     temp_file = archive + ".tmp"
     with zipfile.ZipFile(temp_file, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
@@ -139,5 +141,5 @@ def prepare(output=None, python=None, log=print):
                 z.write(path, os.path.join("PatchSmith", os.path.relpath(path, folder)))
     os.replace(temp_file, archive)
     weight = sum(os.path.getsize(os.path.join(r, n)) for r, _c, f in os.walk(folder) for n in f)
-    log("  Cartella: %.0f MB; zip: %.0f MB (%s)" % (weight / 1024 ** 2, os.path.getsize(archive) / 1024 ** 2, archive))
+    log("  Folder: %.0f MB; zip: %.0f MB (%s)" % (weight / 1024 ** 2, os.path.getsize(archive) / 1024 ** 2, archive))
     return folder, archive

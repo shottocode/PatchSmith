@@ -16,7 +16,7 @@ def windows_processes():
     ids = (wintypes.DWORD * 4096)()
     used = wintypes.DWORD()
     if not psapi.EnumProcesses(ctypes.byref(ids), ctypes.sizeof(ids), ctypes.byref(used)):
-        raise OSError("EnumProcesses non riuscito")
+        raise OSError("EnumProcesses failed")
     k32.OpenProcess.restype = wintypes.HANDLE
     paths = []
     for pid in ids[: used.value // ctypes.sizeof(wintypes.DWORD)]:
@@ -41,6 +41,6 @@ def game_open(folder):
     try:
         paths = windows_processes()
     except (OSError, AttributeError) as e:
-        raise SysError("Non riesco a controllare se il gioco e' aperto (%s): chiudilo e riprova." % e) from e
+        raise SysError("I'm having trouble checking if the game is open (%s): close it and try again." % e) from e
     root = os.path.normcase(os.path.abspath(folder)).rstrip("\\/") + os.sep
     return any(os.path.normcase(p).startswith(root) for p in paths)

@@ -166,9 +166,9 @@ def font_chars(folder, log=None):
     if unreadable:
         common = ASCII if common is None else common & ASCII
         if log:
-            log("  ! %d file .xnb non leggibili (compressi?): per sicurezza uso solo caratteri ASCII" % unreadable)
+            log("  ! %d .xnb files not readable (compressed?): to be safe, I only use ASCII characters" % unreadable)
     elif common is None and seen and log:
-        log("  ! Nessun font XNB riconosciuto: per sicurezza uso solo caratteri ASCII")
+        log("  ! No XNB font recognized: for safety, I only use ASCII characters")
     if common is None and seen:
         common = ASCII
     return common
@@ -179,7 +179,7 @@ def analyze(folder):
     resource_sets, problems = [], []
     for i in find_resources(folder):
         if i["firmato"]:
-            problems.append("%s e' firmato con nome sicuro: non ancora supportato (lo salto)" % i["file"])
+            problems.append("%s is strong-name signed: not yet supported (skipping it)" % i["file"])
         else:
             resource_sets.append(i)
     return {"insiemi": resource_sets, "problemi": problems}
@@ -276,8 +276,8 @@ def compiler(runtime):
             p = os.path.join(windir, "Microsoft.NET", framework, v, "csc.exe")
             if os.path.exists(p):
                 return p
-    raise XnaError("Non trovo il compilatore C# di .NET Framework %s (csc.exe), che serve a creare i file "
-                    "di traduzione. Attiva .NET Framework nelle funzionalita' di Windows." % runtime)
+    raise XnaError("I can't find the .NET Framework %s C# compiler (csc.exe), needed to create the translation files. "
+                   "Turn on .NET Framework in Windows features." % runtime)
 
 
 def build_satellite(runtime, assembly_name, version, culture, resources, work_folder):
@@ -302,7 +302,7 @@ def build_satellite(runtime, assembly_name, version, culture, resources, work_fo
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     output = os.path.join(work_folder, _satellite_name(assembly_name))
     if outcome.returncode != 0 or not os.path.exists(output):
-        raise XnaError("Il compilatore C# non e' riuscito a creare il satellite: %s"
+        raise XnaError("The C# compiler was unable to create the satellite: %s"
                         % (outcome.stdout + outcome.stderr).strip()[:500])
     with open(output, "rb") as f:
         data = f.read()
@@ -311,9 +311,9 @@ def build_satellite(runtime, assembly_name, version, culture, resources, work_fo
     identity = sat.identity()
     if (identity["nome"] != assembly_name + ".resources" or identity["cultura"] != culture
             or identity["versione"] != version or identity["chiave_pubblica"] or not _has_marker(sat)):
-        raise XnaError("Satellite creato con identita' inattesa: %s" % identity)
+        raise XnaError("Satellite created with an unexpected identity: %s" % identity)
     if set(sat.resources()) != set(resources) or any(sat.read_resource(n) != d for n, d in resources.items()):
-        raise XnaError("Satellite creato con risorse diverse da quelle previste")
+        raise XnaError("Satellite created using resources other than those specified")
     os.remove(output)
     return data
 
@@ -322,11 +322,12 @@ def build_satellite(runtime, assembly_name, version, culture, resources, work_fo
 
 def _checks(folder):
     if game_open(folder):
-        raise XnaError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+        raise XnaError("The game is open: close it and try again.", "GIOCO_APERTO")
     outcome = detection.detect(folder)
     names = [r["nome"] for r in outcome["risultati"] if r["sezione"] == "AntiCheat"]
     if names:
-        raise XnaError("Questo gioco ha un anti-cheat (%s): non aggiungo file (rischio di ban)." % ", ".join(names),
+        raise XnaError("This game has an anti-cheat system (%s): I won't be adding any files (which could lead to a "
+                       "ban)." % ", ".join(names),
                         "ANTICHEAT")
 
 
@@ -334,12 +335,12 @@ def texts_to_translate(folder, log=print):
     """(insiemi, unique texts to translate). Only strings with letters."""
     resource_sets = analyze(folder)["insiemi"]
     if not resource_sets:
-        raise XnaError("Non ho trovato risorse di testo localizzate (.resources con satelliti) utilizzabili nel gioco.")
+        raise XnaError("I haven't found any usable localized text resources (.resources with satellites) in the game.")
     texts = {}
     for i in resource_sets:
         for base in i["basi"]:
             strings = _strings(i["assembly"], base)
-            log("  %s: %s (%d testi; lingue gia' presenti: %s)" % (i["file"], base, len(strings),
+            log("  %s: %s (%d texts; languages already present: %s)" % (i["file"], base, len(strings),
                                                                    ", ".join(i["basi"][base])))
             for text in strings.values():
                 if text and any(c.isalpha() for c in text):
@@ -374,23 +375,23 @@ def install(folder, origin, dest_lang, profile_name, memory, log=print):
     _checks(folder)
     manifest = read_manifest(folder) if manifest_present(folder) else None
     if manifest_present(folder) and manifest is None:
-        raise XnaError("Il file %s non e' valido: non lo uso. Controlla la cartella a mano." % MANIFEST)
+        raise XnaError("The file %s is invalid: I'm not using it. Please check the folder manually." % MANIFEST)
     game_info = analyze(folder)
     for problem in game_info["problemi"]:
         log("  ! " + problem)
     resource_sets = game_info["insiemi"]
     if not resource_sets:
-        raise XnaError("Non ho trovato risorse di testo localizzate utilizzabili nel gioco.")
+        raise XnaError("I haven't found any usable localized text resources within the game.")
     cultures_by_set = {}
     for i in resource_sets:
         cultures = cultures_to_create(i, origin, dest_lang)
         for c in cultures:
             if not _CULTURE.match(c):
-                raise XnaError("Codice di lingua non valido: '%s'. Scegli la lingua dall'elenco." % c)
+                raise XnaError("Invalid language code: '%s'. Please select a language from the list." % c)
         cultures_by_set[i["file"]] = cultures
     allowed = font_chars(folder, log)
     if allowed is not None:
-        log("  Font del gioco: %d caratteri disegnabili da tutti i font (gli altri vengono adattati)" % len(allowed))
+        log("  Game fonts: %d characters drawable by all fonts (the others are adapted)" % len(allowed))
 
     plan, translated_count, total, adapted, rejected = {}, 0, 0, 0, 0
     work = tempfile.mkdtemp(prefix="patchsmith-xna-")
@@ -398,7 +399,7 @@ def install(folder, origin, dest_lang, profile_name, memory, log=print):
         for i in resource_sets:
             cultures = cultures_by_set[i["file"]]
             if not cultures:
-                log("  %s: niente da aggiungere (lingua gia' presente nel gioco)" % i["file"])
+                log("  %s: nothing to add (language already present in the game)" % i["file"])
                 continue
             by_culture = {c: {} for c in cultures}
             for base in i["basi"]:
@@ -423,7 +424,7 @@ def install(folder, origin, dest_lang, profile_name, memory, log=print):
                 checks = dotnet.resources_strings(dotnet.read_resources(data))
                 expected = dict(dotnet.resources_strings(info), **new_lines)
                 if checks != expected:
-                    raise XnaError("Controllo delle risorse tradotte fallito per %s: non scrivo nulla" % base)
+                    raise XnaError("Check of the translated resources failed for %s: not writing anything" % base)
                 for c in cultures:
                     by_culture[c]["%s.%s.resources" % (base, c)] = data
             for c, resources in by_culture.items():
@@ -431,7 +432,7 @@ def install(folder, origin, dest_lang, profile_name, memory, log=print):
                 os.makedirs(subfolder)
                 rel = c + "/" + _satellite_name(i["nome"])
                 if not _valid_rel(rel):
-                    raise XnaError("Percorso del satellite non valido: %s" % rel)
+                    raise XnaError("Invalid satellite path: %s" % rel)
                 plan[rel] = build_satellite(i["runtime"], i["nome"], i["versione"], c, resources, subfolder)
     finally:
         shutil.rmtree(work, ignore_errors=True)
@@ -440,7 +441,7 @@ def install(folder, origin, dest_lang, profile_name, memory, log=print):
     for rel in plan:
         target_file = os.path.join(folder, *rel.split("/"))
         if os.path.exists(target_file) and not _is_ours(target_file):
-            raise XnaError("Esiste gia' %s non creato da PatchSmith: non lo sovrascrivo." % rel)
+            raise XnaError("There's already %s, which wasn't created by PatchSmith: I won't overwrite it." % rel)
     ours_before, _ = our_satellites(folder)
     created_folders = list((manifest or {}).get("cartelle_create", []))
     for rel in plan:
@@ -489,10 +490,10 @@ def install(folder, origin, dest_lang, profile_name, memory, log=print):
     _remove_empty_folders(folder, created_folders, keep={rel.split("/")[0] for rel in new_items})
     created_folders = [c for c in created_folders if os.path.isdir(os.path.join(folder, c))]
     write_manifest(new_items)
-    log("  Satelliti di traduzione scritti: %s" % ", ".join(sorted(new_items)))
-    log("  %d testi tradotti su %d%s%s" % (translated_count, total,
-                                          "; %d adattati ai caratteri dei font" % adapted if adapted else "",
-                                          "; %d lasciati in originale (caratteri non disegnabili)" % rejected
+    log("  Translation satellite assemblies written: %s" % ", ".join(sorted(new_items)))
+    log("  %d of %d texts translated%s%s" % (translated_count, total,
+                                          "; %d adapted to the font characters" % adapted if adapted else "",
+                                          "; %d left untranslated (characters that can't be drawn)" % rejected
                                           if rejected else ""))
     return translated_count
 
@@ -511,13 +512,13 @@ def uninstall(folder, log=print):
         return False
     manifest = read_manifest(folder) if manifest_present(folder) else None
     if manifest_present(folder) and manifest is None:
-        raise XnaError("Il file %s non e' valido: per sicurezza non cancello nulla." % MANIFEST)
+        raise XnaError("The file %s is invalid: for your safety, I won't delete anything." % MANIFEST)
     if game_open(folder):
-        raise XnaError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+        raise XnaError("The game is open: close it and try again.", "GIOCO_APERTO")
     ours, temp_files = our_satellites(folder)
     for rel in ours:
         os.remove(os.path.join(folder, *rel.split("/")))
-        log("  Rimosso %s" % rel)
+        log("  Removed %s" % rel)
     for rel in temp_files:
         os.remove(os.path.join(folder, *rel.split("/")))
     folders = set((manifest or {}).get("cartelle_create", [])) | {rel.split("/")[0] for rel in ours + temp_files}
@@ -525,7 +526,7 @@ def uninstall(folder, log=print):
     for name in (MANIFEST + TMP_SUFFIX, MANIFEST):
         if os.path.exists(os.path.join(folder, name)):
             os.remove(os.path.join(folder, name))
-    log("  Traduzione rimossa: il gioco usa di nuovo solo i suoi file originali.")
+    log("  Translation removed: the game is now using only its original files again.")
     return True
 
 
@@ -534,18 +535,18 @@ def state(folder, log=print):
     if not manifest:
         ours, _ = our_satellites(folder)
         if ours:
-            log("  ! Satelliti di PatchSmith presenti senza manifesto: %s ('Ripristina originali' li toglie)"
+            log("  ! PatchSmith satellites present without a manifest: %s ('Restore originals' removes them)"
                 % ", ".join(ours))
             return True
-        log("  Traduzione non installata.")
+        log("  Translation not installed.")
         return False
     for rel, fingerprint in manifest["file"].items():
         p = os.path.join(folder, *rel.split("/"))
         ok = os.path.exists(p) and _sha256(p) == fingerprint
-        log("  %s %s (lingua %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("lingua"), manifest.get("data")))
+        log("  %s %s (language %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("lingua"), manifest.get("data")))
     for name, fingerprint in manifest.get("sorgenti", {}).items():
         p = os.path.join(folder, name)
         if not os.path.exists(p) or _sha256(p) != fingerprint:
-            log("  ! Il gioco e' stato aggiornato (%s): premi 'Analizza e traduci' per tradurre anche i testi nuovi."
+            log("  ! The game has been updated (%s): press 'Analyze and translate' to translate the new texts too."
                 % name)
     return True

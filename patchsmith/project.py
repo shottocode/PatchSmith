@@ -198,7 +198,7 @@ def create_backup(path, extra=None):
             os.fsync(f.fileno())
         fingerprint = _hash_file(path)
         if _hash_file(temp_file) != fingerprint:
-            raise RuntimeError("Backup non riuscito per %s (copia diversa dall'originale): nulla e' stato modificato."
+            raise RuntimeError("Backup failed for %s (the copy differs from the original): nothing was changed."
                                % path)
         info = {"hash_originale": fingerprint, "hash_scritti": [], "creati": [], "precedenti": []}
         info.update(extra or {})
@@ -240,35 +240,35 @@ def restore_file(path, log):
     name = os.path.basename(path)
     if not info:
         if os.path.exists(backup):
-            log("  ! %s: backup senza informazioni, lo lascio al suo posto (controlla a mano)" % name)
+            log("  ! %s: backup without information, leaving it in place (check it by hand)" % name)
         return False
     folder = os.path.dirname(path)
     if os.path.exists(backup):
         if _hash_file(backup) != info["hash_originale"]:
-            log("  ! %s: il backup non corrisponde all'originale registrato, NON lo uso (controlla a mano)" % name)
+            log("  ! %s: the backup doesn't match the recorded original, NOT using it (check it by hand)" % name)
             return False
         if not os.path.exists(path):
-            log("  %s: il gioco ha rimosso il file, elimino solo il backup" % name)
+            log("  %s: The game has removed the file, I'm just deleting the backup" % name)
         else:
             current = _hash_file(path)
             if current in info.get("hash_scritti", []) or _has_tag(path):
                 with open(backup, "rb") as f:
                     adapter_webjson.write_atomic(path, f.read())
                 if _hash_file(path) != info["hash_originale"]:
-                    log("  ! %s: ripristino non verificato, il backup resta al suo posto" % name)
+                    log("  ! %s: restore not verified, the backup stays in place" % name)
                     return False
-                log("  %s: ripristinato (identico all'originale)" % name)
+                log("  %s: Restored (identical to the original)" % name)
             elif current == info["hash_originale"]:
-                log("  %s: era gia' originale" % name)
+                log("  %s: already original" % name)
             elif info.get("configuratore") or info.get("solo_creati"):
                 # file replaced by an update: the configurator's change is gone and the backup
                 # (of an old version) is not needed: the file stays the new one
-                log("  %s: aggiornato dal gioco, la modifica di PatchSmith non c'e' piu'" % name
-                    if info.get("configuratore") else "  %s: aggiornato dal gioco (non era modificato da PatchSmith)"
+                log("  %s: updated by the game, PatchSmith's change is no longer there" % name
+                    if info.get("configuratore") else "  %s: Updated by the game (not modified by PatchSmith)"
                     % name)
             else:
-                log("  ! %s: e' stato cambiato dopo la traduzione (aggiornamento o modifica a mano): lo lascio "
-                    "com'e' e conservo l'originale in %s" % (name, os.path.basename(backup)))
+                log("  ! %s: It has been changed after the translation (update or manual modification): I'll leave it "
+                    "as is and keep the original in %s" % (name, os.path.basename(backup)))
                 for other in info.get("creati", []):
                     _remove_created(folder, other, info, log)
                 return False
@@ -293,11 +293,11 @@ def _remove_created(folder, name, info, log):
     expected = (info.get("hash_creati") or {}).get(name)
     if expected and _hash_file(p) != expected:
         os.replace(p, p + ".patchsmith-modificato")
-        log("  ! %s era stato cambiato dopo la traduzione: tolto dal gioco ma conservato come %s"
+        log("  ! %s had been changed after the translation: removed from the game but kept as %s"
             % (name, name + ".patchsmith-modificato"))
         return
     os.remove(p)
-    log("  %s: tolto (l'aveva aggiunto PatchSmith)" % name)
+    log("  %s: Removed (it was added by PatchSmith)" % name)
 
 
 def find_info(folder):
@@ -448,14 +448,14 @@ def entry_problems(original, translated, dest, pattern=None, references=()):
     problems = translation_problems(original, translated, dest)
     if dest.split("-")[0] in language._WORDS and not _unchanged(original, translated) and \
             language.obvious_language(words_only(translated), dest):  # e.g. left in English or came out in Spanish
-        problems.append("in un'altra lingua")
+        problems.append("in another language")
     if lost_names(original, translated, pattern):
-        problems.append("nome tradotto")
+        problems.append("translated name")
     # only for sentences: a word identical in the two languages is normal ('Oro' in Spanish and in Italian, 'Ferro' in
     # Portuguese), and the local translator accepts it if it says it again without the official translations in view
     if references and len(re.findall(r"[^\W\d_]+", translated)) >= 3 and not _unchanged(original, translated) and \
             any(r and _unchanged(r, translated) for r in references):
-        problems.append("riferimento copiato")
+        problems.append("copied reference")
     return problems
 
 
@@ -500,7 +500,7 @@ class Project:
         self.log = log
         self.memory_path = memory_path(self.profile, test)
         self.test = test
-        self.memory = self._read_json(self.memory_path, {}, "file delle traduzioni")
+        self.memory = self._read_json(self.memory_path, {}, "translation file")
         # the translation memory is also written by the translator started by the game: only our own changes are saved
         self._memory_file = shared_file.MergingFile(self.memory_path, self.memory)
         # for the outcome of the operation (see outcome.py): why the translation stopped and what apply() wrote
@@ -542,7 +542,7 @@ class Project:
                 raise
             return default
         except ValueError as e:
-            raise RuntimeError("Il %s non e' un JSON valido: %s (%s). Correggilo e riprova." % (
+            raise RuntimeError("The %s is not a valid JSON: %s (%s). Please correct it and try again." % (
                 description, path, e)) from e
 
     def _migrate_old_state(self):
@@ -550,7 +550,7 @@ class Project:
         old = os.path.splitext(self.profile_path)[0] + ".stato.json"
         if not os.path.exists(old):
             return
-        state = self._read_json(old, {}, "file di stato")
+        state = self._read_json(old, {}, "status file")
         for rel, data in state.get("file", {}).items():
             path = self._game_path(rel)
             if os.path.exists(path + BACKUP_SUFFIX) and not read_info(path) and data.get("hash_originale"):
@@ -578,7 +578,7 @@ class Project:
         try:
             self._problems_file.save(self._problems)
         except OSError as e:
-            self.log("  ! Elenco dei testi con problemi non salvato (%s)" % e)
+            self.log("  ! List of texts with problems not saved (%s)" % e)
 
     def problems(self):
         """Copy of the texts with a problem: {text: {motivo, dove, tentativi, ...}} (see percorso_problemi)."""
@@ -598,7 +598,7 @@ class Project:
         memory."""
         if self._machine is None:
             self._machine = {} if self.test else \
-                self._read_json(self._machine_path(), {}, "file delle traduzioni automatiche")
+                self._read_json(self._machine_path(), {}, "automatic translation file")
             self._machine_file = shared_file.MergingFile(self._machine_path(), self._machine)
         return self._machine
 
@@ -648,18 +648,18 @@ class Project:
             info = {"hash_originale": _hash_file(backup), "hash_scritti": [], "creati": [], "precedenti": []}
             save_info(path, info)
         if not info:
-            raise RuntimeError("Per %s c'e' un backup ma non le sue informazioni: non posso sapere se e' "
-                               "affidabile. Controlla a mano (o elimina il backup se il file e' originale)." % path)
+            raise RuntimeError("For %s, there's a backup, but it doesn't contain its information: I can't verify if "
+                               "it's reliable. Check manually (or delete the backup if the file is original)." % path)
         if _hash_file(backup) != info["hash_originale"]:
-            raise RuntimeError("Il backup di %s non corrisponde all'originale registrato: mi fermo." % path)
+            raise RuntimeError("The backup of %s doesn't match the recorded original: stopping." % path)
         current = _hash_file(path)
         if current == info["hash_originale"] or current in info.get("hash_scritti", []) or _has_tag(path):
             return backup
         # The translated file was changed by hand: the original stays the one in the backup (it is not lost)
         if self._looks_translated(path, entry):
             if update:
-                self.log("  ! %s e' stato modificato a mano dopo la traduzione: lo riscrivo dall'originale "
-                         "(per correggere una traduzione usa 'Correggi traduzioni')" % os.path.basename(path))
+                self.log("  ! %s was modified by hand after the translation: rewriting it from the original (to fix a "
+                         "translation, use 'Fix translations')" % os.path.basename(path))
             return backup
         # The file was changed by someone else: an update of the game (or of another mod).
         if not update:
@@ -673,7 +673,7 @@ class Project:
         except BaseException:
             os.replace(os.path.join(os.path.dirname(backup), old), backup)  # everything as it was
             raise
-        self.log("  ! %s e' cambiato (aggiornamento del gioco?): e' il nuovo originale, il precedente e' in %s"
+        self.log("  ! %s has changed (game update?): it's the new original, the previous one is in %s"
                  % (os.path.basename(path), old))
         return backup
 
@@ -709,7 +709,7 @@ class Project:
         """The index of the column to translate of a CSV table (voce["colonna"]: its name in the header)."""
         i = f.column(entry.get("colonna"))
         if i is None:
-            raise adapter_csv.CSVError("la colonna '%s' non c'e' piu' nella tabella" % entry.get("colonna"))
+            raise adapter_csv.CSVError("the column '%s' no longer exists in the table" % entry.get("colonna"))
         return i
 
     @staticmethod
@@ -788,22 +788,22 @@ class Project:
                 continue
             if names_pattern and names_pattern.fullmatch(t.strip()) and v.strip() != t.strip() and \
                     (machine.get(t) == v or t not in machine):  # machine translation or from a previous version
-                redo[t] = "nome del gioco tradotto"
+                redo[t] = "game name translated"
                 continue
             if machine.get(t) != v:
                 continue
             problem = self._problems.get(t) or {}
             if problem.get("dove") == "gioco" and problem.get("valore") == v:
-                redo[t] = problem.get("motivo") or "non adatta al gioco"
+                redo[t] = problem.get("motivo") or "not suitable for the game"
                 continue
             references = ((contexts or {}).get(t) or {}).get("riferimenti") or {}
             reasons = entry_problems(t, v, dest, pattern, list(references.values()))
             if reasons:
-                redo[t] = "traduzione salvata sospetta (%s)" % ", ".join(reasons)
+                redo[t] = "suspicious saved translation (%s)" % ", ".join(reasons)
         if redo:
             example = next(iter(redo))
-            self.log("  %d traduzioni salvate non vanno bene (es. %r: %s): le rifaccio; se non riesco resta quella "
-                     "di prima" % (len(redo), example[:50], redo[example]))
+            self.log("  %d saved translations aren't right (e.g. %r: %s): redoing them; if that fails, the previous "
+                     "one stays" % (len(redo), example[:50], redo[example]))
         return redo
 
     def _with_fixes(self, texts, contexts):
@@ -835,7 +835,7 @@ class Project:
                 del self.memory[t]
                 dropped += 1
         if dropped:
-            self.log("  %d traduzioni salvate avevano perso un'icona del gioco (%s): le rifaccio"
+            self.log("  %d saved translations had lost a game icon (%s): redoing them"
                      % (dropped, ", ".join(self.codes)))
             self._save_memory()
 
@@ -907,12 +907,12 @@ class Project:
                     contexts.setdefault(t, c)
         if orig == language.AUTO:
             orig, reason = language.detect(texts)
-            self.log("Lingua del gioco rilevata: %s" % language.label(orig))
-            self.log(DETAIL + "  (lingua riconosciuta da: %s)" % reason)
+            self.log("Game language detected: %s" % language.label(orig))
+            self.log(DETAIL + "  (language detected from: %s)" % reason)
         if orig.split("-")[0] == dest.split("-")[0]:
-            self.log("Il gioco e' gia' in %s: niente da tradurre." % language.label(dest))
+            self.log("The game is already in %s: nothing to translate." % language.label(dest))
             self.translation_outcome = "NULLA_DA_FARE"
-            self.translation_reason = "Il gioco e' gia' in %s: non c'e' niente da tradurre." % language.label(dest)
+            self.translation_reason = "The game is already in %s: there's nothing to translate." % language.label(dest)
             interruption.check()
             return self.apply()
         present = set(texts)
@@ -929,7 +929,8 @@ class Project:
         redo = [t for t in self._refused if self.is_machine(t)
                   and (self._problems.get(t) or {}).get("tentativi", 0) < MAX_ATTEMPTS]
         if redo and self.recovery and self.translation_outcome is None:
-            self.log("  %d traduzioni non si possono scrivere nel gioco: le rifaccio subito con l'istruzione giusta"
+            self.log("  %d translations can't be written to the game: redoing them right away with the right "
+                     "instruction"
                      % len(redo))
             leading, redone = list(self.last_failed), self.redone
             failed += self.translate_texts(redo, backend, orig, dest, contexts)
@@ -983,7 +984,7 @@ class Project:
                 try:
                     self._machine_file.save(machine)
                 except OSError as e:
-                    self.log("  ! Traduzioni automatiche non annotate (%s)" % e)
+                    self.log("  ! Automatic translations not recorded (%s)" % e)
         dropped = [t for t in changes if (self._problems.get(t) or {}).get("dove") in ("traduzione", "memoria")]
         for t in dropped:
             del self._problems[t]
@@ -1011,7 +1012,7 @@ class Project:
             try:
                 self._shared_file.save(shared)
             except OSError as e:
-                self.log("  ! Memoria comune non aggiornata (%s)" % e)
+                self.log("  ! Shared memory not updated (%s)" % e)
                 return changed
             self._save_origin()
         return changed
@@ -1038,8 +1039,8 @@ class Project:
         before = {t: self.memory.get(t) for t in unique}
         self._min_round = dict.fromkeys(unique, round_) if round_ else {}
         contexts = self._with_fixes(unique, contexts)
-        self.log("Ritraduco %d testi (%d caratteri)%s" % (len(unique), sum(len(t) for t in unique),
-                                                         " con domande nuove" if round_ else ""))
+        self.log("Retranslating %d texts (%d characters)%s" % (len(unique), sum(len(t) for t in unique),
+                                                         " with new prompts" if round_ else ""))
         try:
             self._translate_missing(unique, backend, orig, dest, contexts)
         finally:
@@ -1061,7 +1062,7 @@ class Project:
                     # translation that could not be redone stays as it was, without being noted as suspect
                     # (the re-translation counts as one round, even with the seeds of a later round: see
                     # corrections.retranslate)
-                    self._mark_problem(t, motivo=self._failure_reasons.get(t) or "nessuna traduzione valida",
+                    self._mark_problem(t, motivo=self._failure_reasons.get(t) or "no valid translation",
                                          dove="traduzione", tentativi=max((entry or {}).get("tentativi", 0),
                                                                           min(round_, 1)) + getattr(self, "_steps", 1))
                     has_changed = True
@@ -1081,7 +1082,7 @@ class Project:
                 raw_texts = dict(self._raw_json(f.data, entry)) if units and isinstance(f, adapter_webjson.JSONFile) \
                     else {}
             except (OSError, ValueError, KeyError, RuntimeError, UnicodeDecodeError) as e:
-                self.log("  ! %s: non riesco a leggerlo (%s)" % (entry.get("percorso"), e))
+                self.log("  ! %s: I can't read it (%s)" % (entry.get("percorso"), e))
                 continue
             for pos, t in units or []:
                 if isinstance(t, str):
@@ -1149,10 +1150,10 @@ class Project:
         self._min_round = dict.fromkeys(redo, 1)
         redo_contexts = contexts or {}
         contexts = self._with_fixes(missing, contexts)
-        self.log("Testi del gioco: %d, gia' tradotti: %d%s, da tradurre: %d" % (
+        self.log("Game texts: %d, already translated: %d%s, to translate: %d" % (
             len(unique), len(unique) - len(missing),
-            " (%d da altri giochi)" % from_shared if from_shared else "", len(missing)))
-        self.log(DETAIL + "  (%d caratteri da tradurre)" % sum(len(t) for t in missing))
+            " (%d from other games)" % from_shared if from_shared else "", len(missing)))
+        self.log(DETAIL + "  (%d characters to translate)" % sum(len(t) for t in missing))
         try:
             return self._translate_missing(missing, backend, orig, dest, contexts)
         finally:
@@ -1184,7 +1185,7 @@ class Project:
             references = ((contexts or {}).get(t) or {}).get("riferimenti") or {}
             reasons = entry_problems(t, v, dest, pattern, list(references.values()))
             if not reasons and v == before.get(t):
-                reasons = ["uguale a quella di prima"]
+                reasons = ["the same as before"]
             if reasons:
                 still[t] = reasons
         return still
@@ -1198,7 +1199,7 @@ class Project:
         'Fix translations', and the fix also holds for the other games (except an entry fixed by hand in another
         game: the first fix stays). The machine translation stays in .machine.json: so it is always known
         which entries were fixed by hand (and they are not touched)."""
-        shared = self._read_json(shared_path(orig, dest), {}, "file della memoria comune")
+        shared = self._read_json(shared_path(orig, dest), {}, "shared memory file")
         self._machine = None  # read again: the translator started by the game writes it too
         self._read_machine()
         try:
@@ -1229,7 +1230,7 @@ class Project:
             self._shared_origin[t] = {"mano": True, "gioco": self.profile.get("nome"), "versione": __version__}
             changed += 1
         if changed:
-            self.log("  Memoria comune: %d correzioni fatte a mano in questo gioco valgono ora per tutti" % changed)
+            self.log("  Shared memory: %d corrections made by hand in this game now apply to every game" % changed)
             self._shared_file.save(shared)
             self._save_origin()
         return shared
@@ -1238,7 +1239,7 @@ class Project:
         try:
             self._source_file.save(self._shared_origin)
         except OSError as e:
-            self.log("  ! Provenienza della memoria comune non salvata (%s)" % e)
+            self.log("  ! Shared memory origin not saved (%s)" % e)
 
     def _provenance(self):
         """Where a translation made now comes from: translator, model, PatchSmith version, game."""
@@ -1256,7 +1257,7 @@ class Project:
         try:
             self._machine_file.save(machine)
         except OSError as e:
-            self.log("  ! Traduzioni automatiche non annotate (%s)" % e)
+            self.log("  ! Automatic translations not recorded (%s)" % e)
 
     def _update_shared(self, shared, orig, dest, missing, before=None):
         """The short texts translated now go into the shared translation memory, with their origin
@@ -1289,7 +1290,7 @@ class Project:
         try:
             self._shared_file.save(shared)
         except OSError as e:
-            self.log("  ! Memoria comune non aggiornata (%s)" % e)
+            self.log("  ! Shared memory not updated (%s)" % e)
             return
         if hasattr(self, "_source_file"):
             self._save_origin()
@@ -1315,8 +1316,8 @@ class Project:
                     self._mark_problem(t, tentativi=handled)
                     has_changed = True
                 elif t in still:
-                    self._mark_problem(t, motivo="%s; rifatta, ma non va ancora (%s)" % (
-                        redo.get(t) or "traduzione salvata sospetta", ", ".join(still[t])), dove="memoria",
+                    self._mark_problem(t, motivo="%s; redone, but still not right (%s)" % (
+                        redo.get(t) or "suspicious saved translation", ", ".join(still[t])), dove="memoria",
                         tentativi=handled, valore=self.memory.get(t))
                     has_changed = True
                 elif entry:
@@ -1328,10 +1329,10 @@ class Project:
             if t in redo and entry and entry.get("dove") == "gioco":
                 self._mark_problem(t, tentativi=handled)
             elif t in redo:
-                self._mark_problem(t, motivo="%s; rifarla non e' riuscito, resta quella di prima" % redo[t],
+                self._mark_problem(t, motivo="%s; redoing it failed, the previous one stays" % redo[t],
                                      dove="memoria", tentativi=handled, valore=self.memory.get(t))
             else:
-                self._mark_problem(t, motivo=self._failure_reasons.get(t) or "nessuna traduzione valida",
+                self._mark_problem(t, motivo=self._failure_reasons.get(t) or "no valid translation",
                                      dove="traduzione", tentativi=handled)
             has_changed = True
         if has_changed:
@@ -1377,7 +1378,7 @@ class Project:
         try:
             self._ask_shorter(backend, orig, dest, contexts)
         except Exception as e:  # noqa: BLE001 - it is an extra: the translation just made stays valid and is written
-            self.log("  ! etichette piu' corte non riuscite (%s: %s)" % (type(e).__name__, e))
+            self.log("  ! shorter labels failed (%s: %s)" % (type(e).__name__, e))
 
     def _ask_shorter(self, backend, orig, dest, contexts=None):
         if self.translation_outcome is not None:  # translator blocked: next time
@@ -1388,13 +1389,13 @@ class Project:
         if not getattr(backend, "uses_context", False):
             for t, space in long_labels.items():
                 self._too_long[t] = (space, self.memory[t], False)
-            self.log("  %d etichette corte sono piu' lunghe dello spazio che hanno di solito (es. %r -> %r): le vedi "
-                     "in 'Correggi traduzioni' (elenco 'Troppo lunghi'); il traduttore locale sa farle piu' corte" % (
+            self.log("  %d short labels are longer than the space they usually have (e.g. %r -> %r): you can see them "
+                     "in 'Fix translations' ('Too long' list); the local translator can make them shorter" % (
                          len(long_labels), next(iter(long_labels))[:30], self.memory[next(iter(long_labels))][:40]))
             return
         if hasattr(backend, "pause") and backend.pause():
             return
-        self.log("  %d etichette corte sono piu' lunghe dello spazio che hanno di solito: le chiedo piu' corte"
+        self.log("  %d short labels are longer than the space they usually have: asking for shorter ones"
                  % len(long_labels))
         pattern = protected_pattern(self._protected())
         shortened = []
@@ -1409,10 +1410,10 @@ class Project:
             try:
                 responses = backend.translate_lines([protected[t][0] for t in group], orig, dest, contexts=requests)
             except BackendError as e:  # the others are asked next time
-                self.log("  ! etichette piu' corte non chieste: %s" % e)
+                self.log("  ! shorter labels not requested: %s" % e)
                 break
             except Exception as e:  # noqa: BLE001 - it is an extra: the previous translations stay
-                self.log("  ! etichette piu' corte non riuscite (%s: %s)" % (type(e).__name__, e))
+                self.log("  ! shorter labels failed (%s: %s)" % (type(e).__name__, e))
                 break
             for t, response in zip(group, responses):
                 old_folder = self.memory[t]
@@ -1432,8 +1433,8 @@ class Project:
             self._update_machine(shortened)
             self.shortened += len(shortened)
         still_long = sum(1 for v in self._too_long.values() if v)
-        self.log("  Etichette: %d accorciate%s" % (len(shortened), ", %d ancora piu' lunghe del solito (le vedi in "
-                                                    "'Correggi traduzioni', elenco 'Troppo lunghi')" % still_long
+        self.log("  Labels: %d shortened%s" % (len(shortened), ", %d still longer than usual (you can see them in "
+                                                                   "'Fix translations', 'Too long' list)" % still_long
                                                     if still_long else ""))
 
     def _record_long(self):
@@ -1452,7 +1453,7 @@ class Project:
                 continue  # a more important problem (not translated, unfit for the game)
             # chiesta: already asked shorter to the local translator (if not, it is asked with that one:
             # _long_labels)
-            self._mark_problem(t, motivo="%d caratteri, di solito ce ne stanno circa %d" % (
+            self._mark_problem(t, motivo="%d characters, usually about %d fit" % (
                 round(_weight(value_)), int(space)), dove="lunghezza", valore=value_, spazio=int(space),
                 chiesta=requested)
             self.long_noted += 1
@@ -1472,7 +1473,7 @@ class Project:
             return 0
         pause = backend.pause() if hasattr(backend, "pause") else None
         if pause:  # service paused because of a previous block: no requests, so as not to extend it
-            self.log("  ! Traduzione non avviata: %s" % pause)
+            self.log("  ! Translation not started: %s" % pause)
             self.translation_outcome, self.translation_reason = "TRADUTTORE_BLOCCATO", pause
             return len(missing)
         groups = _groups(missing, min(TEXTS_PER_GROUP, getattr(backend, "max_texts", TEXTS_PER_GROUP)),
@@ -1482,17 +1483,17 @@ class Project:
             requests = backend.requests(missing) if hasattr(backend, "requests") else \
                 [sum(len(t) + 1 for t in g) for g in groups]
             if getattr(backend, "limited", True):
-                self.log("  Richieste previste: circa %d, tempo stimato: %s (PatchSmith va piano apposta con %s, per "
-                         "ridurre il rischio di blocchi)" % (len(requests),
+                self.log("  Expected requests: about %d, estimated time: %s (PatchSmith goes slowly on purpose with "
+                         "%s, to reduce the risk of being blocked)" % (len(requests),
                                                              describe_duration(backend.estimate(requests)),
                                                              NAMES.get(backend.name, backend.name)))
             else:
-                self.log("  Traduttore locale: %d testi, tempo stimato circa %s. Non avviare il gioco mentre traduce "
-                         "(la scheda video e' occupata)." % (len(requests),
+                self.log("  Local translator: %d texts, estimated time approximately %s. Do not start the game while "
+                         "translating (the graphics card is busy)." % (len(requests),
                                                              describe_duration(backend.estimate(requests))))
             if hasattr(backend, "quota") and sum(requests) > backend.quota():
-                self.log("  ! Servono circa %d caratteri, piu' dei %d al giorno di %s: oggi se ne traduce una parte, "
-                         "il resto nei giorni successivi (si riparte da dove ci si era fermati)."
+                self.log("  ! About %d characters are needed, more than the %d per day of %s: part of them gets "
+                         "translated today, the rest on the following days (it resumes from where it stopped)."
                          % (sum(requests), backend.quota(), NAMES.get(backend.name, backend.name)))
         # the rejected proposals of the local translator say why a text did not pass (for problems.json); in the
         # live translator it prepares them itself (xunity_service)
@@ -1514,8 +1515,8 @@ class Project:
                 backend.rejects = None
         self.last_failed = failed
         total = len(failed) + not_attempted
-        self.log(DETAIL + "Memoria: %d voci (%s)%s" % (
-            len(self.memory), self.memory_path, ", non tradotti: %d" % total if total else ""))
+        self.log(DETAIL + "Memory: %d entries (%s)%s" % (
+            len(self.memory), self.memory_path, ", untranslated: %d" % total if total else ""))
         return total
 
     def _translate_groups(self, backend, groups, missing, orig, dest, contexts=None):
@@ -1526,25 +1527,25 @@ class Project:
         for group in groups:
             start = handled
             handled += len(group)
-            self.log(DETAIL + "  testi %d-%d di %d" % (start + 1, start + len(group), len(missing)))
+            self.log(DETAIL + "  texts %d-%d of %d" % (start + 1, start + len(group), len(missing)))
             # in the window the progress every 10% (not every group of texts)
             if start and len(groups) > 2 and start * 10 // len(missing) > (start - len(group)) * 10 // len(missing):
-                self.log("  Tradotti %d di %d (%d%%)..." % (start, len(missing), start * 100 // len(missing)))
+                self.log("  Translated %d of %d (%d%%)..." % (start, len(missing), start * 100 // len(missing)))
             try:
                 interruption.check()
                 failed += self._translate_group(backend, group, orig, dest, contexts)
             except interruption.Interrupted:
-                self.log("  Fermato: le traduzioni fatte finora sono salvate (%d in memoria) e la prossima volta si "
-                         "riparte da li'." % len(self.memory))
+                self.log("  Stopped: the translations done so far are saved (%d in memory) and next time it resumes "
+                         "from there." % len(self.memory))
                 raise
             except BackendError as e:  # service unreachable or blocked: resumes at the next run
-                self.log("  ! traduzione interrotta: %s" % e)
+                self.log("  ! translation interrupted: %s" % e)
                 self.translation_outcome, self.translation_reason = "TRADUTTORE_BLOCCATO", str(e)
                 self.last_error = e
                 not_attempted += len(missing) - start
                 break
             except Exception as e:  # problem with this group: skip it and continue with the next ones
-                self.log("  ! gruppo saltato (%s: %s)" % (type(e).__name__, e))
+                self.log("  ! group skipped (%s: %s)" % (type(e).__name__, e))
                 self.last_error = e
                 not_attempted += len(group)
             finally:
@@ -1648,8 +1649,8 @@ class Project:
            a single request; the local translator uses new seeds, derived from the text and the round;
         2. the model stays the chosen one: the texts still rejected go into problems.json ('Fix translations').
         Returns the texts still without a translation."""
-        self.log("  %d testi scartati dai controlli: li riprovo subito in un altro modo (frasi separate, parametri "
-                 "diversi)" % len(failed))
+        self.log("  %d texts rejected by the checks: retrying them right away in a different way (separate phrases, "
+                 "different parameters)" % len(failed))
         split_parts = {t: split_lines(t) for t in failed}
         rounds = self._rounds(split_parts)
         lines = list(dict.fromkeys(n for t in failed for _, n, _ in split_parts[t]
@@ -1660,11 +1661,11 @@ class Project:
             fallback = self._translate_in_pieces(backend, lines, orig, dest, sentences=True,
                                             rounds={n: rounds.get(n, 0) + 1 for n in lines})
         except BackendError as e:  # translator stopped or blocked: resumes at the next run
-            self.log("  ! nuovo giro interrotto: %s" % e)
+            self.log("  ! new pass interrupted: %s" % e)
             self.translation_outcome, self.translation_reason, self.last_error = "TRADUTTORE_BLOCCATO", str(e), e
             fallback, stopped = {}, True
         except Exception as e:  # noqa: BLE001 - the new rounds are an extra: the translations made are written anyway
-            self.log("  ! nuovo giro non riuscito (%s: %s)" % (type(e).__name__, e))
+            self.log("  ! new pass failed (%s: %s)" % (type(e).__name__, e))
             self.last_error = e
             fallback = {}
         for n, r in fallback.items():
@@ -1676,7 +1677,7 @@ class Project:
         # would take minutes and the graphics card without being asked); the remaining ones can be re-translated with
         # the 12B from 'Fix translations', if wanted
         recovered = len(failed) - len(remaining)
-        self.log("  Nuovi giri: %d testi tradotti, %d ancora in originale" % (recovered, len(remaining)))
+        self.log("  More passes: %d texts translated, %d still untranslated" % (recovered, len(remaining)))
         return remaining
 
     def _reasons(self, failed):
@@ -1691,8 +1692,8 @@ class Project:
                 proposal = self._seen_rejects.get(protect(n, self._protected())[0])
                 if proposal:
                     reasons += [m for m in proposal[1] if m not in reasons]
-            output[t] = ("scartata dai controlli (%s)" % ", ".join(reasons)) if reasons else \
-                "il traduttore non ha dato una traduzione valida"
+            output[t] = ("rejected by the checks (%s)" % ", ".join(reasons)) if reasons else \
+                "the translator didn't provide a valid translation"
         return output
 
     def _translate_in_pieces(self, backend, cores, orig, dest, sentences=False, rounds=None):
@@ -1740,7 +1741,7 @@ class Project:
         self.last_apply = {"ok": 0, "mancanti": 0, "esempi": [], "scartate": 0, "scritti": 0, "aperto": False}
         self._refused, self._applied = {}, set()
         if self.profile.get("motore") == "gamemaker" and game_open(self.profile["cartella_gioco"]):
-            self.log("  ! Il gioco e' aperto: chiudilo e riprova (alcuni testi li rilegge solo al riavvio).")
+            self.log("  ! The game is open: close it and try again (it rereads some texts only when restarted).")
             self.last_apply["aperto"] = True
             return False
         total_ok = total_missing = 0
@@ -1759,12 +1760,12 @@ class Project:
                 else:
                     ok, missing = self._apply_json(entry)
             except (OSError, ValueError, UnicodeDecodeError) as e:
-                self.log("  ! %s saltato: %s" % (entry["percorso"], e))
+                self.log("  ! %s skipped: %s" % (entry["percorso"], e))
                 ok, missing = 0, 1
             total_ok += ok
             total_missing += missing
-        self.log("Applicato: %d testi tradotti%s, %d ancora in originale." % (
-            total_ok, ", %d lasciati in originale come nelle traduzioni del gioco" % self._left_as_is
+        self.log("Applied: %d texts translated%s, %d still untranslated." % (
+            total_ok, ", %d left untranslated, as in the game's translations" % self._left_as_is
             if self._left_as_is else "", total_missing))
         self.last_apply.update(ok=total_ok, mancanti=total_missing, esempi=list(self._examples),
                                    scartate=self._rejected, scritti=self._writes)
@@ -1807,8 +1808,8 @@ class Project:
                                  tentativi=max(before.get("tentativi", 0), 1))  # redone: new seeds
             has_changed = True
         if machine:
-            self.log("  %d traduzioni automatiche non si possono scrivere nel gioco: alla prossima traduzione le "
-                     "rifaccio con l'istruzione giusta" % machine)
+            self.log("  %d automatic translations can't be written to the game: I'll redo them with the right "
+                     "instruction at the next translation" % machine)
         if has_changed:
             self._save_problems()
 
@@ -1823,7 +1824,7 @@ class Project:
     def _apply_json(self, entry):
         f, units = self._load(entry)
         if units is None:
-            self.log("  %s: il file non esiste piu' nel gioco, lo salto" % entry["percorso"])
+            self.log("  %s: This file no longer exists in the game, so I'm skipping it" % entry["percorso"])
             return 0, 0
         special = entry.get("a_capo") or entry.get("punto_elenco")
         originals = 0  # labels left like the original on purpose (they are not missing translations)
@@ -1854,8 +1855,8 @@ class Project:
                         # the game's signs (line break, symbol) written inside the translation: not next time
                         markers = "".join(s for s in (entry.get("a_capo") or "", entry.get("punto_elenco") or "")
                                         if s and not s.isalnum() and s in translated)
-                        self._refuse(t, "forma diversa dall'originale (paragrafi diversi o il segno di a capo del "
-                                          "gioco dentro la frase)", entry, markers)
+                        self._refuse(t, "different format from the original (different paragraphs or the game's line "
+                                        "break character within the sentence)", entry, markers)
                         continue
                     translated = reassembled
                 if limit and entry.get("a_capo"):
@@ -1871,31 +1872,31 @@ class Project:
                 if is_ready is None:
                     undrawable.append(translated)
                     absent = self._missing_chars(translated, raw_texts[p], lowercase)
-                    self._refuse(t, "caratteri che i font del gioco non sanno disegnare: %s" % " ".join(absent),
+                    self._refuse(t, "characters that the game's fonts can't draw: %s" % " ".join(absent),
                                    entry, absent)
                     continue
                 adapted += is_ready != translated
                 replacements[p] = is_ready
             if adapted:
-                self.log("  %s: %d testi adattati ai caratteri dei font del gioco" % (entry["percorso"], adapted))
+                self.log("  %s: %d texts adapted to the game's font characters" % (entry["percorso"], adapted))
             if originals:
-                self.log("  %s: %d etichette corte lasciate in originale come nelle traduzioni ufficiali del gioco "
-                         "(la traduzione non ci stava)" % (entry["percorso"], originals))
+                self.log("  %s: %d short labels left untranslated, as in the game's official translations (the "
+                         "translation didn't fit)" % (entry["percorso"], originals))
             if undrawable:
-                self.log("  ! %s: %d traduzioni hanno caratteri che i font del gioco non sanno disegnare e restano in "
-                         "originale, es. %r (quelle scritte da PatchSmith le rifaccio senza quei caratteri; quelle "
-                         "corrette a mano vanno sistemate con 'Correggi traduzioni')"
+                self.log("  ! %s: %d translations have characters the game's fonts can't draw and stay untranslated, "
+                         "e.g. %r (I'll redo the ones written by PatchSmith without those characters; the ones fixed "
+                         "by hand need correcting with 'Fix translations')"
                          % (entry["percorso"], len(undrawable), undrawable[0][:60]))
             if too_wide:
                 too_wide.sort(key=lambda x: x[2] - x[1])
-                self.log("  ! %s: %d testi potrebbero uscire dal loro spazio (piu' lunghi di tutte le versioni del "
-                         "gioco), es. %s: se serve accorciali con 'Correggi traduzioni' (elenco 'Troppo lunghi')" % (
+                self.log("  ! %s: %d texts might not fit their space (longer than every version in the game), e.g. %s: "
+                         "if needed, shorten them with 'Fix translations' ('Too long' list)" % (
                              entry["percorso"], len(too_wide),
-                             ", ".join("'%s' %d/%d caratteri" % x for x in too_wide[:4])))
+                             ", ".join("'%s' %d/%d characters" % x for x in too_wide[:4])))
             if rejected:
-                self.log("  ! %s: %d traduzioni lasciate in originale perche' non hanno la forma del testo originale "
-                         "(paragrafi diversi o un '%s' scritto a mano), es. %s (quelle scritte da PatchSmith le "
-                         "rifaccio; quelle corrette a mano vanno sistemate con 'Correggi traduzioni')"
+                self.log("  ! %s: %d translations left untranslated because they don't have the shape of the original "
+                         "text (different paragraphs or a '%s' typed by hand), e.g. %s (I'll redo the ones written by "
+                         "PatchSmith; the ones fixed by hand need correcting with 'Fix translations')"
                          % (entry["percorso"], len(rejected), entry.get("a_capo") or "*",
                             ", ".join(str(p[-1]) for p in rejected[:3])))
             self._rejected += len(rejected) + len(undrawable)
@@ -1905,7 +1906,7 @@ class Project:
         new_items = adapter_webjson.apply(f.data, replacements)
         problems = adapter_webjson.verify_structure(f.data, new_items, set(replacements))
         if problems:
-            self.log("  ! %s NON scritto, controllo struttura fallito: %s" % (entry["percorso"], problems[:3]))
+            self.log("  ! %s NOT written, structure check failed: %s" % (entry["percorso"], problems[:3]))
             self._remaining(t for _, t in units)
             return 0, len(units)
         self._remaining(t for p, t in units if p not in replacements and p not in left_alone)
@@ -1917,7 +1918,7 @@ class Project:
             adapter_webjson.write_atomic(new, data_bytes)
             self._writes += 1
             self._applied.update(t for p, t in units if p in replacements)
-            self.log("  %s: %d testi tradotti, %d ancora in originale (lingua aggiunta al gioco; %s resta originale)"
+            self.log("  %s: %d texts translated, %d still untranslated (language added to the game; %s stays original)"
                      % (entry["lingua_nuova"], len(replacements), missing, entry["percorso"]))
             self._left_as_is += originals
             return len(replacements), missing
@@ -1925,7 +1926,7 @@ class Project:
         adapter_webjson.write_atomic(path, data_bytes)
         self._writes += 1
         self._applied.update(t for p, t in units if p in replacements)
-        self.log("  %s: %d testi tradotti, %d ancora in originale" % (entry["percorso"], len(replacements), missing))
+        self.log("  %s: %d texts translated, %d still untranslated" % (entry["percorso"], len(replacements), missing))
         self._left_as_is += originals
         return len(replacements), missing
 
@@ -1939,13 +1940,13 @@ class Project:
           of the original file's backup, so 'Restore originals' removes it."""
         new = self._game_path(relative)
         if os.path.normcase(os.path.dirname(new)) != os.path.normcase(os.path.dirname(source)):
-            raise ValueError("la lingua aggiunta deve stare accanto al file originale")
+            raise ValueError("the new language file must be placed next to the original file")
         name = os.path.basename(new)
         backup = source + BACKUP_SUFFIX
         info = read_info(source) if os.path.exists(backup) else None
         if os.path.exists(new) and (info is None or name not in info.get("creati", [])):
-            raise ValueError("%s c'e' gia' e non l'ha creato PatchSmith (una traduzione di qualcun altro?): non lo "
-                             "tocco. Spostalo o rinominalo se vuoi la traduzione di PatchSmith" % relative)
+            raise ValueError("%s already exists and wasn't created by PatchSmith (someone else's translation?): I "
+                             "won't touch it. Move or rename it if you want PatchSmith's translation" % relative)
         if info is None:
             info = create_backup(source, {"solo_creati": True})
         else:
@@ -1954,13 +1955,13 @@ class Project:
                                                       or self._looks_translated(source, entry)):
                 if current not in info.get("hash_scritti", []):
                     shutil.copyfile(source, source + ".patchsmith-modificato")
-                    self.log("  ! %s era tradotto e corretto a mano: la versione corretta resta in %s"
+                    self.log("  ! %s was translated and fixed by hand: the fixed version is kept in %s"
                              % (os.path.basename(source), os.path.basename(source) + ".patchsmith-modificato"))
                 with open(backup, "rb") as f:
                     adapter_webjson.write_atomic(source, f.read())
                 if _hash_file(source) != info["hash_originale"]:
-                    raise RuntimeError("non riesco a rimettere l'originale di %s" % source)
-                self.log("  %s: rimesso originale (la traduzione ora e' una lingua a parte)"
+                    raise RuntimeError("I can't restore the original of %s" % source)
+                self.log("  %s: Restored to original (the translation is now a separate language)"
                          % os.path.basename(source))
             info["solo_creati"] = True
         expected = (info.get("hash_creati") or {}).get(name)
@@ -1969,12 +1970,13 @@ class Project:
             info["creati"] = [c for c in info.get("creati", []) if c != name]
             info["hash_creati"] = {k: v for k, v in (info.get("hash_creati") or {}).items() if k != name}
             save_info(source, info)
-            raise ValueError("%s e' stato sostituito da un file che non e' di PatchSmith (un aggiornamento del gioco?): "
-                             "non lo tocco. Se il gioco ha ora la sua traduzione, sceglila nel menu" % relative)
+            raise ValueError("%s has been replaced by a file that isn't from PatchSmith (is this a game update?): I "
+                             "won't touch it. If the game now has its own translation, choose it from the menu"
+                             % relative)
         if os.path.exists(new) and expected and _hash_file(new) != expected:
             shutil.copyfile(new, new + ".patchsmith-modificato")
-            self.log("  ! %s era stato corretto a mano: lo riscrivo, la versione corretta resta in %s (per "
-                     "correggere una traduzione usa 'Correggi traduzioni')" % (name, name + ".patchsmith-modificato"))
+            self.log("  ! %s had been fixed by hand: rewriting it, the fixed version is kept in %s (to fix a "
+                     "translation, use 'Fix translations')" % (name, name + ".patchsmith-modificato"))
         if name not in info.get("creati", []):
             info["creati"] = info.get("creati", []) + [name]
         info["hash_creati"] = dict(info.get("hash_creati") or {}, **{name: _hash_bytes(data_bytes)})
@@ -2003,7 +2005,8 @@ class Project:
                                                                  self.profile.get("lettere_ufficiali"),
                                                                  self.profile.get("lingua_file"))
                 if self._allowed is None:
-                    self.log("  ! Non trovo i font del gioco (data.win): per sicurezza uso solo caratteri ASCII")
+                    self.log("  ! I'm having trouble finding the game's fonts (data.win): for safety, I'm only using "
+                             "ASCII characters")
                     self._allowed = set(ASCII)
             elif font == "xna":  # None if the game has no XNB fonts: no limit
                 self._allowed = adapter_xna.font_chars(self.profile["cartella_gioco"], self.log)
@@ -2037,21 +2040,21 @@ class Project:
         catalog = self._game_path(rel)
         source = self._original(catalog)
         if source is None:
-            raise ValueError("non trovo il catalogo dei bundle (%s)" % rel)
+            raise ValueError("I can't find the bundle catalog (%s)" % rel)
         names = [os.path.basename(v["percorso"]) for v in self.profile.get("file", [])
                 if v.get("catalogo") == rel and v.get("percorso")]
         with open(source, "rb") as f:
             original = f.read()
         new = adapter_unity_loc.remove_crc(original, names)
         if new is None:
-            raise ValueError("non riesco a togliere il controllo dell'impronta (CRC) di %s dal catalogo del gioco: "
-                             "non lo modifico" % ", ".join(names))
+            raise ValueError("I can't remove the checksum (CRC) check of %s from the game's catalog: not modifying it"
+                             % ", ".join(names))
         with open(catalog, "rb") as f:
             current = f.read()
         if current != new:
             self._prepare_write(catalog, new)
             adapter_webjson.write_atomic(catalog, new)
-            self.log(DETAIL + "  %s: tolto il controllo dell'impronta (CRC) di %s" % (os.path.basename(catalog),
+            self.log(DETAIL + "  %s: removed the CRC check of %s" % (os.path.basename(catalog),
                                                                             ", ".join(names)))
 
     def _tmp_chars(self, entry):
@@ -2070,10 +2073,11 @@ class Project:
                     self._allowed_tmp, reason = None, "%s: %s" % (type(e).__name__, e)
                 dest = self.profile["lingua_destinazione"]
                 if self._allowed_tmp is None:
-                    self.log("  Font del gioco: non so quali caratteri hanno (%s), non li limito" % reason)
+                    self.log("  Game fonts: I don't know which characters they have (%s), not limiting them" % reason)
                 else:
                     absent_letters = [c for c in typical_letters(dest) if c not in self._allowed_tmp]
-                    self.log(DETAIL + "  Font del gioco: %s%s" % (reason, "; non hanno %s: le adatto (es. e')"
+                    self.log(DETAIL + "  Game fonts: %s%s" % (reason, "; they don't have %s: adapting them (e.g. "
+                                                                          "e')"
                                                                   % " ".join(absent_letters) if absent_letters else ""))
         return self._allowed_tmp
 
@@ -2086,7 +2090,7 @@ class Project:
         and goes into problems.json (the next translation redoes it without those characters)."""
         f, units = self._load(entry)
         if units is None:
-            self.log("  %s: il file non esiste piu' nel gioco, lo salto" % entry["percorso"])
+            self.log("  %s: This file no longer exists in the game, so I'm skipping it" % entry["percorso"])
             return 0, 0
         allowed = self._tmp_chars(entry)
         # characters the game said it cannot draw (Unity log, see checks.py)
@@ -2098,11 +2102,11 @@ class Project:
             if not isinstance(v, str):
                 continue
             if not any(c.isalpha() for c in v):
-                self._refuse(t, "traduzione senza lettere: nella tabella dei testi non si puo' scrivere", entry)
+                self._refuse(t, "translation without letters: it can't be written in the text table", entry)
                 continue
             is_ready, absent = _adapt_tmp(v, t, allowed, excluded, dest)
             if is_ready is None:
-                self._refuse(t, "caratteri che i font del gioco non sanno disegnare: %s" % " ".join(absent),
+                self._refuse(t, "characters that the game's fonts can't draw: %s" % " ".join(absent),
                                entry, absent)
                 font_rejected += 1
                 continue
@@ -2110,13 +2114,13 @@ class Project:
                 adapted.append((v, is_ready))
             replacements[pos] = is_ready
         if adapted:
-            self.log("  %s: %d testi adattati ai caratteri dei font del gioco (es. %r -> %r)" % (
+            self.log("  %s: %d texts adapted to the characters of the game's fonts (e.g. %r -> %r)" % (
                 os.path.basename(entry["percorso"]), len(adapted), adapted[0][0][:40], adapted[0][1][:40]))
             self._font_adapted = getattr(self, "_font_adapted", 0) + len(adapted)
         if font_rejected:
-            self.log("  ! %s: %d traduzioni hanno caratteri che i font del gioco non sanno disegnare e restano in "
-                     "originale (quelle scritte da PatchSmith le rifaccio senza quei caratteri; quelle corrette a mano "
-                     "vanno sistemate con 'Correggi traduzioni')" % (os.path.basename(entry["percorso"]),
+            self.log("  ! %s: %d translations have characters the game's fonts can't draw and stay untranslated (I'll "
+                     "redo the ones written by PatchSmith without those characters; the ones fixed by hand need "
+                     "correcting with 'Fix translations')" % (os.path.basename(entry["percorso"]),
                                                                      font_rejected))
         for _ in range(self.MAX_TABLE_REJECTS + 1):
             data_bytes = f.serialize(replacements)
@@ -2132,11 +2136,11 @@ class Project:
                 data_bytes = None
                 break
             del replacements[pos]
-            self._refuse(text, "la tabella dei testi riletta non torna con questa traduzione", entry)
+            self._refuse(text, "the text table doesn't match this translation", entry)
         else:
             data_bytes = None
         if data_bytes is None:
-            self.log("  ! %s NON scritto: il controllo dopo la riscrittura non torna" % entry["percorso"])
+            self.log("  ! %s NOT written: the check after rewriting doesn't match" % entry["percorso"])
             self._remaining(t for _, t in units)
             return 0, len(units)
         path = self._game_path(entry["percorso"])
@@ -2149,14 +2153,14 @@ class Project:
         self._rejected += len({t for t in self._refused if self._refused[t].get("file") == entry["percorso"]})
         self._remaining(t for pos, t in units if pos not in replacements)
         missing = len(units) - len(replacements)
-        self.log("  %s: %d testi tradotti, %d ancora in originale" % (os.path.basename(entry["percorso"]),
+        self.log("  %s: %d texts translated, %d still untranslated" % (os.path.basename(entry["percorso"]),
                                                                        len(replacements), missing))
         return len(replacements), missing
 
     def _apply_lines(self, entry):
         f, units = self._load(entry)
         if units is None:
-            self.log("  %s: il file non esiste piu' nel gioco, lo salto" % entry["percorso"])
+            self.log("  %s: This file no longer exists in the game, so I'm skipping it" % entry["percorso"])
             return 0, 0
         replacements, adapted = {}, 0
         for pos, text in units:
@@ -2165,14 +2169,14 @@ class Project:
                 continue
             if translated.count("\n") != text.count("\n"):
                 self._rejected += 1  # different number of lines (e.g. badly fixed by hand)
-                self._refuse(text, "righe diverse dall'originale (%d invece di %d)" % (
+                self._refuse(text, "different lines from the original (%d instead of %d)" % (
                     translated.count("\n") + 1, text.count("\n") + 1), entry)
                 continue
             is_ready = self._adapt(translated, text)
             if is_ready is None:
                 self._rejected += 1
                 absent = self._missing_chars(translated, text)
-                self._refuse(text, "caratteri che i font del gioco non sanno disegnare: %s" % " ".join(absent),
+                self._refuse(text, "characters that the game's fonts can't draw: %s" % " ".join(absent),
                                entry, absent)
                 continue
             adapted += is_ready != translated
@@ -2183,12 +2187,12 @@ class Project:
             del replacements[pos]
         if rejected:
             originals = dict(units)
-            self.log("  ! %s: %d traduzioni lasciate in originale perche' il gioco le leggerebbe male (es. %r)"
+            self.log("  ! %s: %d translations left untranslated because the game would read them incorrectly (e.g. %r)"
                      % (entry["percorso"], len(rejected), originals.get(rejected[0], "")[:60]))
             self._rejected += len(rejected)
             for pos in rejected:
-                self._refuse(originals.get(pos), "il gioco leggerebbe male il file con questa traduzione (una riga "
-                                                   "vuota, un numero o un segno del file dove va il testo)", entry)
+                self._refuse(originals.get(pos), "the game would misinterpret the file with this translation (an empty "
+                                                 "line, a number, or a file marker where the text should go)", entry)
         missing = len(units) - len(replacements)
         self._remaining(t for pos, t in units if pos not in replacements)
         path = self._game_path(entry["percorso"])
@@ -2196,9 +2200,9 @@ class Project:
         adapter_webjson.write_atomic(path, data_bytes)
         self._writes += 1
         self._applied.update(t for pos, t in units if pos in replacements)
-        self.log("  %s: %d testi tradotti, %d ancora in originale%s" % (
+        self.log("  %s: %d texts translated, %d still untranslated%s" % (
             entry["percorso"], len(replacements), missing,
-            ", %d adattati ai caratteri dei font" % adapted if adapted else ""))
+            ", %d adapted to the font characters" % adapted if adapted else ""))
         return len(replacements), missing
 
     def _apply_csv(self, entry):
@@ -2208,7 +2212,7 @@ class Project:
         untranslated."""
         f, units = self._load(entry)
         if units is None:
-            self.log("  %s: il file non esiste piu' nel gioco, lo salto" % entry["percorso"])
+            self.log("  %s: This file no longer exists in the game, so I'm skipping it" % entry["percorso"])
             return 0, 0
         replacements, adapted, rejected = {}, 0, []
         for pos, text in units:
@@ -2217,30 +2221,30 @@ class Project:
                 continue
             if translated.count("\n") != text.count("\n"):
                 rejected.append(text)
-                self._refuse(text, "righe diverse dall'originale (%d invece di %d)" % (
+                self._refuse(text, "different lines from the original (%d instead of %d)" % (
                     translated.count("\n") + 1, text.count("\n") + 1), entry)
                 continue
             is_ready = self._adapt(translated, text, repair=False)
             if is_ready is None:
                 rejected.append(text)
                 absent = self._missing_chars(translated, text)
-                self._refuse(text, "caratteri che i font del gioco non sanno disegnare: %s" % " ".join(absent),
+                self._refuse(text, "characters that the game's fonts can't draw: %s" % " ".join(absent),
                                entry, absent)
                 continue
             is_ready = f.adapt(is_ready)  # e.g. ',' -> ';' in a table that the game splits on commas
             forbidden = f.unwritable(is_ready)
             if forbidden:
                 rejected.append(text)
-                self._refuse(text, "caratteri che la tabella del gioco non permette nei testi: %s" % " ".join(
+                self._refuse(text, "characters that the game's table does not allow in the text: %s" % " ".join(
                     repr(c) if c.isspace() else c for c in forbidden), entry,
                     forbidden.replace("\n", "").replace("\r", ""))
                 continue
             adapted += is_ready != translated
             replacements[pos] = is_ready
         if rejected:
-            self.log("  ! %s: %d traduzioni lasciate in originale perche' il gioco non le leggerebbe bene, es. %r "
-                     "(quelle scritte da PatchSmith le rifaccio; quelle corrette a mano vanno sistemate con 'Correggi "
-                     "traduzioni')" % (entry["percorso"], len(rejected), rejected[0][:60]))
+            self.log("  ! %s: %d translations left untranslated because the game wouldn't read them correctly, e.g. %r "
+                     "(I'll redo the ones written by PatchSmith; the ones fixed by hand need correcting with 'Fix "
+                     "translations')" % (entry["percorso"], len(rejected), rejected[0][:60]))
             self._rejected += len(rejected)
         data_bytes = f.serialize(replacements)  # CSVError (ValueError) if the file read back differs: not written
         missing = len(units) - len(replacements)
@@ -2250,16 +2254,16 @@ class Project:
         adapter_webjson.write_atomic(path, data_bytes)
         self._writes += 1
         self._applied.update(t for pos, t in units if pos in replacements)
-        self.log("  %s: %d testi tradotti, %d ancora in originale%s" % (
+        self.log("  %s: %d texts translated, %d still untranslated%s" % (
             entry["percorso"], len(replacements), missing,
-            ", %d adattati ai caratteri dei font" % adapted if adapted else ""))
+            ", %d adapted to the font characters" % adapted if adapted else ""))
         return len(replacements), missing
 
     def _apply_webui(self, entry):
         index = self._game_path(entry["percorso"])
         _, units = self._load(entry)
         if units is None:
-            self.log("  %s: il file non esiste piu' nel gioco, lo salto" % entry["percorso"])
+            self.log("  %s: This file no longer exists in the game, so I'm skipping it" % entry["percorso"])
             return 0, 0
         dictionary = {t: self.memory[t] for _, t in units if t in self.memory}
         missing = len(units) - len(dictionary)
@@ -2269,7 +2273,7 @@ class Project:
             html, encoding = adapter_webui.decode_html(f.read())
         new_html = adapter_webui.insert_tag(html)
         if new_html.count(adapter_webui.SCRIPT_NAME) != 1:
-            self.log("  ! %s: inserimento del tag non riuscito, interfaccia NON modificata" % entry["percorso"])
+            self.log("  ! %s: Tag insertion failed, interface NOT modified" % entry["percorso"])
             return 0, len(units)
         html_bytes = adapter_webui.encode_html(new_html, encoding)
         script_bytes = adapter_webui.generate_script(dictionary).encode("utf-8")
@@ -2284,22 +2288,22 @@ class Project:
         adapter_webjson.write_atomic(script, script_bytes)
         syntax = adapter_webui.check_script(script)
         if syntax is False:
-            self.log("  ! %s: lo script generato non e' valido, interfaccia NON modificata" % entry["percorso"])
+            self.log("  ! %s: The generated script is invalid; interface NOT modified" % entry["percorso"])
             return 0, len(units)
         # 3) page with the tag
         adapter_webjson.write_atomic(index, html_bytes)
         self._writes += 1
         self._applied.update(dictionary)
-        self.log("  %s: interfaccia, %d testi tradotti, %d ancora in originale%s" % (
+        self.log("  %s: interface, %d texts translated, %d still untranslated%s" % (
             entry["percorso"], len(dictionary), missing,
-            "" if syntax else " (sintassi dello script non verificata: Node.js assente)"))
+            "" if syntax else " (script syntax not verified: Node.js not present)"))
         return len(dictionary), missing
 
     def restore(self):
         """Puts back the originals of ALL the changed files in the game's folder."""
         paths = find_info(self.profile["cartella_gioco"])
         if not paths:
-            self.log("  Nessun file modificato: il gioco e' gia' originale.")
+            self.log("  No files modified: the game is already in its original state.")
             return False
         for path in paths:
             restore_file(path, self.log)
@@ -2310,17 +2314,17 @@ class Project:
         for entry in self.profile["file"]:
             _, units = self._load(entry, update=False)
             if units is None:
-                self.log("  %s: non esiste piu' nel gioco" % entry["percorso"])
+                self.log("  %s: It no longer exists in the game" % entry["percorso"])
                 continue
             for _, t in units:
                 unique[t] = t in self.memory
             is_modified = os.path.exists(self._game_path(entry["percorso"]) + BACKUP_SUFFIX)
-            kinds = {"web-ui": "interfaccia", "righe": "testi", "csv": "tabella dei testi"}
+            kinds = {"web-ui": "interfaccia", "righe": "testi", "csv": "text table"}
             kind = kinds.get(entry.get("formato"), "dati")
-            self.log("  %s (%s): %d testi, %s" % (entry["percorso"], kind, len(units),
-                                                 "tradotto (backup presente)" if is_modified else "originale"))
+            self.log("  %s (%s): %d texts, %s" % (entry["percorso"], kind, len(units),
+                                                 "translated (backup available)" if is_modified else "originale"))
         translated_items = sum(unique.values())
-        self.log("Testi unici: %d, tradotti in memoria: %d, mancanti: %d" % (len(unique), translated_items,
+        self.log("Unique texts: %d, translated in memory: %d, missing: %d" % (len(unique), translated_items,
                                                                               len(unique) - translated_items))
         for t in [t for t, ok in unique.items() if ok][:examples]:
             self.log("  EN: %s\n  %s: %s" % (t[:160].replace("\n", " / "), self.profile["lingua_destinazione"].upper(),

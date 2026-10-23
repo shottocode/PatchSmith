@@ -199,6 +199,6 @@ def executable(folder=PROGRAM):
 
 if __name__ == "__main__":
     write()
-    print("Immagini dell'icona in", FOLDER)
+    print("Icon images in", FOLDER)
     if executable():
         print("PatchSmith.exe in", PROGRAM)

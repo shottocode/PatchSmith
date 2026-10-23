@@ -51,7 +51,7 @@ def _csv_cells(text, sep):
             while True:
                 k = text.find('"', j)
                 if k < 0:
-                    raise CSVError("virgolette non chiuse")
+                    raise CSVError("unclosed quote")
                 pieces.append(text[j:k])
                 if text.startswith('"', k + 1):
                     pieces.append('"')
@@ -60,7 +60,7 @@ def _csv_cells(text, sep):
                 end = k + 1
                 break
             if end < n and text[end] not in sep + "\r\n":
-                raise CSVError("testo dopo le virgolette di chiusura")
+                raise CSVError("text after the closing quotation marks")
             line.append((i, end, "".join(pieces), True))
         else:
             m = cell_end.search(text, i)
@@ -105,7 +105,7 @@ def _separator(text):
     occurrences = {s: before.count(s) for s in SEPARATORS}
     best = max(SEPARATORS, key=lambda s: occurrences[s])
     if not occurrences[best]:
-        raise CSVError("nessun separatore nella prima riga")
+        raise CSVError("no separator in the first row")
     return best
 
 
@@ -118,13 +118,13 @@ class CSVFile:
         try:
             text = data_bytes.decode("utf-8")
         except UnicodeDecodeError as e:
-            raise CSVError("il file non e' UTF-8: %s" % e) from e
+            raise CSVError("the file is not UTF-8: %s" % e) from e
         self.bom = text.startswith("\ufeff")
         self.text = text[1:] if self.bom else text
         self.separator = _separator(self.text)
         try:
             if by_hand:
-                raise CSVError("diviso a mano")
+                raise CSVError("manually divided")
             self.lines = _csv_cells(self.text, self.separator)
             self.quotes = True
         except CSVError:
@@ -152,10 +152,10 @@ class CSVFile:
             read_items = list(csv.reader(io.StringIO(self.text, newline=""), delimiter=self.separator, quotechar='"',
                                     doublequote=True, strict=True))
         except csv.Error as e:
-            raise CSVError("CSV non valido: %s" % e) from e
+            raise CSVError("Invalid CSV: %s" % e) from e
         ours = [[] if len(r) == 1 and not r[0][3] and not r[0][2] else [c[2] for c in r] for r in self.lines]
         if [r for r in read_items if r] != [r for r in ours if r]:
-            raise CSVError("celle diverse da quelle del modulo csv")
+            raise CSVError("cells differ from those of the csv module")
 
     def _cell(self, r, c):
         line = self.lines[r]
@@ -262,7 +262,7 @@ class CSVFile:
         for (r, c), new in sorted(replacements.items(), key=lambda x: self.lines[x[0][0]][x[0][1]][0]):
             start, end, value_, quoted = self.lines[r][c]
             if self.unwritable(new):
-                raise CSVError("riga %d: la traduzione ha caratteri che il file non permette" % (r + 1))
+                raise CSVError("row %d: the translation has characters that the file doesn't allow" % (r + 1))
             if "\r\n" in value_:
                 new = new.replace("\r\n", "\n").replace("\n", "\r\n")
             expectations[(r, c)] = new
@@ -279,7 +279,7 @@ class CSVFile:
                 [len(r) for r in checks.lines] != [len(r) for r in self.lines] or \
                 any(checks.lines[r][c][2] != expectations.get((r, c), self.lines[r][c][2])
                     for r in range(len(self.lines)) for c in range(len(self.lines[r]))):
-            raise CSVError("il file riletto non torna: non scrivo")
+            raise CSVError("the file doesn't match when read back: not writing")
         return data
 
 

@@ -21,16 +21,16 @@ class GameMakerError(ValueError):
 def pieces(data):
     """{nome: (content start, size)} of the chunks of a data.win."""
     if len(data) < 8 or data[:4] != b"FORM":
-        raise GameMakerError("non e' un data.win di GameMaker (manca FORM)")
+        raise GameMakerError("this is not a GameMaker data.win file (it's missing the FORM)")
     end = 8 + struct.unpack_from("<I", data, 4)[0]
     if end > len(data):
-        raise GameMakerError("data.win troncato")
+        raise GameMakerError("data.win truncated")
     output, p = {}, 8
     while p + 8 <= end:
         name = data[p:p + 4].decode("ascii", "replace")
         dim = struct.unpack_from("<I", data, p + 4)[0]
         if p + 8 + dim > end:
-            raise GameMakerError("pezzo %s oltre la fine del file" % name)
+            raise GameMakerError("chunk %s beyond the end of the file" % name)
         output[name] = (p + 8, dim)
         p += 8 + dim
     return output
@@ -39,10 +39,10 @@ def pieces(data):
 def read_string(data, pointer):
     """GameMaker string from its reference (which points to the text, preceded by the length)."""
     if not 4 <= pointer <= len(data) - 1:
-        raise GameMakerError("riferimento a stringa non valido")
+        raise GameMakerError("invalid string reference")
     n = struct.unpack_from("<I", data, pointer - 4)[0]
     if pointer + n >= len(data) or data[pointer + n] != 0:
-        raise GameMakerError("stringa non valida")
+        raise GameMakerError("invalid string")
     return data[pointer:pointer + n].decode("utf-8", "replace")
 
 
@@ -78,16 +78,16 @@ def font(data):
     start, dim = table["FONT"]
     end = start + dim
     if dim < 4:
-        raise GameMakerError("pezzo FONT non valido")
+        raise GameMakerError("invalid FONT chunk")
     n = struct.unpack_from("<I", data, start)[0]
     if n > 10000 or dim < 4 + 4 * n:
-        raise GameMakerError("pezzo FONT non valido")
+        raise GameMakerError("invalid FONT chunk")
     output, unreadable = [], 0
     for k in range(n):
         p = struct.unpack_from("<I", data, start + 4 + 4 * k)[0]
         try:
             if not start <= p < end - 4:
-                raise GameMakerError("font fuori dal pezzo FONT")
+                raise GameMakerError("font outside the FONT chunk")
             name = read_string(data, struct.unpack_from("<I", data, p)[0])
         except (GameMakerError, struct.error):
             unreadable += 1
@@ -141,7 +141,7 @@ def sprite(data):
     end = start + dim
     n = struct.unpack_from("<I", data, start)[0]
     if n > 100000 or dim < 4 + 4 * n:
-        raise GameMakerError("pezzo SPRT non valido")
+        raise GameMakerError("invalid SPRT chunk")
     output = []
     for k in range(n):
         p = struct.unpack_from("<I", data, start + 4 + 4 * k)[0]
@@ -190,7 +190,7 @@ def strings(data):
     start, dim = table["STRG"]
     n = struct.unpack_from("<I", data, start)[0]
     if n > 1000000 or dim < 4 + 4 * n:
-        raise GameMakerError("pezzo STRG non valido")
+        raise GameMakerError("invalid STRG chunk")
     output = []
     for k in range(n):
         p = struct.unpack_from("<I", data, start + 4 + 4 * k)[0]

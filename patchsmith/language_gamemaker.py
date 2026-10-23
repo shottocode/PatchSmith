@@ -31,26 +31,26 @@ class FormatError(ValueError):
 def _value(b, i):
     """(type, start, end, value) of the value that starts at i."""
     if i + 4 > len(b):
-        raise FormatError("valore oltre la fine")
+        raise FormatError("value beyond the end")
     kind = struct.unpack_from("<I", b, i)[0]
     if kind == 1:  # string
         n = struct.unpack_from("<I", b, i + 4)[0]
         if i + 8 + n > len(b):
-            raise FormatError("stringa oltre la fine")
+            raise FormatError("string beyond the end")
         return kind, i, i + 8 + n, b[i + 8:i + 8 + n].decode("utf-8")
     sizes = {0: 8, 5: 0, 7: 4, 10: 8, 13: 8, 12: 0}  # real, undefined, int32, int64, bool, null
     if kind not in sizes or i + 4 + sizes[kind] > len(b):
-        raise FormatError("tipo di valore sconosciuto (%d)" % kind)
+        raise FormatError("unknown value type (%d)" % kind)
     return kind, i, i + 4 + sizes[kind], None
 
 
 def _entries(b, mapping):
     """The entries of a map ([(key, value)]) or of a list ([value]), with their positions in the bytes."""
     if len(b) < 8:
-        raise FormatError("troppo corto")
+        raise FormatError("too short")
     header, n = struct.unpack_from("<II", b, 0)
     if header not in (_MAPS if mapping else _LISTS) or n > 100000:
-        raise FormatError("intestazione sconosciuta")
+        raise FormatError("unknown header")
     i, output = 8, []
     for _ in range(n):
         if mapping:
@@ -63,7 +63,7 @@ def _entries(b, mapping):
             output.append(v)
             i = v[2]
     if i != len(b):
-        raise FormatError("byte avanzati")
+        raise FormatError("leftover bytes")
     return output
 
 
@@ -130,11 +130,11 @@ def change(json_text, spot, new):
     new_mapping = _replace(b, v, _to_hex(new_list, uppercase))
     new_hex = _to_hex(new_mapping, hex_str == hex_str.upper())
     if json_text.count(hex_str) != 1:
-        raise FormatError("il valore da cambiare non e' unico nel file")
+        raise FormatError("the value to change is not unique in the file")
     result = json_text.replace(hex_str, new_hex)
     checks = find(result, {new})
     if [(c, m, i) for c, m, i, _ in checks] != [(json_key, mapping_key, idx)]:
-        raise FormatError("controllo dopo la modifica non riuscito")
+        raise FormatError("check after the change failed")
     return result
 
 
@@ -164,7 +164,7 @@ def search(root, languages):
     """(file, place) of the only language saved in the game's options, or (None, reason)."""
     folders = settings_folders(root)
     if not folders:
-        return None, "il gioco non ha ancora salvato le sue opzioni (avvialo una volta)"
+        return None, "the game hasn't saved its options yet (you'll need to start it once)"
     found = []
     for folder, name in [(c, n) for c in folders for n in sorted(os.listdir(c))]:
         path = os.path.join(folder, name)
@@ -178,8 +178,8 @@ def search(root, languages):
             continue
         found += [(path, spot) for spot in find(text, languages)]
     if len(found) != 1:
-        return None, ("non trovo dove il gioco salva la lingua" if not found else
-                      "la lingua compare in piu' punti delle opzioni salvate: non tocco nulla")
+        return None, ("I can't find where the game saves the language setting" if not found else
+                      "the language appears in several places in the saved options: not touching anything")
     return found[0]
 
 
@@ -195,8 +195,8 @@ def set_(root, new_value, languages, saves, log=print, respect=None):
         return {"tipo": "gamemaker_opzioni", "file": path, "posto": list(spot[:3]), "precedente": None,
                 "scritto": new_value}, None
     if respect and spot[3] != respect:
-        return None, "nel gioco hai scelto la lingua '%s': la lascio (la traduzione e' la lingua '%s')" % (
-            spot[3], new_value)
+        return None, ("in the game, you have chosen the language '%s'. I will leave it as is (the translation is in "
+                      "language '%s')" % (spot[3], new_value))
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
     new = change(text, spot, new_value)
@@ -206,7 +206,7 @@ def set_(root, new_value, languages, saves, log=print, respect=None):
     shutil.copyfile(path, copy_dir)
     from .adapter_webjson import write_atomic
     write_atomic(path, new.encode("utf-8"))
-    log("  Lingua del gioco impostata su '%s' nelle sue opzioni (%s; copia di prima in %s)"
+    log("  Game language set to '%s' in its options (%s; previous copy in %s)"
         % (new_value, path, copy_dir))
     return {"tipo": "gamemaker_opzioni", "file": path, "posto": list(spot[:3]), "precedente": spot[3],
             "scritto": new_value, "copia": copy_dir}, None

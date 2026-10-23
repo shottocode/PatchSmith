@@ -134,8 +134,8 @@ def test_bundle_extraction(game):
               texts.index("Welcome home, traveler!") < texts.index("Across the chunk boundary we go")
               < texts.index("Open the treasure chest"))
     check("pre-traduzione: il registro dice cosa ha letto",
-              any("Tabelle dei testi di Unity Localization" in r for r in lines)
-              and any("Bundle del gioco: letti" in r for r in lines))
+              any("Unity Localization text tables" in r for r in lines)
+              and any("Game bundles: read" in r for r in lines))
     # time limit used up: the bundles are left to the live translation, the rest is read
     old = adapter_unity.MAX_BUNDLE_SECONDS
     adapter_unity.MAX_BUNDLE_SECONDS = -1
@@ -146,7 +146,7 @@ def test_bundle_extraction(game):
         adapter_unity.MAX_BUNDLE_SECONDS = old
     check("pre-traduzione: con il tempo per i bundle finito, niente bundle (lo dice) ma il resto si'",
               "Open the treasure chest" not in texts and "Talk to the mayor" in texts
-              and any("letti 0 su" in r and "dal vivo" in r for r in lines))
+              and any("read 0 of" in r and "live translation" in r for r in lines))
 
 
 def main(base):
@@ -170,7 +170,7 @@ def main(base):
     # 1) installation with detected language
     lines = []
     adapter_unity.install(game, "auto", "it", NAME, lines.append)
-    check("lingua rilevata: inglese", any("Inglese (en)" in r for r in lines))
+    check("lingua rilevata: inglese", any("English (en)" in r for r in lines))
     check("file installati", all(os.path.exists(os.path.join(game, *p.split("/"))) for p in (
         "winhttp.dll", "doorstop_config.ini", "BepInEx/core/BepInEx.dll",
         "BepInEx/plugins/XUnity.AutoTranslator/XUnity.AutoTranslator.Plugin.BepInEx.dll")))
@@ -202,11 +202,12 @@ def main(base):
         "\n[Behaviour]\nMaxCharactersPerTranslation=500\nEnableBatching=True\nHandleRichText=True\n")
     lines = []
     adapter_unity.state(game, NAME, "it", lines.append)
-    check("stato: BepInEx e XUnity caricati, 2 frasi", any("OK  BepInEx avviato" in r for r in lines)
-              and any("OK  XUnity caricato" in r for r in lines) and any("tradotte finora: 2" in r for r in lines))
+    check("stato: BepInEx e XUnity caricati, 2 frasi", any("OK  BepInEx has been launched" in r for r in lines)
+              and any("OK  XUnity loaded" in r for r in lines)
+              and any("Translated phrases so far: 2" in r for r in lines))
     check("stato: com'e' andato l'avvio del traduttore di PatchSmith (scritto dal plugin)",
               adapter_unity.read_service_state(game).get("Esito") == "python-mancante"
-              and any("ultimo avvio del gioco: python-mancante (2026-10-18 04:29:33)" in r for r in lines))
+              and any("last game start: python-mancante (2026-10-18 04:29:33)" in r for r in lines))
 
     # 3) already installed: language change without losing the other keys
     adapter_unity.install(game, "en", "es", NAME, silent)
@@ -436,7 +437,7 @@ def test_live(base):
             stored = json.load(f)
         check("profilo: il traduttore scelto al posto di 'xunity-google'", stored.get("backend") == "google")
         check("finestra: 'Frasi nuove mentre giochi: PatchSmith, con il traduttore locale'",
-                  "Frasi nuove mentre giochi: PatchSmith, con il traduttore locale" in outcome.window(e)["testo"])
+                  "New phrases while playing: PatchSmith, with the local translator" in outcome.window(e)["testo"])
         automatic.restore(game, silent)
         check("ripristina: niente piu' XUnity ne' plugin", not adapter_unity.manifest_present(game))
         d = {}
@@ -564,7 +565,7 @@ def test_live_cache(base, unity, full):
               "'Xbox Series' (un nome) no",
               set(flagged) == {"Open the door to the castle", "Collect {{A}} coins",
                                  "Talk to the guard and the king"}
-              and "segnaposto diversi" in flagged["Collect {{A}} coins"][1])
+              and "different placeholders" in flagged["Collect {{A}} coins"][1])
     e = full(path, backend="google")
     entries = adapter_unity.xunity_cache_entries(game, "it")
     check("cache: righe sbagliate scritte da PatchSmith o dal traduttore dal vivo (diario: rifiutata, rinviata) "

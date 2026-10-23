@@ -67,14 +67,14 @@ def read_vdf(text):
     for t in _token(text):
         if t == "{":
             if key is None:
-                raise SteamError("VDF non valido: '{' senza chiave")
+                raise SteamError("Invalid VDF: '{' without key")
             new = {}
             stack[-1][key] = new
             stack.append(new)
             key = None
         elif t == "}":
             if len(stack) == 1:
-                raise SteamError("VDF non valido: '}' in piu'")
+                raise SteamError("Invalid VDF: extra '}'")
             stack.pop()
         elif key is None:
             key = t[1]
@@ -199,7 +199,7 @@ _CACHE = {}  # only one cache read: {'identita': (path, mtime, size), 'valore': 
 def _binary_kv(data, pos, keys, depth=0):
     """Binary KeyValues: type (0 section, 1 string, 2 int32, 3 float, 7 uint64, 8/11 end)."""
     if depth > 64:
-        raise SteamError("KeyValues troppo annidati")
+        raise SteamError("KeyValues nested too deeply")
     output = {}
     while True:
         kind = data[pos]
@@ -209,7 +209,7 @@ def _binary_kv(data, pos, keys, depth=0):
         if keys is not None:
             idx = struct.unpack_from("<i", data, pos)[0]
             if not 0 <= idx < len(keys):
-                raise SteamError("chiave KeyValues fuori tabella: %d" % idx)
+                raise SteamError("KeyValues key outside the table: %d" % idx)
             name = keys[idx]
             pos += 4
         else:
@@ -235,21 +235,21 @@ def _binary_kv(data, pos, keys, depth=0):
             output[name] = struct.unpack_from("<q", data, pos)[0]
             pos += 8
         else:
-            raise SteamError("tipo KeyValues sconosciuto: %d" % kind)
+            raise SteamError("unknown KeyValues type: %d" % kind)
 
 
 def _build_index(data):
     """(keys of the table or None, {appid: (start of the KeyValues, end of the record)}) of appinfo.vdf."""
     if len(data) < 16:
-        raise SteamError("appinfo.vdf troppo corto")
+        raise SteamError("appinfo.vdf is too short")
     magic = struct.unpack_from("<I", data, 0)[0]
     if magic not in (_V27, _V28, _V29):
-        raise SteamError("formato di appinfo.vdf sconosciuto (0x%08x)" % magic)
+        raise SteamError("unknown appinfo.vdf format (0x%08x)" % magic)
     pos, keys, limit = 8, None, len(data)
     if magic >= _V29:
         table = struct.unpack_from("<q", data, 8)[0]
         if not 16 <= table <= len(data) - 4:
-            raise SteamError("appinfo.vdf: tabella delle chiavi fuori dal file")
+            raise SteamError("appinfo.vdf: key table outside the file")
         pos, limit = 16, table
         n = struct.unpack_from("<I", data, table)[0]
         keys, q = [], table + 4
@@ -266,7 +266,7 @@ def _build_index(data):
             break
         end = pos + 8 + size
         if end > limit or size <= head:
-            raise SteamError("appinfo.vdf: record %d troncato" % app)
+            raise SteamError("appinfo.vdf: record %d truncated" % app)
         record[app] = (pos + 8 + head, end)
         pos = end
     return keys, record
@@ -292,7 +292,7 @@ def _appinfo(steam=None):
     except SteamError:
         raise
     except (struct.error, IndexError, ValueError, OverflowError) as e:
-        raise SteamError("appinfo.vdf illeggibile (%s)" % e) from e
+        raise SteamError("appinfo.vdf is unreadable (%s)" % e) from e
     _CACHE.clear()
     _CACHE.update(identita=identity, valore=(data, keys, record, {}))
     return _CACHE["valore"]
@@ -307,7 +307,7 @@ def _record_info(cache, app):
         except SteamError:
             raise
         except (struct.error, IndexError, ValueError, RecursionError) as e:
-            raise SteamError("appinfo.vdf: gioco %d illeggibile (%s)" % (app, e)) from e
+            raise SteamError("appinfo.vdf: game %d unreadable (%s)" % (app, e)) from e
         read_items[app] = kv.get("appinfo", kv)
     return read_items[app]
 

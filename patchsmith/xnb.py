@@ -24,7 +24,7 @@ def _read_7bit(data, pos):
             return value_, pos
         shift += 7
         if shift > 35:
-            raise XnbError("intero a 7 bit non valido")
+            raise XnbError("invalid 7-bit integer")
 
 
 def _read_string(data, pos):
@@ -42,13 +42,13 @@ def _read_char(data, pos):
 def header(data):
     """(platform, version, flags, readers [(name, version)], position of the main object)."""
     if data[:3] != b"XNB":
-        raise XnbError("non e' un file XNB")
+        raise XnbError("this is not an XNB file")
     platform_id, version, flags = chr(data[3]), data[4], data[5]
     size = struct.unpack_from("<I", data, 6)[0]
     if size != len(data):
-        raise XnbError("dimensione dichiarata diversa da quella del file")
+        raise XnbError("declared size differs from the file size")
     if flags & 0xC0:
-        raise XnbError("XNB compresso: non ancora supportato")
+        raise XnbError("Compressed XNB: not yet supported")
     pos = 10
     n, pos = _read_7bit(data, pos)
     readers = []
@@ -59,7 +59,7 @@ def header(data):
         readers.append((name, ver))
     shared_count, pos = _read_7bit(data, pos)
     if shared_count:
-        raise XnbError("risorse condivise non supportate")
+        raise XnbError("shared resources not supported")
     return platform_id, version, flags, readers, pos
 
 
@@ -74,10 +74,10 @@ def read_spritefont(data):
     def read_object(pos, expected):
         idx, pos = _read_7bit(data, pos)
         if idx == 0:
-            raise XnbError("oggetto nullo inatteso")
+            raise XnbError("unexpected null object")
         name = readers[idx - 1][0]
         if expected not in name:
-            raise XnbError("atteso %s, trovato %s" % (expected, name))
+            raise XnbError("expected %s, found %s" % (expected, name))
         return pos
 
     pos = read_object(pos, "SpriteFontReader")
@@ -109,7 +109,7 @@ def read_spritefont(data):
     if has_default:
         default, pos = _read_char(data, pos)
     if pos != len(data):
-        raise XnbError("SpriteFont non letto fino in fondo (%d byte avanzati)" % (len(data) - pos))
+        raise XnbError("SpriteFont not fully read (%d bytes remaining)" % (len(data) - pos))
     return {"caratteri": chars, "predefinito": default, "interlinea": line_spacing,
             "spaziatura": spacing, "texture": (width, height)}
 

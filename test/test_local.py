@@ -250,7 +250,7 @@ def main(base):
               and backend.translation_problems("deals 1 damage to a target", "infligge danni a una creatura", "it")
               and not backend.translation_problems("restore one [[7]] on hit", "ripristina 1 [[7]] al colpo", "it"))
     check("lettere che non sono dell'italiano (es. 'crânio' dal portoghese): scartata",
-              "lettere di un'altra lingua" in backend.translation_problems("great skull", "crânio grande", "it")
+              "letters from another language" in backend.translation_problems("great skull", "crânio grande", "it")
               and not backend.translation_problems("so is it", "così è", "it"))
 
     # --- 3b. Stop during the fallback: the good translations of the same group stay in the translation memory
@@ -321,9 +321,9 @@ def main(base):
 
     # --- 4. understandable errors
     for name, error, word in (("modello mancante (404)", http_error(404, b'{"error":"model not found"}'),
-                                  "non e' scaricato"),
+                                  "is not downloaded"),
                                  ("memoria insufficiente", http_error(500, b'{"error":"requires more system memory"}'),
-                                  "Memoria insufficiente")):
+                                  "Insufficient memory")):
         b, server = local(lambda t, o: "x", error)
         try:
             b.translate_lines(["Start"], "en", "it")
@@ -398,7 +398,7 @@ def main(base):
         message = str(e)
     del os.environ["PATCHSMITH_FINTO_MUORI"]
     check("server che non parte: errore con le ultime righe del suo registro",
-              "non si e' avviato" in message and "errore simulato" in message)
+              "didn't start" in message and "errore simulato" in message)
 
     # Stop while the server is starting: the process just launched does not stay running
     import threading
@@ -499,14 +499,14 @@ def main(base):
     check("scaricamento interrotto: il pezzo resta e si riprende da li' (Range), file finale identico",
               half == 1024 and requests == [None, "bytes=1024-"] and open(partial, "rb").read() == content)
     check("stato senza installazione: 'non installato' e descrizione dei download con fonte e dimensione",
-              ollama.state() == "non installato" and any("github.com" in r for r in ollama.download_description(["4b"]))
+              ollama.state() == "not installed" and any("github.com" in r for r in ollama.download_description(["4b"]))
               and any("Gemma Terms" in r for r in ollama.download_description(["4b"])))
     try:
         backend.Local("4b", log=silent).translate_lines(["Start"], "en", "it")
         message = ""
     except backend.BackendError as e:
         message = str(e)
-    check("traduttore locale non installato: messaggio con cosa fare", "Installa" in message)
+    check("traduttore locale non installato: messaggio con cosa fare", "Install" in message)
     try:
         backend.create_backend("locale", silent)
         message, code, command = "", None, ""
@@ -514,7 +514,7 @@ def main(base):
         message, code, command = str(e), e.code, e.command or ""
     check("crea_backend('locale') senza installazione: errore subito (prima di toccare il gioco), il messaggio "
               "parla del pulsante (niente comandi), il comando e' a parte per la riga di comando",
-              "Installa" in message and "smith.py" not in message and code == "TRADUTTORE_ASSENTE"
+              "Install" in message and "smith.py" not in message and code == "TRADUTTORE_ASSENTE"
               and "smith.py local --install" in command)
     # installed, but the chosen model (12B) is not downloaded: the one present (4B) is used
     os.makedirs(os.path.join(ollama.folder(), ollama.VERSION))
@@ -526,7 +526,7 @@ def main(base):
     lines = []
     chosen = backend.create_backend("locale", lines.append)
     check("modello scelto non scaricato: si usa quello scaricato, e lo si dice",
-              chosen.key == "4b" and any("non e' scaricato" in r for r in lines))
+              chosen.key == "4b" and any("is not downloaded" in r for r in lines))
 
     test_recovery(base)
     test_memory(base)
@@ -600,7 +600,7 @@ def test_recovery(base):
     problems = p.problems()
     check("testo sempre scartato: in problemi.json con il motivo e i passaggi fatti, non in memoria",
               failed == 1 and text not in p.memory and os.path.exists(p.problems_path)
-              and problems.get(text, {}).get("dove") == "traduzione" and "non tradotta" in problems[text]["motivo"]
+              and problems.get(text, {}).get("dove") == "traduzione" and "not translated" in problems[text]["motivo"]
               and problems[text]["tentativi"] == 2 and p.last_failed == [text])
     e = outcome.Outcome("PARZIALE", engine="web", written=True, translated_items=3, remaining=1,
                         remaining_examples=[text], extra=automatic._extra_attempts(p))
@@ -608,8 +608,8 @@ def test_recovery(base):
     automatic._after_attempts({"esito": e}, log_file.append)
     window = outcome.window(e)["testo"]
     check("messaggio finale: niente 'rilancia'; dice cosa ha gia' provato da solo e nomina 'Correggi traduzioni'",
-              "Correggi traduzioni" in " ".join(log_file) and "riprovato da solo" in window
-              and "Mostra i rimasti" in window and "rilancia" not in (" ".join(log_file) + window).lower())
+              "Fix translations" in " ".join(log_file) and "retried automatically" in window
+              and "Show remaining" in window and "relaunch" not in (" ".join(log_file) + window).lower())
     p = Project(profile_of(base, "sempre-scartato"), silent)
     b, server = local(lambda t, o: t)
     p.translate_texts([text], b, "en", "it")
@@ -752,7 +752,7 @@ def test_memory(base):
               and p.memory["Find 3 gems"] == "Trova 30 gemme" and p.redone == 1)
     check("traduzione automatica in un'altra lingua: se rifarla non riesce resta quella di prima, annotata",
               p.memory["Open the chest of the house"] == "Abre el cofre de la casa y el mapa"
-              and problem.get("dove") == "memoria" and "in un'altra lingua" in problem.get("motivo", ""))
+              and problem.get("dove") == "memoria" and "in another language" in problem.get("motivo", ""))
     p._problems["Open the chest of the house"] = dict(problem, tentativi=project.MAX_ATTEMPTS)
     p._save_problems()
     p = Project(path, silent)
@@ -762,8 +762,8 @@ def test_memory(base):
               % project.MAX_ATTEMPTS, not server.requests)
     from patchsmith import language
     check("controlli: 'a capo diversi' (righe in piu' o in meno), 'a capo aggiunto' per un testo di una riga",
-              "a capo diversi" in backend.translation_problems("NEW\n\nText", "NUOVO\n\n\nTesto")
-              and "a capo aggiunto" in backend.translation_problems("Start", "Inizia\nora")
+              "different line breaks" in backend.translation_problems("NEW\n\nText", "NUOVO\n\n\nTesto")
+              and "line break added" in backend.translation_problems("Start", "Inizia\nora")
               and not backend.translation_problems("A\nB c", "A\nB d"))
     check("lingua: niente falsi allarmi su 'Qui, qui!' o su titoli inglesi tra virgolette e tag",
               not project.entry_problems("Over here, over here!", "Qui, qui!", "it")
@@ -926,7 +926,7 @@ def test_limited_redos(base):
     check("'riferimento copiato' solo per le frasi: 'Oro' per 'Gold' (come in spagnolo) va bene",
               not project.entry_problems("Gold", "Oro", "it", references=["Oro"])
               and project.entry_problems("Open the big chest now", "Abre el gran cofre ahora", "it",
-                                         references=["Abre el gran cofre ahora"]) == ["riferimento copiato"])
+                                         references=["Abre el gran cofre ahora"]) == ["copied reference"])
 
 
 if __name__ == "__main__":

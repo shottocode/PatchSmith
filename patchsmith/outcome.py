@@ -13,20 +13,20 @@ CODES = ("OK", "PARZIALE", "NULLA_DA_FARE", "UFFICIALE", "NON_SUPPORTATO", "ANTI
 ACTIONS = ("chiudi_gioco", "usa_locale", "installa_locale", "mostra_rimasti", "crea_rapporto", "riapplica",
           "scegli_lingua", "traduci_comunque", "sperimentale", "ripristina", "traduci", "ritraduci", "correggi")
 MAX_EXAMPLES = 20  # texts left untranslated to show (the first ones)
-LIVE = {"locale": "PatchSmith, con il traduttore locale (sul tuo PC)",
-            "online": "PatchSmith, con il traduttore online (con le pause che evitano i blocchi)",
-            "google": "XUnity, con Google gratuito (via internet)",
-            "nessuno": "nessuno, restano in originale"}
+LIVE = {"locale": "PatchSmith, with the local translator (on your PC)",
+            "online": "PatchSmith, with the online translator (with pauses that avoid getting blocked)",
+            "google": "XUnity, with free Google access (via the internet)",
+            "nessuno": "none, they remain in their original form"}
 # why PatchSmith is not the one translating the new sentences (Outcome.extra["dal_vivo_nota"], see automatic._live)
 LIVE_NOTES = {
-    "senza_traduttore": "Adesso non c'è un traduttore disponibile: il traduttore locale non è installato e quelli "
-                        "online sono in pausa. Installa il traduttore locale: dalla prossima volta che avvii il "
-                        "gioco tradurrà le frasi nuove.",
-    "plugin_google": "Non sono riuscito a preparare nel gioco il traduttore di PatchSmith: le frasi nuove le chiede "
-                     "XUnity a Google, senza le pause di PatchSmith.",
-    "plugin_nessuno": "Non sono riuscito a preparare nel gioco il traduttore di PatchSmith e Google è in pausa: le "
-                      "frasi nuove resteranno in originale. Puoi creare un rapporto da inviare a chi ti aiuta con "
-                      "PatchSmith.",
+    "senza_traduttore": "Right now no translator is available: the local translator isn't installed and the online "
+                        "ones are paused. Install the local translator: from the next time you start the game, it will "
+                        "translate the new phrases.",
+    "plugin_google": "I couldn't set up the PatchSmith translator in the game: XUnity asks Google for the new phrases, "
+                     "without PatchSmith's pauses.",
+    "plugin_nessuno": "I haven't been able to set up the PatchSmith translator in the game, and Google Translate is on "
+                      "hold: any new phrases will remain in their original language. You can create a report to send "
+                      "to anyone who is helping you with PatchSmith.",
 }
 # Outcome field -> key of its dictionary (as_dict, used in the report)
 _DATA_KEYS = {"code": "codice", "reason": "motivo", "engine": "motore", "written": "scritto",
@@ -57,10 +57,10 @@ class Outcome:
 
     def __post_init__(self):
         if self.code not in CODES:
-            raise ValueError("Codice di esito sconosciuto: %s" % self.code)
+            raise ValueError("Unknown outcome code: %s" % self.code)
         unknowns = [a for a in self.actions if a not in ACTIONS]
         if unknowns:
-            raise ValueError("Azioni sconosciute: %s" % ", ".join(unknowns))
+            raise ValueError("Unknown actions: %s" % ", ".join(unknowns))
         self.remaining_examples = [str(t) for t in list(dict.fromkeys(self.remaining_examples))[:MAX_EXAMPLES]]
         self.actions = list(dict.fromkeys(self.actions))
         if self.remaining and self.remaining_examples and "mostra_rimasti" not in self.actions:
@@ -72,14 +72,14 @@ class Outcome:
 
     def summary(self):
         """One line for the log on disk."""
-        parts = ["Esito: %s" % self.code]
+        parts = ["Result: %s" % self.code]
         if self.engine:
-            parts.append("motore %s" % self.engine)
+            parts.append("engine %s" % self.engine)
         if self.written or self.translated_items or self.remaining:
-            parts.append("scritto nel gioco: %s, tradotti %d, rimasti %d" % ("si'" if self.written else "no",
+            parts.append("written to the game: %s, translated %d, remaining %d" % ("yes" if self.written else "no",
                                                                              self.translated_items, self.remaining))
         if self.live:
-            parts.append("frasi nuove: %s" % self.live)
+            parts.append("new phrases: %s" % self.live)
         if self.reason:
             parts.append(self.reason)
         return " - ".join(parts)
@@ -109,8 +109,8 @@ def from_exception(error):
     if isinstance(error, SysError):
         return Outcome("GIOCO_APERTO", message, actions=["chiudi_gioco"])
     if isinstance(error, PermissionError):
-        return Outcome("PERMESSI", "Windows non mi lascia modificare %s (%s)." % (
-            error.filename or "un file del gioco", error.strerror or "accesso negato"),
+        return Outcome("PERMESSI", "Windows doesn't allow me to modify %s (%s)." % (
+            error.filename or "a game file", error.strerror or "access denied"),
             actions=["chiudi_gioco", "crea_rapporto"])
     if _known_error(error):
         return Outcome("ERRORE", message or type(error).__name__, actions=["crea_rapporto"])
@@ -136,61 +136,62 @@ def _known_error(error):
 # --- interface windows ----------------------------------------------------------------------------
 
 HOW_TO_SEE_IT = {
-    "unity": "La traduzione è installata nel gioco (BepInEx + XUnity.AutoTranslator).\n\nAvvia il gioco come al "
-             "solito: le frasi pre-tradotte compaiono subito in italiano; le altre la prima volta compaiono in "
-             "originale per un attimo, poi tradotte. Nel gioco: ALT+T alterna originale e traduzione.",
-    "unity-localization": "Le tabelle dei testi del gioco sono tradotte (gli originali sono salvati e si rimettono "
-                          "con \"Ripristina originali\").\n\nNel gioco lascia selezionata la lingua English: i suoi "
-                          "testi ora sono tradotti.",
-    "gamemaker": "I file di testo del gioco sono tradotti (gli originali sono salvati e si rimettono con "
-                 "\"Ripristina originali\").\n\nNel gioco lascia selezionata la lingua originale, di solito English.",
-    "xna": "La traduzione è installata come file di lingua aggiuntivi (i file originali non sono stati toccati).\n\n"
-           "Nel gioco lascia o seleziona la lingua originale, di solito English: la traduzione prende il suo posto.",
-    "unreal": "La traduzione è installata come pak di patch aggiuntivo (i file originali non sono stati toccati).\n\n"
-              "Nel gioco deve essere selezionata la lingua originale, di solito English: la traduzione prende il "
-              "suo posto.",
-    None: "I testi del gioco sono tradotti (gli originali sono salvati e si rimettono con \"Ripristina "
-          "originali\").\n\nAvvia il gioco come al solito.",
+    "unity": "The translation is installed within the game (BepInEx + XUnity.AutoTranslator).\n\nStart the game as "
+             "usual: the pre-translated phrases appear immediately in Italian; the others appear in the original "
+             "language for a moment, then are translated. In the game: ALT+T switches between the original and the "
+             "translation.",
+    "unity-localization": "The game's text tables are translated (the originals are saved and can be put back with "
+                          '"Restore originals").\n\nIn the game, keep English selected: its texts are now translated.',
+    "gamemaker": "The game's text files are translated (the originals are saved and can be put back with \"Restore "
+                 'originals").\n\nIn the game, keep the original language selected, usually English.',
+    "xna": "The translation is installed as additional language files (the original files have not been "
+           "modified).\n\nIn the game, either leave or select the original language, usually English: the translation "
+           "will then take over.",
+    "unreal": "The translation is installed as an additional patch pak (the original files have not been "
+              "modified).\n\nIn the game, you need to select the original language, usually English: the translation "
+              "will then take its place.",
+    None: 'The game texts are translated (the originals are saved and can be put back with "Restore '
+          'originals").\n\nStart the game as usual.',
 }
 
 TITLES = {
-    "OK": "Traduzione installata", "PARZIALE": "Traduzione installata in parte", "NULLA_DA_FARE": "Niente da fare",
-    "UFFICIALE": "Il gioco ha già la tua lingua", "NON_SUPPORTATO": "Gioco non ancora supportato",
-    "ANTICHEAT": "Gioco con anti-cheat", "GIOCO_APERTO": "Il gioco è aperto",
-    "TRADUTTORE_BLOCCATO": "Traduzione interrotta", "TRADUTTORE_ASSENTE": "Traduttore non pronto",
-    "GIA_ORIGINALE": "Gioco già originale", "PERMESSI": "File bloccati", "CARTELLA_SBAGLIATA": "Cartella da cambiare",
-    "ERRORE": "Operazione non riuscita",
+    "OK": "Translation installed", "PARZIALE": "Translation partially installed", "NULLA_DA_FARE": "Nothing to do",
+    "UFFICIALE": "The game already has your language", "NON_SUPPORTATO": "Game not yet supported",
+    "ANTICHEAT": "Game with anti-cheat", "GIOCO_APERTO": "The game is open",
+    "TRADUTTORE_BLOCCATO": "Translation interrupted", "TRADUTTORE_ASSENTE": "Translator not ready",
+    "GIA_ORIGINALE": "Game already original", "PERMESSI": "Locked files", "CARTELLA_SBAGLIATA": "Wrong folder",
+    "ERRORE": "Operation failed",
 }
-OPERATION_TITLES = {("riapplica", "OK"): "Traduzione riapplicata", ("ritraduci", "OK"): "Traduzioni rifatte",
-                     ("ripristina", "OK"): "Originali ripristinati",
-                     ("ripristina", "PARZIALE"): "Ripristino quasi completo",
-                     ("controlla", "OK"): "Controllo dopo aver giocato", ("controlla", "PARZIALE"): "Qualcosa da fare",
-                     ("controlla", "NULLA_DA_FARE"): "Niente da controllare"}
+OPERATION_TITLES = {("riapplica", "OK"): "Translation reapplied", ("ritraduci", "OK"): "Translations redone",
+                     ("ripristina", "OK"): "Originals restored",
+                     ("ripristina", "PARZIALE"): "Almost complete restoration",
+                     ("controlla", "OK"): "Check after playing", ("controlla", "PARZIALE"): "Something to do",
+                     ("controlla", "NULLA_DA_FARE"): "Nothing to check"}
 STATE = {
-    "OK": "completato.", "PARZIALE": "completato in parte.", "NULLA_DA_FARE": "niente da fare.",
-    "UFFICIALE": "il gioco ha già la lingua ufficiale.", "NON_SUPPORTATO": "gioco non ancora supportato.",
-    "ANTICHEAT": "gioco con anti-cheat, nessuna modifica.", "GIOCO_APERTO": "il gioco è aperto.",
-    "TRADUTTORE_BLOCCATO": "traduttore fermo.", "TRADUTTORE_ASSENTE": "traduttore non pronto.",
-    "GIA_ORIGINALE": "il gioco è già originale.", "PERMESSI": "file bloccati.",
-    "CARTELLA_SBAGLIATA": "cartella da cambiare.", "ERRORE": "non riuscito.",
+    "OK": "completed.", "PARZIALE": "partially completed.", "NULLA_DA_FARE": "nothing to do.",
+    "UFFICIALE": "the game already has the official language.", "NON_SUPPORTATO": "game not supported yet.",
+    "ANTICHEAT": "game with anti-cheat, nothing changed.", "GIOCO_APERTO": "the game is open.",
+    "TRADUTTORE_BLOCCATO": "translator stopped.", "TRADUTTORE_ASSENTE": "translator not ready.",
+    "GIA_ORIGINALE": "the game already has its original files.", "PERMESSI": "files locked.",
+    "CARTELLA_SBAGLIATA": "folder to change.", "ERRORE": "failed.",
 }
 KINDS = {"OK": "info", "PARZIALE": "avviso", "NULLA_DA_FARE": "info", "UFFICIALE": "info", "GIA_ORIGINALE": "info",
         "ERRORE": "errore"}
-BUTTONS = {"mostra_rimasti": "Mostra i rimasti", "crea_rapporto": "Crea rapporto", "riapplica": "Riapplica",
-            "usa_locale": "Usa il traduttore locale", "installa_locale": "Installa il traduttore locale",
-            "traduci_comunque": "Traduci comunque", "chiudi_gioco": "Riprova",
-            "sperimentale": "Prova in modo sperimentale", "ripristina": "Ripristina originali",
-            "traduci": "Analizza e traduci", "ritraduci": "Ritraduci le frasi", "correggi": "Correggi traduzioni"}
-OPERATION_NAMES = {"traduci": "Analizza e traduci", "riapplica": "Riapplica",
-                   "ripristina": "Ripristina originali", "controlla": "Controllo dopo aver giocato",
-                   "ritraduci": "Ritraduci"}
+BUTTONS = {"mostra_rimasti": "Show remaining", "crea_rapporto": "Create report", "riapplica": "Reapply",
+            "usa_locale": "Use the local translator", "installa_locale": "Install the local translator",
+            "traduci_comunque": "Translate anyway", "chiudi_gioco": "Try again",
+            "sperimentale": "Try it out experimentally", "ripristina": "Restore originals",
+            "traduci": "Analyze and translate", "ritraduci": "Re-translate the phrases", "correggi": "Fix translations"}
+OPERATION_NAMES = {"traduci": "Analyze and translate", "riapplica": "Reapply",
+                   "ripristina": "Restore originals", "controlla": "Check after playing",
+                   "ritraduci": "Re-translate"}
 # operations after which, with texts left untranslated or translations the game cannot show, "Fix translations"
 # is proposed (the window with the right list already chosen)
 WITH_FIXES = ("traduci", "riapplica", "ritraduci")
 # status of the problems of the after-play check (checks.Problem.state) -> group in the window
-CHECK_GROUPS = (("corretto", "Corretto da solo:"),
-                    ("da_fare", "Da fare:"), ("rimandato", "Da correggere quando il gioco è chiuso:"),
-                    ("info", "Da sapere:"))
+CHECK_GROUPS = (("corretto", "Fixed automatically:"),
+                    ("da_fare", "To do:"), ("rimandato", "To fix when the game is closed:"),
+                    ("info", "Good to know:"))
 GROUP_STATES = {"corretto": "corretto", "non_riuscito": "da_fare", "gia_tentato": "da_fare", "da_fare": "da_fare",
                 "rimandato": "rimandato", "da_correggere": "rimandato", "info": "info"}
 # operations that do not touch the game's files (installation of the local translator, report, window
@@ -200,22 +201,23 @@ OUTSIDE_GAME = ("installa", "rapporto", "interfaccia")
 
 def title_text(e, operation="traduci"):
     if operation == "rapporto":
-        return "Rapporto non creato"
+        return "Report not created"
     if e.extra.get("imprevisto"):
-        return "Errore imprevisto"
+        return "Unexpected error"
     if e.code == "OK" and not e.written and operation == "traduci":
-        return "Fatto"
+        return "Done"
     return OPERATION_TITLES.get((operation, e.code)) or TITLES[e.code]
 
 
 def _how_to_see_it(e):
     added_lang = e.extra.get("lingua_aggiunta")
     if added_lang:
-        return ("La traduzione è una lingua nuova del gioco: \"%s\". L'originale resta com'era e si può ancora "
-                "scegliere.\n\n%s\n\n\"Ripristina originali\" toglie la lingua aggiunta." % (
-                    added_lang["nome"], "L'ho già impostata nelle opzioni del gioco: avvialo e basta."
+        return ('The translation is a new language for the game: "%s". The original remains as it was and you can '
+                'still choose it.\n\n%s\n\n"Restore originals" removes the added language.' % (
+                    added_lang["nome"], "I've already set it up in the game options: just launch it and it will work."
                     if added_lang.get("impostata") else
-                    "Nel gioco apri Opzioni > Lingua e scegli \"%s\" con le frecce." % added_lang["nome"].upper()))
+                    'In the game, open Options > Language and select "%s" using the arrows.'
+                    % added_lang["nome"].upper()))
     return HOW_TO_SEE_IT.get(e.engine, HOW_TO_SEE_IT[None])
 
 
@@ -223,8 +225,8 @@ def _counts(e):
     if not (e.translated_items or e.remaining):
         return ""
     if not e.remaining:
-        return "Testi tradotti: %d." % e.translated_items
-    return "Testi tradotti: %d, rimasti in originale: %d." % (e.translated_items, e.remaining)
+        return "Translated texts: %d." % e.translated_items
+    return "Translated texts: %d, left untranslated: %d." % (e.translated_items, e.remaining)
 
 
 def window(e, operation="traduci", local_ready=False, current=None):
@@ -236,23 +238,23 @@ def window(e, operation="traduci", local_ready=False, current=None):
     other = "usa_locale" in e.actions and not (current == "locale" and local_ready)  # propose another translator
     lines = []
     if operation == "rapporto":  # no log on disk nor report to propose: only the reason is given
-        lines.append("Non sono riuscito a creare il rapporto: %s" % (
-            "errore imprevisto (%s): %s" % (e.extra.get("tipo", "?"), e.reason) if e.extra.get("imprevisto")
-            else e.reason or "motivo sconosciuto"))
+        lines.append("I wasn't able to create the report: %s" % (
+            "unexpected error (%s): %s" % (e.extra.get("tipo", "?"), e.reason) if e.extra.get("imprevisto")
+            else e.reason or "unknown reason"))
     elif e.extra.get("imprevisto"):
-        lines.append("Errore imprevisto (%s): %s" % (e.extra.get("tipo", "?"), e.reason or "nessun dettaglio"))
-        lines.append("I dettagli tecnici sono nel registro salvato. Puoi creare un rapporto da inviare a chi ti "
-                     "aiuta con PatchSmith.")
+        lines.append("Unexpected error (%s): %s" % (e.extra.get("tipo", "?"), e.reason or "no details"))
+        lines.append("The technical details are in the saved log. You can create a report to send to whoever is "
+                     "assisting you with PatchSmith.")
     elif operation == "controlla" and "controllo" in e.extra:
         lines += check_text(e)
     elif operation in OUTSIDE_GAME:
-        lines += [e.reason, "Puoi creare un rapporto da inviare a chi ti aiuta con PatchSmith."]
+        lines += [e.reason, "You can create a report to send to anyone who helps you with PatchSmith."]
     elif operation == "ripristina":
         lines += _restore_text(e)
     elif e.written and e.code in ("OK", "PARZIALE", "TRADUTTORE_BLOCCATO", "GIOCO_APERTO"):
         lines += _written_text(e, op, other)
     elif e.code == "OK":
-        lines += [e.reason or "Fatto.", _counts(e)] + _attempts_text(e)
+        lines += [e.reason or "Done.", _counts(e)] + _attempts_text(e)
     else:
         lines += _problem_text(e, op, other)
     if e.extra.get("ritraduzione") and operation == "ritraduci":
@@ -305,12 +307,13 @@ def fixes_filter(e):
 
 
 def _retranslation_text(r):
-    text = "Ho ritradotto %d testi su %d." % (r.get("ritradotte", 0), r.get("testi", 0))
+    text = "I re-translated %d of %d texts." % (r.get("ritradotte", 0), r.get("testi", 0))
     if r.get("rimaste"):
-        text += (" Per gli altri %d resta la traduzione di prima (la nuova non ha passato i controlli, o era uguale)."
+        text += (" For the other %d, the previous translation remains in place (the new one didn't pass quality "
+                 "control, or it was the same)."
                   % r["rimaste"])
     if r.get("interrotta"):
-        text += " La ritraduzione si è fermata: %s" % r["interrotta"]
+        text += " The retranslation has stopped: %s" % r["interrotta"]
     return text
 
 
@@ -319,32 +322,32 @@ def _written_text(e, op, other=True):
     rest."""
     lines = []
     if e.code == "GIOCO_APERTO":
-        lines.append(e.reason or "Il gioco è aperto.")
-        lines.append("Chiudi il gioco e premi \"Riapplica\": le traduzioni sono già pronte, non serve tradurle di "
-                     "nuovo.")
+        lines.append(e.reason or "The game is open.")
+        lines.append('Close the game and press "Reapply": the translations are already done, no need to translate them '
+                     "again.")
         return lines
     if e.code == "TRADUTTORE_BLOCCATO":
         lines.append(e.reason)
     lines.append(_how_to_see_it(e))
     lines.append(_counts(e))
     if e.live:
-        lines.append("Frasi nuove mentre giochi: %s." % LIVE.get(e.live, e.live))
+        lines.append("New phrases while playing: %s." % LIVE.get(e.live, e.live))
         lines.append(LIVE_NOTES.get(e.extra.get("dal_vivo_nota"), ""))
     if e.code == "PARZIALE" and e.reason:
         lines.append(e.reason)
     lines += _attempts_text(e)
     if e.remaining and e.code in ("PARZIALE", "TRADUTTORE_BLOCCATO"):
         if other:
-            lines.append("Per i testi rimasti puoi usare un altro traduttore (il traduttore locale non ha blocchi) e "
-                         "premere di nuovo \"Analizza e traduci\": le traduzioni fatte restano.")
+            lines.append("For the remaining texts you can use another translator (the local translator has no blocks) "
+                         'and press "Analyze and translate" again: the translations already done are kept.')
         elif fixes_filter(e) == "gioco":
-            lines.append("Le traduzioni che il gioco non saprebbe mostrare puoi correggerle tu con \"Correggi "
-                         "traduzioni\" (elenco \"Non scritte nel gioco\"): quando salvi, PatchSmith le scrive nel gioco "
-                         "da solo.")
+            lines.append("You can fix the translations the game couldn't display yourself with \"Fix translations\" "
+                         '("Not written to the game" list): when you save, PatchSmith writes them into the game on its '
+                         "own.")
         else:
-            lines.append("I testi rimasti in originale puoi tradurli tu con \"Correggi traduzioni\" (elenco "
-                         "\"Rimasti in originale\"%s): quando salvi, PatchSmith li scrive nel gioco da solo." % (
-                             "; quelli che il gioco non saprebbe mostrare sono in \"Non scritte nel gioco\""
+            lines.append('You can translate the untranslated texts yourself with "Fix translations" ("Left '
+                         'untranslated" list%s): when you save, PatchSmith writes them to the game by itself.' % (
+                             "; those that the game wouldn't be able to display are in \"Not written to the game\""
                              if e.extra.get("scartate") else ""))
     return lines
 
@@ -356,43 +359,42 @@ def _attempts_text(e):
     if e.extra.get("ritentati"):
         n = e.extra["ritentati"]
         # whole sentences, singular and plural (in pieces they cannot be translated into the interface language)
-        lines.append("Un testo scartato dai controlli l'ho già riprovato da solo (frasi separate, parametri diversi): "
-                     "lo vedi con \"Mostra i rimasti\". Alla prossima \"Analizza e traduci\" lo riprovo con parametri "
-                     "nuovi." if n == 1 else
-                     "%d testi scartati dai controlli li ho già riprovati da solo (frasi separate, parametri diversi): "
-                     "li vedi con \"Mostra i rimasti\". Alla prossima \"Analizza e traduci\" li riprovo con parametri "
-                     "nuovi." % n)
+        lines.append("One text rejected by the checks has already been retried automatically (separate sentences, "
+                     'different parameters): you can see it with "Show remaining". At the next "Analyze and translate" '
+                     "I'll retry it with new parameters." if n == 1 else
+                     "%d texts rejected by the checks have already been retried automatically (separate sentences, "
+                     'different parameters): you can see them with "Show remaining". At the next "Analyze and '
+                     "translate\" I'll retry them with new parameters." % n)
     if e.extra.get("rifatte"):
-        lines.append("Ho rifatto %d traduzioni salvate che non andavano bene." % e.extra["rifatte"])
+        lines.append("I redid %d saved translations that weren't right." % e.extra["rifatte"])
     if e.extra.get("cache_corrette"):
-        lines.append("Ho corretto %d frasi sbagliate nelle traduzioni salvate nel gioco." % e.extra["cache_corrette"])
+        lines.append("I fixed %d wrong phrases in the translations saved in the game." % e.extra["cache_corrette"])
     if e.extra.get("correzioni_scritte"):
         n = e.extra["correzioni_scritte"]
-        lines.append("Ho scritto nel gioco %s." % ("la tua correzione" if n == 1 else "%d tue correzioni" % n))
+        lines.append("I wrote %s to the game." % ("your correction" if n == 1 else "your %d corrections" % n))
     if e.extra.get("corrette_a_mano_scartate"):
         n = e.extra["corrette_a_mano_scartate"]
-        lines.append("Una traduzione corretta a mano non si può scrivere nel gioco (righe o caratteri che il gioco non "
-                     "sa mostrare): sistemala con \"Correggi traduzioni\" (elenco \"Non scritte nel gioco\")." if n == 1
-                     else "%d traduzioni corrette a mano non si possono scrivere nel gioco (righe o caratteri che il "
-                     "gioco non sa mostrare): sistemale con \"Correggi traduzioni\" (elenco \"Non scritte nel gioco\")."
+        lines.append("One translation fixed by hand can't be written to the game (lines or characters the game can't "
+                     'display): fix it with "Fix translations" (list "Not written to the game").' if n == 1
+                     else "%d translations fixed by hand can't be written to the game (lines or characters the game "
+                          "can't display): fix them with \"Fix translations\" (list \"Not written to the game\")."
                      % n)
     if e.extra.get("adattate_font"):
         n = e.extra["adattate_font"]
-        lines.append("%s lettere che i font del gioco non sanno disegnare: le ho sostituite (es. è diventa e')."
-                     % ("Un testo aveva" if n == 1 else "%d testi avevano" % n))
+        lines.append("%s letters that the game's fonts can't draw: I've replaced them (e.g., \"è\" becomes \"e\")."
+                     % ("A text had" if n == 1 else "%d texts had" % n))
     if e.extra.get("accorciate"):
         n = e.extra["accorciate"]
-        lines.append("Un'etichetta era troppo lunga per lo spazio che ha nel gioco: l'ho chiesta più corta." if n == 1
-                     else "%d etichette erano troppo lunghe per lo spazio che hanno nel gioco: le ho chieste più "
-                     "corte." % n)
+        lines.append("A label was too long for its space in the game: I asked for a shorter one." if n == 1
+                     else "%d labels were too long for their space in the game: I asked for shorter ones." % n)
     if e.extra.get("troppo_lunghe"):
         n = e.extra["troppo_lunghe"]
         if n == 1:
-            lines.append("Un'etichetta potrebbe uscire dal suo spazio nel gioco: la vedi in \"Correggi traduzioni\" "
-                         "(elenco \"Troppo lunghi\").")
+            lines.append('A label might not fit its space in the game: you can see it in "Fix translations" ("Too '
+                         'long" list).')
         else:
-            lines.append("%d etichette potrebbero uscire dal loro spazio nel gioco: le vedi in \"Correggi traduzioni\" "
-                         "(elenco \"Troppo lunghi\")." % n)
+            lines.append('%d labels might not fit their space in the game: you can see them in "Fix translations" '
+                         '("Too long" list).' % n)
     return lines
 
 
@@ -417,16 +419,16 @@ def check_text(e):
 
 def _restore_text(e):
     if e.code == "OK":
-        return ["Il gioco è tornato com'era. Le traduzioni restano salvate: \"Analizza e traduci\" le rimette "
-                "subito, senza tradurle di nuovo."]
+        return ['The game is back to how it was. The translations stay saved: "Analyze and translate" puts them back '
+                "right away, without translating them again."]
     lines = [e.reason] if e.reason else []
     if e.code == "GIOCO_APERTO":
-        lines.append("Chiudi il gioco e premi di nuovo \"Ripristina originali\". Non ho toccato nulla.")
+        lines.append("Close the game and press \"Restore originals\" again. I haven't touched anything.")
     elif e.code == "PERMESSI":
-        lines.append("Chiudi il gioco e i programmi che potrebbero usarne i file (anche l'antivirus), poi premi di "
-                     "nuovo \"Ripristina originali\".")
+        lines.append("Close the game and any programs that might use its files (including your antivirus), then press "
+                     '"Restore originals" again.')
     elif e.code == "ERRORE":
-        lines.append("Puoi creare un rapporto da inviare a chi ti aiuta con PatchSmith.")
+        lines.append("You can create a report to send to anyone who helps you with PatchSmith.")
     return lines
 
 
@@ -434,45 +436,45 @@ def _problem_text(e, op, other=True):
     """Nothing (or not everything) was written: the reason and the next step."""
     reason = e.reason
     if e.code == "NON_SUPPORTATO":
-        lines = ["Questo gioco non si può ancora tradurre: %s" % _lowercase(reason) if reason else
-                 "Questo gioco non si può ancora tradurre."]
+        lines = ["This game cannot yet be translated: %s" % _lowercase(reason) if reason else
+                 "This game cannot yet be translated."]
         if "sperimentale" in e.actions:
-            lines.append("Ho però trovato dei file con testo: posso provare a tradurli in modo sperimentale (con il "
-                         "backup automatico degli originali).")
+            lines.append("However, I've found some files containing text; I can try to translate them experimentally "
+                         "(with automatic backups of the originals).")
         else:
-            lines.append("Non ho modificato nulla nel gioco. Se vuoi, crea un rapporto da inviare a chi sviluppa "
-                         "PatchSmith.")
+            lines.append("I haven't made any changes to the game. If you'd like, create a report to send to the "
+                         "PatchSmith developers.")
         return lines
     lines = [reason] if reason else []
     if e.code == "ANTICHEAT":
-        lines.append("Per sicurezza non ho modificato nulla.")
+        lines.append("Just to be safe, I haven't made any changes.")
     elif e.code == "GIOCO_APERTO" and "riapplica" in e.actions:
-        lines.append("Chiudi il gioco e premi \"Riapplica\": le traduzioni sono già pronte, non serve tradurle di "
-                     "nuovo.")
+        lines.append('Close the game and press "Reapply": the translations are already done, no need to translate them '
+                     "again.")
     elif e.code == "GIOCO_APERTO":
-        lines.append("Chiudi il gioco e premi di nuovo \"%s\" (o \"Riprova\")." % op)
+        lines.append('Close the game and press "%s" again (or "Try again").' % op)
     elif e.code == "UFFICIALE":
-        lines.append("Sceglila nel menu delle lingue del gioco: la traduzione ufficiale è migliore di quella "
-                     "automatica." + (" Se vuoi comunque quella automatica, premi \"Traduci comunque\"."
+        lines.append("Choose it from the game's language menu: the official translation is better than the automatic "
+                     "one." + (' If you still want the machine translation, press "Translate anyway".'
                                       if "traduci_comunque" in e.actions else ""))
     elif e.code == "TRADUTTORE_BLOCCATO":
-        lines.append("Le traduzioni fatte restano salvate. " + (
-            "Puoi scegliere un altro traduttore (il traduttore locale non ha blocchi) e premere di nuovo \"Analizza "
-            "e traduci\"." if other else "Quando il traduttore torna disponibile premi di nuovo \"Analizza e "
-            "traduci\": si riparte da dove si era fermato."))
+        lines.append("The translations done so far stay saved. " + (
+            'You can choose another translator (the local translator has no blocks) and press "Analyze and translate" '
+            "again." if other else 'When the translator is available again, press "Analyze and translate" again: '
+                                         "it resumes from where it stopped."))
     elif e.code == "TRADUTTORE_ASSENTE":
-        lines.append("Non ho modificato nulla nel gioco.")
+        lines.append("I haven't made any changes to the game.")
     elif e.code == "PARZIALE":
         lines.append(_counts(e))
         lines += _attempts_text(e)
         if other:
-            lines.append("Puoi provare con un altro traduttore (il traduttore locale non ha blocchi) e premere di "
-                         "nuovo \"Analizza e traduci\".")
+            lines.append('You can try another translator (the local translator has no blocks) and press "Analyze and '
+                         'translate" again.')
     elif e.code == "PERMESSI":
-        lines.append("Chiudi il gioco e i programmi che potrebbero usarne i file (anche l'antivirus), poi riprova. "
-                     "Se il gioco è nella cartella Programmi, Windows potrebbe proteggerla.")
+        lines.append("Close the game and any programs that might use its files (including your antivirus), then try "
+                     "again. If the game is in the Program Files folder, Windows might be protecting it.")
     elif e.code == "ERRORE":
-        lines.append("Puoi creare un rapporto da inviare a chi ti aiuta con PatchSmith.")
+        lines.append("You can create a report to send to anyone who helps you with PatchSmith.")
     return lines
 
 
@@ -484,6 +486,6 @@ def _lowercase(text):
 def remaining_text(e):
     """The text of the "Show remaining" window: the first originals left, one per line."""
     lines = ["- " + " ".join(t.split())[:90] for t in e.remaining_examples]
-    header = ("Testi rimasti in originale: %d. Eccone %d:" % (e.remaining, len(lines)) if e.remaining > len(lines)
-                    else "Testi rimasti in originale: %d." % e.remaining)
+    header = ("Texts left untranslated: %d. Here are %d:" % (e.remaining, len(lines)) if e.remaining > len(lines)
+                    else "Texts left untranslated: %d." % e.remaining)
     return header + "\n\n" + "\n".join(lines)

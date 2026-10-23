@@ -26,38 +26,39 @@ IGNORED_FOLDERS = {"_redist", "_commonredist", "redist", "redistributables", "di
 
 # Recommended route per engine (state of Phase 0).
 ADVICE = {
-    "Web": "Supportato ora: adapter web-json (comandi scan e translate).",
-    "Electron": "Supportato ora: adapter web-json (comandi scan e translate).",
-    "GemShell": "Testi e codice in un archivio cifrato (GemShell): PatchSmith non forza le protezioni degli sviluppatori, "
-    "quindi questo gioco non si puo' tradurre.",
-    "NWJS": "Supportato ora: adapter web-json (comandi scan e translate).",
-    "RPGMaker": "MV/MZ: i dati sono JSON (www/data), l'adapter web-json funziona in via sperimentale. "
-    "Altre versioni: in arrivo con rvpacker-txt-rs (Fase 1).",
-    "Unity": "Supportato (Unity Mono): PatchSmith installa e configura BepInEx + XUnity.AutoTranslator, "
-    "che traduce i testi dentro il gioco. Unity IL2CPP: supportato se usa Unity Localization (tabelle dei testi "
-    "nei bundle), altrimenti in arrivo.",
-    "RenPy": "In arrivo (Fase 1): framework tl/ di Ren'Py + unrpyc.",
-    "Godot": "Supportato (Godot 4) se il gioco usa le tabelle delle traduzioni di Godot: PatchSmith legge la tabella "
-    "inglese dal pacchetto dei dati (senza toccarlo) e aggiunge la traduzione accanto all'eseguibile (override.cfg).",
-    "GameMaker": "Supportato se il gioco ha file di localizzazione esterni (es. Localization/english_*.txt): "
-    "PatchSmith li traduce con backup. Testi scritti nel codice (data.win): in arrivo.",
-    "Unreal": "Supportato (Unreal 4, pak non cifrati): PatchSmith traduce i file .locres e aggiunge un pak "
-    "di patch. Unreal 5 / IoStore / pak cifrati: in arrivo.",
-    "XNA": "Supportato se il gioco ha risorse .NET localizzate (.resources con satelliti): PatchSmith aggiunge "
-    "satelliti tradotti senza toccare i file del gioco. Testi scritti nel codice: in arrivo.",
-    "FNA": "Come XNA: risorse .NET localizzate supportate.",
-    "MonoGame": "Come XNA: risorse .NET localizzate supportate.",
-    "KiriKiri": "Al meglio (Fase 3): KirikiriTools / VNTextPatch.",
-    "WolfRPGEditor": "Al meglio (Fase 3): UberWolf + WolfTL.",
+    "Web": "Supported now: web-json adapter (scan and translate commands).",
+    "Electron": "Supported now: web-json adapter (scan and translate commands).",
+    "GemShell": "Text and code in an encrypted archive (GemShell): PatchSmith does not bypass developer protections, "
+                "so this game cannot be translated.",
+    "NWJS": "Supported now: web-json adapter (scan and translate commands).",
+    "RPGMaker": "MV/MZ: the data is JSON (www/data), the web-json adapter works experimentally. Other versions: coming "
+                "with rvpacker-txt-rs (Phase 1).",
+    "Unity": "Supported (Unity Mono): PatchSmith installs and configures BepInEx + XUnity.AutoTranslator, which "
+             "translates the texts inside the game. Unity IL2CPP: supported if it uses Unity Localization (text tables "
+             "in bundles), otherwise coming soon.",
+    "RenPy": "Coming soon (Phase 1): Ren'Py tl/ framework + unrpyc.",
+    "Godot": "Supported (Godot 4) if the game uses Godot's translation tables: PatchSmith reads the English table from "
+             "the data package (without modifying it) and adds the translation next to the executable (override.cfg).",
+    "GameMaker": "Supported if the game has external localization files (e.g., Localization/english_*.txt): PatchSmith "
+                 "will translate them with a backup. Text written in the code (data.win): coming soon.",
+    "Unreal": "Supported (Unreal 4, unencrypted paks): PatchSmith translates the .locres files and adds a patch pak. "
+              "Unreal 5 / IoStore / encrypted paks: coming soon.",
+    "XNA": "Supported if the game has localized .NET resources (.resources with satellites): PatchSmith adds "
+           "translated satellites without modifying the game files. Text written in the code: coming soon.",
+    "FNA": "Like XNA: localized .NET resources supported.",
+    "MonoGame": "Like XNA: localized .NET resources supported.",
+    "KiriKiri": "Best case scenario (Phase 3): KirikiriTools / VNTextPatch.",
+    "WolfRPGEditor": "Best case scenario (Phase 3): UberWolf + WolfTL.",
 }
 
 # Signatures in the first bytes: (regex on the path, signature, engine, description)
 SIGNATURES = [
-    (r"\.pck$", b"GDPC", "Godot", "archivio .pck Godot (GDPC)"),
+    (r"\.pck$", b"GDPC", "Godot", "Godot .pck archive (GDPC)"),
     (r"(?:^|/)(?:data\.win|game\.unx|game\.ios)$", b"FORM", "GameMaker", "data.win GameMaker (FORM)"),
-    (r"\.xp3$", b"XP3\r\n", "KiriKiri", "archivio .xp3 KiriKiri"),
-    (r"\.rpa$", b"RPA-", "RenPy", "archivio .rpa Ren'Py"),
-    (r"(?:^|/)(?:globalgamemanagers|data\.unity3d|[^/]+\.bundle)$", b"UnityFS", "Unity", "asset bundle Unity (UnityFS)"),
+    (r"\.xp3$", b"XP3\r\n", "KiriKiri", "KiriKiri .xp3 archive"),
+    (r"\.rpa$", b"RPA-", "RenPy", "Ren'Py .rpa archive"),
+    (r"(?:^|/)(?:globalgamemanagers|data\.unity3d|[^/]+\.bundle)$", b"UnityFS", "Unity",
+     "Unity asset bundle (UnityFS)"),
     (r"\.utoc$", b"-==--==--==--==-", "Unreal", "IoStore .utoc Unreal"),
 ]
 
@@ -108,7 +109,7 @@ def _sequences(tree, limit=256):
             variants = [[(op, av)]]  # opaque element: quantifiers, classes, anchors, lookarounds...
         sequences = [s + v for s in sequences for v in variants]
         if len(sequences) > limit:
-            raise ValueError("troppe alternative")
+            raise ValueError("too many options")
     return sequences
 
 
@@ -325,7 +326,7 @@ def detect(folder):
     for path in items:
         if (path.lower().endswith(".exe") and path.count("/") <= 1
                 and _read_end(os.path.join(folder, path)) == b"GDPC"):
-            _add("Engine", "Godot", "%s (pacchetto dei dati incorporato)" % path, 10)
+            _add("Engine", "Godot", "%s (built-in data package)" % path, 10)
             break
 
     # Unity: Mono or IL2CPP
@@ -339,11 +340,11 @@ def detect(folder):
     if any(p.endswith("chrome_100_percent.pak") for p in lowercase) and \
             any(p.endswith("v8_context_snapshot.bin") or p.endswith("snapshot_blob.bin") for p in lowercase) and \
             any("resources/app" in p for p in lowercase):
-        _add("Container", "Electron", "file di Chromium e resources/app", 10)
+        _add("Container", "Electron", "Chromium files and resources/app", 10)
     # encrypted archives: the texts cannot be read without removing a developers' protection (we do not do that)
     for p in items:
         if p.lower().endswith("resources/app/gemshell-assets"):
-            _add("Container", "GemShell", "%s (cifrato)" % p, 10)
+            _add("Container", "GemShell", "%s (encrypted)" % p, 10)
 
     web_roots, framework = _web_framework(folder, items)
     if web_roots:
@@ -383,15 +384,15 @@ def encrypted_container(outcome):
 
 
 def print_summary(outcome, log=print):
-    log("File esaminati: %d%s" % (outcome["file_esaminati"], " (elenco troncato)" if outcome["troncato"] else ""))
+    log("Files examined: %d%s" % (outcome["file_esaminati"], " (truncated list)" if outcome["troncato"] else ""))
     if not outcome["risultati"]:
-        log("Nessun motore riconosciuto.")
-    labels = {"Engine": "Motore", "Container": "Contenitore", "SDK": "Componente", "AntiCheat": "ANTI-CHEAT",
-                 "Launcher": "Launcher", "Emulator": "Emulatore", "Evidence": "Indizio"}
+        log("No engine detected.")
+    labels = {"Engine": "Engine", "Container": "Container", "SDK": "Component", "AntiCheat": "ANTI-CHEAT",
+                 "Launcher": "Launcher", "Emulator": "Emulator", "Evidence": "Evidence"}
     if outcome["motore_principale"]:
-        log("Motore principale: %s" % outcome["motore_principale"])
+        log("Main engine: %s" % outcome["motore_principale"])
     elif outcome["risultati"]:
-        log("Motore non riconosciuto (probabilmente proprietario o non in elenco).")
+        log("Engine not recognized (probably proprietary or not in the list).")
     has_engine = bool(outcome["motore_principale"])
     components = 0
     for r in outcome["risultati"]:
@@ -405,10 +406,10 @@ def print_summary(outcome, log=print):
         for e in r["evidenze"][:2]:
             log("          - %s" % e)
     if outcome["framework_web"]:
-        log("Framework web: " + ", ".join(outcome["framework_web"]))
+        log("Web framework: " + ", ".join(outcome["framework_web"]))
     if any(r["sezione"] == "AntiCheat" for r in outcome["risultati"]):
-        log("ATTENZIONE: anti-cheat rilevato. Non usare strumenti a iniezione su questo gioco.")
+        log("WARNING: anti-cheat detected. Don't use injection tools on this game.")
     if outcome["consigli"]:
-        log("Strada consigliata:")
+        log("Recommended route:")
         for c in outcome["consigli"]:
             log("  * " + c)

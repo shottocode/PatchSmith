@@ -111,7 +111,7 @@ def test_checks(base):
         system.game_open = real
     check("gioco aperto: primo controllo, con 'Riprova', per tradurre, riapplicare e ripristinare",
               all(c == ["GIOCO_APERTO"] for c in all_items.values()) and is_open.action == "riprova"
-              and "Riprova" in is_open.message)
+              and "Try again" in is_open.message)
 
     def system_error(_c):
         raise system.SysError("prova")
@@ -134,7 +134,7 @@ def test_checks(base):
     same = automatic._language_problems("it", "it")
     check("lingue: sconosciute e uguali fermano, un codice fuori elenco si puo' usare comunque%s" % (
         " (sbagliati: %s)" % wrong_seeds if wrong_seeds else ""),
-              not wrong_seeds and "stessa lingua" in same[0].message)
+              not wrong_seeds and "same language" in same[0].message)
     check("lingue: si controllano solo per Analizza e traduci",
               "LINGUA" not in codes(automatic.preflight_checks(game, "finto", "riapplica", "Inglesse", "it")))
 
@@ -157,10 +157,10 @@ def test_checks(base):
             os.environ["ProgramFiles"] = old_pf
     check("cartella protetta: si ferma (nessuna azione) per tutte le operazioni, con 'amministratore' e l'accesso "
               "controllato alle cartelle", all(p and p.action is None for p in outside.values())
-              and "amministratore" in outside["traduci"].message
-              and "Accesso controllato" in outside["traduci"].message)
+              and "administrator" in outside["traduci"].message
+              and "Controlled Folder Access" in outside["traduci"].message)
     check("cartella protetta dentro Programmi: lo dice e spiega come spostare il gioco",
-              inside and "Programmi" in inside.message and "Sposta la cartella" in inside.message)
+              inside and "Program Files" in inside.message and "Move install folder" in inside.message)
     one_file = os.path.join(base, "un-file")
     open(one_file, "w").close()
     check("prova di scrittura vera: si' in una cartella (niente resta), errore se non e' una cartella",
@@ -197,7 +197,7 @@ def test_checks(base):
     check("Google in pausa: 'Installa il traduttore locale' (non installato), 'Usa il traduttore locale' "
               "(installato); niente per Riapplica ne' per un altro traduttore",
               pause and pause.action == "installa_locale" and "Google" in pause.message
-              and "traduttore locale" in pause.message and ready_text and ready_text.action == "usa_locale"
+              and "local translator" in pause.message and ready_text and ready_text.action == "usa_locale"
               and "TRADUTTORE_IN_PAUSA" not in reapply and "TRADUTTORE_IN_PAUSA" not in deepl)
 
     # local translator chosen but not installed
@@ -210,7 +210,7 @@ def test_checks(base):
         ollama.state = real_state
     check("traduttore locale non installato: 'Installa ora' prima di partire; installato: nessun avviso",
               absent and absent.action == "installa_locale" and "LOCALE_ASSENTE" not in is_ready
-              and "continui senza" in absent.message)
+              and "continue without" in absent.message)
     # "Continue anyway" without a translator: the game is analyzed, but it stops before changing it (the official
     # language, if there is one, is activated without a translator)
     fingerprints = {n: open(os.path.join(r, n), "rb").read() for r, _d, f in os.walk(game) for n in f}
@@ -288,7 +288,7 @@ def test_same_game(base):
     check("copia: 'stesso gioco gia' tradotto' con il profilo dell'originale e i testi salvati; non con una memoria "
               "vuota (traduttore vero) ne' per un'altra lingua", proposal and proposal.action == "riusa"
               and proposal.data["profilo"] == path and proposal.data["testi"] == len(entries)
-              and not proposal.data["spostato"] and "Riuso le sue traduzioni" in proposal.message
+              and not proposal.data["spostato"] and "Shall I reuse its translations" in proposal.message
               and online is None and other_language is None)
     # a game profile from a previous version (without 'identita'): recognized by its folder, if it is still there
     with open(path, "w", encoding="utf-8") as f:
@@ -311,7 +311,7 @@ def test_same_game(base):
               "l'origine segnata", new != path and completed
               and copy_memory.get("Start a new game") == "VALORE CORRETTO A MANO"
               and profile_copy.get("traduzioni_da") == profile["nome"]
-              and any("Riuso le traduzioni" in r for r in lines))
+              and any("I'm reusing the translations" in r for r in lines))
     check("copia con il suo profilo: non si chiede piu'",
               "STESSO_GIOCO" not in codes(automatic.preflight_checks(copy_dir, "finto", "traduci", language.AUTO,
                                                                              "it")))
@@ -338,7 +338,7 @@ def test_same_game(base):
     check("copia delle traduzioni non riuscita: Analizza e traduci continua e traduce da capo, con l'avviso",
               completed3 and failures and failures[0].endswith(".json")
               and memory3.get("Start a new game") != "VALORE CORRETTO A MANO"
-              and memory3.get("Start a new game") and any("Non sono riuscito a copiare" in r for r in lines))
+              and memory3.get("Start a new game") and any("I haven't been able to copy" in r for r in lines))
 
     # a moved game: the recorded folder is no longer there, the game profile moves to the new folder
     moved = os.path.join(automatic.profiles_folder(), "gioco-spostato.json")
@@ -356,7 +356,7 @@ def test_same_game(base):
                           "STESSO_GIOCO")
     check("gioco spostato: proposto con 'la cartella non c'e' piu'' (dall'identita salvata nel profilo)",
               proposal and proposal.data["spostato"] and proposal.data["profilo"] == moved
-              and "non c'è più" in proposal.message)
+              and "no longer exists" in proposal.message)
     path_s, _, _ = automatic.analyze_and_translate(new_folder, "auto", "it", "finto", silent,
                                                      reuse=proposal.data["profilo"])
     with open(moved, encoding="utf-8") as f:
@@ -376,8 +376,8 @@ def test_defaults(base):
     check("traduttore predefinito: quello locale anche se non e' installato ('da installare', 'Installa...')",
               ollama.state() != "pronto" and backend.default() == "locale")
     check("etichette: Google 'non ufficiale' (con l'avviso alla scelta), modelli con il compromesso",
-              "non ufficiale" in gui.TRANSLATORS["google"] and "bloccarle" in gui.GOOGLE_WARNING
-              and "più lento" in gui.LOCAL_MODELS["12b"])
+              "unofficial" in gui.TRANSLATORS["google"] and "block them" in gui.GOOGLE_WARNING
+              and "slower" in gui.LOCAL_MODELS["12b"])
 
     # graphics card: nvidia-smi, then the registry, then WMI; at WMI's 4 GB limit it cannot be told
     actual = ollama._nvidia_smi, ollama._video_registry, ollama._wmi_video
@@ -455,10 +455,10 @@ def test_defaults(base):
         ollama._VIDEO_MEMORY.clear()
     check("modello consigliato: 12B da 8 GB (anche 7,9), 4B sotto e se la scheda non si conosce (%s)" % advice,
               advice == {8.0: "12b", 7.9: "12b", 6.0: "4b", 4.0: "4b"} and unlabeled[0] == "4b"
-              and "8 GB" in ollama.recommended_model(8.0)[1] and "Veloce" in unlabeled[1])
+              and "8 GB" in ollama.recommended_model(8.0)[1] and "Fast" in unlabeled[1])
     check("avviso prima di scaricare: grafica integrata o scheda vecchia -> lento sul processore (con DeepL come "
               "alternativa); poca RAM -> avviso; scheda da 8 GB, 16 GB di RAM o PC sconosciuto -> nessun avviso",
-              "processore" in ollama.performance_warning(0.5, 16) and "DeepL" in ollama.performance_warning(0.5, 16)
+              "processor" in ollama.performance_warning(0.5, 16) and "DeepL" in ollama.performance_warning(0.5, 16)
               and "RAM" in ollama.performance_warning(8, 6) and ollama.performance_warning(8, 16) == ""
               and ollama.performance_warning(3.9, 16) == "")
 
@@ -485,21 +485,22 @@ def test_defaults(base):
     finally:
         ollama.download_description, ollama.install, backend.probe_local = actual
     check("riga di comando 'locale': modello consigliato (12B con 8 GB) e comando; '--installa' fa la frase di "
-              "prova e esce con 2 se non riesce", status_code == 0 and "Qualità (12B)" in text
-              and "--install 12b (oppure 4b" in text and trial_code == 2 and tests == ["12b"])
+              "prova e esce con 2 se non riesce", status_code == 0 and "Quality model (12B)" in text
+              and "--install 12b (or 4b" in text and trial_code == 2 and tests == ["12b"])
 
     # test of the local translator after installation
     server = FakeServer()
     r = backend.probe_local("4b", silent, server=server)
     check("prova del traduttore locale: tradotto sulla scheda video, con i tempi (%s)" % r["messaggio"],
               r["ok"] and r["scheda"] == 1.0 and r["traduzione"] == "Inizia la partita"
-              and "sulla scheda video" in r["messaggio"] and "Start game" in r["messaggio"] and r["secondi"] is not None)
+              and "on the graphics card" in r["messaggio"] and "Start game" in r["messaggio"]
+              and r["secondi"] is not None)
     r = backend.probe_local("4b", silent, server=FakeServer(vram=0))
     check("prova: solo processore -> 'sara' lento' e il consiglio", r["ok"] and r["scheda"] == 0
-              and "solo con il processore" in r["messaggio"])
+              and "only with the processor" in r["messaggio"])
     r = backend.probe_local("4b", silent, server=FakeServer(response="Start game"))
     check("prova: frase rimasta in originale -> non riuscita, senza errori", not r["ok"]
-              and "rimasto in originale" in r["messaggio"])
+              and "stayed untranslated" in r["messaggio"])
     r = backend.probe_local("4b", silent, server=FakeServer(error=ollama.LocalError("non parte")))
     check("prova: server che non parte -> non riuscita, con il motivo, senza eccezioni",
               not r["ok"] and "non parte" in r["messaggio"])
@@ -508,7 +509,7 @@ def test_defaults(base):
     message = limiter.Limiter("google", log=None).blocked(429, "prova")
     limiter.Limiter("google", log=None).reset()
     check("blocco di Google: il messaggio consiglia il traduttore locale, senza comandi",
-              "traduttore locale" in message and "smith.py" not in message)
+              "local translator" in message and "smith.py" not in message)
 
 
 def main(base):

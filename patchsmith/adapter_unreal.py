@@ -97,14 +97,15 @@ class Pak:
             tail = f.read()
         i = tail.rfind(struct.pack("<I", MAGIC_PAK))
         if i < 0:
-            raise UnrealError("%s non e' un pak Unreal valido" % os.path.basename(path))
+            raise UnrealError("%s is not a valid Unreal pak" % os.path.basename(path))
         self.version, self.index_offset, self.index_size = struct.unpack_from("<Iqq", tail, i + 4)
         if not 3 <= self.version <= 9:
-            raise UnrealError("Pak versione %d: non ancora supportata (supportate 3-9, Unreal 4.x)" % self.version)
+            raise UnrealError("Pak version %d: Not yet supported (versions 3-9, Unreal 4.x are supported)"
+                              % self.version)
         self.index_encrypted = self.version >= 4 and tail[i - 1] != 0
         self.key_guid = tail[i - 17:i - 1] if self.version >= 7 else b"\x00" * 16
         if self.index_encrypted:
-            raise UnrealError("L'indice del pak e' cifrato (serve la chiave AES del gioco): non supportato")
+            raise UnrealError("The PAK index is encrypted (requires the game's AES key): Not supported")
         rest = tail[i + 4 + 4 + 8 + 8 + 20:]
         self.frozen = rest[0] if self.version >= 9 else None
         names = rest[1:] if self.version >= 9 else rest
@@ -122,7 +123,7 @@ class Pak:
             except (struct.error, UnrealError, UnicodeDecodeError):
                 continue
         else:
-            raise UnrealError("Indice del pak non leggibile")
+            raise UnrealError("Pak index unreadable")
         self.prefix = full_name(self.mount, "")
 
     def _read_index(self, idx, width):
@@ -152,7 +153,7 @@ class Pak:
             entries[name] = PakEntry(name, offset, dim, dim_orig, method, blocks, flags, block_size, sha1,
                                      idx[start:pos])
         if pos != len(idx):
-            raise UnrealError("indice non coerente")
+            raise UnrealError("inconsistent index")
         return mount, entries
 
     def method_name(self, entry):
@@ -170,14 +171,14 @@ class Pak:
         if entry is None:
             raise KeyError(name)
         if entry.flags & 1:
-            raise UnrealError("%s e' cifrato: non supportato" % name)
+            raise UnrealError("%s is encrypted: not supported" % name)
         with open(self.path, "rb") as f:
             if not entry.method:
                 f.seek(entry.offset + entry.header_length)
                 data = f.read(entry.size)
             else:
                 if self.method_name(entry).lower() != "zlib":
-                    raise UnrealError("%s e' compresso con %s: non supportato" % (name, self.method_name(entry)))
+                    raise UnrealError("%s is compressed with %s: not supported" % (name, self.method_name(entry)))
                 base = entry.offset if self.version >= 5 else 0  # relative blocks from version 5
                 parts = []
                 for start, end in entry.blocks:
@@ -185,7 +186,7 @@ class Pak:
                     parts.append(zlib.decompress(f.read(end - start)))
                 data = b"".join(parts)
         if not entry.method and hashlib.sha1(data).digest() != entry.sha1:
-            raise UnrealError("%s: impronta diversa da quella dell'indice" % name)
+            raise UnrealError("%s: hash different from the one in the index" % name)
         return data
 
 
@@ -232,10 +233,10 @@ def write_pak(path, model, file, mount=None):
 def read_locres(data):
     """Structure of a .locres (versions 1-3). The translated strings are at the end of the file."""
     if data[:16] != MAGIC_LOCRES:
-        raise UnrealError("Formato .locres 'legacy' (senza intestazione): non ancora supportato")
+        raise UnrealError("'Legacy' .locres format (no header): not yet supported")
     version = data[16]
     if not 1 <= version <= 3:
-        raise UnrealError("Versione .locres %d non supportata" % version)
+        raise UnrealError(".locres version %d not supported" % version)
     pos = 17
     strings_offset = struct.unpack_from("<q", data, pos)[0]
     pos += 8
@@ -259,7 +260,7 @@ def read_locres(data):
             pos += 4
             keys.append((ns, key, idx))
     if pos != strings_offset:
-        raise UnrealError(".locres non coerente (sezione chiavi)")
+        raise UnrealError(".locres inconsistent (key section)")
     n = struct.unpack_from("<i", data, pos)[0]
     pos += 4
     strings = []
@@ -271,9 +272,9 @@ def read_locres(data):
             pos += 4
         strings.append((s, ref))
     if pos != len(data):
-        raise UnrealError(".locres non coerente (stringhe)")
+        raise UnrealError(".locres inconsistent (strings)")
     if any(not 0 <= i < n for _, _, i in keys):
-        raise UnrealError(".locres non coerente (indici delle stringhe)")
+        raise UnrealError(".locres inconsistent (string indices)")
     return {"versione": version, "testa": data[:strings_offset], "chiavi": keys, "stringhe": strings}
 
 
@@ -379,7 +380,7 @@ def analyze(folder):
         except UnrealError as e:
             info["problemi"].append("%s: %s" % (os.path.basename(p), e))
     if info["firmati"]:
-        info["problemi"].append("i pak del gioco sono firmati (.sig): un pak aggiunto verrebbe rifiutato")
+        info["problemi"].append("the game's paks are signed (.sig): an added pak would be rejected")
     return info
 
 
@@ -417,14 +418,14 @@ def _sha256(path):
 
 def _checks(folder):
     if game_open(folder):
-        raise UnrealError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+        raise UnrealError("The game is open: close it and try again.", "GIOCO_APERTO")
     if analyze(folder)["firmati"]:
-        raise UnrealError("I pak del gioco sono firmati (file .sig): il gioco rifiuterebbe un pak aggiunto.",
+        raise UnrealError("The game's paks are signed (.sig files): the game would reject an added pak.",
                            "NON_SUPPORTATO")
     outcome = detection.detect(folder)
     names = [r["nome"] for r in outcome["risultati"] if r["sezione"] == "AntiCheat"]
     if names:
-        raise UnrealError("Questo gioco ha un anti-cheat (%s): non aggiungo pak modificati (rischio di ban)."
+        raise UnrealError("This game has an anti-cheat system (%s): I won't add modified paks (risk of a ban)."
                            % ", ".join(names), "ANTICHEAT")
 
 
@@ -432,11 +433,12 @@ def texts_to_translate(folder, log=print):
     """(sources, unique texts to translate, original language)."""
     sources = find_locres(folder)
     if not sources:
-        raise UnrealError("Non ho trovato file di localizzazione (.locres) nei pak del gioco.", "NON_SUPPORTATO")
+        raise UnrealError("I haven't found any localization files (.locres) within the game's PAK files.",
+                          "NON_SUPPORTATO")
     texts, cultures = {}, set()
     for pak, name, target, culture in sources:
         info = read_locres(pak.read_file(name))
-        log("  %s (%s): %d frasi" % (name, culture, len(info["stringhe"])))
+        log("  %s (%s): %d phrases" % (name, culture, len(info["stringhe"])))
         cultures.add(culture)
         for s, _ in info["stringhe"]:
             if any(c.isalpha() for c in s):
@@ -520,10 +522,11 @@ def install(folder, a, profile_name, memory, log=print, refused=None):
     _checks(folder)
     sources = find_locres(folder)
     if not sources:
-        raise UnrealError("Non ho trovato file di localizzazione (.locres) nei pak del gioco.", "NON_SUPPORTATO")
+        raise UnrealError("I haven't found any localization files (.locres) within the game's PAK files.",
+                          "NON_SUPPORTATO")
     manifest = read_manifest(folder) if manifest_present(folder) else None
     if manifest_present(folder) and manifest is None:
-        raise UnrealError("Il file %s non e' valido: non lo uso. Controlla la cartella a mano." % MANIFEST)
+        raise UnrealError("The file %s is invalid: I'm not using it. Please check the folder manually." % MANIFEST)
 
     read_items = [(pak, name, pak.read_file(name)) for pak, name, _, _ in sources]
     read_items = [(pak, name, original, read_locres(original)) for pak, name, original in read_items]
@@ -546,14 +549,14 @@ def install(folder, a, profile_name, memory, log=print, refused=None):
         new = write_locres(info, new_lines)
         checks = read_locres(new)  # it must read back with the same structure
         if checks["chiavi"] != info["chiavi"] or checks["testa"] != info["testa"]:
-            raise UnrealError("Controllo del .locres tradotto fallito per %s: non scrivo nulla" % name)
+            raise UnrealError("Check of the translated .locres failed for %s: not writing anything" % name)
         by_pak.setdefault(os.path.dirname(pak.path), (pak, []))[1].append((name, new, original))
     if adapted:
-        log("  %d frasi adattate ai caratteri dei font del gioco (lettere che le sue lingue non usano, es. e')"
+        log("  %d phrases adapted to the game's font characters (letters that its languages don't use, e.g., \"è\")"
             % adapted)
     if rejected:
-        log("  ! %d traduzioni hanno caratteri che i font del gioco probabilmente non hanno e restano in originale, "
-            "es. %r (quelle scritte da PatchSmith le rifaccio senza quei caratteri)" % (
+        log("  ! %d translations have characters the game's fonts probably lack and stay untranslated, e.g. %r (I'll "
+            "redo the ones written by PatchSmith without those characters)" % (
                 len(rejected), next(iter(rejected))[:60]))
         if refused is not None:
             refused.update(rejected)
@@ -565,14 +568,14 @@ def install(folder, a, profile_name, memory, log=print, refused=None):
             dest_lang = os.path.join(paks_folder, pak_name(a))
             rel = os.path.relpath(dest_lang, folder).replace(os.sep, "/")
             if os.path.exists(dest_lang) and rel not in old_files:
-                raise UnrealError("Esiste gia' %s non creato da PatchSmith: non lo sovrascrivo." % rel)
+                raise UnrealError("There's already %s, which wasn't created by PatchSmith: I won't overwrite it." % rel)
             temp_file = dest_lang + TMP_SUFFIX
             # full names with the root mount point: this also works for the .locres files of a pak mounted in a
             # deeper folder (for the main paks it is the same mount point, '../../../')
             write_pak(temp_file, model, [(n, d) for n, d, _ in file], mount="../../../")
             was_read = Pak(temp_file)  # verification: the written pak must read back with the same files
             if any(was_read.read_file(n) != d for n, d, _ in file) or set(was_read.entries) != {n for n, _, _ in file}:
-                raise UnrealError("Verifica del pak scritto fallita: non installo nulla")
+                raise UnrealError("Verification of the written pak failed: not installing anything")
             ready[rel] = (temp_file, dest_lang, _sha256(temp_file))
     except BaseException:
         for temp_file, _, _ in ready.values():
@@ -601,7 +604,8 @@ def install(folder, a, profile_name, memory, log=print, refused=None):
         if rel not in new_files and os.path.exists(p) and _sha256(p) == fingerprint:
             os.remove(p)
     write_manifest(new_files, {})
-    log("  Pak di traduzione scritto: %s (%d frasi tradotte su %d)" % (", ".join(new_files), translated_count, total))
+    log("  Translation pak written: %s (%d of %d sentences translated)"
+        % (", ".join(new_files), translated_count, total))
     return translated_count
 
 
@@ -611,9 +615,9 @@ def uninstall(folder, log=print):
         return False
     manifest = read_manifest(folder)
     if manifest is None:
-        raise UnrealError("Il file %s non e' valido: per sicurezza non cancello nulla." % MANIFEST)
+        raise UnrealError("The file %s is invalid: for your safety, I won't delete anything." % MANIFEST)
     if game_open(folder):
-        raise UnrealError("Il gioco e' aperto: chiudilo e riprova.", "GIOCO_APERTO")
+        raise UnrealError("The game is open: close it and try again.", "GIOCO_APERTO")
     for rel, fingerprint in manifest["file"].items():
         p = os.path.join(folder, *rel.split("/"))
         if os.path.exists(p + TMP_SUFFIX):
@@ -621,35 +625,35 @@ def uninstall(folder, log=print):
         if os.path.exists(p):
             if _sha256(p) in (fingerprint, manifest.get("precedenti", {}).get(rel)):
                 os.remove(p)
-                log("  Rimosso %s" % rel)
+                log("  Removed %s" % rel)
             else:
-                log("  ! %s e' stato modificato da altri: lo lascio" % rel)
+                log("  ! %s has been modified by others: I'm leaving it as is" % rel)
     if os.path.exists(os.path.join(folder, MANIFEST + TMP_SUFFIX)):
         os.remove(os.path.join(folder, MANIFEST + TMP_SUFFIX))
     os.remove(os.path.join(folder, MANIFEST))
-    log("  Traduzione rimossa: il gioco usa di nuovo i suoi file originali.")
+    log("  Translation removed: the game is using its original files again.")
     return True
 
 
 def state(folder, log=print):
     info = analyze(folder)
-    log("  Pak del gioco: %d (versioni %s)%s" % (len(info["paks"]), sorted(set(info["versioni"])),
-                                                ", IoStore presente" if info["iostore"] else ""))
+    log("  Game paks: %d (versions %s)%s" % (len(info["paks"]), sorted(set(info["versioni"])),
+                                                ", IoStore present" if info["iostore"] else ""))
     for p in info["problemi"]:
         log("  ! " + p)
     manifest = read_manifest(folder)
     if not manifest:
-        log("  Traduzione non installata.")
+        log("  Translation not installed.")
         return False
     for rel, fingerprint in manifest["file"].items():
         p = os.path.join(folder, *rel.split("/"))
         ok = os.path.exists(p) and _sha256(p) == fingerprint
-        log("  %s %s (lingua %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("lingua"), manifest.get("data")))
+        log("  %s %s (language %s, %s)" % ("OK " if ok else "NO ", rel, manifest.get("lingua"), manifest.get("data")))
     try:
         current_count = {n: hashlib.sha1(pak.read_file(n)).hexdigest() for pak, n, _, _ in find_locres(folder)}
         if current_count != manifest.get("sorgenti"):
-            log("  ! Il gioco e' stato aggiornato: premi 'Analizza e traduci' per tradurre anche i testi nuovi "
-                "(quelli gia' tradotti restano).")
+            log("  ! The game has been updated: press 'Analyze and translate' to translate the new texts too (the ones "
+                "already translated are kept).")
     except UnrealError as e:
         log("  ! " + str(e))
     return True

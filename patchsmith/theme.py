@@ -200,7 +200,7 @@ def error(parent, c, title_text, text):
 
 def ask(parent, c, title_text, text):
     """True if the user chooses Yes."""
-    return bool(window(parent, c, title_text, text, "domanda", (("Sì", True), ("No", False)), cancel=False))
+    return bool(window(parent, c, title_text, text, "domanda", (("Yes", True), ("No", False)), cancel=False))
 
 
 def choose(parent, c, title_text, text, buttons, kind="info"):

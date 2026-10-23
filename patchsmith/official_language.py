@@ -61,7 +61,7 @@ def detect(folder, dest_lang, engine=None, log=None):
     except Exception as e:  # a detector that fails must not block the translation
         present, engine_data = None, {}
         if log:
-            log("  ! Controllo delle lingue nei file non riuscito (%s: %s)" % (type(e).__name__, e))
+            log("  ! Check of the languages in the files failed (%s: %s)" % (type(e).__name__, e))
     r["motore"] = engine_data
     root = engine_data.get("radice") if engine_data.get("tipo") == "scheda" else None
     if not info and root and os.path.normcase(root) != os.path.normcase(os.path.abspath(folder)):
@@ -75,12 +75,12 @@ def detect(folder, dest_lang, engine=None, log=None):
     elif known:
         r["steam_conosciuto"] = known
     if steam_says is not None:
-        state = "e' tra le lingue ufficiali" if steam_says else "non e' tra le lingue ufficiali"
+        state = "is one of the official languages" if steam_says else "is not one of the official languages"
         if info:
             r["fonti"].append("Steam: %s %s" % (label, state))
     in_files = None if present is None else bool(engine_data.get("trovata"))
     if in_files:
-        r["fonti"].append("File del gioco: c'e' la lingua %s" % label)
+        r["fonti"].append("Game files: the %s language is present" % label)
 
     # 3) decision
     if info:  # Steam installation: Steam wins (the language may be in a package not yet downloaded)
@@ -91,11 +91,12 @@ def detect(folder, dest_lang, engine=None, log=None):
             game = "\"%s\"" % (known.get("nome") or known["appid"])
             if in_files is None and known.get("cartella_simile"):
                 r["presente"] = steam_says
-                r["fonti"].append("Steam conosce questo gioco (%s, avviato da %s): %s %s" % (
+                r["fonti"].append("Steam recognizes this game (%s, launched by %s): %s %s" % (
                     game, known["eseguibile"], label, state))
             elif steam_says and not in_files:
-                r["note"].append("Forse e' il gioco Steam %s, che ha %s ufficiale: se e' lui, cerca la lingua nelle "
-                                 "opzioni del gioco o nel launcher." % (game, label))
+                r["note"].append("Perhaps it's the Steam game %s, which has %s official language support: if that's "
+                                 "the case, look for the language setting in the game options or in the launcher."
+                                 % (game, label))
     return r
 
 
@@ -117,7 +118,7 @@ def _steam_data(folder, name, log, installed_only=False):
                 selectable = name in steam.selectable_from_info(app_data)
     except Exception as e:
         if log:
-            log("  ! Lettura dei dati di Steam non riuscita (%s: %s): continuo senza" % (type(e).__name__, e))
+            log("  ! Failed to read Steam data (%s: %s): continuing without" % (type(e).__name__, e))
     return info, known, steam_says, selectable
 
 
@@ -237,7 +238,7 @@ def _is_open(folder):
     from . import system
     try:
         if system.game_open(folder):
-            return "il gioco e' aperto: chiudilo e riprova"
+            return "the game is open: close it and try again"
     except system.SysError as e:
         return str(e)
     return None
@@ -248,14 +249,14 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
     user's consent is needed (e.g. to modify the executables): then the lines are the proposal."""
     m = detection.get("motore") or {}
     name = language.label(dest_lang)
-    in_menu = "scegli %s nel menu delle opzioni del gioco" % name
+    in_menu = "choose %s in the game's options menu" % name
     if m.get("tipo") == "scheda":
         from . import games as sheets
         if detection.get("steam") and detection.get("selezionabile_steam"):
             return False, []  # installed from Steam: the language is chosen there (the message says where)
         sheet = sheets.by_id(m.get("scheda"))
         if sheet and not m.get("radice") and len(m.get("radici") or []) > 1:
-            return False, ["Nella cartella ci sono %d copie di %s (%s): scegli la cartella di una sola."
+            return False, ["The folder contains %d copies of %s (%s): choose the folder of just one."
                            % (len(m["radici"]), sheet.NAME, "; ".join(m["radici"]))]
         if sheet and m.get("radice"):
             return sheet.set_language(m["radice"], dest_lang, consent, log)
@@ -264,35 +265,35 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
         gus = language_unreal.settings_file(m.get("progetto"), folder)
         if not gus:
             if _first_time(folder):
-                return False, ["Non trovo ancora le impostazioni del gioco: avvialo una volta e chiudilo, poi ripeti "
-                               "'Analizza e traduci' e provo a impostare %s io (oppure %s)." % (name, in_menu)]
-            return False, ["Non trovo le impostazioni del gioco (GameUserSettings.ini): %s." % in_menu]
+                return False, ["I can't find the game settings yet: start it once and close it, then repeat 'Analyze "
+                               "and translate' and I'll try to set %s myself (or %s)." % (name, in_menu)]
+            return False, ["I can't find the game settings (GameUserSettings.ini): %s." % in_menu]
         try:
             _, other_ones = language_unreal.read_internationalization(gus)
         except (OSError, ValueError) as e:
-            return False, ["Non ho potuto leggere le impostazioni del gioco (%s): %s." % (e, in_menu)]
+            return False, ["I was unable to access the game settings (%s): %s." % (e, in_menu)]
         if other_ones:
-            return False, ["Il gioco gestisce la lingua da solo (%s): %s." % (", ".join(other_ones[:2]), in_menu)]
+            return False, ["The game handles the language by itself (%s): %s." % (", ".join(other_ones[:2]), in_menu)]
         reason = _is_open(folder)
         if reason:
-            return False, ["Non imposto la lingua: %s ('Analizza e traduci' la imposta)." % reason]
+            return False, ["I'm not setting the language: %s ('Analyze and translate' sets it)." % reason]
         try:
             changes = language_unreal.set_culture(gus, m["tag"])
         except (OSError, ValueError) as e:
-            return False, ["Non ho potuto scrivere le impostazioni del gioco (%s): %s." % (e, in_menu)]
+            return False, ["I wasn't able to save the game settings (%s): %s." % (e, in_menu)]
         if not changes:
-            return True, ["Le impostazioni del gioco sono gia' su %s (%s)." % (name, gus),
-                          "Se il gioco e' ancora in un'altra lingua, %s." % in_menu]
+            return True, ["The game settings are already set to %s (%s)." % (name, gus),
+                          "If the game is still in another language, %s." % in_menu]
         previous = _read_log(folder)
         if previous and previous.get("tipo") == "unreal" and previous.get("file") == gus:
             changes = previous["modifiche"] + changes  # the oldest values (the original ones) win
-        lines = ["Ho impostato %s nelle impostazioni del gioco (%s, [Internationalization])." % (name, gus),
-                 "Avvia il gioco: se e' ancora in un'altra lingua, il gioco usa un suo menu: %s." % in_menu]
+        lines = ["I have set %s in the game settings (%s, [Internationalization])." % (name, gus),
+                 "Start the game: if it's still in another language, the game uses its own menu: %s." % in_menu]
         try:
             _save_log(folder, {"tipo": "unreal", "file": gus, "tag": m["tag"], "modifiche": changes,
                                        "data": _now()})
         except OSError as e:
-            lines.append("Attenzione: non ho potuto salvare il registro per il ripristino (%s)." % e)
+            lines.append("Warning: I couldn't save the restore log (%s)." % e)
         return True, lines
     if m.get("tipo") == "unity" and m.get("i2_lingua"):
         from . import language_unity
@@ -300,43 +301,44 @@ def set_(folder, detection, dest_lang, log=print, consent=False):
         if not company or not product:
             return False, [in_menu[0].upper() + in_menu[1:] + "."]
         if m.get("i2_personalizzato"):
-            return False, ["Il gioco salva la lingua a modo suo: %s." % in_menu]
+            return False, ["The game saves the language in its own way: %s." % in_menu]
         try:
             previous = language_unity.read_pref(company, product, language_unity.PREF_I2)
         except OSError as e:
-            return False, ["Non ho potuto leggere le preferenze del gioco (%s): %s." % (e, in_menu)]
+            return False, ["I was unable to access the game's settings (%s): %s." % (e, in_menu)]
         if previous is False:
             if _first_time(folder):
-                return False, ["Il gioco non ha ancora le sue preferenze: avvialo una volta e chiudilo, poi ripeti "
-                               "'Analizza e traduci' e provo a impostare %s io (oppure %s)." % (name, in_menu)]
-            return False, ["Non trovo le preferenze del gioco: %s." % in_menu]
+                return False, ["The game has no preferences yet: start it once and close it, then repeat 'Analyze and "
+                               "translate' and I'll try to set %s myself (or %s)." % (name, in_menu)]
+            return False, ["I can't find the game settings: %s." % in_menu]
         value_ = m["i2_lingua"]
         written = value_.encode("utf-8") + b"\x00"
         if previous and previous[1] == written:
-            return True, ["La lingua del gioco e' gia' impostata su %s." % name,
-                          "Se il gioco e' ancora in un'altra lingua, %s." % in_menu]
+            return True, ["The game's language is already set to %s." % name,
+                          "If the game is still in another language, %s." % in_menu]
         reason = _is_open(folder)
         if reason:
-            return False, ["Non imposto la lingua: %s ('Analizza e traduci' la imposta)." % reason]
+            return False, ["I'm not setting the language: %s ('Analyze and translate' sets it)." % reason]
         try:
             language_unity.write_pref_string(company, product, language_unity.PREF_I2, value_)
         except (OSError, ValueError) as e:
-            return False, ["Non ho potuto impostare la lingua (%s): %s." % (e, in_menu)]
+            return False, ["I was unable to set the language (%s): %s." % (e, in_menu)]
         old = _read_log(folder)
         if old and old.get("tipo") == "unity_i2" and old.get("azienda") == company and \
                 old.get("prodotto") == product:
             before = old.get("precedente")  # the value from before the first time
         else:
             before = [previous[0], previous[1].hex()] if previous else None
-        lines = ["Ho impostato la lingua del gioco su %s (preferenza di I2 Localization: \"%s\")." % (name, value_),
-                 "Avvia il gioco: dovrebbe partire in %s. Se e' ancora in un'altra lingua, il gioco usa una sua "
-                 "impostazione: %s." % (name, in_menu)]
+        lines = ["I have set the game language to %s (following I2 Localization's preference: \"%s\")."
+                 % (name, value_),
+                 "Start the game: it should start in %s. If it's still in another language, the game uses its own "
+                 "setting: %s." % (name, in_menu)]
         try:
             _save_log(folder, {"tipo": "unity_i2", "azienda": company, "prodotto": product,
                                        "chiave": language_unity.PREF_I2, "scritto": written.hex(), "precedente": before,
                                        "data": _now()})
         except OSError as e:
-            lines.append("Attenzione: non ho potuto salvare il registro per il ripristino (%s)." % e)
+            lines.append("Warning: I couldn't save the restore log (%s)." % e)
         return True, lines
     return False, []
 
@@ -351,7 +353,7 @@ def set_added_language(folder, name, languages, log=print, source=None, force=Fa
     from .project import data_folder
     reason = _is_open(folder)
     if reason:
-        return False, ["Non imposto la lingua '%s' nelle opzioni del gioco: %s." % (name, reason)]
+        return False, ["I'm not setting the language '%s' in the game options: %s." % (name, reason)]
     saves = data_folder("save-backups", "lingua-" + os.path.basename(_log_file(folder))[:-5])
     old = _read_log(folder)
     if not (old and old.get("tipo") == "gamemaker_opzioni"):
@@ -360,9 +362,9 @@ def set_added_language(folder, name, languages, log=print, source=None, force=Fa
         log_file, reason = language_gamemaker.set_(folder, name, languages, saves, log,
                                                     respect=old.get("scritto") if old and not force else None)
     except (OSError, ValueError, KeyError, StopIteration) as e:
-        return False, ["Non ho potuto impostare la lingua nelle opzioni del gioco (%s)." % e]
+        return False, ["I wasn't able to set the language in the game options (%s)." % e]
     if log_file is None:
-        return False, ["Non imposto la lingua da fuori: %s." % reason]
+        return False, ["I don't set the language from outside: %s." % reason]
     if old and old.get("file") == log_file["file"] and old.get("precedente"):
         log_file["precedente"] = old["precedente"]  # the language from before the first time wins
     elif not log_file.get("precedente") and source:
@@ -371,7 +373,7 @@ def set_added_language(folder, name, languages, log=print, source=None, force=Fa
     try:
         _save_log(folder, log_file)
     except OSError as e:
-        return True, ["Attenzione: non ho potuto salvare il registro per il ripristino (%s)." % e]
+        return True, ["Warning: I couldn't save the restore log (%s)." % e]
     return True, []
 
 
@@ -398,7 +400,7 @@ def put_back_added_language(folder, additions, source, languages, log=print):
         previous = source
     reason = _is_open(folder)
     if reason:
-        log("  ! Lingua del gioco non rimessa: %s." % reason)
+        log("  ! Game language not restored: %s." % reason)
         return False
     try:
         with open(path, encoding="utf-8", newline="") as f:
@@ -406,9 +408,9 @@ def put_back_added_language(folder, additions, source, languages, log=print):
         from .adapter_webjson import write_atomic
         write_atomic(path, language_gamemaker.change(text, spot, previous).encode("utf-8"))
     except (OSError, ValueError) as e:
-        log("  ! Non ho potuto rimettere la lingua '%s' nelle opzioni del gioco (%s)." % (previous, e))
+        log("  ! I was unable to set the language back to '%s' in the game options (%s)." % (previous, e))
         return False
-    log("  Lingua del gioco: rimessa '%s' (prima era '%s', la lingua aggiunta)" % (previous, spot[3]))
+    log("  Game language: set back to '%s' (it was '%s', the added language)" % (previous, spot[3]))
     if log_file.get("tipo") == "gamemaker_opzioni":
         try:
             os.remove(_log_file(folder))
@@ -439,7 +441,7 @@ def restore(folder, log=print):
     for root in _lever_roots(folder):
         outcome = configurator.restore(root, "lingua", log)
         if outcome:
-            log("  Lingua del gioco: rimessa com'era prima")
+            log("  Game language: set back to how it was")
         outcomes.append(outcome)
     if False in outcomes:
         return False
@@ -452,11 +454,11 @@ def _restore_setting(folder, log):
         return None
     data = _read_log(folder)
     if not isinstance(data, dict):
-        log("  ! Lingua del gioco: registro illeggibile (%s): scegli la lingua nel menu del gioco." % path)
+        log("  ! Game language: unreadable registry (%s): choose the language in the game menu." % path)
         return False
     reason = _is_open(folder)
     if reason:
-        log("  ! Lingua del gioco non rimessa: %s (resta da fare)." % reason)
+        log("  ! Game language not restored: %s (still to do)." % reason)
         return False
     try:
         if data.get("tipo") == "unreal":
@@ -473,13 +475,13 @@ def _restore_setting(folder, log):
         else:
             ok = False
     except (OSError, ValueError, TypeError, KeyError) as e:
-        where = data.get("file") or "registro di Windows, HKCU\\Software\\%s\\%s" % (data.get("azienda"),
+        where = data.get("file") or "Windows registry, HKCU\\Software\\%s\\%s" % (data.get("azienda"),
                                                                                    data.get("prodotto"))
-        log("  ! Non ho potuto rimettere la lingua del gioco com'era (%s; %s): togli la sola lettura e riprova, "
-            "oppure scegli la lingua nel menu del gioco." % (e, where))
+        log("  ! I wasn't able to revert the game's language to its original setting (%s; %s): either remove read-only "
+            "mode and try again, or select the language in the game's menu." % (e, where))
         return False
-    log("  Lingua del gioco: %s" % ("rimessa com'era prima" if ok else
-                                    "cambiata nel frattempo (dal gioco o da te): la lascio com'e'"))
+    log("  Game language: %s" % ("restored to how it was" if ok else
+                                    "changed in the meantime (by the game or by you): leaving it as it is"))
     os.remove(path)
     return True
 
@@ -489,7 +491,7 @@ def _restore_setting(folder, log):
 def message(detection, dest_lang, setting=None, done=False):
     """Lines to show the user when the official language is there."""
     name = language.label(dest_lang)
-    lines = ["Il gioco ha gia' la traduzione ufficiale in %s: e' meglio di una traduzione automatica." % name]
+    lines = ["The game already has an official translation in %s: it's better than an automated translation." % name]
     lines += ["  - " + f for f in detection["fonti"]]
     if setting:
         lines += setting
@@ -500,21 +502,23 @@ def message(detection, dest_lang, setting=None, done=False):
     info = detection.get("steam")
     if info:
         if detection.get("lingua_steam") == _steam_name(dest_lang):
-            lines.append("Steam usa gia' %s per questo gioco: se il gioco e' in un'altra lingua, sceglila nelle sue "
-                         "opzioni." % name)
+            lines.append("Steam already uses %s for this game: if the game is in another language, select it from its "
+                         "options." % name)
         elif detection.get("selezionabile_steam"):
-            lines.append("In Steam: Libreria > tasto destro su \"%s\" > Proprieta' > Generali > Lingua > %s." % (
-                info.get("nome") or "il gioco", name))
+            lines.append('In Steam: Library > Right-click on "%s" > Properties > General > Language > %s.' % (
+                info.get("nome") or "the game", name))
         elif not setting:
-            lines.append("Scegli %s nelle opzioni del gioco (in Steam questo gioco non ha il menu Lingua)." % name)
+            lines.append("Choose %s in the game options (this game doesn't have a language menu on Steam)." % name)
     elif detection.get("steam_conosciuto"):
         if done is False:
-            lines.append("Non posso impostarla io: questa cartella non e' un'installazione di Steam, e molti giochi "
-                         "usano la lingua che gli passa il negozio (Steam o Epic) all'avvio.")
+            lines.append("I can't set it myself: this folder isn't a Steam installation, and many games use the "
+                         "language that the store (Steam or Epic) passes to them at startup.")
             if detection.get("selezionabile_steam"):
-                lines.append("Da Steam: Libreria > tasto destro sul gioco > Proprieta' > Generali > Lingua > %s."
+                lines.append("From Steam: Library > Right-click on the game > Properties > General > Language > %s."
                              % name)
-            lines.append("Altrimenti cerca %s nelle opzioni del gioco o nel launcher da cui lo avvii." % name)
+            lines.append("Alternatively, try searching for %s in the game's options or in the launcher from which you "
+                         "launch it." % name)
     elif not setting:
-        lines.append("Per attivarla: scegli %s nelle opzioni del gioco (o nel launcher da cui lo avvii)." % name)
+        lines.append("To activate it: choose %s in the game options (or in the launcher from which you launch it)."
+                     % name)
     return lines

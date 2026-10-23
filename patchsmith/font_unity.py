@@ -419,7 +419,7 @@ def game_fonts(data_folder, log=None, seconds=MAX_SECONDS, items=None):
     if collector.complete:
         _CACHE[key] = result
     elif log:
-        log("  ! Lettura dei font del gioco non finita in %d secondi: non limito i caratteri" % seconds)
+        log("  ! Reading the game's fonts didn't finish within %d seconds: I'm not limiting the characters" % seconds)
     return result
 
 
@@ -470,10 +470,10 @@ def allowed_chars(data_folder, log=None, seconds=MAX_SECONDS, cache=None):
         if was_read is not None:
             return was_read
     if log and len(items) > 100:
-        log("  Controllo quali lettere sanno disegnare i font del gioco (%d file, sola lettura; solo la prima volta, "
-            "puo' richiedere qualche minuto)..." % len(items))
+        log("  Checking which letters the game's fonts can draw (%d files, read-only; only the first time, it may take "
+            "a few minutes)..." % len(items))
     found = game_fonts(data_folder, log, seconds, items)
-    result = _apply_rule(found) if found["completa"] else (None, "lettura dei font non finita in tempo")
+    result = _apply_rule(found) if found["completa"] else (None, "font reading didn't finish in time")
     if cache:
         try:
             os.makedirs(os.path.dirname(cache), exist_ok=True)
@@ -490,9 +490,9 @@ def _apply_rule(found):
     """(caratteri, descrizione) or (None, motivo) from the fonts found (see the rule at the start of the file)."""
     tmp = found["tmp"]
     if not tmp:
-        return None, "nessun font TextMeshPro"
+        return None, "no TextMeshPro font"
     if any(f["modo"] == _DYNAMIC_OS for f in tmp):
-        return None, "un font usa i font di Windows"
+        return None, "a font uses Windows fonts"
     allowed = set()
     dynamic_ones = []
     for f in tmp:
@@ -502,12 +502,12 @@ def _apply_rule(found):
             dynamic_ones.append(f)
     if dynamic_ones:
         if not found["ttf"]:
-            return None, "font dinamici senza i loro file .ttf"
+            return None, "dynamic fonts without their .ttf files"
         for t in found["ttf"]:
             allowed |= t["caratteri"]
     if _letters(allowed) < MIN_LETTERS:
-        return None, "font senza le lettere dei testi"
-    description = "%d font TextMeshPro%s" % (len(tmp), (" (%d dinamici, con %d file .ttf)" % (
+        return None, "font without the letters of the text"
+    description = "%d TextMeshPro fonts%s" % (len(tmp), (" (%d dynamic, with %d .ttf files)" % (
         len(dynamic_ones), len(found["ttf"]))) if dynamic_ones else "")
     return allowed, description
 

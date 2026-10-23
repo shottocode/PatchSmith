@@ -146,7 +146,7 @@ def names_of_game(folder, log=None):
             if variant not in output:
                 output.append(variant)
     if log and output:
-        log("  Nomi del gioco che restano come sono nella traduzione: %s" % ", ".join(output))
+        log("  Game names kept as they are in the translation: %s" % ", ".join(output))
     return output
 
 

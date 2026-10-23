@@ -192,7 +192,7 @@ def main(base):
     log_lines = []
     automatic.reapply(game, log_lines.append, test=True)
     check("modifica a mano riconosciuta (non scambiata per un aggiornamento del gioco)",
-              any("modificato a mano" in r for r in log_lines)
+              any("modified by hand" in r for r in log_lines)
               and not any(f.endswith(".patchsmith-originale.1")
                           for f in os.listdir(os.path.join(game, "Localization"))))
     automatic.restore(game, silent)

@@ -195,7 +195,7 @@ def _opts(catalog_bytes, names):
     m = _EXTRA.search(catalog_bytes)
     extra = base64.b64decode(data["m_ExtraDataString"])
     if not m or base64.b64decode(m.group(1)) != extra:
-        raise ValueError("dati extra del catalogo non trovati")
+        raise ValueError("extra data from the catalog not found")
     entries = base64.b64decode(data["m_EntryDataString"])
     ids = data["m_InternalIds"]
     wanted = {n.lower() for n in names}

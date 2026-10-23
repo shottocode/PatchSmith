@@ -30,7 +30,7 @@ def request():
 
 def check():
     if _request.is_set():
-        raise Interrupted("fermato su tua richiesta")
+        raise Interrupted("stopped at your request")
 
 
 def wait_for(seconds):
@@ -42,4 +42,4 @@ def wait_for(seconds):
         if rest <= 0:
             return
         if _request.wait(min(rest, 0.2)):
-            raise Interrupted("fermato su tua richiesta")
+            raise Interrupted("stopped at your request")

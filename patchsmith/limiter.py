@@ -37,8 +37,8 @@ MAX_FUTURE = 8 * DAY  # a farther "fino" (wrong clock, damaged file) is reduced
 FORGET_AFTER = 7 * DAY  # a week without blocks: start again from the first level
 OK_TO_RESET = 10
 NAMES = {"google": "Google", "deepl": "DeepL", "mymemory": "MyMemory"}
-LOCAL_ADVICE = ("Per continuare subito usa il traduttore locale (consigliato: nessun limite e nessun blocco) o un "
-                    "altro traduttore.")
+LOCAL_ADVICE = ("To continue right away, use the local translator (recommended: no limits and no blocks) or another "
+                "translator.")
 
 
 class Paused(Exception):
@@ -55,10 +55,10 @@ def when(instant):
     moment = datetime.datetime.fromtimestamp(instant)
     today = datetime.date.today()
     if moment.date() == today:
-        return "alle %s" % moment.strftime("%H:%M")
+        return "at %s" % moment.strftime("%H:%M")
     if moment.date() == today + datetime.timedelta(days=1):
-        return "alle %s di domani" % moment.strftime("%H:%M")
-    return "alle %s del %s" % (moment.strftime("%H:%M"), moment.strftime("%d/%m"))
+        return "at %s tomorrow" % moment.strftime("%H:%M")
+    return "at %s on %s" % (moment.strftime("%H:%M"), moment.strftime("%d/%m"))
 
 
 class _Lock:
@@ -123,7 +123,7 @@ class Limiter:
         except FileNotFoundError:
             return {"versione": 1}
         except (OSError, ValueError):
-            self._warning("  ! Stato dei traduttori illeggibile (%s): riparto da zero." % self.path)
+            self._warning("  ! Translator status unreadable (%s): starting from scratch." % self.path)
             return {"versione": 1}
 
     def _write(self, data):
@@ -141,7 +141,7 @@ class Limiter:
                 return
             except OSError:
                 time.sleep(0.1)  # antivirus or indexer holding the file: retry
-        self._warning("  ! Non riesco a salvare lo stato dei traduttori (%s): lo tengo solo in memoria." % self.path)
+        self._warning("  ! I can't save the translators' state (%s): keeping it in memory only." % self.path)
         self._in_memory = data
 
     def _warning(self, text):
@@ -194,16 +194,16 @@ class Limiter:
         if not block:
             return None
         if block.get("disattivato"):
-            return ("%s e' disattivato dopo ripetuti rifiuti (ultimo %s): usa il traduttore locale (nessun limite e "
-                    "nessun blocco) o un altro traduttore, oppure riattivalo con il pulsante 'Riattiva' accanto al "
-                    "traduttore."
+            return ("%s is disabled after repeated rejections (last %s): use the local translator (no limits and no "
+                    "blocks) or another translator, or reactivate it with the 'Reactivate' button next to the "
+                    "translator."
                     % (NAMES.get(self.service, self.service), when(block.get("dal", now))))
         if now < block.get("fino", 0) and block.get("tipo") == "quota":
-            return "%s: %s, si riprende %s." % (NAMES.get(self.service, self.service),
-                                                block.get("dettaglio") or "quota finita", when(block["fino"]))
+            return "%s: %s, resumes %s." % (NAMES.get(self.service, self.service),
+                                                block.get("dettaglio") or "quota reached", when(block["fino"]))
         if now < block.get("fino", 0):
-            return ("%s e' in pausa fino %s (blocco ricevuto %s): PatchSmith non manda richieste prima, per non "
-                    "allungarlo." % (NAMES.get(self.service, self.service), when(block["fino"]),
+            return ("%s is paused until %s (block received %s): PatchSmith won't send requests before then, so as not "
+                    "to extend it." % (NAMES.get(self.service, self.service), when(block["fino"]),
                                      when(block.get("dal", now))))
         return None
 
@@ -217,9 +217,9 @@ class Limiter:
         if not block:
             return ""
         if block.get("disattivato"):
-            return "disattivato dopo ripetuti rifiuti"
+            return "disabled after repeated rejections"
         if now < block.get("fino", 0):
-            return "in pausa fino %s" % when(block["fino"])
+            return "paused, resumes %s" % when(block["fino"])
         return ""
 
     def _wait(self, s, chars, now):
@@ -254,8 +254,8 @@ class Limiter:
                     self._write(data)
                     return
             if wait > 15 and self.log:
-                self.log("    Pausa di %s per restare nei margini prudenti di %s: riprendo %s. Puoi fermarti: il "
-                         "lavoro fatto resta salvato." % (_duration(wait), NAMES.get(self.service, self.service),
+                self.log("    Pausing for %s to stay within the safe margins of %s: resuming %s. You can stop: the "
+                         "work done stays saved." % (_duration(wait), NAMES.get(self.service, self.service),
                                                           when(self.current_time() + wait)))
             self.sleep(wait)
 
@@ -283,7 +283,7 @@ class Limiter:
                                     "tipo": "quota", "http": http, "dettaglio": detail, "disattivato": False},
                                    **(extra or {}))
                 self._write(data)
-                return "%s in pausa fino %s (%s)." % (NAMES.get(self.service, self.service), when(until), detail)
+                return "%s paused until %s (%s)." % (NAMES.get(self.service, self.service), when(until), detail)
             most_recent = s.get("ultimo_ok") and now - s["ultimo_ok"] < DAY
             successes_24h = s.get("ok_totali", 0)
             kind = "dopo_traffico" if (self.session_ok or most_recent) else "a_freddo"
@@ -298,20 +298,20 @@ class Limiter:
             self._write(data)
         name = NAMES.get(self.service, self.service)
         if disabled:
-            return ("%s ha rifiutato di nuovo le richieste: lo disattivo finche' non lo riattivi tu (pulsante "
-                    "'Riattiva' accanto al traduttore). %s" % (name, LOCAL_ADVICE))
+            return ("%s rejected the requests again: disabling it until you reactivate it ('Reactivate' button next to "
+                    "the translator). %s" % (name, LOCAL_ADVICE))
         if kind == "a_freddo":
-            return ("%s ha rifiutato la prima richiesta: non e' un limite superato, %s non accetta richieste "
-                    "automatiche da questo programma (succede a molti). Riprovare subito non serve e potrebbe "
-                    "allungare il blocco: PatchSmith non riprovera' prima %s. Le traduzioni fatte restano salvate. "
-                    "Per continuare subito usa il traduttore locale (consigliato: nessun limite e nessun blocco), "
-                    "oppure DeepL (gratis con una tua chiave, 500.000 caratteri al mese) o MyMemory (senza account)."
+            return ("%s rejected the first request: it's not an exceeded limit, %s doesn't accept automatic requests "
+                    "from this program (this happens to many). Retrying right away won't help and could extend the "
+                    "block: PatchSmith won't retry before %s. The translations done stay saved. To continue right "
+                    "away, use the local translator (recommended: no limits and no blocks), or DeepL (free with your "
+                    "own key, 500,000 characters per month) or MyMemory (no account needed)."
                     % (name, name, when(until)))
-        after = ("dopo %d richieste riuscite" % self.session_ok if self.session_ok else
-                "dopo %d richieste riuscite nelle ultime ore" % successes_24h if successes_24h else
-                "dopo le richieste riuscite delle ultime ore")
-        return ("%s ha messo in pausa le richieste %s: PatchSmith riprendera' %s, non prima. Il lavoro fatto e' "
-                "salvato. %s" % (name, after, when(until), LOCAL_ADVICE))
+        after = ("after %d successful requests" % self.session_ok if self.session_ok else
+                "after %d successful requests in the last few hours" % successes_24h if successes_24h else
+                "after the successful requests of the last few hours")
+        return ("%s has paused requests %s: PatchSmith will resume %s, not before. The work done is saved. %s"
+                % (name, after, when(until), LOCAL_ADVICE))
 
     def reset(self):
         with _Lock(self.path):
@@ -337,10 +337,10 @@ class Limiter:
 
 def _duration(seconds):
     if seconds < 90:
-        return "%d secondi" % round(seconds)
+        return "%d seconds" % round(seconds)
     if seconds < 90 * 60:
-        return "%d minuti" % round(seconds / 60)
-    return "%.1f ore" % (seconds / 3600)
+        return "%d minutes" % round(seconds / 60)
+    return "%.1f hours" % (seconds / 3600)
 
 
 def describe_duration(seconds):

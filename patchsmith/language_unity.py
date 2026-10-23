@@ -55,7 +55,7 @@ def _lz4(src, dim):
     try:
         return _lz4_block(src, dim)
     except IndexError as e:
-        raise UnityLanguageError("LZ4 non valido") from e
+        raise UnityLanguageError("LZ4 is invalid") from e
 
 
 def _lz4_block(src, dim):
@@ -88,14 +88,14 @@ def _lz4_block(src, dim):
         length += 4
         start = len(out) - off
         if off <= 0 or start < 0:
-            raise UnityLanguageError("LZ4 non valido")
+            raise UnityLanguageError("LZ4 is invalid")
         if off >= length:
             out += out[start:start + length]
         else:
             for k in range(length):
                 out.append(out[start + k])
     if len(out) != dim:
-        raise UnityLanguageError("LZ4: dimensione inattesa")
+        raise UnityLanguageError("LZ4: Unexpected size")
     return out
 
 
@@ -109,7 +109,7 @@ def _decompress(data, kind, dim):
         return lzma.decompress(data[5:], format=lzma.FORMAT_RAW, filters=filter_)[:dim]
     if kind in (2, 3):
         return _lz4(data, dim)
-    raise UnityLanguageError("compressione %d non supportata" % kind)
+    raise UnityLanguageError("compression %d not supported" % kind)
 
 
 def _open_bundle(path):
@@ -118,7 +118,7 @@ def _open_bundle(path):
         head = f.read(512)
         p = head.index(b"\0")
         if head[:p] != b"UnityFS":
-            raise UnityLanguageError("non e' un bundle UnityFS")
+            raise UnityLanguageError("this is not a UnityFS bundle")
         p += 1
         version = struct.unpack_from(">I", head, p)[0]
         p += 4
@@ -432,7 +432,7 @@ def write_pref_string(company, product, key, text):
         winreg.SetValueEx(k, pref_name(key), 0, winreg.REG_BINARY, text.encode("utf-8") + b"\x00")
     was_read = read_pref(company, product, key)
     if not was_read or was_read[1] != text.encode("utf-8") + b"\x00":
-        raise UnityLanguageError("la preferenza scritta non si rilegge uguale")
+        raise UnityLanguageError("the written preference doesn't read back the same")
 
 
 def restore_pref(company, product, key, previous, written):

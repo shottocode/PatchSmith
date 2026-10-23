@@ -383,7 +383,7 @@ def extract_texts(root, log=None):
             if is_shown_text(g) if is_shown else is_ui_text(g):
                 found.setdefault(normalize(g), None)
     if log and large:
-        log("  ! %d file del gioco web troppo grandi, non letti per i menu (oltre %d MB): %s" % (
+        log("  ! %d web game files too large, not read for the menus (over %d MB): %s" % (
             len(large), MAX_SIZE // (1024 * 1024), ", ".join(large[:3])))
     return list(found)
 

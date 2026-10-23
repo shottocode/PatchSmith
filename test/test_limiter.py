@@ -137,7 +137,7 @@ def main(base):
               len(opener.requests) == 1 and not network_waits and sum(clock.expectations) < 10)
     check("... blocco 'a freddo' ricordato per 24 ore, messaggio onesto (non 'troppe richieste')",
               state["tipo"] == "a_freddo" and abs(state["fino"] - state["dal"] - 86400) < 1
-              and "non e' un limite superato" in message and "troppe richieste" not in message)
+              and "it's not an exceeded limit" in message and "too many requests" not in message)
     lim2, _ = fake_limiter(base, name="blocco.json", clock=clock)
     opener2 = Opener(google_echo, clock)
     try:
@@ -146,7 +146,7 @@ def main(base):
     except backend.Blocked as e:
         pause = str(e)
     check("persistenza: un nuovo avvio durante la pausa non manda nessuna richiesta e dice fino a quando",
-              not opener2.requests and "in pausa fino" in pause)
+              not opener2.requests and "is paused until" in pause)
     clock.t += 86400 + 1
     check("dopo la pausa si riprova", backend.GoogleFree(log=silent, opener=opener2, limiter=lim2)
               .translate_lines(["hello"], "en", "it") == ["[it] hello"])
@@ -283,14 +283,14 @@ def main(base):
     check("DeepL: codici delle lingue (zh-TW, pt-BR, en)",
               backend._deepl_language("zh-TW", True) == "ZH-HANT" and backend._deepl_language("pt-BR", True) == "PT-BR"
               and backend._deepl_language("en", True) == "EN-US" and backend._deepl_language("zh-CN", False) == "ZH")
-    for code, text in ((456, "finito"), (403, "chiave")):
+    for code, text, expected_text in ((456, "finito", "used up"), (403, "chiave", "doesn't accept the key")):
         try:
             backend.DeepL("x:fx", log=silent, opener=Opener(lambda r, c=code: http_error(c), clock),
                           limiter=lim).translate_lines(["one"], "en", "it")
             message = ""
         except backend.BackendError as e:
             message = str(e)
-        check("DeepL %d: messaggio chiaro (%s)" % (code, text), text in message)
+        check("DeepL %d: messaggio chiaro (%s)" % (code, text), expected_text in message)
     sequence = [http_error(429, header={"Retry-After": "2"}), None]
 
     def first_429(req):
@@ -333,7 +333,7 @@ def main(base):
     except backend.Blocked as e:
         message = str(e)
     check("MyMemory: caratteri del giorno finiti -> stop chiaro e pausa fino a domani",
-              "domani" in message and lim.pause() is not None)
+              "tomorrow" in message and lim.pause() is not None)
 
     # --- 13. credentials from settings.json
     with open(os.path.join(project.PROJECT_FOLDER, "settings.json"), "w", encoding="utf-8") as f:
@@ -362,9 +362,9 @@ def main(base):
     p.translate_texts(texts, backend.GoogleFree(log=silent, opener=opener, limiter=lim), "en", "it")
     check("progetto: gruppi da una richiesta ciascuno (circa 3.600 caratteri), stima mostrata prima",
               # ("  testi " lines: detail, only on disk)
-              len(opener.requests) == len([r for r in lines if r.lstrip("").startswith("  testi ")])
+              len(opener.requests) == len([r for r in lines if r.lstrip("").startswith("  texts ")])
               and all(len(urllib.parse.parse_qs(r.data.decode())["q"][0]) <= 4000 for r in opener.requests)
-              and any("Richieste previste" in r and "tempo stimato" in r for r in lines))
+              and any("Expected requests" in r and "estimated time" in r for r in lines))
 
     class Damager(backend.Backend):
         name = "rovina"
@@ -400,7 +400,7 @@ def main(base):
     except backend.BackendError as e:
         message = str(e)
     check("DeepL: chiave incollata con un a capo ripulita; caratteri strani -> errore senza mostrarla",
-              clean_deepl.key == "abcd-1234efgh:fx" and "non validi" in message and "SEGRETA" not in message)
+              clean_deepl.key == "abcd-1234efgh:fx" and "invalid characters" in message and "SEGRETA" not in message)
 
     def broken_urlopen(req, timeout):
         raise ValueError("Invalid header value b'DeepL-Auth-Key abcd-SEGRETA:fx'")
@@ -432,7 +432,7 @@ def main(base):
         message = ""
     except backend.BackendError as e:
         message = str(e)
-    check("Google: risposta in un formato inatteso -> stop con messaggio", "formato inatteso" in message)
+    check("Google: risposta in un formato inatteso -> stop con messaggio", "unexpected format" in message)
 
     # MyMemory: quota used up halfway through a group -> the lines already translated stay in the translation memory
     lim, clock = fake_limiter(base, "mymemory", name="mm-quota.json")
@@ -458,14 +458,14 @@ def main(base):
     p.translate_texts(["frase lunga numero %d con parecchie parole dentro" % i for i in range(150)],
                     backend.MyMemory(None, log=silent, opener=Opener(mymemory, clock), limiter=lim), "en", "it")
     check("MyMemory: richieste previste = una per riga, avviso se si supera la quota del giorno",
-              any("Richieste previste: circa 150" in r for r in lines)
-              and any("al giorno" in r for r in lines))
+              any("Expected requests: about 150" in r for r in lines)
+              and any("per day" in r for r in lines))
     lim, clock = fake_limiter(base, name="messaggio.json")
     lim.before_request(10)
     lim.ok()
     clock.t += 3 * 3600
     lim2, _ = fake_limiter(base, name="messaggio.json", clock=clock)
-    check("messaggio di blocco senza 'dopo 0 traduzioni'", "dopo 0" not in lim2.blocked(429))
+    check("messaggio di blocco senza 'dopo 0 traduzioni'", "after 0" not in lim2.blocked(429))
 
     from patchsmith import cli
     cli_profile = os.path.join(project.PROJECT_FOLDER, "profilo-cli.json")
@@ -486,19 +486,19 @@ def main(base):
         asked.append(req.full_url)
         return Response(json.dumps({"character_count": 1234, "character_limit": 500000}).encode())
     ok, message = backend.verify_translator("deepl", "abc-123:fx", opener=Opener(fake_usage))
-    check("Verifica DeepL: chiave buona -> consumo del mese (1.234 su 500.000), con /v2/usage",
-              ok and "1.234" in message and "500.000" in message and asked == ["https://api-free.deepl.com/v2/usage"])
+    check("Verifica DeepL: chiave buona -> consumo del mese (1,234 su 500,000), con /v2/usage",
+              ok and "1,234" in message and "500,000" in message and asked == ["https://api-free.deepl.com/v2/usage"])
     ok, message = backend.verify_translator("deepl", "sbagliata:fx", opener=Opener(lambda r: http_error(403)))
-    check("Verifica DeepL: chiave rifiutata -> spiegato (HTTP 403)", not ok and "non accetta la chiave" in message)
+    check("Verifica DeepL: chiave rifiutata -> spiegato (HTTP 403)", not ok and "doesn't accept the key" in message)
     ok, message = backend.verify_translator("mymemory", "nome@", opener=Opener(lambda r: 1 / 0))
-    check("Verifica MyMemory: email scritta male -> detto subito, senza rete", not ok and "non sembra" in message)
+    check("Verifica MyMemory: email scritta male -> detto subito, senza rete", not ok and "doesn't seem" in message)
     response_mm = Response(json.dumps({"responseStatus": 200, "responseData": {"translatedText": "Ciao"}}).encode())
     ok, message = backend.verify_translator("mymemory", "nome@esempio.it", opener=Opener(lambda r: response_mm))
     check("Verifica MyMemory: email accettata -> 50.000 caratteri al giorno, nessun account",
-              ok and "50.000" in message)
+              ok and "50,000" in message)
     ok, message = backend.verify_translator("mymemory", "", opener=Opener(lambda r: OSError("rete")))
     check("Verifica MyMemory senza rete: spiegato, niente eccezioni",
-              not ok and ("connessione" in message or "non risponde" in message))
+              not ok and ("connection" in message or "not responding" in message))
 
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRISULTATO: %d/%d controlli superati" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))

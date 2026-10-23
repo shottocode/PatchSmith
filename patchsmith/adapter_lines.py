@@ -99,7 +99,7 @@ class LinesFile:
         try:
             text = data_bytes.decode("utf-8")
         except UnicodeDecodeError as e:
-            raise LinesError("il file non e' UTF-8: %s" % e) from e
+            raise LinesError("the file is not UTF-8: %s" % e) from e
         self.bom = text.startswith(BOM)
         if self.bom:
             text = text[1:]
@@ -120,20 +120,20 @@ class LinesFile:
                 body, end = _split_end(lines[i])
                 m = _ID_TEXT.match(body)
                 if not m or "\n" in new or "\r" in new:
-                    raise LinesError("traduzione non valida per la riga %d" % (i + 1))
+                    raise LinesError("translation not valid for row %d" % (i + 1))
                 lines[i] = m.group(1) + m.group(2) + new + end
             else:
                 _, i, j = pos
                 new_lines = new.split("\n")
                 if len(new_lines) != j - i or any("\r" in r for r in new_lines):
-                    raise LinesError("la traduzione delle righe %d-%d ha un numero di righe diverso" % (i + 1, j))
+                    raise LinesError("the translation of lines %d-%d has a different number of lines" % (i + 1, j))
                 for k, r in enumerate(new_lines):
                     lines[i + k] = r + _split_end(lines[i + k])[1]
         data = ((BOM if self.bom else "") + "".join(lines)).encode("utf-8")
         checks = LinesFile(data)
         if (checks.mode, checks.shape) != (self.mode, self.shape) or \
                 [p for p, _ in checks.units] != [p for p, _ in self.units]:
-            raise LinesError("la struttura del file cambierebbe: non scrivo")
+            raise LinesError("the file structure would change: I'm not writing")
         return data
 
     def serialize(self, replacements):

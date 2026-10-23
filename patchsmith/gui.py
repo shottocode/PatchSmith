@@ -37,23 +37,22 @@ SETTINGS_VERSION = 2
 # Translator used by the interface. The "finto" test translator is only available from the command line
 # (--backend finto) and for the automatic tests (App.forced_backend).
 DEFAULT_BACKEND = "locale"  # fallback: the real default is backend.default()
-TRANSLATORS = {"locale": "Traduttore locale (sul tuo PC)", "google": "Google gratuito (non ufficiale)",
-              "deepl": "DeepL (con la tua chiave gratuita)", "mymemory": "MyMemory (gratuito)"}
-GOOGLE_WARNING = ("Google gratuito usa l'indirizzo del traduttore web di Google, che non è fatto per i programmi: "
-                 "Google può rifiutare le richieste dopo poche frasi (da alcuni PC già dalla prima) e bloccarle "
-                 "per ore.\n\n"
-                 "Quando succede PatchSmith si ferma da solo, mette in pausa Google e salva quello che ha già "
-                 "tradotto; accanto al traduttore compare fino a quando dura la pausa. Se poi scegli un altro "
-                 "traduttore, \"Analizza e traduci\" riparte da dove eri arrivato: traduce solo le frasi che mancano.\n\n"
-                 "Per tradurre un gioco intero conviene il traduttore locale (sul tuo PC, nessun limite) oppure "
-                 "DeepL con la tua chiave gratuita.")
-LOCAL_MODELS = {"4b": "Veloce (4B)", "12b": "Qualità (12B, più lento)"}
+TRANSLATORS = {"locale": "Local translator (on your PC)", "google": "Free Google (unofficial)",
+              "deepl": "DeepL (with your free key)", "mymemory": "MyMemory (free)"}
+GOOGLE_WARNING = ("Free Google uses the address of Google's web translator, which isn't made for programs: Google can "
+                  "reject requests after a few phrases (from some PCs, from the very first) and block them for "
+                  "hours.\n\nWhen this happens, PatchSmith stops on its own, pauses Google and saves what it has "
+                  "already translated; next to the translator you'll see until when the pause lasts. If you then "
+                  'choose another translator, "Analyze and translate" resumes from where you had got to: it only '
+                  "translates the missing phrases.\n\nFor translating an entire game, it's best to use a local "
+                  "translator (on your PC, with no limits) or DeepL with your free key.")
+LOCAL_MODELS = {"4b": "Fast (4B)", "12b": "Quality (12B, slower)"}
 # the preliminary checks (automatic.preflight_checks): title and type of the dialog
-PREFLIGHT_WINDOWS = {"GIOCO_APERTO": ("Il gioco è aperto", "avviso"), "LINGUA": ("Lingua da controllare", "avviso"),
-                        "SOLA_LETTURA": ("Cartella del gioco protetta", "errore"),
-                        "SPAZIO": ("Poco spazio libero", "avviso"), "TRADUTTORE_IN_PAUSA": ("Traduttore in pausa", "avviso"),
-                        "LOCALE_ASSENTE": ("Traduttore locale da installare", "domanda"),
-                        "STESSO_GIOCO": ("Stesso gioco già tradotto?", "domanda")}
+PREFLIGHT_WINDOWS = {"GIOCO_APERTO": ("The game is open", "avviso"), "LINGUA": ("Language to check", "avviso"),
+                        "SOLA_LETTURA": ("Protected game folder", "errore"),
+                        "SPAZIO": ("Low free space", "avviso"), "TRADUTTORE_IN_PAUSA": ("Translator paused", "avviso"),
+                        "LOCALE_ASSENTE": ("Local translator to install", "domanda"),
+                        "STESSO_GIOCO": ("Same game already translated?", "domanda")}
 _STOPPED = object()  # result of a work stopped with the "Stop" button
 MAX_LOGS = 30  # operation logs kept on disk (the oldest are deleted)
 
@@ -191,14 +190,14 @@ class App:
         frame.pack(fill="both", expand=True)
         frame.columnconfigure(1, weight=1)
 
-        ttk.Label(frame, text="Cartella del gioco:").grid(row=0, column=0, sticky="w")
+        ttk.Label(frame, text="Game folder:").grid(row=0, column=0, sticky="w")
         self.folder = tk.StringVar(value=prefs.get("cartella", ""))
         # only from "Browse…": no paths typed by hand (wrong or half-typed); the text can be copied
         self.folder_entry = ttk.Entry(frame, textvariable=self.folder, state="readonly")
         self.folder_entry.grid(row=0, column=1, sticky="ew", padx=6)
         # as wide as the column (that is, as "Create report"): the right edges are all aligned; as tall as the
         # folder field
-        self.btn_browse = ttk.Button(frame, text="Sfoglia…", style="Campo.TButton", command=self._browse)
+        self.btn_browse = ttk.Button(frame, text="Browse…", style="Campo.TButton", command=self._browse)
         self.btn_browse.grid(row=0, column=2, sticky="nsew")
         # flag: interface language (the languages are the files in patchsmith/ui_language/)
         self._flags = {c: ui.flag(c, root) for c in ui.languages()}
@@ -227,15 +226,15 @@ class App:
         self.bottom.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         check_row = self.check_row = ttk.Frame(self.bottom)
         self.check_status = tk.StringVar(value="")
-        self.btn_details = ttk.Button(check_row, text="Dettagli ultima partita",
+        self.btn_details = ttk.Button(check_row, text="Last session details",
                                        command=self._check_details)
         # lines translated while playing that need redoing: the check on opening does not re-translate them on its
         # own (loading the local translator or waiting for Google's pauses would block the window), this button does
-        self.btn_retranslate = ttk.Button(check_row, text="Ritraduci", command=self._retranslate)
+        self.btn_retranslate = ttk.Button(check_row, text="Re-translate", command=self._retranslate)
 
         options = ttk.Frame(frame)
         options.grid(row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
-        ttk.Label(options, text="Da:").pack(side="left")
+        ttk.Label(options, text="From:").pack(side="left")
         # languages only from the list; a saved language that is not there (old settings) goes back to the default
         source_items, target_items = language.labels(with_auto=True), language.labels()
         # (in the menus the language names are in the interface language: from there _code goes back to the code)
@@ -245,7 +244,7 @@ class App:
                                                         else language.label(language.AUTO)))
         ttk.Combobox(options, textvariable=self.src_lang, values=source_items, state="readonly",
                      width=22).pack(side="left", padx=(4, 12))
-        ttk.Label(options, text="A:").pack(side="left")
+        ttk.Label(options, text="To:").pack(side="left")
         a = language.label(prefs.get("a") or language.windows_language())
         self.a = tk.StringVar(value=ui.translate(a if a in target_items else
                                                         language.label(language.windows_language())))
@@ -256,7 +255,7 @@ class App:
 
         services = ttk.Frame(frame)
         services.grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
-        ttk.Label(services, text="Traduttore:").pack(side="left")
+        ttk.Label(services, text="Translator:").pack(side="left")
         self.deepl_key = prefs.get("chiave_deepl", "")
         self.email_mymemory = prefs.get("email_mymemory", "")
         from . import ollama
@@ -273,10 +272,10 @@ class App:
         self.credential = tk.StringVar()
         self.credential_entry = ttk.Entry(services, textvariable=self.credential, width=30)
         # tests the DeepL key or the MyMemory email right away, without waiting for "Analyze and translate"
-        self.btn_verify = ttk.Button(services, text="Verifica", command=self._verify_credential)
+        self.btn_verify = ttk.Button(services, text="Check", command=self._verify_credential)
         self._warned_google = False
         self.translator_status = ttk.Label(services, text="", style="Stato.TLabel")
-        self.btn_reactivate = ttk.Button(services, text="Riattiva", command=self._reactivate)
+        self.btn_reactivate = ttk.Button(services, text="Reactivate", command=self._reactivate)
         # the model: the saved one, otherwise the best one already downloaded; with neither, the one suited to the
         # graphics card is proposed (ollama.recommended_model, looked up in the background: _suggest_model)
         self._model_chosen = prefs.get("modello_locale") in LOCAL_MODELS
@@ -288,7 +287,7 @@ class App:
         self.model_choice = ttk.Combobox(services, textvariable=self.local_model,
                                            values=list(LOCAL_MODELS.values()), state="readonly", width=22)
         self.model_choice.bind("<<ComboboxSelected>>", lambda _e: self._choose_model())
-        self.btn_install = ttk.Button(services, text="Installa…", command=self._install_local)
+        self.btn_install = ttk.Button(services, text="Install…", command=self._install_local)
         self._change_translator(first=True)
         self.root.after(60_000, lambda: self._update_service_status(repeat=True))
         if not self._model_chosen and not any(ollama.model_present(k) for k in LOCAL_MODELS):
@@ -297,14 +296,14 @@ class App:
 
         buttons = ttk.Frame(frame)
         buttons.grid(row=4, column=0, columnspan=3, sticky="ew", pady=10)
-        self.btn_translate = ttk.Button(buttons, text="Analizza e traduci", command=self._translate)
+        self.btn_translate = ttk.Button(buttons, text="Analyze and translate", command=self._translate)
         self.btn_translate.pack(side="left")
-        self.btn_fix = ttk.Button(buttons, text="Correggi traduzioni…", command=self._fix)
+        self.btn_fix = ttk.Button(buttons, text="Fix translations…", command=self._fix)
         self.btn_fix.pack(side="left", padx=6)
-        self.btn_restore = ttk.Button(buttons, text="Ripristina originali", command=self._restore)
+        self.btn_restore = ttk.Button(buttons, text="Restore originals", command=self._restore)
         self.btn_restore.pack(side="right")
         # enabled only while an operation is running: it stops at the first safe point (translations saved)
-        self.btn_stop = ttk.Button(buttons, text="Ferma", command=self._stop)
+        self.btn_stop = ttk.Button(buttons, text="Stop", command=self._stop)
         self.btn_stop.pack(side="right", padx=6)
         self.btn_stop.state(["disabled"])
         # disabled while a work is running: never two works at once (nor translator changes halfway)
@@ -331,12 +330,12 @@ class App:
         self.status_label = ttk.Label(self.bottom, textvariable=self.state, style="Stato.TLabel")
         self.status_label.pack(side="left")
         # while the game is open with its translator on (see _watch_live)
-        self.btn_stop_live = ttk.Button(self.bottom, text="Ferma il traduttore del gioco",
+        self.btn_stop_live = ttk.Button(self.bottom, text="Stop the game translator",
                                          command=self._stop_live)
         self._live_on = None  # name of the game with the translator on, the last time it was checked
         self._journal_read = {}  # game -> how far its journal has already been summarized in the log
         # logs, settings (without key or email) and useful files in a zip on the Desktop, to send to whoever helps
-        self.btn_report = ttk.Button(frame, text="Crea rapporto", command=self._create_report)
+        self.btn_report = ttk.Button(frame, text="Create report", command=self._create_report)
         self.btn_report.grid(row=7, column=2, sticky="e", pady=(6, 0))
         self.buttons.append(self.btn_report)
 
@@ -350,9 +349,9 @@ class App:
     def _close(self):
         """Do not close halfway through an installation or a write to the game's files."""
         if self.work is not None and self.work.is_alive():
-            if not theme.ask(self.root, self.colors, "Operazione in corso",
-                               "PatchSmith sta ancora lavorando sui file del gioco.\n"
-                               "Se chiudi adesso l'operazione resta a metà. Chiudere comunque?"):
+            if not theme.ask(self.root, self.colors, "Operation in progress",
+                               "PatchSmith is still working on the game files.\nIf you close now, the operation is "
+                               "left half-done. Close anyway?"):
                 return
         self._save_settings()  # chosen translator, key/email, folder and languages: found again on reopening
         music.stop()
@@ -380,11 +379,11 @@ class App:
                   self.btn_reactivate, self.model_choice, self.btn_install):
             w.pack_forget()
         if self._chosen == "deepl":
-            self.credential_label.configure(text="Chiave DeepL:")
+            self.credential_label.configure(text="DeepL key:")
             self.credential.set(self.deepl_key)
             self.credential_entry.configure(show="•")
         elif self._chosen == "mymemory":
-            self.credential_label.configure(text="Email (facoltativa):")
+            self.credential_label.configure(text="Email (optional):")
             self.credential.set(self.email_mymemory)
             self.credential_entry.configure(show="")
         if self._chosen in ("deepl", "mymemory"):
@@ -398,7 +397,7 @@ class App:
             self._save_settings()
         if just_chosen and self._chosen == "google" and not self._warned_google:
             self._warned_google = True
-            theme.warn(self.root, self.colors, "Google gratuito: può bloccarsi", GOOGLE_WARNING)
+            theme.warn(self.root, self.colors, "Free Google: it may get blocked", GOOGLE_WARNING)
 
     def _verify_credential(self):
         """"Check" button: the DeepL key or the MyMemory email, in the background (one small request)."""
@@ -407,14 +406,15 @@ class App:
         if name == "deepl":
             self.deepl_key = value_
             if not value_:
-                theme.warn(self.root, self.colors, "Chiave DeepL", "Incolla prima la tua chiave DeepL nel campo "
-                            "accanto. Si crea gratis con un account \"DeepL API Free\" (500.000 caratteri al mese).")
+                theme.warn(self.root, self.colors, "DeepL key", "First, paste your DeepL key in the field next to "
+                                                                   'it. You can get one for free with a "DeepL API '
+                                                                   'Free" account (500,000 characters per month).')
                 return
         elif name == "mymemory":
             self.email_mymemory = value_
         self._save_settings()
         self.btn_verify.state(["disabled"])
-        self.btn_verify.configure(text="Verifico…")
+        self.btn_verify.configure(text="Checking…")
 
         def _work():
             self.tail.put(("verifica", (name, verify_translator(name, value_))))
@@ -423,9 +423,9 @@ class App:
 
     def _finish_verify(self, name, result):
         self.btn_verify.state(["!disabled"])
-        self.btn_verify.configure(text="Verifica")
+        self.btn_verify.configure(text="Check")
         ok, message = result
-        title_text = {"deepl": "Chiave DeepL", "mymemory": "MyMemory"}.get(name, "Verifica")
+        title_text = {"deepl": "DeepL key", "mymemory": "MyMemory"}.get(name, "Check")
         if ok:
             theme.inform(self.root, self.colors, title_text, message)
         else:
@@ -473,19 +473,19 @@ class App:
             return
         recommendation = ""
         if self._model_recommendation and not ollama.model_present(selected[0]):
-            recommendation = "\n\n%s Ora è scelto \"%s\"; per l'altro sceglilo nel menu accanto e premi di nuovo " \
-                        "\"Installa…\"." % (self._model_recommendation[1], LOCAL_MODELS[selected[0]])
+            recommendation = ('\n\n%s "%s" is selected now; for the other one, select it in the menu next to it and '
+                              'press "Install…" again.' % (self._model_recommendation[1], LOCAL_MODELS[selected[0]]))
         try:
             slow = ollama.performance_warning()
         except Exception:  # noqa: BLE001 - only a warning: it must not prevent the installation
             slow = ""
-        text = ("Per il traduttore locale servono questi download, salvati in %s:\n\n- %s\n\nNessun limite e "
-                 "nessun blocco: dopo l'installazione traduce anche senza internet.%s%s\n\nProcedo?"
-                 % (ollama.folder(), "\n- ".join(lines), recommendation, "\n\nAttenzione: " + slow if slow else ""))
-        if theme.ask(self.root, self.colors, "Installare il traduttore locale?", text):
+        text = ("The local translator needs these downloads, saved in %s:\n\n- %s\n\nNo limits, no restrictions: after "
+                "installation, it translates even without an internet connection.%s%s\n\nShall I proceed?"
+                 % (ollama.folder(), "\n- ".join(lines), recommendation, "\n\nWarning: " + slow if slow else ""))
+        if theme.ask(self.root, self.colors, "Install the local translator?", text):
             self._then = then
             a = self._target_lang()
-            self._start("Installazione del traduttore locale", lambda _c: self._install_and_test(selected, a),
+            self._start("Installing the local translator", lambda _c: self._install_and_test(selected, a),
                         stoppable=True, needs_folder=False, operation="installa")
 
     def _install_and_test(self, selected, a="it"):
@@ -493,8 +493,8 @@ class App:
         (backend.probe_local) goes to the status line at the bottom."""
         from . import backend, ollama
         ollama.install(selected, self._log)
-        self._log("Prova del traduttore locale: traduco \"Start game\" (la prima volta il modello si carica nella "
-                  "scheda video: può volerci un minuto)…")
+        self._log('Testing the local translator: translating "Start game" (the first time, the model loads into the '
+                  "graphics card: it can take a minute)…")
         result = backend.probe_local(selected[0], self._log, a=a)
         self._log(("  " if result["ok"] else "  ! ") + result["messaggio"])
         return result
@@ -511,7 +511,7 @@ class App:
             is_ready = ollama.installed() and ollama.model_present(self._model_key())
             slow = is_ready and (self._local_probe or {}).get("scheda") == 0  # the test: processor only
             # installed: no text (only the warning if it uses the processor); otherwise "to install" with "Install…"
-            text = ("lento: senza scheda video" if slow else "") if is_ready else "da installare"
+            text = ("slow: without a graphics card" if slow else "") if is_ready else "to install"
             self.translator_status.configure(text=text)
             if text:
                 self.translator_status.pack(side="left")
@@ -532,9 +532,9 @@ class App:
     def _reactivate(self):
         from .limiter import NAMES, Limiter
         name = NAMES.get(self._chosen, self._chosen)
-        if theme.ask(self.root, self.colors, "Riattivare %s?" % name,
-                       "%s ha rifiutato piu' volte le richieste. Se lo riattivi e continua a rifiutarle, insistere "
-                       "puo' allungare il blocco. Riattivare?" % name):
+        if theme.ask(self.root, self.colors, "Reactivate %s?" % name,
+                       "%s has rejected the requests several times. If you reactivate it and it keeps rejecting them, "
+                       "insisting may extend the block. Reactivate?" % name):
             Limiter(self._chosen, log=None).reset()
             self._update_service_status()
 
@@ -676,8 +676,8 @@ class App:
         if code == self.ui_lang:
             return
         if self._busy():
-            theme.warn(self.root, self.colors, "Operazione in corso", "Aspetta che l'operazione finisca, poi "
-                        "cambia la lingua.")
+            theme.warn(self.root, self.colors, "Operation in progress",
+                       "Wait for the process to finish, then change the language.")
             return
         # the choices of the drop-down menus as codes, before their labels change
         src_lang, a, model = (self._language_code(self.src_lang.get()), self._language_code(self.a.get()),
@@ -741,7 +741,7 @@ class App:
                 pass
         now = datetime.datetime.now()
         try:
-            header = "PatchSmith %s - %s - %s\nCartella: %s\nTraduttore: %s, lingue: %s -> %s\n" % (
+            header = "PatchSmith %s - %s - %s\nFolder: %s\nTranslator: %s, languages: %s -> %s\n" % (
                 __version__, description, now.strftime("%Y-%m-%d %H:%M:%S"), folder or "-", self._backend(),
                 self._language_code(self.src_lang.get()), self._target_lang())
         except Exception:  # noqa: BLE001 - the header must not prevent the log
@@ -816,8 +816,8 @@ class App:
         text = "".join(traceback.format_exception(kind, value_, tb))
         is_open = self._log_file is not None
         if not is_open:
-            self._open_log("", "Errore nell'interfaccia", "interfaccia")
-        self._write_log("ERRORE IMPREVISTO NELL'INTERFACCIA (%s: %s)\n%s" % (kind.__name__, value_, text))
+            self._open_log("", "Error in the interface", "interfaccia")
+        self._write_log("UNEXPECTED INTERFACE ERROR (%s: %s)\n%s" % (kind.__name__, value_, text))
         if not is_open:
             self._close_log()
         if self._in_error or not issubclass(kind, Exception):
@@ -827,7 +827,7 @@ class App:
             e = Outcome("ERRORE", str(value_).strip(), actions=["crea_rapporto"],
                       extra={"imprevisto": True, "tipo": kind.__name__})
             self.last_outcome = e
-            self.state.set("Errore imprevisto: %s" % kind.__name__)
+            self.state.set("Unexpected error: %s" % kind.__name__)
             self._show_window(e, "interfaccia")
         except Exception:  # noqa: S110 - an error here too: it is already in the log, no further attempt
             pass
@@ -843,7 +843,7 @@ class App:
         if self._busy():  # one work at a time: reset() would cancel a "Stop" still in progress
             return
         if needs_folder and (not folder or not os.path.isdir(folder)):
-            theme.warn(self.root, self.colors, "Cartella mancante", "Scegli una cartella del gioco valida.")
+            theme.warn(self.root, self.colors, "Missing folder", "Choose a valid game folder.")
             return
         self._check_code()
         self._operation = operation
@@ -868,7 +868,7 @@ class App:
                 self.tail.put(("fine", (description, _STOPPED, None)))
             except Exception as e:  # the error must be shown to the user, it must not close the app
                 # the technical detail (traceback) only in the log on disk: it is for whoever helps, not for the player
-                self._write_log("ERRORE (%s: %s)\n%s" % (type(e).__name__, e, traceback.format_exc()))
+                self._write_log("ERROR (%s: %s)\n%s" % (type(e).__name__, e, traceback.format_exc()))
                 self.tail.put(("fine", (description, None, e)))
 
         self.work = threading.Thread(target=_run, daemon=True)
@@ -877,8 +877,8 @@ class App:
     def _stop(self):
         interruption.request_stop()
         self.btn_stop.state(["disabled"])
-        self.state.set("Mi fermo appena possibile (le traduzioni fatte restano salvate)…")
-        self._log("Richiesta di fermarsi: mi fermo al primo punto sicuro.")
+        self.state.set("Stopping as soon as possible (the translations done so far stay saved)…")
+        self._log("Stop requested: stopping at the first safe point.")
 
     def _finish(self, description, result, error):
         # at the end of an operation the first dialog plays a sound (if sounds are on; not the check on opening)
@@ -900,29 +900,29 @@ class App:
         if operation == "installa":
             then, self._then = self._then, None
         if result is _STOPPED:
-            if description.startswith("Installazione"):
-                self.state.set(description + ": fermata. 'Installa…' riprende lo scaricamento da dove era.")
+            if description.startswith("Installing"):
+                self.state.set(description + ": stopped. 'Install…' resumes the download where it left off.")
             else:
-                self.state.set(description + ": fermato. Le traduzioni fatte sono salvate: 'Analizza e traduci' "
-                                             "riprende da li'.")
-            self._log("Fermato.")
+                self.state.set(description + ": stopped. The translations done are saved: 'Analyze and translate' "
+                                             "resumes from there.")
+            self._log("Stopped.")
             self._close_log()
             return
         if error:
             e = outcomes.from_exception(error)
             if getattr(error, "from_scratch", False):  # "Start over" did not start (see _translate)
                 e.extra["from_scratch"] = True
-            self._log("ERRORE imprevisto (%s): %s" % (type(error).__name__, error) if e.extra.get("imprevisto")
-                      else "ERRORE: %s" % error)
+            self._log("Unexpected error (%s): %s" % (type(error).__name__, error) if e.extra.get("imprevisto")
+                      else "ERROR: %s" % error)
             if getattr(error, "command", None):
-                self._write_log("(da riga di comando: %s)" % error.command)
+                self._write_log("(from command line: %s)" % error.command)
             self._write_log(e.summary())
             self._close_log()
             self.last_outcome = e
             self.state.set("%s: %s" % (description, outcomes.STATE[e.code]))
             if operation == "controlla" and self._auto_check:  # on opening: no error dialogs
-                self.check_status.set("Controllo dopo l'ultima partita non riuscito (i dettagli sono nel registro): "
-                                         "puoi creare un rapporto.")
+                self.check_status.set("Check after the last session failed (the details are in the log): you can "
+                                      "create a report.")
                 return
             self._show_window(e, operation)
             return
@@ -941,25 +941,25 @@ class App:
             self._close_log()
             self._local_probe = result
             self._update_service_status()
-            self.state.set("Traduttore locale installato: %s" % result["messaggio"])
+            self.state.set("Local translator installed: %s" % result["messaggio"])
             if then and result.get("ok"):  # again the operation that was waiting for the local translator
                 self.root.after(100, then)
             elif not result.get("ok"):  # after downloads of a few GB the bottom line is not enough
-                text = "Il traduttore locale è installato, ma %s" % result["messaggio"]
+                text = "The local translator is installed, but %s" % result["messaggio"]
                 if then:
-                    text += ("\n\nPer questo l'operazione che aspettava il traduttore non è partita: premi di nuovo "
-                              "il suo pulsante per riprovare.")
-                if "rapporto" not in text:
-                    text += "\n\nSe succede ancora, crea un rapporto (pulsante in basso a destra)."
-                theme.warn(self.root, self.colors, "Prova del traduttore locale non riuscita", text)
+                    text += ("\n\nThat's why the operation that was waiting for the translator didn't start: press its "
+                             "button again to try again.")
+                if "report" not in text:
+                    text += "\n\nIf it happens again, create a report (button in the bottom right)."
+                theme.warn(self.root, self.colors, "Local translator test failed", text)
             return
         if operation == "rapporto" and result:
-            self.state.set("Rapporto creato: %s" % result)
-            choice = theme.choose(self.root, self.colors, "Rapporto creato",
-                                 "Ho creato il rapporto:\n%s\n\nContiene i registri e le impostazioni utili per "
-                                 "capire cosa è successo, senza la chiave DeepL e senza l'email. Puoi inviarlo a chi "
-                                 "ti aiuta con PatchSmith." % result,
-                                 [("OK", None), ("Apri la cartella", "apri")])
+            self.state.set("Report created: %s" % result)
+            choice = theme.choose(self.root, self.colors, "Report generated",
+                                 "I've created the report:\n%s\n\nIt contains the logs and settings that will help you "
+                                 "understand what happened, without the DeepL key or your email address. You can send "
+                                 "it to whoever is helping you with PatchSmith." % result,
+                                 [("OK", None), ("Open the folder", "apri")])
             if choice == "apri":
                 show_file(result)
             return
@@ -969,7 +969,7 @@ class App:
             self._show_outcome(description, result)
             return
         self._close_log()
-        self.state.set(description + ": completato.")
+        self.state.set(description + ": completed.")
 
     def _local_ready(self):
         from . import ollama
@@ -995,33 +995,34 @@ class App:
         if e.code == "UFFICIALE" and x.get("lingua_ufficiale"):  # official language present (official_language.py)
             lines = x.get("righe") or [e.reason]
             if x.get("serve_consenso"):
-                self.state.set("Il gioco ha gia' la lingua ufficiale: serve il tuo consenso per attivarla.")
-                if theme.ask(self.root, self.colors, "Attivare la lingua del gioco?",
-                               "\n\n".join(lines) + "\n\nProcedo? (Te lo chiedo solo questa volta per "
-                               "questo gioco.)"):
+                self.state.set("The game already has its official language: you need to give your consent to activate "
+                               "it.")
+                if theme.ask(self.root, self.colors, "Activate the game's language?",
+                               "\n\n".join(lines) + "\n\nShall I proceed? (I'm only asking you this once, specifically "
+                                                    "for this game.)"):
                     self._translate(force=x.get("force", False), consent=True)
                 return
             if not x.get("supportato", True):
-                self.state.set("Lingua ufficiale attivata." if x.get("impostata") else
-                               "Il gioco ha gia' la lingua ufficiale.")
-                theme.inform(self.root, self.colors, "Lingua ufficiale", "\n\n".join(lines))
+                self.state.set("Official language activated." if x.get("impostata") else
+                               "The game already has its official language.")
+                theme.inform(self.root, self.colors, "Official language", "\n\n".join(lines))
                 return
-            self.state.set("Il gioco ha gia' la lingua ufficiale.")
+            self.state.set("The game already has its official language.")
             if theme.ask(
-                self.root, self.colors, "Lingua ufficiale disponibile",
-                "\n\n".join(lines) + "\n\nVuoi comunque una traduzione automatica?"
-                " (di solito non serve: quella ufficiale è migliore)",
+                self.root, self.colors, "Official language available",
+                "\n\n".join(lines) + "\n\nDo you still want an automatic translation? (Usually, this isn't necessary: "
+                                     "the official one is better)",
             ):
                 self._translate(force=x.get("force", False), translate_anyway=True)
             return
         if e.code == "NON_SUPPORTATO" and "sperimentale" in e.actions:
             self.state.set("%s: %s" % (description, outcomes.STATE[e.code]))
             choice = theme.choose(
-                self.root, self.colors, "Motore non ancora supportato",
-                "Il motore di questo gioco (%s) non è ancora supportato in automatico.\n\n"
-                "Ho però trovato file con testo. Vuoi provare a tradurli in modo sperimentale?\n"
-                "(Viene fatto comunque il backup degli originali.)" % x.get("motore_rilevato", "non riconosciuto"),
-                [("Sì", "sperimentale"), ("No", None), ("Crea rapporto", "crea_rapporto")], "domanda")
+                self.root, self.colors, "Engine not yet supported",
+                "This game's engine (%s) is not supported automatically yet.\n\nHowever, I found files with text. "
+                "Would you like to try translating them experimentally?\n(The original files are still backed up, "
+                "though.)" % x.get("motore_rilevato", "not recognized"),
+                [("Yes", "sperimentale"), ("No", None), ("Create report", "crea_rapporto")], "domanda")
             if choice == "sperimentale":
                 self._translate(force=True, translate_anyway=x.get("translate_anyway", False))
             else:
@@ -1045,20 +1046,20 @@ class App:
         if enable is None:
             return
         choice = theme.choose(
-            self.root, self.colors, "Traduzione mentre giochi",
-            "Le frasi trovate adesso sono già tradotte. Mentre giochi, PatchSmith può tenere acceso il suo traduttore "
-            "per tradurre anche le frasi nuove che compaiono (la prima volta in inglese per un attimo).\n\n"
-            "Si avvia con il gioco e si chiude da solo quando chiudi il gioco. Usa la scheda video (circa 3 GB di "
-            "memoria) solo per il tempo in cui giochi. Mentre è acceso, qui sotto vedi ogni tanto cosa ha tradotto e "
-            "puoi fermarlo con un pulsante.\n\nLo tengo acceso?",
-            [("Sì, tienilo acceso", True), ("No, solo le traduzioni salvate", False)], "domanda")
+            self.root, self.colors, "Translation while playing",
+            "The phrases found now are already translated. While you play, PatchSmith can keep its translator on to "
+            "also translate the new phrases that appear (the first time they show in English for a moment).\n\nIt "
+            "starts with the game and closes on its own when you close the game. It uses the graphics card (about 3 GB "
+            "of memory) only while you play. While it's on, below you'll see from time to time what it has translated, "
+            "and you can stop it with a button.\n\nKeep it on?",
+            [("Yes, keep it on", True), ("No, only the saved translations", False)], "domanda")
         if choice is None:  # dialog closed: it stays as it was
             return
         if choice != enable:
             try:
                 automatic.set_live(folder, choice, self._log)
             except Exception as ex:  # noqa: BLE001 - the translation is already in the game: say so and go on
-                self._log("! Non ho potuto %s la traduzione mentre giochi (%s): riprova con 'Analizza e traduci'."
+                self._log("! I couldn't %s the translation while you play (%s): try again with 'Analyze and translate'."
                           % ("accendere" if choice else "spegnere", ex))
                 return
         if not choice:
@@ -1070,7 +1071,7 @@ class App:
         try:
             self._check_live()
         except Exception as e:  # noqa: BLE001 - only a help: it must never disturb the window
-            self._write_log("(sorveglianza del traduttore del gioco: %s: %s)" % (type(e).__name__, e))
+            self._write_log("(game translator monitoring: %s: %s)" % (type(e).__name__, e))
         finally:
             self.root.after(5000, self._watch_live)
 
@@ -1089,14 +1090,14 @@ class App:
             if not self.btn_stop_live.winfo_manager():
                 self.btn_stop_live.pack(side="left", padx=(0, 10), before=self.status_label)
             if self._live_on != name:
-                self._log("Il gioco è aperto con il traduttore di PatchSmith acceso: qui vedi ogni tanto le frasi "
-                          "nuove che traduce.")
+                self._log("The game is open with the PatchSmith translator on: here you'll see, every now and then, "
+                          "the new phrases it translates.")
         else:
             self.btn_stop_live.pack_forget()
         if name:
             self._summarize_journal(name)
         if self._live_on and not is_on:
-            self._log("Il traduttore del gioco si è chiuso (gioco chiuso o fermato).")
+            self._log("The game translator has closed (game closed or stopped).")
         self._live_on = name if is_on else None
 
     def _summarize_journal(self, name):
@@ -1128,20 +1129,20 @@ class App:
                 remaining_count += 1
         if not new_lines and not remaining_count:
             return
-        text = "Mentre giochi: %s" % _fixed_label(len(new_lines), "frase nuova tradotta", "frasi nuove tradotte")
+        text = "While playing: %s" % _fixed_label(len(new_lines), "new phrase translated", "new phrases translated")
         if new_lines:
             example = new_lines[-1]
-            text += " (es. \"%s\" → \"%s\")" % (" ".join(example[0].split())[:50], " ".join(example[1].split())[:50])
+            text += ' (e.g., "%s" → "%s")' % (" ".join(example[0].split())[:50], " ".join(example[1].split())[:50])
         if remaining_count:
-            text += ", %s in originale" % _fixed_label(remaining_count, "rimasta", "rimaste")
+            text += ", %s untranslated" % _fixed_label(remaining_count, "left", "left")
         self._log(text)
 
     def _stop_live(self):
         folder = self.folder.get().strip().strip('"')
         profile, _active = automatic.live_translation(folder)
         if profile and xunity_service.stop(profile.get("nome", "")):
-            self._log("Traduttore del gioco fermato: le frasi nuove restano in originale fino al prossimo avvio del "
-                      "gioco (scheda video libera).")
+            self._log("Game translator stopped: new phrases remain in the original language until the next time you "
+                      "start the game (graphics card free).")
         self.btn_stop_live.pack_forget()
         self._live_on = None
 
@@ -1154,9 +1155,9 @@ class App:
             # that game
             self.folder.set(os.path.normpath(e.extra["cartella"]))
         if action == "mostra_rimasti":
-            choice = theme.choose(self.root, self.colors, "Testi rimasti in originale", outcomes.remaining_text(e),
-                                 [("OK", None), ("Correggi traduzioni", "correggi"),
-                                  ("Crea rapporto", "crea_rapporto")])
+            choice = theme.choose(self.root, self.colors, "Texts left untranslated", outcomes.remaining_text(e),
+                                 [("OK", None), ("Fix translations", "correggi"),
+                                  ("Create report", "crea_rapporto")])
             self._action(choice, e)
         elif action == "correggi":  # the window with the right list (left untranslated, not written to the game)
             self._fix(outcomes.fixes_filter(e))
@@ -1197,7 +1198,7 @@ class App:
     # --- actions -------------------------------------------------------------------------------
 
     def _browse(self):
-        choice = filedialog.askdirectory(title="Cartella del gioco", initialdir=self.folder.get() or None)
+        choice = filedialog.askdirectory(title="Game folder", initialdir=self.folder.get() or None)
         if choice:
             self.folder.set(os.path.normpath(choice))
 
@@ -1216,21 +1217,22 @@ class App:
             found = automatic.preflight_checks(folder, backend, operation, self._language_code(self.src_lang.get()),
                                                        self._target_lang())
         except Exception as e:  # noqa: BLE001 - a check that fails must not prevent working
-            self._log("  ! Controlli prima di partire non riusciti (%s: %s): parto lo stesso." % (type(e).__name__, e))
+            self._log("  ! Pre-start checks failed (%s: %s): starting anyway." % (type(e).__name__, e))
             return {"riusa": None}
         choices = {"riusa": None}
         for p in found:
-            title_text, kind = PREFLIGHT_WINDOWS.get(p.code, ("Prima di partire", "avviso"))
+            title_text, kind = PREFLIGHT_WINDOWS.get(p.code, ("Before starting", "avviso"))
             buttons = {
-                "riprova": [("Riprova", "riprova"), ("Annulla", None)],
-                "continua": [("Annulla", None), ("Continua comunque", "continua")],
-                "usa_locale": [("Usa il traduttore locale", "usa_locale"), ("Continua comunque", "continua"),
-                               ("Annulla", None)],
+                "riprova": [("Try again", "riprova"), ("Cancel", None)],
+                "continua": [("Cancel", None), ("Continue anyway", "continua")],
+                "usa_locale": [("Use the local translator", "usa_locale"), ("Continue anyway", "continua"),
+                               ("Cancel", None)],
                 # (continuing without: the official language needs no translating, and without a translator Analyze
                 # and translate stops before changing the game)
-                "installa_locale": [("Installa il traduttore locale" if p.code != "LOCALE_ASSENTE" else "Installa ora",
-                                     "installa_locale"), ("Continua comunque", "continua"), ("Annulla", None)],
-                "riusa": [("Sì, riusale", "riusa"), ("No, traduci da capo", "da_capo"), ("Annulla", None)],
+                "installa_locale": [("Install the local translator" if p.code != "LOCALE_ASSENTE" else "Install now",
+                                     "installa_locale"), ("Continue anyway", "continua"), ("Cancel", None)],
+                "riusa": [("Yes, use them again", "riusa"), ("No, translate from scratch", "da_capo"),
+                          ("Cancel", None)],
             }.get(p.action, [("OK", None)])
             self.state.set("%s: %s" % (title_text, p.message.split("\n")[0][:120]))
             choice = theme.choose(self.root, self.colors, title_text, p.message, buttons, kind)
@@ -1248,7 +1250,7 @@ class App:
             if choice == "riusa":
                 choices["riusa"] = p.data.get("profilo")
             elif choice not in ("continua", "da_capo"):  # Cancel, OK of a problem that stops, dialog closed
-                self.state.set("%s: non avviato." % title_text)
+                self.state.set("%s: Not started." % title_text)
                 return None
         return choices
 
@@ -1286,7 +1288,7 @@ class App:
 
         self._retry = repeat
         self._translate_choices = {"force": force, "translate_anyway": translate_anyway}
-        self._start("Analisi e traduzione", _work, stoppable=True, operation="traduci")
+        self._start("Analysis and translation", _work, stoppable=True, operation="traduci")
 
     def _reapply(self):
         test = self._backend() == "finto"
@@ -1302,11 +1304,12 @@ class App:
             return e
 
         self._retry = self._reapply
-        self._start("Riapplicazione", _work, operation="riapplica")
+        self._start("Reapplying", _work, operation="riapplica")
 
     def _restore(self, ask=True):
-        if ask and not theme.ask(self.root, self.colors, "Ripristina", "Rimettere i file originali del "
-                                      "gioco?\nLe traduzioni restano salvate: \"Analizza e traduci\" le rimette subito."):
+        if ask and not theme.ask(self.root, self.colors, "Restore", "Restore the original game files?\nYour "
+                                                                       'translations are saved. "Analyze and '
+                                                                       'translate" will restore them instantly.'):
             return
         if self._preflight("ripristina", lambda: self._restore(ask=False)) is None:
             return
@@ -1317,7 +1320,7 @@ class App:
             return outcome.get("esito") or Outcome("OK" if done else "PARZIALE")
 
         self._retry = lambda: self._restore(ask=False)
-        self._start("Ripristino", _work, operation="ripristina")
+        self._start("Restoring", _work, operation="ripristina")
 
     def _create_report(self, e=None):
         """Zip on the Desktop with logs, game profile, settings without key or email and useful files of the game. If
@@ -1329,15 +1332,15 @@ class App:
         last, chosen = e if e is not None else self.last_outcome, self._chosen
 
         def _work(folder):
-            extra = ["Traduttore scelto: %s" % chosen]
+            extra = ["Selected translator: %s" % chosen]
             try:
                 return report.create(folder, report.desktop_folder(), outcome=last, extra=extra)
             except OSError as e:
-                self._log("  ! Non riesco a scrivere il rapporto sul Desktop (%s): lo metto nella cartella dei "
-                          "registri di PatchSmith." % e)
+                self._log("  ! I can't write the report to the Desktop (%s): I'm putting it in PatchSmith's logs "
+                          "folder." % e)
                 return report.create(folder, logs_folder(), outcome=last, extra=extra)
 
-        self._start("Creazione del rapporto", _work, needs_folder=False, operation="rapporto", keep_log=False)
+        self._start("Creating the report", _work, needs_folder=False, operation="rapporto", keep_log=False)
 
     # --- after-play check ----------------------------------------------------------------------
 
@@ -1348,7 +1351,7 @@ class App:
             try:
                 found = checks.to_check()
             except Exception as e:  # noqa: BLE001 - it must never prevent using PatchSmith
-                self._log("  ! Controllo dopo l'ultima partita non riuscito (%s: %s)" % (type(e).__name__, e))
+                self._log("  ! Check after the last session failed (%s: %s)" % (type(e).__name__, e))
                 found = []
             self.tail.put(("controllo", found))
 
@@ -1366,11 +1369,11 @@ class App:
             self._show_last_check()
             return
         if self.work is not None:  # meanwhile you already started an operation: the check starts afterwards
-            if not self.check_status.get().startswith("Ci sono novità"):  # (only one line in the log)
-                self._log("Ci sono novità dopo l'ultima partita (%s): le controllo appena finisce l'operazione in "
-                          "corso." % _fixed_label(len(found), "gioco", "giochi"))
-            self.check_status.set("Ci sono novità dopo l'ultima partita (%s): le controllo appena finisce "
-                                     "l'operazione in corso." % _fixed_label(len(found), "gioco", "giochi"))
+            if not self.check_status.get().startswith("There's something new"):  # (only one line in the log)
+                self._log("There's something new after the last session (%s): I'll check it as soon as the current "
+                          "operation finishes." % _fixed_label(len(found), "game", "games"))
+            self.check_status.set("There's something new after the last session (%s): I'll check it as soon as the "
+                                  "current operation finishes." % _fixed_label(len(found), "game", "games"))
             if getattr(self, "_pending_check", None):
                 self.root.after_cancel(self._pending_check)
             self._pending_check = self.root.after(2000, lambda: self._start_initial_check(found))
@@ -1404,9 +1407,9 @@ class App:
             if profiles is None:
                 path = automatic.find_profile(folder)
                 if not path:
-                    self._log("Per questa cartella non c'e' nessuna traduzione di PatchSmith da controllare.")
-                    return [Outcome("NULLA_DA_FARE", "Per questa cartella non c'è nessuna traduzione di PatchSmith da "
-                                  "controllare: usa prima \"Analizza e traduci\".")]
+                    self._log("There is no PatchSmith translation to check for this folder.")
+                    return [Outcome("NULLA_DA_FARE", "There is no PatchSmith translation to check for this folder: use "
+                                                     '"Analyze and translate" first.')]
                 items = [path]
             else:
                 items = profiles
@@ -1419,7 +1422,7 @@ class App:
                 except interruption.Interrupted:
                     raise
                 except Exception as e:  # noqa: BLE001 - a game that cannot be checked does not stop the others
-                    self._write_log("ERRORE (%s: %s)\n%s" % (type(e).__name__, e, traceback.format_exc()))
+                    self._write_log("ERROR (%s: %s)\n%s" % (type(e).__name__, e, traceback.format_exc()))
                     problems = [checks.error_problem(e)]
                 results.append(checks.as_outcome(problems, path))
             return results
@@ -1428,7 +1431,7 @@ class App:
             return
         self._auto_check = at_open
         self._retry = lambda: self._check(profiles, at_open=False)  # "Try again": with the dialog at the end
-        self._start("Controllo dopo aver giocato", _work, stoppable=True, needs_folder=profiles is None,
+        self._start("Check after playing", _work, stoppable=True, needs_folder=profiles is None,
                     operation="controlla", log_name="controllo" if profiles is not None else None)
 
     def _update_check_line(self, last=False):
@@ -1443,24 +1446,24 @@ class App:
         fixed_count = sum(e.extra.get("corretti", 0) for e in self.check_outcomes)
         to_do = sum(e.extra.get("da_fare", 0) for e in self.check_outcomes)
         if len(self.check_outcomes) == 1:
-            text = "%s %s: " % ("All'ultimo controllo di" if last else "Dopo l'ultima partita a",
-                                 self.check_outcomes[0].extra.get("gioco", "il gioco"))
+            text = "%s %s: " % ("At the last check of" if last else "After the last session of",
+                                 self.check_outcomes[0].extra.get("gioco", "the game"))
         else:
-            text = "Dopo l'ultima partita (%s): " % _fixed_label(len(self.check_outcomes), "gioco", "giochi")
+            text = "After the last session (%s): " % _fixed_label(len(self.check_outcomes), "game", "games")
         if with_problems:
             self.btn_details.pack(side="left")
         if fixed_count or to_do:
-            text += "%s, %s" % (_fixed_label(fixed_count, "problema corretto", "problemi corretti"),
-                                 _fixed_label(to_do, "da fare", "da fare"))
+            text += "%s, %s" % (_fixed_label(fixed_count, "problem fixed", "problems fixed"),
+                                 _fixed_label(to_do, "to do", "to do"))
         else:
-            text += "nessun problema"
+            text += "no problem"
         if any(e.code == "GIOCO_APERTO" for e in self.check_outcomes):
-            text += " (alcune correzioni appena il gioco è chiuso)"
+            text += " (Some fixes will be applied right after the game closes)"
         self.check_status.set(text)
         profiles, sentences = self._to_retranslate()
         if profiles:
-            self.btn_retranslate.configure(text="Ritraduci %s" % _fixed_label(sentences, "frase", "frasi")
-                                           if sentences else "Ritraduci le frasi")
+            self.btn_retranslate.configure(text="Re-translate %s" % _fixed_label(sentences, "phrase", "phrases")
+                                           if sentences else "Re-translate the phrases")
             self.btn_retranslate.pack(side="left", padx=(6, 0) if with_problems else 0)
         self._show_check_line()
 
@@ -1514,9 +1517,9 @@ class App:
         current = code_fingerprint()
         if current != self._code or (current[0] and current[0] != __version__):
             self._warned_code = True
-            theme.warn(self.root, self.colors, "PatchSmith è stato aggiornato",
-                        "PatchSmith è stato aggiornato mentre questa finestra era aperta: chiudi PatchSmith e riaprilo, "
-                        "altrimenti continui a usare la versione di prima.")
+            theme.warn(self.root, self.colors, "PatchSmith has been updated",
+                        "PatchSmith has been updated while this window was open: please close and reopen PatchSmith, "
+                        "otherwise you will continue to use the older version.")
 
     # --- fix translations (gui_corrections.py) ---------------------------------------------------------------
 
@@ -1532,28 +1535,29 @@ class App:
         except Exception:  # noqa: BLE001 - damaged game profile: as if untranslated (Analyze and translate says so)
             path = None
         if not path:
-            theme.inform(self.root, self.colors, "Nessuna traduzione", "Per questa cartella non ci sono ancora "
-                         "traduzioni: usa prima \"Analizza e traduci\".")
+            theme.inform(self.root, self.colors, "No translation", "There are no translations for this folder yet: "
+                                                                       'use "Analyze and translate" first.')
             return None
         try:
             items = corrections.load(path, test=self._backend() == "finto", log=self._log)
         except (OSError, ValueError, KeyError, RuntimeError) as e:
-            reason = ("Il file delle traduzioni di questo gioco è rovinato (forse è stato modificato a mano con un "
-                      "errore) e non si legge." if isinstance(e, RuntimeError) and "JSON" in str(e) else
-                      "Non riesco a leggere le traduzioni di questo gioco (%s)." % e)
+            reason = ("The translation file for this game is corrupted (possibly manually edited with an error) and is "
+                      "unreadable." if isinstance(e, RuntimeError) and "JSON" in str(e) else
+                      "I can't read this game's translations (%s)." % e)
             # the detail goes to the interface log (outside an operation none is open) and to the
             # outcome: "Create report" below must be about this, not about the last operation
             is_open = self._log_file is not None
             if not is_open:
-                self._open_log("", "Correggi traduzioni", "interfaccia")
-            self._write_log("Correggi traduzioni non aperta (%s: %s)" % (type(e).__name__, e))
+                self._open_log("", "Fix translations", "interfaccia")
+            self._write_log("Fix translations did not open (%s: %s)" % (type(e).__name__, e))
             if not is_open:
                 self._close_log()
             self.last_outcome = Outcome("ERRORE", reason, actions=["crea_rapporto"])
-            choice = theme.choose(self.root, self.colors, "Traduzioni non leggibili", reason + "\n\nPuoi aprire il "
-                                 "file e correggerlo a mano (avanzato), oppure creare un rapporto da inviare a chi ti "
-                                 "aiuta con PatchSmith.", [("OK", None), ("Apri il file (avanzato)", "apri"),
-                                                            ("Crea rapporto", "crea_rapporto")], "errore")
+            choice = theme.choose(self.root, self.colors, "Unreadable translations",
+                                  reason + "\n\nYou can open the file and edit it manually (advanced), or create a "
+                                           "report to send to whoever is helping you with PatchSmith.",
+                                  [("OK", None), ("Open the file (advanced)", "apri"),
+                                   ("Create report", "crea_rapporto")], "errore")
             if choice == "apri":
                 self._open_translations_file()
             elif choice:
@@ -1569,27 +1573,27 @@ class App:
         except Exception:  # noqa: BLE001 - as without a file
             path = None
         if not path or not os.path.exists(path):
-            theme.inform(self.root, self.colors, "Nessuna traduzione", "Per questa cartella non ci sono ancora "
-                         "traduzioni.")
+            theme.inform(self.root, self.colors, "No translation", "There are currently no translations for this "
+                                                                       "folder.")
             return
         theme.inform(
-            self.root, self.colors, "Apri il file delle traduzioni",
-            "Si apre il file delle traduzioni: a sinistra il testo originale, a destra la traduzione.\n"
-            "Modifica solo il testo a destra, salva il file e poi premi \"Analizza e traduci\".\n\n"
-            "Di solito è più comodo \"Correggi traduzioni…\", che controlla anche i segnaposto e le lunghezze.")
+            self.root, self.colors, "Open the translation file",
+            "The translation file opens: on the left, the original text, on the right, the translation.\nOnly edit the "
+            'text on the right, save the file and then press "Analyze and translate".\n\n"Fix translations…" is '
+            "usually more convenient, as it also checks placeholders and lengths.")
         try:
             _open(path)
         except OSError as e:
-            theme.warn(self.root, self.colors, "File non aperto", "Non riesco ad aprire il file (%s). Lo trovi "
-                        "qui:\n%s" % (e.strerror or e, path))
+            theme.warn(self.root, self.colors, "File not opened", "I can't open the file (%s). You can find it "
+                                                                  "here:\n%s" % (e.strerror or e, path))
             show_file(path)
 
     def _after_fixes(self, how_many):
         """Fixes saved in the "Fix translations" window: they are written to the game on their own, with "Reapply"
         (first the checks: if the game is open, "Try again" once you have closed it)."""
-        self._log("Correggi traduzioni: %s salvate, le scrivo nel gioco." % _fixed_label(how_many, "correzione",
-                                                                                    "correzioni"))
-        self.state.set("Correzioni salvate: le scrivo nel gioco…")
+        self._log("Fix translations: %s saved, writing them into the game." % _fixed_label(how_many, "fix",
+                                                                                    "fixes"))
+        self.state.set("Corrections saved: writing them into the game…")
         self._reapply()
 
     def _retranslate_fixes(self, texts=None, model=None):
@@ -1609,7 +1613,7 @@ class App:
             return outcome.get("esito") or Outcome("OK" if done else "PARZIALE")
 
         self._retry = self._reapply  # (the new translations are already saved: "Try again" writes them to the game)
-        self._start("Ritraduzione", _work, stoppable=True, operation="ritraduci")
+        self._start("Re-translation", _work, stoppable=True, operation="ritraduci")
 
     def _install_12b_and_retranslate(self):
         """"Re-translate everything with Quality (12B)" without the model: the local translator's Quality model is

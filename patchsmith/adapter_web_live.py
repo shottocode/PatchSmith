@@ -80,7 +80,7 @@ def install(folder, profile_path, profile_name, src_lang, a, translations, log=p
     from . import project
     preload = suitable(folder)
     if not preload:
-        raise ValueError("questo gioco non permette la traduzione dal vivo (preload.js isolato o assente)")
+        raise ValueError("this game does not support live translation (preload.js is isolated or absent)")
     app = os.path.dirname(preload)
     with open(preload, "rb") as f:
         current = f.read()
@@ -109,9 +109,9 @@ def install(folder, profile_path, profile_name, src_lang, a, translations, log=p
     if fingerprint not in info.get("hash_scritti", []):
         info["hash_scritti"] = (info.get("hash_scritti") or [])[-(project.MAX_FINGERPRINTS - 1):] + [fingerprint]
         project.save_info(preload, info)
-    log("  Traduzione dal vivo installata in %s (con backup): %d traduzioni gia' pronte%s" % (
-        os.path.relpath(preload, folder), len(dictionary), ", le altre arrivano mentre giochi" if active else
-        " (traduttore mentre giochi spento)"))
+    log("  Live translation installed in %s (with backup): %d translations ready%s" % (
+        os.path.relpath(preload, folder), len(dictionary), ", the others arrive as you play" if active else
+        " (translator while playing: off)"))
     if not os.path.exists(command["programma"]) and sys.platform.startswith("win"):
-        log("  ! Non trovo Python (%s): le frasi nuove resteranno in originale" % command["programma"])
+        log("  ! I can't find Python (%s): the new phrases will stay untranslated" % command["programma"])
     return len(dictionary)

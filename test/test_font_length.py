@@ -114,14 +114,15 @@ def test_font(base):
               names == [("Testi SDF", None), ("Titoli SDF", 0)] and found["completa"])
     allowed, reason = font_unity.allowed_chars(game_data)
     check("regola: un carattere va bene se almeno un font lo ha (à da uno, ü dall'altro), è no",
-              allowed is not None and {"à", "ü"} <= allowed and "è" not in allowed and "2 font" in reason)
+              allowed is not None and {"à", "ü"} <= allowed and "è" not in allowed
+              and "2 TextMeshPro fonts" in reason)
     # dynamic font: its .ttf counts
     dynamic = os.path.join(base, "dinamico")
     fake.il2cpp_game(dynamic, {"fonts_assets_all.bundle": fake.bundle([("CAB-d", fake.font_file(
         [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)], [("Corpo", ASCII + "àèéìòù")]))])})
     allowed, reason = font_unity.allowed_chars(os.path.join(dynamic, "Gioco_Data"))
     check("font dinamico: valgono anche i caratteri del suo .ttf (è si disegna)",
-              allowed is not None and "è" in allowed and "dinamici" in reason)
+              allowed is not None and "è" in allowed and "dynamic" in reason)
     without_ttf = os.path.join(base, "senza-ttf")
     fake.il2cpp_game(without_ttf, {"fonts_assets_all.bundle": fake.bundle([("CAB-d", fake.font_file(
         [("Corpo SDF", "", 1), ("Pixel SDF", ASCII, 0)]))])})
@@ -179,13 +180,13 @@ def test_unity_localization(base):
     check("font senza è: nella tabella è diventa e' (é resta: il font ce l'ha); in memoria resta è; la tabella "
               "francese non si tocca", texts[3] == "La porta e' chiusa. Trova prima la chiave, perché serve."
               and read_json(memory)[EN[3]].startswith("La porta è") and fingerprint(os.path.join(folder, TABLE_FR))
-              == fr_before and any("non hanno" in r and "è" in r and "é" not in r for r in lines))
+              == fr_before and any("don't have" in r and "è" in r and "é" not in r for r in lines))
     problems = read_json(project.problems_path(read_json(profile), test=True))
     check("un carattere che non si puo' adattare (→): resta l'originale, in problemi.json con il carattere da "
               "non usare; l'esito lo dice (testo adattato e traduzione scartata)",
               texts[4] == EN[4] and problems.get(EN[4], {}).get("dove") == "gioco"
               and "→" in problems[EN[4]].get("non_usare", "") and d["esito"].extra.get("adattate_font") == 1
-              and "è diventa e'" in "\n".join(outcome._attempts_text(d["esito"])))
+              and '"è" becomes "e"' in "\n".join(outcome._attempts_text(d["esito"])))
     # characters the game said it cannot draw (Unity's log): they count even if the font has them
     p = read_json(profile)
     p["caratteri_mancanti"] = "é"
@@ -316,7 +317,7 @@ def test_log(base):
     font = next((p for p in problems if p.code == "FONT_MANCANTI"), None)
     check("controllo in sola lettura: lettere mancanti trovate (si correggerebbero da sole), nulla scritto",
               font is not None and font.state == "da_correggere" and "«è»" in font.message
-              and "Una frase con quelle lettere" in font.message and snapshot(base) == whole
+              and "One sentence with those letters" in font.message and snapshot(base) == whole
               and "caratteri_mancanti" not in read_json(path))
     problems = checks.check(path, apply=True, log=silent)
     font = next((p for p in problems if p.code == "FONT_MANCANTI"), None)
@@ -366,13 +367,13 @@ def test_log(base):
         adapter_unity.xunity_cache_entries = real
     check("errore imprevisto nel controllo delle lettere: solo una riga nel registro, gli altri problemi restano",
               ok and any(p.code == "CONFIGURAZIONE" for p in problems)
-              and any("lettere dei font non riuscito" in r for r in log_lines))
+              and any("Font letter check failed" in r for r in log_lines))
     # an earlier configuration (WriteUnityLog off): the check puts it back
     write(cfg, "[Logging.Disk]\nWriteUnityLog = false\n")
     problems = checks.check(path, apply=False, log=silent)
     conf = next((p for p in problems if p.code == "CONFIGURAZIONE"), None)
     check("installazione di prima con WriteUnityLog spento: il controllo lo riaccende (CONFIGURAZIONE)",
-              conf is not None and "WriteUnityLog" in conf.detail and "lettere mancanti" in conf.message)
+              conf is not None and "WriteUnityLog" in conf.detail and "letters missing" in conf.message)
     # BepInEx.cfg with non-UTF-8 bytes (a comment written by hand): it is switched on all the same, the rest stays
     # the same
     with open(cfg, "wb") as f:
@@ -552,7 +553,7 @@ def test_length(base):
     items = corrections.load(path)
     entry = next(x for x in items.entries if x.text == "Main Menu")
     check("'Correggi traduzioni': nell'elenco 'Troppo lunghi' con il testo originale",
-              "lunghi" in entry.problems and "troppo lunga" in entry.problems["lunghi"]
+              "lunghi" in entry.problems and "too long" in entry.problems["lunghi"]
               and entry in items.apply_filter("lunghi"))
     # fixed by hand: not asked again
     p = Project(path, silent)
@@ -584,14 +585,14 @@ def test_length(base):
     e = outcome.Outcome(code="OK", extra={"accorciate": 2, "troppo_lunghe": 1})
     text = "\n".join(outcome._attempts_text(e))
     check("esito: etichette accorciate e quella ancora lunga, con 'Correggi traduzioni' > 'Troppo lunghi'",
-              "2 etichette erano troppo lunghe per lo spazio che hanno" in text
-              and "Un'etichetta potrebbe uscire" in text
+              "2 labels were too long for their space" in text
+              and "A label might not fit" in text
               and outcome.to_fix(e) and outcome.fixes_filter(e) == "lunghi")
     singular = "\n".join(outcome._attempts_text(outcome.Outcome(code="OK", extra={"accorciate": 1})))
     check("esito con un'etichetta sola: 'lo spazio che ha nel gioco' (non 'che hanno')",
-              "Un'etichetta era troppo lunga per lo spazio che ha nel gioco: l'ho chiesta più corta." in singular)
+              "A label was too long for its space in the game: I asked for a shorter one." in singular)
     check("'Correggi traduzioni': il motivo si legge bene (caratteri e spazio)",
-              "troppo lunga: 21 caratteri, di solito ce ne stanno circa 17" in entry.problems["lunghi"])
+              "too long: 21 characters, usually about 17 fit" in entry.problems["lunghi"])
     # noted with an online translator, then with the local one: asked shorter once
     _without_shared()
     path4 = _profile(base, "etichette-poi-locale")
@@ -624,7 +625,7 @@ def test_length(base):
     remaining = p8.translate_texts(texts, Broken(), "en", "it")
     check("errore imprevisto mentre si accorciano le etichette: traduzione finita, traduzioni salvate, una riga "
               "nel registro", remaining == 0 and p8.memory["Credits"] == "Riconoscimenti"
-              and any("etichette piu' corte non riuscite" in r for r in log_lines))
+              and any("shorter labels failed" in r for r in log_lines))
 
 
 class ServerPrompt:

@@ -112,7 +112,7 @@ def main(base):
     r = official_language.detect(steam_game, "it")
     lines = official_language.message(r, "it")
     check("Steam: italiano ufficiale e selezionabile -> istruzioni per il menu Lingua di Steam",
-              r["presente"] and r["selezionabile_steam"] and any("Generali > Lingua" in x for x in lines))
+              r["presente"] and r["selezionabile_steam"] and any("General > Language" in x for x in lines))
 
     # --- folder outside Steam, recognized by the executable (the demo does not count)
     outside = os.path.join(base, "Fuori")
@@ -123,7 +123,7 @@ def main(base):
     r = official_language.detect(outside, "it")
     check("fuori da Steam: italiano ufficiale segnalato, senza istruzioni Steam per la cartella",
               r["presente"] and r["steam"] is None and
-              any("non e' un'installazione di Steam" in x for x in official_language.message(r, "it")))
+              any("isn't a Steam installation" in x for x in official_language.message(r, "it")))
 
     # --- Unreal: game with Italian, setting and restore in GameUserSettings.ini
     project.PROJECT_FOLDER = os.path.join(base, "patchsmith")
@@ -158,7 +158,7 @@ def main(base):
     check("Unreal: niente traduzione automatica, lingua impostata", path is None and outcome.get("lingua_ufficiale")
               and b"Language=it-IT" in open(gus, "rb").read() and official_language.is_set(ue))
     check("Unreal: messaggio con quello che e' stato fatto",
-              any("Ho impostato" in x for x in outcome.get("lingua_ufficiale_righe", [])))
+              any("I have set" in x for x in outcome.get("lingua_ufficiale_righe", [])))
     automatic.restore(ue, silent)
     check("Unreal: ripristino identico e registro tolto", open(gus, "rb").read() == original_gus
               and not official_language.is_set(ue))

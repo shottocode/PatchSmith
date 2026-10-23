@@ -4,16 +4,16 @@
 
 ## Lingua dell'interfaccia
 
-I testi del programma sono scritti in italiano nel codice; ogni altra lingua è un file `patchsmith/ui_language/<codice>.json`:
+I testi del programma sono scritti in inglese nel codice; ogni altra lingua è un file `patchsmith/ui_language/<codice>.json`, per esempio l'italiano:
 
 ```json
-{"nome": "English", "bandiera": {"tipo": "gb"}, "testi": {"Crea rapporto": "Create report", "Motore: %s": "Engine: %s"}}
+{"nome": "Italiano", "bandiera": {"verticali": ["#009246", "#ffffff", "#ce2b37"]}, "testi": {"Create report": "Crea rapporto", "Engine: %s": "Motore: %s"}}
 ```
 
-- La traduzione avviene quando la finestra mostra un testo: pulsanti, etichette, titoli, menu, finestre di dialogo e righe del registro. Una voce con `%s`, `%d`... vale per tutte le righe di quella forma (`"Tradotti %d di %d"` traduce "Tradotti 400 di 1654"), e i pezzi di testo dentro si traducono a loro volta. Quello che non è nel file resta in italiano; il registro salvato su disco resta in italiano.
+- La traduzione avviene quando la finestra mostra un testo: pulsanti, etichette, titoli, menu, finestre di dialogo e righe del registro. Una voce con `%s`, `%d`... vale per tutte le righe di quella forma (`"Translated %d of %d"` traduce "Translated 400 of 1654"), e i pezzi di testo dentro si traducono a loro volta. Quello che non è nel file resta in inglese; il registro salvato su disco è in inglese.
 - **Aggiungere una lingua** (es. francese): `python -I smith.py interface --create fr --name Français --flag "{\"verticali\": [\"#0055a4\", \"#ffffff\", \"#ef4135\"]}"`. PatchSmith estrae dal codice tutti i testi per chi lo usa e li traduce con il traduttore locale (i segnaposto `%s`, `%d` sono protetti; le voci già nel file restano, quindi le correzioni a mano non si perdono). Poi conviene rivedere a mano i testi della finestra: la traduzione automatica sbaglia soprattutto le parole isolate dei pulsanti.
 - La bandiera è a strisce (`{"verticali": [colori]}` o `{"orizzontali": [colori]}`), oppure un'immagine PNG 24x16 accanto al file (`{"file": "fr.png"}`).
-- La lingua predefinita è quella di Windows, se c'è il suo file; altrimenti l'inglese.
+- Al primo avvio la lingua è quella di Windows se PatchSmith ce l'ha (oggi l'italiano), altrimenti l'inglese. La lingua scelta con la bandierina viene salvata e usata da lì in poi.
 
 ## Il modo più semplice: l'interfaccia grafica
 

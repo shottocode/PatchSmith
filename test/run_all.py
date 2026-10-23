@@ -75,7 +75,8 @@ def environment(folder):
     for env_var, rel in folders.items():
         test_env[env_var] = os.path.join(folder, *rel.split("/"))
         os.makedirs(test_env[env_var], exist_ok=True)
-    test_env["PATCHSMITH_INTERFACCIA"] = "it"  # the tests check the Italian texts (the English one picks it by itself)
+    # the tests check the texts of the code (test_ui_language chooses Italian)
+    test_env["PATCHSMITH_INTERFACCIA"] = "en"
     return test_env
 
 

@@ -125,10 +125,10 @@ def scan_folder(folder, log=print):
     candidates = [c for c in candidates if c["stringhe_leggibili"]]
     candidates.sort(key=lambda c: -c["caratteri"])
     if large:
-        log("  ! %d file JSON troppo grandi, non letti (oltre %d MB): %s" % (
+        log("  ! %d JSON files too large, not read (over %d MB): %s" % (
             len(large), MAX_JSON_SIZE // (1024 * 1024), ", ".join(large[:3])))
     if unreadable:
-        log("  ! %d file .json non letti perche' non sono JSON validi: %s" % (
+        log("  ! %d .json files not read because they are not valid JSON: %s" % (
             len(unreadable), ", ".join(unreadable[:3])))
     return candidates, others
 
@@ -176,9 +176,9 @@ def create_profile(name, folder, candidates, origin, dest_lang, backend, web_roo
             "escludi": exclude,
         })
     if log and excluded:
-        log("  %d file con pochi testi non inclusi (meno di %d testi o %d caratteri): %s" % (
+        log("  %d files with little text not included (fewer than %d texts or %d characters): %s" % (
             len(excluded), STRINGS_THRESHOLD, CHARS_THRESHOLD, ", ".join(
-                "%s (%d testi, %d caratteri)" % (c["percorso"], c["stringhe_leggibili"], c["caratteri"])
+                "%s (%d texts, %d characters)" % (c["percorso"], c["stringhe_leggibili"], c["caratteri"])
                 for c in excluded[:3])))
     profile = {
         "nome": name,
@@ -187,8 +187,8 @@ def create_profile(name, folder, candidates, origin, dest_lang, backend, web_roo
         "lingua_destinazione": dest_lang,
         "backend": backend,
         "file": file,
-        "_nota": "Sposta gli schemi tra 'includi' ed 'escludi' per decidere cosa tradurre. "
-                 "I valori che non sembrano testo (id, file, colori...) vengono saltati comunque.",
+        "_nota": "Move the patterns between 'include' and 'exclude' to decide what to translate. Values that don't "
+                 "appear to be text (id, file, colors...) are ignored anyway.",
     }
     font = FONT_ENGINES.get(engine)
     if font:
@@ -200,29 +200,29 @@ def create_profile(name, folder, candidates, origin, dest_lang, backend, web_roo
 
 def print_summary(candidates, others, log=print, detail=None):
     if not candidates:
-        log("Nessun file con testo leggibile trovato.")
+        log("No readable text file found.")
     else:
-        log("File con testo leggibile (i primi 15):")
+        log("Files with readable text (first 15):")
         for c in candidates[:15]:
             marker = "*" if above_threshold(c) else " "
-            kind = " (tabella CSV, colonna %s)" % c["colonna"] if c.get("formato") == "csv" else \
-                " (file di lingua)" if c.get("localizzazione") else ""
-            log("  %s %7d caratteri %5d stringhe  %s%s" % (marker, c["caratteri"], c["stringhe_leggibili"],
+            kind = " (CSV table, column %s)" % c["colonna"] if c.get("formato") == "csv" else \
+                " (language file)" if c.get("localizzazione") else ""
+            log("  %s %7d characters %5d strings  %s%s" % (marker, c["caratteri"], c["stringhe_leggibili"],
                                                             c["percorso"], kind))
-        log("  (* = incluso nel profilo)")
+        log("  (* = included in profile)")
         if len(candidates) > 15:
-            log("  ... e altri %d file (%d inclusi nel profilo)" % (
+            log("  ... and %d more files (%d included in the profile)" % (
                 len(candidates) - 15, sum(1 for c in candidates[15:] if above_threshold(c))))
     for fmt, items in sorted(others.items()):
-        log("Altri file di testo (%s, non ancora supportati): %d, es. %s" % (fmt, len(items), items[0]))
+        log("Other text files (%s, not yet supported): %d, for example, %s" % (fmt, len(items), items[0]))
     if detail:
         for c in candidates:
             if c["percorso"] != detail:
                 continue
-            log("Schemi in %s:" % detail)
+            log("Patterns in %s:" % detail)
             for pattern, s in sorted(c["statistiche"].items(), key=lambda x: -x[1]["caratteri"]):
                 if s["leggibili"]:
-                    log("  %6d car. %4d/%-4d %s" % (s["caratteri"], s["leggibili"], s["stringhe"], pattern))
+                    log("  %6d chars %4d/%-4d %s" % (s["caratteri"], s["leggibili"], s["stringhe"], pattern))
                     for e in s["esempi"][:2]:
                         log("              > %s" % e)
 

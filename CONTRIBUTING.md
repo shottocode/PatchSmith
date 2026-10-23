@@ -8,9 +8,8 @@ Thanks for your interest! Bug reports, games that do not work, translations of t
 
 ## Italian left in the code
 
-Names, comments, docstrings, file names, the command line and the documentation are in English. PatchSmith started as a personal Italian project, so a few things are still in Italian (the [glossary](#glossary) below covers the words you will meet most often):
+Names, comments, docstrings, interface texts, file names, the command line and the documentation are in English; the Italian interface comes from `patchsmith/ui_language/it.json` (English text → Italian text). PatchSmith started as a personal Italian project, so a few things are still in Italian (the [glossary](#glossary) below covers the words you will meet most often):
 
-- **The interface texts** are written in Italian in the code. The English interface comes from `patchsmith/ui_language/en.json` (Italian text → English text).
 - **The keys saved in user files** (settings, profiles, translation memory: `"cartella_gioco"`, `"non_tradurre"`, `"lingua_destinazione"`...) and the codes stored in them (outcomes like `"GIOCO_APERTO"`, actions like `"riapplica"`). They are a file format: do not rename them.
 - **Markers written into games**, such as the first comment of `patchsmith/injector_live.js` ("Patchsmith - traduzione dal vivo"): PatchSmith recognizes its own files by them, so they must never change.
 
@@ -63,12 +62,12 @@ Please add or update a test with every change, and run the whole suite before op
 - **No circumventing protections:** no breaking developers' encryption, no online games or games with anti-cheat, no support for cracked copies or emulators.
 - **Downloads** come only from official releases, at pinned versions, with a verified SHA-256 (see `patchsmith/components.py`), and only after the user agrees.
 - **Only translations are shared**, never game files.
-- **Interface texts:** write the Italian text in the code and add its English translation to `patchsmith/ui_language/en.json` (`test_ui_language` checks that every text is there, with the same placeholders). Write singular and plural as two whole sentences, not sentences built from pieces: pieces cannot be translated.
+- **Interface texts:** write the English text in the code and add its Italian translation to `patchsmith/ui_language/it.json` (`test_ui_language` checks that every text is there, with the same placeholders). Write singular and plural as two whole sentences, not sentences built from pieces: pieces cannot be translated.
 - **Style:** lines up to 120 characters; keep each file's line endings (the repository stores files as they are).
 
 ## Glossary
 
-The Italian words you will meet most often in the data keys, the stored codes and the interface texts.
+The Italian words you will meet most often in the data keys and the stored codes.
 
 | Italian | English | Notes |
 |---|---|---|

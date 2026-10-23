@@ -38,7 +38,7 @@ def main(base):
     runtime = os.path.join(folder, "runtime")
     expected_list = ["PatchSmith.exe", "PatchSmith.pyw", "smith.py", "LEGGIMI.md", "README.md", "LICENSE",
               "patchsmith/gui.py", "patchsmith/launcher.cs", "docs/TECNICO.md", "docs/TECHNICAL.md",
-              "patchsmith/icon/16.png", "patchsmith/ui_language/en.json", "data/rules.ini",
+              "patchsmith/icon/16.png", "patchsmith/ui_language/it.json", "data/rules.ini",
               "components/plugin/PatchsmithServizio.cs", "runtime/pythonw.exe", "runtime/DLLs/_tkinter.pyd",
               "runtime/Lib/tkinter/__init__.py", "runtime/LICENSE.txt"]
     absent = [a for a in expected_list if not os.path.isfile(os.path.join(folder, *a.split("/")))]

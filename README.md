@@ -77,7 +77,7 @@ Machine translation has no context: expect machine-translation quality.
 - **Problems or suggestions:** open an [issue](https://github.com/shottocode/PatchSmith/issues), in English or Italian. Attach the **Create report** zip: it does not contain your DeepL key or email.
 - **Questions and ideas:** [Discussions](https://github.com/shottocode/PatchSmith/discussions).
 - **Security problems:** privately, with [Report a vulnerability](https://github.com/shottocode/PatchSmith/security/advisories/new).
-- **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md). The code is in English; the saved data keys and the interface's source texts are in Italian: it has a glossary of those words.
+- **Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md). The code is in English; the keys of the saved data are still in Italian: it has a glossary of those words.
 
 ## Legal notes
 

@@ -78,18 +78,18 @@ def string_positions(text):
                 return i + 1
             while True:
                 if text[i:i + 1] != '"':
-                    raise ValueError("chiave attesa alla posizione %d" % i)
+                    raise ValueError("expected key at position %d" % i)
                 key, i = json.decoder.scanstring(text, i + 1)
                 i = spaces(i)
                 if text[i:i + 1] != ":":
-                    raise ValueError("':' atteso alla posizione %d" % i)
+                    raise ValueError("':' expected at position %d" % i)
                 i = spaces(value_(i + 1, path + (key,)))
                 if text[i:i + 1] == ",":
                     i = spaces(i + 1)
                     continue
                 if text[i:i + 1] == "}":
                     return i + 1
-                raise ValueError("',' o '}' atteso alla posizione %d" % i)
+                raise ValueError("',' or '}' expected at position %d" % i)
         if c == "[":
             i = spaces(i + 1)
             if text[i:i + 1] == "]":
@@ -103,7 +103,7 @@ def string_positions(text):
                     continue
                 if text[i:i + 1] == "]":
                     return i + 1
-                raise ValueError("',' o ']' atteso alla posizione %d" % i)
+                raise ValueError("',' or ']' expected at position %d" % i)
         if c == '"':
             _, end = json.decoder.scanstring(text, i + 1)
             output[path] = (i, end)
@@ -111,13 +111,13 @@ def string_positions(text):
         try:
             _, end = _DECODER.scan_once(text, i)  # numbers, true, false, null
         except StopIteration:
-            raise ValueError("valore atteso alla posizione %d" % i) from None
+            raise ValueError("expected value at position %d" % i) from None
         return end
 
     try:
         value_(0, ())
     except RecursionError:
-        raise ValueError("JSON troppo annidato") from None
+        raise ValueError("Too deeply nested JSON") from None
     return output
 
 
@@ -175,22 +175,22 @@ class JSONFile:
             try:
                 before, after = _at_path(self.data, path), _at_path(data, path)
             except (KeyError, IndexError, TypeError):
-                raise ValueError("struttura cambiata in %s" % (path,)) from None
+                raise ValueError("structure changed in %s" % (path,)) from None
             if after == before:
                 continue
             if not isinstance(after, str):
-                raise ValueError("valore non stringa in %s" % (path,))
+                raise ValueError("non-string value in %s" % (path,))
             pieces += [self._text[last:start], json.dumps(after, ensure_ascii=self.ascii_only)]
             last = end
         text = "".join(pieces) + self._text[last:]
         if read_lenient(text) != data:
-            raise ValueError("il file riscritto non torna: cambiato qualcosa che non e' una stringa")
+            raise ValueError("the rewritten file doesn't match: something other than a string changed")
         data_bytes = text.encode("utf-8")
         return (b"\xef\xbb\xbf" + data_bytes) if self.bom else data_bytes
 
 
 def _refuse_constant(name):
-    raise ValueError("valore non ammesso in JSON standard: %s" % name)
+    raise ValueError("value not allowed in standard JSON: %s" % name)
 
 
 def reread_strict(data_bytes, lenient=False):
@@ -269,19 +269,19 @@ def verify_structure(original, new, allowed, path=()):
     """List of problems: the structure must be identical, only the allowed strings change."""
     problems = []
     if type(original) is not type(new):
-        return ["tipo diverso in %s" % (path,)]
+        return ["different type in %s" % (path,)]
     if isinstance(original, dict):
         if list(original.keys()) != list(new.keys()):
-            return ["chiavi diverse in %s" % (path,)]
+            return ["different keys in %s" % (path,)]
         for k in original:
             problems += verify_structure(original[k], new[k], allowed, path + (k,))
     elif isinstance(original, list):
         if len(original) != len(new):
-            return ["lunghezza diversa in %s" % (path,)]
+            return ["different lengths in %s" % (path,)]
         for i, (a, b) in enumerate(zip(original, new)):
             problems += verify_structure(a, b, allowed, path + (i,))
     elif original != new and path not in allowed:
-        problems.append("valore cambiato senza permesso in %s" % (path,))
+        problems.append("value changed without permission in %s" % (path,))
     return problems[:20]
 
 

@@ -69,7 +69,7 @@ def obtain(name, log=print):
         return dest_lang
     os.makedirs(folder(), exist_ok=True)
     temp_file = dest_lang + ".scaricamento"
-    log("  scarico %s (%d KB) da %s" % (entry["file"], entry["dimensione"] // 1024, entry["url"]))
+    log("  downloading %s (%d KB) from %s" % (entry["file"], entry["dimensione"] // 1024, entry["url"]))
     req = urllib.request.Request(entry["url"], headers={"User-Agent": "Mozilla/5.0 (patchsmith)"})
     try:
         with urllib.request.urlopen(req, timeout=60) as response, open(temp_file, "wb") as f:
@@ -78,18 +78,18 @@ def obtain(name, log=print):
                 interruption.check()
                 read_items += len(block)
                 if read_items > entry["dimensione"] * 2 + 1_000_000:
-                    raise ComponentError("%s: il file scaricato e' troppo grande, scaricamento interrotto" % name)
+                    raise ComponentError("%s: The downloaded file is too large, download interrupted" % name)
                 f.write(block)
     except BaseException as e:  # "Stop" too: no half-finished downloads
         if os.path.exists(temp_file):
             os.remove(temp_file)
         if isinstance(e, OSError):
-            raise ComponentError("Scaricamento di %s non riuscito: %s" % (name, e)) from e
+            raise ComponentError("Download of %s failed: %s" % (name, e)) from e
         raise
     fingerprint = _sha256(temp_file)
     if fingerprint != entry["sha256"]:
         os.remove(temp_file)
-        raise ComponentError("%s: impronta SHA-256 diversa da quella attesa (%s): file scartato per sicurezza"
+        raise ComponentError("%s: SHA-256 hash different from the expected one (%s): file discarded for safety"
                                % (name, fingerprint))
     os.replace(temp_file, dest_lang)
     return dest_lang

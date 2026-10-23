@@ -215,7 +215,7 @@ def main(base):
          locres_v2([("UI", "Start", "Start Game"), ("UI", "New", "New Quest")]))]))
     lines = []
     adapter_unreal.state(game, lines.append)
-    check("gioco aggiornato: segnalato", any("aggiornato" in r for r in lines))
+    check("gioco aggiornato: segnalato", any("has been updated" in r for r in lines))
     adapter_unreal.uninstall(game, silent)
 
     failed = [n for n, ok in OUTCOMES if not ok]

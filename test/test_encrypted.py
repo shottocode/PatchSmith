@@ -60,7 +60,7 @@ def main(base):
     path, outcome = automatic.prepare(game, "auto", "it", "finto", lines.append)
     e = outcome.get("esito")
     check("file cifrati: non supportato, spiegato (nessuna traduzione sperimentale), nessun profilo",
-              path is None and e is not None and e.code == "NON_SUPPORTATO" and "cifrato" in e.reason
+              path is None and e is not None and e.code == "NON_SUPPORTATO" and "encrypted" in e.reason
               and "sperimentale" not in (e.actions or []))
     check("file cifrati: nessun file del gioco cambiato (neanche quello dell'emulatore di Steam)",
               fingerprints(game) == before)

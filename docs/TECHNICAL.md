@@ -2,20 +2,20 @@
 
 *How PatchSmith works engine by engine, every check, the command line, the tests and how to add an adapter. To just use it, the [README](../README.md) is enough (in Italian: [LEGGIMI](../LEGGIMI.md)). Italian version of this document: [TECNICO.md](TECNICO.md).*
 
-PatchSmith's source code is in English, except the interface's source texts and the keys of the saved data, which are in Italian (see [CONTRIBUTING.md](../CONTRIBUTING.md), with a glossary); the English interface comes from `patchsmith/ui_language/en.json`.
+PatchSmith's source code is in English, interface texts included; the keys of the saved data are still in Italian (see [CONTRIBUTING.md](../CONTRIBUTING.md), with a glossary). The Italian interface comes from `patchsmith/ui_language/it.json`.
 
 ## Interface language
 
-The program's texts are written in Italian in the code; every other language is a file `patchsmith/ui_language/<code>.json`:
+The program's texts are written in English in the code; every other language is a file `patchsmith/ui_language/<code>.json`:
 
 ```json
-{"nome": "English", "bandiera": {"tipo": "gb"}, "testi": {"Crea rapporto": "Create report", "Motore: %s": "Engine: %s"}}
+{"nome": "Italiano", "bandiera": {"verticali": ["#009246", "#ffffff", "#ce2b37"]}, "testi": {"Create report": "Crea rapporto", "Engine: %s": "Motore: %s"}}
 ```
 
-- Translation happens when the window shows a text: buttons, labels, titles, menus, dialogs and log lines. An entry with `%s`, `%d`... applies to every line of that shape (`"Tradotti %d di %d"` translates "Tradotti 400 di 1654"), and the pieces of text inside are translated in turn. Whatever is not in the file stays in Italian; the log saved on disk stays in Italian.
+- Translation happens when the window shows a text: buttons, labels, titles, menus, dialogs and log lines. An entry with `%s`, `%d`... applies to every line of that shape (`"Translated %d of %d"` translates "Translated 400 of 1654"), and the pieces of text inside are translated in turn. Whatever is not in the file stays in English; the log saved on disk is in English.
 - **Adding a language** (e.g. French): `python -I smith.py interface --create fr --name Français --flag "{\"verticali\": [\"#0055a4\", \"#ffffff\", \"#ef4135\"]}"`. PatchSmith extracts from the code every text meant for the user and translates it with the local translator (the `%s`, `%d` placeholders are protected; entries already in the file are kept, so corrections made by hand are never lost). Then it is worth reviewing the window's texts by hand: machine translation gets single button words wrong most often.
 - The flag is made of stripes (`{"verticali": [colors]}` or `{"orizzontali": [colors]}`), or a 24x16 PNG image next to the file (`{"file": "fr.png"}`).
-- The default language is Windows' own, if its file exists; otherwise English.
+- At the first start the language is Windows' own if PatchSmith has it (today Italian), otherwise English. The language chosen with the flag button is saved and used from then on.
 
 ## The easy way: the graphical interface
 

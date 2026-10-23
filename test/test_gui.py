@@ -34,13 +34,13 @@ from patchsmith import (auto as automatic, outcome, gui, ollama, project, report
                         theme)  # noqa: E402
 
 # the expected title of the "Analyze and translate" end dialog for each outcome
-TITLES = {"OK": "Traduzione installata", "PARZIALE": "Traduzione installata in parte",
-          "NULLA_DA_FARE": "Niente da fare", "UFFICIALE": "Il gioco ha già la tua lingua",
-          "NON_SUPPORTATO": "Gioco non ancora supportato", "ANTICHEAT": "Gioco con anti-cheat",
-          "GIOCO_APERTO": "Il gioco è aperto", "TRADUTTORE_BLOCCATO": "Traduzione interrotta",
-          "TRADUTTORE_ASSENTE": "Traduttore non pronto", "GIA_ORIGINALE": "Gioco già originale",
-          "PERMESSI": "File bloccati", "CARTELLA_SBAGLIATA": "Cartella da cambiare",
-          "ERRORE": "Operazione non riuscita"}
+TITLES = {"OK": "Translation installed", "PARZIALE": "Translation partially installed",
+          "NULLA_DA_FARE": "Nothing to do", "UFFICIALE": "The game already has your language",
+          "NON_SUPPORTATO": "Game not yet supported", "ANTICHEAT": "Game with anti-cheat",
+          "GIOCO_APERTO": "The game is open", "TRADUTTORE_BLOCCATO": "Translation interrupted",
+          "TRADUTTORE_ASSENTE": "Translator not ready", "GIA_ORIGINALE": "Game already original",
+          "PERMESSI": "Locked files", "CARTELLA_SBAGLIATA": "Wrong folder",
+          "ERRORE": "Operation failed"}
 WINDOWS = []  # (titolo, testo, pulsanti) of the choice dialogs shown by the interface
 CHECKS = []
 
@@ -77,8 +77,8 @@ def main(folder):
     ollama.folder = lambda: os.path.join(os.path.dirname(os.path.abspath(folder)), "ollama-prova-gui")
     automatic.GAME_SPACE = automatic.DATA_SPACE = 0  # the free space of the test disk does not count here
     # the graphics card (for the proposed model) is simulated: 8 GB -> Quality (12B)
-    ollama.recommended_model = lambda gb=None: ("12b", "La tua scheda video ha 8 GB di memoria: ti propongo il "
-                                                  "modello Qualità (12B).")
+    ollama.recommended_model = lambda gb=None: ("12b", "Your graphics card has 8 GB of memory: I recommend the "
+                                                  "Quality model (12B).")
     if not os.environ.get("PATCHSMITH_DATI"):
         project.DATA_ROOT = os.path.join(os.path.dirname(os.path.abspath(folder)), "dati-prova-gui")
     gui.SETTINGS = None  # those of the test data folder
@@ -181,7 +181,7 @@ def _trial_live_journal():
         text = app.text.get("1.0", "end")
         check("mentre giochi: frasi nuove tradotte riassunte nel registro (non quelle dalla memoria ne' la storia "
                   "di prima), una volta sola",
-                  text.count("Mentre giochi: 2 frasi nuove tradotte") == 1 and "1 rimasta in originale" in text
+                  text.count("While playing: 2 new phrases translated") == 1 and "1 left untranslated" in text
                   and "Riga vecchia" not in text)
     finally:
         root.destroy()
@@ -197,7 +197,7 @@ def _trial(folder, reports):
         time.sleep(0.02)
     check("primo avvio senza traduttore salvato: 'Traduttore locale' da installare con 'Installa…' e il modello "
               "adatto alla scheda video (12B con 8 GB)", app.translator.get() == gui.TRANSLATORS["locale"]
-              and app._chosen == "locale" and app.translator_status.cget("text") == "da installare"
+              and app._chosen == "locale" and app.translator_status.cget("text") == "to install"
               and app.btn_install.winfo_manager() == "pack" and app.local_model.get() == gui.LOCAL_MODELS["12b"])
     app.folder.set(folder)
     app.forced_backend = "finto"  # test translator, not in the menu
@@ -211,26 +211,26 @@ def _trial(folder, reports):
     _wait_for(app, root)
     log_file = app.text.get("1.0", "end")
     state = app.state.get()
-    outcome_ok = "Fatto. Avvia il gioco" in log_file and "ERRORE" not in log_file and one_job \
+    outcome_ok = "Done. Start the game" in log_file and "ERRORE" not in log_file and one_job \
         and app.translator_choice.instate(["!disabled", "readonly"])
     print("stato:", state)
     print("\n".join(log_file.strip().splitlines()[-6:]))
 
     # end dialog and log on disk
     check("finestra di fine 'Traduzione installata' anche per un gioco web, con il riepilogo",
-              WINDOWS and WINDOWS[-1][0] == "Traduzione installata" and "Testi tradotti:" in WINDOWS[-1][1])
+              WINDOWS and WINDOWS[-1][0] == "Translation installed" and "Translated texts:" in WINDOWS[-1][1])
     saved_items = _logs()
     text = _read_text(saved_items[-1]) if saved_items else ""
     check("registro salvato su disco (logs/AAAAMMGG-HHMMSS-<gioco>.log) con l'operazione e l'esito",
-              saved_items and "Analisi e traduzione" in text and "Fatto. Avvia il gioco" in text
-              and "Esito: OK" in text and os.path.basename(saved_items[-1])[:8].isdigit())
+              saved_items and "Analysis and translation" in text and "Done. Start the game" in text
+              and "Result: OK" in text and os.path.basename(saved_items[-1])[:8].isdigit())
 
     # a dialog for each outcome, with its title
     app._operation = "traduci"
     wrong_seeds = []
     for code, expected in TITLES.items():
         before = len(WINDOWS)
-        app._show_outcome("Analisi e traduzione", outcome.Outcome(code, "Motivo di prova.", engine="gamemaker",
+        app._show_outcome("Analysis and translation", outcome.Outcome(code, "Motivo di prova.", engine="gamemaker",
                                                               written=code in ("OK", "PARZIALE"), translated_items=3,
                                                               remaining=1 if code == "PARZIALE" else 0,
                                                               remaining_examples=["Quit"]))
@@ -239,11 +239,11 @@ def _trial(folder, reports):
     check("titolo della finestra per ogni esito%s" % (": sbagliati " + ", ".join(wrong_seeds) if wrong_seeds else ""),
               not wrong_seeds)
     windows = len(WINDOWS)
-    app._show_outcome("Analisi e traduzione", outcome.Outcome("NON_SUPPORTATO", actions=["sperimentale"],
-                                                         extra={"motore_rilevato": "RenPy"}))
+    app._show_outcome("Analysis and translation", outcome.Outcome("NON_SUPPORTATO", actions=["sperimentale"],
+                                                             extra={"motore_rilevato": "RenPy"}))
     check("motore non supportato con file di testo: domanda sulla traduzione sperimentale",
-              len(WINDOWS) == windows + 1 and WINDOWS[-1][0] == "Motore non ancora supportato"
-              and "RenPy" in WINDOWS[-1][1] and ("Sì", "sperimentale") in WINDOWS[-1][2])
+              len(WINDOWS) == windows + 1 and WINDOWS[-1][0] == "Engine not yet supported"
+              and "RenPy" in WINDOWS[-1][1] and ("Yes", "sperimentale") in WINDOWS[-1][2])
 
     # unexpected error during the job: dialog with the type, traceback in the log on disk
     real = automatic.analyze_and_translate
@@ -259,8 +259,8 @@ def _trial(folder, reports):
         automatic.analyze_and_translate = real
     text = _read_text(_logs()[-1])
     check("errore imprevisto: finestra 'Errore imprevisto' con il tipo e 'Crea rapporto'",
-              WINDOWS[-1][0] == "Errore imprevisto" and "KeyError" in WINDOWS[-1][1]
-              and ("Crea rapporto", "crea_rapporto") in WINDOWS[-1][2])
+              WINDOWS[-1][0] == "Unexpected error" and "KeyError" in WINDOWS[-1][1]
+              and ("Create report", "crea_rapporto") in WINDOWS[-1][2])
     check("errore imprevisto: nel registro su disco con il traceback",
               "Traceback (most recent call last)" in text and "KeyError: 'cartella_gioco'" in text
               and "in faulty" in text)
@@ -274,12 +274,12 @@ def _trial(folder, reports):
     text = _read_text(_logs()[-1])
     check("errore in un comando della finestra: nel registro su disco e in una finestra",
               "ZeroDivisionError" in text and "Traceback" in text and len(WINDOWS) == windows + 1
-              and WINDOWS[-1][0] == "Errore imprevisto")
+              and WINDOWS[-1][0] == "Unexpected error")
 
     # after an operation without a folder (installation of the local translator) a window error still goes to the
     # 'interfaccia' log; a permission error in a command does not offer "Try again" (it would repeat the last
     # operation on the game) nor advice about the game
-    app._start("Installazione del traduttore locale", lambda _c: True, needs_folder=False, operation="installa")
+    app._start("Installing the local translator", lambda _c: True, needs_folder=False, operation="installa")
     _wait_for(app, root)
     windows = len(WINDOWS)
 
@@ -293,8 +293,8 @@ def _trial(folder, reports):
     names = [os.path.basename(p) for p in _logs()]
     check("errore della finestra dopo l'installazione del traduttore locale: registro 'interfaccia', finestra "
               "senza 'Riprova'", names[-1].endswith("-interfaccia.log") and names[-2].endswith("-traduttore-locale.log")
-              and len(WINDOWS) == windows + 1 and WINDOWS[-1][0] == "Errore imprevisto"
-              and not any(a == "chiudi_gioco" for _, a in WINDOWS[-1][2]) and "Programmi" not in WINDOWS[-1][1])
+              and len(WINDOWS) == windows + 1 and WINDOWS[-1][0] == "Unexpected error"
+              and not any(a == "chiudi_gioco" for _, a in WINDOWS[-1][2]) and "Program Files" not in WINDOWS[-1][1])
 
     # an error while looking for the game profile for the log name does not leave the buttons disabled
     real = automatic.find_profile
@@ -336,7 +336,7 @@ def _trial(folder, reports):
     # restore from the window: outcome OK, 'Originals restored'
     app._restore(ask=False)
     _wait_for(app, root)
-    check("ripristino: finestra 'Originali ripristinati'", WINDOWS[-1][0] == "Originali ripristinati")
+    check("ripristino: finestra 'Originali ripristinati'", WINDOWS[-1][0] == "Originals restored")
 
     # Create report: zip in the test folder (instead of the Desktop) with the operation's log
     already_present = set(glob.glob(os.path.join(glob.escape(reports), "*.zip")))  # from a previous run
@@ -345,7 +345,7 @@ def _trial(folder, reports):
     created = sorted(set(glob.glob(os.path.join(glob.escape(reports), "*.zip"))) - already_present)
     names = zipfile.ZipFile(created[0]).namelist() if created else []
     check("Crea rapporto: finestra 'Rapporto creato' e zip con registri (anche dell'errore nella finestra), "
-              "profilo e impostazioni", WINDOWS[-1][0] == "Rapporto creato" and len(created) == 1
+              "profilo e impostazioni", WINDOWS[-1][0] == "Report generated" and len(created) == 1
               and any(n.startswith("registri/") and n.endswith("-lantern-keeper.log") for n in names)
               and any(n.endswith("-interfaccia.log") for n in names)
               and "settings.json" in names and any(n.startswith("profilo/") for n in names))
@@ -363,7 +363,7 @@ def _trial(folder, reports):
         os.remove(blocked)
     fallback = sorted(set(glob.glob(os.path.join(glob.escape(gui.logs_folder()), "*.zip"))) - already_present)
     check("Crea rapporto con il Desktop bloccato: rapporto nella cartella dei registri, finestra 'Rapporto creato'",
-              len(fallback) == 1 and WINDOWS[-1][0] == "Rapporto creato" and fallback[0] in WINDOWS[-1][1])
+              len(fallback) == 1 and WINDOWS[-1][0] == "Report generated" and fallback[0] in WINDOWS[-1][1])
     for p in fallback:  # it does not stay among the test data
         os.remove(p)
 
@@ -383,20 +383,20 @@ def _trial_check(app, root, folder):
     app._check()
     _wait_for(app, root)
     check("controllo del gioco scelto: finestra di fine e riga 'Dopo l'ultima partita a ...'",
-              len(WINDOWS) == windows + 1 and WINDOWS[-1][0] == "Controllo dopo aver giocato"
-              and app.check_status.get() == "Dopo l'ultima partita a %s: nessun problema"
+              len(WINDOWS) == windows + 1 and WINDOWS[-1][0] == "Check after playing"
+              and app.check_status.get() == "After the last session of %s: no problem"
               % os.path.basename(os.path.normpath(folder)))
-    check("controllo: registro su disco con il risultato", "Controllo dopo aver giocato" in _read_text(
-        _logs()[-1]) and "Esito: OK" in _read_text(_logs()[-1]))
+    check("controllo: registro su disco con il risultato", "Check after playing" in _read_text(
+        _logs()[-1]) and "Result: OK" in _read_text(_logs()[-1]))
     # at startup, with a problem to do in another game: no dialog, the line with 'Last session details'
     other = os.path.join(os.path.dirname(os.path.abspath(folder)), "Altro Gioco")
     real = checks.check
 
     def fake(path, apply=True, log=print, translator=None, events=None, **_k):
-        log("Controllo dopo aver giocato: prova")
-        return [checks.Problem("CRASH", "errore", "Il gioco si e' chiuso all'improvviso.", action="ripristina",
+        log("Check after playing: test")
+        return [checks.Problem("CRASH", "errore", "The game closed suddenly.", action="ripristina",
                                    state="da_fare"),
-                checks.Problem("TEMPORANEI", "info", "Tolti 2 file temporanei.", state="corretto")]
+                checks.Problem("TEMPORANEI", "info", "Removed 2 temporary files.", state="corretto")]
 
     real_as_outcome = checks.as_outcome
     checks.check = fake
@@ -408,8 +408,8 @@ def _trial_check(app, root, folder):
     finally:
         checks.check, checks.as_outcome = real, real_as_outcome
     check("controllo all'apertura: nessuna finestra, riga '1 problema corretto, 1 da fare' e 'Dettagli'",
-              len(WINDOWS) == windows and app.check_status.get() == "Dopo l'ultima partita a Altro Gioco: "
-              "1 problema corretto, 1 da fare" and app.btn_details.winfo_manager() == "pack")
+              len(WINDOWS) == windows and app.check_status.get() == "After the last session of Altro Gioco: "
+              "1 problem fixed, 1 to do" and app.btn_details.winfo_manager() == "pack")
     names = [os.path.basename(p) for p in _logs()]
     check("controllo all'apertura: registro 'controllo'", names[-1].endswith("-controllo.log"))
     # Last session details: the dialog with "To do" and "Restore originals"; once chosen, it applies to that game
@@ -428,8 +428,8 @@ def _trial_check(app, root, folder):
         app._restore, theme.choose = real_restore, real_choose
         app.folder.set(folder)
     check("Dettagli: 'Qualcosa da fare' con 'Ripristina originali', per la cartella di quel gioco",
-              WINDOWS[-1][0] == "Qualcosa da fare" and "Da fare:" in WINDOWS[-1][1]
-              and ("Ripristina originali", "ripristina") in WINDOWS[-1][2] and choices == [os.path.normpath(other)])
+              WINDOWS[-1][0] == "Something to do" and "To do:" in WINDOWS[-1][1]
+              and ("Restore originals", "ripristina") in WINDOWS[-1][2] and choices == [os.path.normpath(other)])
     # a game that cannot be checked (unexpected error) does not stop the others: "to do" with the report
     def broken(path, apply=True, log=print, translator=None, events=None, **_k):
         if path == "rotto":
@@ -445,7 +445,7 @@ def _trial_check(app, root, folder):
     errors = [p for e in app.check_outcomes for p in e.extra.get("controllo", []) if p["codice"] == "ERRORE"]
     check("controllo all'apertura: un gioco con un errore non ferma gli altri (errore da fare, con il rapporto)",
               len(app.check_outcomes) == 2 and len(errors) == 1 and errors[0]["azione"] == "crea_rapporto"
-              and "KeyError" in errors[0]["messaggio"] and "1 da fare" in app.check_status.get())
+              and "KeyError" in errors[0]["messaggio"] and "1 to do" in app.check_status.get())
     # "Try again" in the dialog of a check (game open): the check of that game again, not the last operation done
     # (e.g. a translation)
     redone_calls, real_check = [], app._check
@@ -480,7 +480,7 @@ def _trial_check(app, root, folder):
         app.work = work_before
     del app._check
     check("controllo all'apertura durante un'altra operazione: la riga lo dice e parte da solo appena finisce "
-              "(%s)" % redone_calls, "appena finisce" in line and during == []
+              "(%s)" % redone_calls, "as soon as the current operation finishes" in line and during == []
               and redone_calls == [(["profilo-finto"], None)])
     # "Create report" from the Last session details of another game: the report is for that game, with its outcome
     requested_reports, real_create_report = [], report.create
@@ -507,7 +507,7 @@ def _trial_check(app, root, folder):
     finally:
         gui.code_fingerprint = real_fingerprint
     check("PatchSmith aggiornato con la finestra aperta: avviso di riaprirla, una volta sola",
-              WARNINGS[before:] == ["PatchSmith è stato aggiornato"])
+              WARNINGS[before:] == ["PatchSmith has been updated"])
 
 
 def _trial_retranslate(app, root):
@@ -519,8 +519,8 @@ def _trial_retranslate(app, root):
 
     def fake(path, apply=True, log=print, translator=None, events=None, retranslate=True):
         received.append(retranslate)
-        return [checks.Problem("FRASI_DA_RITRADURRE", "avviso", "Mentre giocavi, 3 frasi sono rimaste in "
-                                   "originale.", action="ritraduci", state="da_fare", extra={"frasi": 3})]
+        return [checks.Problem("FRASI_DA_RITRADURRE", "avviso", "While you were playing, 3 phrases were left "
+                                   "untranslated.", action="ritraduci", state="da_fare", extra={"frasi": 3})]
 
     def fake_as_outcome(problems, path=None, title_text=None):
         e = real_as_outcome(problems, None, "Gioco Diario")
@@ -535,7 +535,7 @@ def _trial_retranslate(app, root):
         checks.check, checks.as_outcome = real, real_as_outcome
     check("controllo all'apertura: le frasi del diario non si ritraducono adesso, pulsante 'Ritraduci 3 frasi' "
               "nella riga", received == [False] and app.btn_retranslate.winfo_manager() == "pack"
-              and app.btn_retranslate.cget("text") == "Ritraduci 3 frasi")
+              and app.btn_retranslate.cget("text") == "Re-translate 3 phrases")
     redone_calls = []
     app._check = lambda profiles=None, at_open=None, retranslate=None: redone_calls.append(
         (profiles, at_open, retranslate))
@@ -575,7 +575,7 @@ def _trial_preflight(app, root, folder):
             system.game_open = real_is_open
         check("gioco aperto prima di Analizza e traduci, Riapplica e Ripristina: 'Il gioco è aperto' con "
                   "'Riprova', nessuna operazione avviata", started == []
-                  and [f[0] for f in WINDOWS[-3:]] == ["Il gioco è aperto"] * 3 and ("Riprova", "riprova")
+                  and [f[0] for f in WINDOWS[-3:]] == ["The game is open"] * 3 and ("Try again", "riprova")
                   in WINDOWS[-1][2])
         state = {"aperto": True}
         system.game_open = lambda _c: state["aperto"]
@@ -589,7 +589,7 @@ def _trial_preflight(app, root, folder):
         finally:
             system.game_open = real_is_open
         check("'Riprova' a gioco chiuso: di nuovo i controlli, poi l'operazione parte",
-                  started == ["Analisi e traduzione"])
+                  started == ["Analysis and translation"])
         started.clear()
         # protected folder and wrong language: it stops, with the reason
         real_write_check = automatic.check_writable
@@ -599,8 +599,8 @@ def _trial_preflight(app, root, folder):
         finally:
             automatic.check_writable = real_write_check
         check("cartella protetta: finestra con il motivo e solo OK, nessuna operazione",
-                  started == [] and WINDOWS[-1][0] == "Cartella del gioco protetta" and WINDOWS[-1][2] == [("OK", None)]
-                  and "amministratore" in WINDOWS[-1][1])
+                  started == [] and WINDOWS[-1][0] == "Protected game folder" and WINDOWS[-1][2] == [("OK", None)]
+                  and "administrator" in WINDOWS[-1][1])
         a_before = app.a.get()
         app.a.set("Italianoo")
         try:
@@ -608,7 +608,7 @@ def _trial_preflight(app, root, folder):
         finally:
             app.a.set(a_before)
         check("lingua non riconosciuta in A: 'Lingua da controllare', nessuna operazione",
-                  started == [] and WINDOWS[-1][0] == "Lingua da controllare" and "Italianoo" in WINDOWS[-1][1])
+                  started == [] and WINDOWS[-1][0] == "Language to check" and "Italianoo" in WINDOWS[-1][1])
         # Google paused: "Install the local translator" chooses it, installs it and then repeats Analyze and translate
         chosen, app.forced_backend = app.translator.get(), None
         app.translator.set(gui.TRANSLATORS["google"])
@@ -637,17 +637,17 @@ def _trial_preflight(app, root, folder):
             app.forced_backend = "finto"
         check("Google in pausa: 'Traduttore in pausa' con 'Installa il traduttore locale' e 'Continua comunque'; "
                   "scelto: traduttore locale e installazione, poi di nuovo Analizza e traduci",
-                  started == [] and pause[0] == "Traduttore in pausa" and ("Installa il traduttore locale",
-                                                                          "installa_locale") in pause[2]
-                  and ("Continua comunque", "continua") in pause[2] and after_pause == "locale"
+                  started == [] and pause[0] == "Translator paused" and ("Install the local translator",
+                                                                        "installa_locale") in pause[2]
+                  and ("Continue anyway", "continua") in pause[2] and after_pause == "locale"
                   and len(installs) == 1 and callable(installs[0]))
         check("traduttore locale non installato: 'Installa ora' prima di partire (o 'Continua comunque': la lingua "
                   "ufficiale non serve tradurla), nessuna operazione",
-                  started == [] and absent[0] == "Traduttore locale da installare"
-                  and ("Installa ora", "installa_locale") in absent[2] and ("Continua comunque", "continua")
+                  started == [] and absent[0] == "Local translator to install"
+                  and ("Install now", "installa_locale") in absent[2] and ("Continue anyway", "continua")
                   in absent[2])
         check("consenso alla lingua ufficiale con il traduttore locale da installare: parte senza domande sul "
-                  "traduttore (non serve tradurre)", consent == (["Analisi e traduzione"], []))
+                  "traduttore (non serve tradurre)", consent == (["Analysis and translation"], []))
     finally:
         system.game_open = real_is_open
         del app._start
@@ -665,7 +665,7 @@ def _trial_preflight(app, root, folder):
     entries = json.load(open(project.memory_path(original, test=True), encoding="utf-8"))
     theme.choose = lambda _g, _c, title_text, text, buttons, kind="info": (
         _choose(_g, _c, title_text, text, buttons, kind)
-        or ("riusa" if title_text == "Stesso gioco già tradotto?" else None))
+        or ("riusa" if title_text == "Same game already translated?" else None))
     try:
         app.folder.set(copy_dir)
         windows = len(WINDOWS)
@@ -674,17 +674,19 @@ def _trial_preflight(app, root, folder):
     finally:
         theme.choose = real_choose
         app.folder.set(folder)
-    question = next((f for f in WINDOWS[windows:] if f[0] == "Stesso gioco già tradotto?"), None)
+    question = next((f for f in WINDOWS[windows:] if f[0] == "Same game already translated?"), None)
     new = automatic.find_profile(copy_dir)
     profile_copy = json.load(open(new, encoding="utf-8")) if new else {}
     copy_memory = json.load(open(project.memory_path(profile_copy, test=True), encoding="utf-8")) \
         if new else {}
     log_file = app.text.get("1.0", "end")
     check("copia del gioco in un'altra cartella: 'Stesso gioco già tradotto?' con 'Sì, riusale'; riusate le sue "
-              "traduzioni (profilo nuovo con la stessa memoria)", question and ("Sì, riusale", "riusa") in question[2]
+              "traduzioni (profilo nuovo con la stessa memoria)", question
+              and ("Yes, use them again", "riusa") in question[2]
               and new and profile_copy.get("nome") != original["nome"]
-              and all(copy_memory.get(k) == v for k, v in entries.items()) and "Riuso le traduzioni" in log_file
-              and WINDOWS[-1][0] == "Traduzione installata")
+              and all(copy_memory.get(k) == v for k, v in entries.items())
+              and "I'm reusing the translations" in log_file
+              and WINDOWS[-1][0] == "Translation installed")
     automatic.restore(copy_dir, print)
 
 
@@ -696,8 +698,8 @@ def _trial_install(app, root):
     from patchsmith import backend
     actual = ollama.download_description, ollama.install, backend.probe_local, theme.ask
     redone, tests, trial_outcomes = [], [], [
-        {"ok": True, "messaggio": "pronto, sulla scheda video: \"Start game\" -> \"Inizia\".", "scheda": 1.0},
-        {"ok": False, "messaggio": "la prova di traduzione non e' riuscita: il traduttore locale non risponde.",
+        {"ok": True, "messaggio": "ready, on the graphics card: \"Start game\" -> \"Inizia\".", "scheda": 1.0},
+        {"ok": False, "messaggio": "the translation test failed: the local translator is not responding.",
          "scheda": None}]
     ollama.download_description = lambda selected: ["finto da scaricare"]
     ollama.install = lambda selected, log=print: True
@@ -713,11 +715,11 @@ def _trial_install(app, root):
     finally:
         ollama.download_description, ollama.install, backend.probe_local, theme.ask = actual
     check("installazione chiesta prima di partire: frase di prova riuscita -> l'operazione riparte da sola",
-              first_result[0] == ["di nuovo"] and "Traduttore locale installato: pronto" in first_result[1]
+              first_result[0] == ["di nuovo"] and "Local translator installed: ready" in first_result[1]
               and not first_result[2] and len(tests) == 2)
     check("frase di prova non riuscita: finestra con il motivo, l'operazione che aspettava non parte",
-              redone == ["di nuovo"] and WARNINGS[-1] == "Prova del traduttore locale non riuscita"
-              and "non risponde" in app.state.get())
+              redone == ["di nuovo"] and WARNINGS[-1] == "Local translator test failed"
+              and "not responding" in app.state.get())
     # already installed: "Install now" runs the waiting operation right away; preliminary checks that fail
     # (unexpected error): it starts anyway, and the log says so
     ollama.download_description = lambda selected: []
@@ -734,7 +736,7 @@ def _trial_install(app, root):
     check("traduttore locale gia' installato: l'operazione che aspettava parte subito; controlli prima di partire "
               "non riusciti: si parte lo stesso, con una riga nel registro", immediate == ["subito"]
               and choices == {"riusa": None}
-              and "Controlli prima di partire non riusciti" in app.text.get("1.0", "end"))
+              and "Pre-start checks failed" in app.text.get("1.0", "end"))
 
     # the check at startup arrives while a dialog is open: it waits for it to close
     window = tk.Toplevel(root)
@@ -785,7 +787,7 @@ def _trial_install(app, root):
         del app._check
         app.work = work
     check("finestra chiusa con un'operazione che parte subito dopo: il controllo all'apertura aspetta che finisca",
-              check_list == [] and "appena finisce" in app.check_status.get())
+              check_list == [] and "as soon as the current operation finishes" in app.check_status.get())
     if app._pending_check:  # (in the test it must not restart later)
         root.after_cancel(app._pending_check)
         app._pending_check = None
@@ -822,12 +824,12 @@ def _trial_fixes(app, root, folder):
               "nuovo, Riapplica da sola che cambia il file del gioco", lines > 10 and cell == "Nuova partita (corretta)"
               and memory.get("Start a new game") == "Nuova partita (corretta)"
               and hashlib.sha256(after).hexdigest() != before and "Nuova partita (corretta)" in after.decode("utf-8")
-              and WINDOWS[-1][0] == "Traduzione riapplicata" and not window.top.winfo_exists())
+              and WINDOWS[-1][0] == "Translation reapplied" and not window.top.winfo_exists())
     windows = len(WINDOWS)
-    app._show_outcome("Analisi e traduzione", outcome.Outcome("PARZIALE", written=True, translated_items=3, remaining=1,
-                                                         remaining_examples=["Quit"]))
+    app._show_outcome("Analysis and translation", outcome.Outcome("PARZIALE", written=True, translated_items=3,
+                                                             remaining=1, remaining_examples=["Quit"]))
     check("finestra di fine con testi rimasti: pulsante 'Correggi traduzioni'",
-              len(WINDOWS) == windows + 1 and ("Correggi traduzioni", "correggi") in WINDOWS[-1][2])
+              len(WINDOWS) == windows + 1 and ("Fix translations", "correggi") in WINDOWS[-1][2])
 
 
 def _read_bytes(path):

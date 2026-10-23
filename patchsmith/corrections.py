@@ -28,24 +28,24 @@ from .project import Project, memory_path, entry_problems, protected_pattern
 from .text import protect
 
 # (key, label) of the window's filters, in menu order
-FILTERS = (("tutte", "Tutte"), ("rimasti", "Rimasti in originale"), ("lunghi", "Troppo lunghi"),
-          ("gioco", "Non scritte nel gioco"), ("segnaposto", "Con numeri o segnaposto"),
-          ("lingua", "In un'altra lingua"), ("sospetti", "Sospetti"), ("mano", "Corrette a mano"))
+FILTERS = (("tutte", "All"), ("rimasti", "Left untranslated"), ("lunghi", "Too long"),
+          ("gioco", "Not written to the game"), ("segnaposto", "Using numbers or placeholders"),
+          ("lingua", "In another language"), ("sospetti", "Suspicious"), ("mano", "Fixed by hand"))
 FILTER_NAMES = dict(FILTERS)
 # the reasons from the Project checks (entry_problems) -> filter and words for the player
-_REASONS = {"non tradotta": ("rimasti", "uguale all'originale"),
-           "in un'altra lingua": ("lingua", "sembra in un'altra lingua"),
-           "riferimento copiato": ("lingua", "uguale alla traduzione ufficiale di un'altra lingua"),
-           "lettere di un'altra lingua": ("lingua", "ha lettere di un'altra lingua"),
-           "scrittura sbagliata": ("lingua", "alfabeto sbagliato"),
-           "numeri diversi": ("segnaposto", "numeri diversi dall'originale"),
-           "a capo diversi": ("sospetti", "righe diverse dall'originale"),
-           "a capo aggiunto": ("sospetti", "righe diverse dall'originale"),
-           "lunghezza anomala": ("sospetti", "lunghezza strana rispetto all'originale"),
-           "ripetizioni": ("sospetti", "parole ripetute"),
-           "testo di contorno": ("sospetti", "testo in più del traduttore"),
-           "rifiuto del modello": ("sospetti", "il traduttore ha risposto con un rifiuto"),
-           "nome tradotto": ("sospetti", "un nome del gioco tradotto")}
+_REASONS = {"not translated": ("rimasti", "identical to the original"),
+           "in another language": ("lingua", "it seems to be in another language"),
+           "copied reference": ("lingua", "same as the official translation of another language"),
+           "letters from another language": ("lingua", "it contains letters from another language"),
+           "wrong script": ("lingua", "wrong alphabet"),
+           "different numbers": ("segnaposto", "different numbers from the original"),
+           "different line breaks": ("sospetti", "different lines from the original"),
+           "line break added": ("sospetti", "different lines from the original"),
+           "abnormal length": ("sospetti", "unusual length compared to the original"),
+           "ripetizioni": ("sospetti", "repeated words"),
+           "surrounding text": ("sospetti", "extra text from the translator"),
+           "model refusal": ("sospetti", "the translator responded with a refusal"),
+           "translated name": ("sospetti", "a game name translated")}
 # verbs that in Italian menus and buttons are usually written in the imperative ("Salva", not "Salvare")
 _UI_VERBS = set("save load export import continue quit exit start restart resume retry reset delete apply cancel "
                 "confirm select play open close buy sell equip unequip use drop craft upgrade join leave create edit "
@@ -86,7 +86,7 @@ class Entry:
     def reasons(self):
         """The problems on one line, for the "Problem" column."""
         text = "; ".join(dict.fromkeys(m for k, m in self.problems.items() if m and k != "mano"))
-        return text or ("corretta a mano" if self.by_hand else "")
+        return text or ("fixed by hand" if self.by_hand else "")
 
 
 class Items:
@@ -218,17 +218,17 @@ def _problems_of(x, problem, dest, pattern, protected, references, machine, prov
     # the fixes made here to texts without a note get one (Project.fix)
     if isinstance(x.memory, str) and t in machine and machine[t] != x.memory:
         x.by_hand = True
-        x.problems["mano"] = "corretta a mano"
+        x.problems["mano"] = "fixed by hand"
     where, value_ = problem.get("dove"), problem.get("valore")
     if not tr.strip():
         reason = problem.get("motivo") if where == "traduzione" else ""
-        x.problems["rimasti"] = "senza traduzione" + (" (%s)" % reason if reason else "")
+        x.problems["rimasti"] = "without translation" + (" (%s)" % reason if reason else "")
     if where == "gioco" and (value_ is None or value_ == x.memory):
-        x.problems["gioco"] = problem.get("motivo") or "il gioco non la saprebbe mostrare"
+        x.problems["gioco"] = problem.get("motivo") or "the game couldn't display it"
     if where == "memoria" and (value_ is None or value_ == x.memory):
-        x.problems["sospetti"] = "sospetta: %s" % (problem.get("motivo") or "non passa i controlli")
+        x.problems["sospetti"] = "suspicious: %s" % (problem.get("motivo") or "doesn't pass the checks")
     if where == "lunghezza" and (value_ is None or value_ == x.memory):  # (see Project._shorten)
-        x.problems["lunghi"] = "troppo lunga: %s" % (problem.get("motivo") or "più lunga del suo spazio")
+        x.problems["lunghi"] = "too long: %s" % (problem.get("motivo") or "longer than its space")
     if not tr.strip():
         return
     for m in entry_problems(t, tr, dest, pattern, references):
@@ -237,17 +237,17 @@ def _problems_of(x, problem, dest, pattern, protected, references, machine, prov
             x.problems.setdefault(filter_, words)
     if x.cache is not None and t in flagged_cache:
         for m in flagged_cache[t][1]:
-            if m == "uguale all'originale":
-                x.problems.setdefault("rimasti", "uguale all'originale")
-            elif m == "in un'altra lingua":
-                x.problems.setdefault("lingua", "sembra in un'altra lingua")
-            elif m == "segnaposto diversi":
-                x.problems.setdefault("segnaposto", "segnaposto diversi dall'originale")
+            if m == "identical to the original":
+                x.problems.setdefault("rimasti", "identical to the original")
+            elif m == "in another language":
+                x.problems.setdefault("lingua", "it seems to be in another language")
+            elif m == "different placeholders":
+                x.problems.setdefault("segnaposto", "placeholders different from the original")
     if x.cache is not None and provisional.get(t) == x.cache:
-        x.problems.setdefault("sospetti", "tradotta mentre giocavi senza tutti i controlli")
+        x.problems.setdefault("sospetti", "translated while you were playing, without all the checks")
     # numbers and placeholders: the filter has all the texts that contain them (to look at), with the reason if they
     # do not match
-    marker_warnings = [a for a in warnings(t, tr, protected) if a.startswith(("manca", "in più", "numeri"))]
+    marker_warnings = [a for a in warnings(t, tr, protected) if a.startswith(("missing", "extra", "different numbers"))]
     if marker_warnings:
         x.problems["segnaposto"] = "; ".join(marker_warnings)
     elif protect(t, protected)[1] or _NUMBERS.search(t):
@@ -255,20 +255,20 @@ def _problems_of(x, problem, dest, pattern, protected, references, machine, prov
     # length: with the space measured in the game; without it, the short labels that became much longer
     measured = measure(x, tr)
     if measured and measured[0] is not None and too_long(*measured):
-        x.problems["lunghi"] = "riga più lunga: %d caratteri, nel gioco ce ne stanno circa %d" % measured
+        x.problems["lunghi"] = "longest line: %d characters, about %d fit in the game" % measured
     elif x.space is None and len(t.split()) <= 3 and len(t) <= 25 and len(tr) >= 2 * len(t) and \
             len(tr) - len(t) >= 8:  # (thresholds tested on real memories: about 2-5% of texts, the obvious cases)
-        x.problems.setdefault("lunghi", "%d caratteri invece di %d: potrebbe non starci" % (len(tr), len(t)))
+        x.problems.setdefault("lunghi", "%d characters instead of %d: it might not fit" % (len(tr), len(t)))
     # one-word labels: turned into a sentence, or an infinitive verb where the imperative is used
     words = re.findall(r"[^\W\d_]+", t)
     if len(words) == 1 and len(words[0]) >= 3 and len(re.findall(r"[^\W\d_]+", tr)) >= 3:
-        x.problems.setdefault("sospetti", "una parola tradotta con una frase")
+        x.problems.setdefault("sospetti", "a word translated as a phrase")
     if dest.split("-")[0] == "it" and 1 <= len(words) <= 2 and "".join(words).lower() in _UI_VERBS:
         first = tr.split()[0] if tr.split() else ""
         if _INFINITIVE.match(first) and not _NOT_INFINITIVE.search(first):
             shape = _imperative(first)
-            x.problems.setdefault("sospetti", "verbo all'infinito: nei pulsanti di solito si usa %s" % (
-                "\"%s\", non \"%s\"" % (shape, first) if shape else "l'imperativo (\"%s\" è all'infinito)" % first))
+            x.problems.setdefault("sospetti", "infinitive verb: buttons usually use %s" % (
+                '"%s", not "%s"' % (shape, first) if shape else 'the imperative ("%s" is in the infinitive)' % first))
 
 
 def _imperative(infinitive):
@@ -285,24 +285,24 @@ def warnings(original, translated, protected=()):
     """What is wrong in a translation written by hand, in words for the player (empty: it is fine): placeholders and
     game codes that are missing or extra (they must be copied as they are), different numbers, different lines."""
     if not translated.strip():
-        return ["la traduzione è vuota"]
+        return ["the translation is empty"]
     output = []
     so, markers_o = protect(original, protected)
     st, markers_t = protect(translated, protected)
     absent = collections.Counter(markers_o) - collections.Counter(markers_t)
     additional = collections.Counter(markers_t) - collections.Counter(markers_o)
     if absent:
-        output.append("manca %s (va copiato così com'è)" % ", ".join(sorted(absent)))
+        output.append("missing %s (must be copied exactly as is)" % ", ".join(sorted(absent)))
     if additional:
-        output.append("in più: %s" % ", ".join(sorted(additional)))
+        output.append("extra: %s" % ", ".join(sorted(additional)))
     without_o, without_t = re.sub(r"\[\[\d+\]\]", " ", so), re.sub(r"\[\[\d+\]\]", " ", st)
     if _numbers(without_o) != _numbers(without_t) and not _numbers_in_words(without_o, without_t, "it"):
         absent, additional = numbers_difference(without_o, without_t)
-        details = (["manca %s" % ", ".join(absent)] if absent else []) + \
-            (["in più %s" % ", ".join(additional)] if additional else [])
-        output.append("numeri diversi dall'originale%s" % (" (%s)" % "; ".join(details) if details else ""))
+        details = (["missing %s" % ", ".join(absent)] if absent else []) + \
+            (["extra %s" % ", ".join(additional)] if additional else [])
+        output.append("different numbers from the original%s" % (" (%s)" % "; ".join(details) if details else ""))
     if original.count("\n") != translated.count("\n"):
-        output.append("righe: %d invece di %d" % (translated.count("\n") + 1, original.count("\n") + 1))
+        output.append("lines: %d instead of %d" % (translated.count("\n") + 1, original.count("\n") + 1))
     return output
 
 
@@ -392,8 +392,8 @@ def save(profile_path, changes, seen=None, test=False, log=print):
         lines = {t: (seen.get(t), v) for t, v in changes.items() if seen.get(t) != v}
         mark_to_write(p.profile, lines)
     if changed or lines:
-        log("Correggi traduzioni: %d correzioni salvate%s" % (
-            len(set(changed) | set(lines)), " (le righe della cache di XUnity si scrivono a gioco chiuso)"
+        log("Fix translations: %d corrections saved%s" % (
+            len(set(changed) | set(lines)), " (The XUnity cache lines are written when the game is closed)"
             if lines else ""))
     return changed, lines
 
@@ -408,7 +408,8 @@ def texts_to_retranslate(items):
         if x.by_hand:
             by_hand += 1
             continue
-        is_provisional = "tradotta mentre giocavi" in (x.problems.get("sospetti") or "")
+        suspicious = x.problems.get("sospetti") or ""  # (Italian in the problems saved before 0.2)
+        is_provisional = "translated while you were playing" in suspicious or "tradotta mentre giocavi" in suspicious
         if x.memory is not None or "rimasti" in x.problems or is_provisional:
             texts.append(x.text)
     return texts, by_hand
@@ -439,8 +440,8 @@ def create_translator(name, model=None, log=print):
         if ollama.state() != "pronto":
             raise backend.BackendError(backend.NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=backend.INSTALL_COMMAND)
         if not ollama.model_present(model):
-            raise backend.BackendError("Il modello %s non e' scaricato: sceglilo accanto al traduttore locale e premi "
-                                        "'Installa...'." % ollama.MODELS[model]["etichetta"], "TRADUTTORE_ASSENTE",
+            raise backend.BackendError("The %s model is not downloaded: choose it next to the local translator and "
+                                       "press 'Install...'." % ollama.MODELS[model]["etichetta"], "TRADUTTORE_ASSENTE",
                                         command="python -I smith.py local --install %s" % model)
         return backend.Local(model, log=log)
     return backend.create_backend(name, log)
@@ -484,7 +485,8 @@ def retranslate(profile_path, texts, translator, log=print, test=False):
                     lines[t] = (c, p.memory[t])
             mark_to_write(p.profile, lines)
     unique = list(dict.fromkeys(texts))
-    log("Ritradotti: %d testi su %d%s" % (len(new_lines), len(unique), " (per gli altri resta la traduzione di prima)"
-                                         if len(new_lines) < len(unique) else ""))
+    log("Re-translated: %d texts out of %d%s" % (len(new_lines), len(unique),
+                                                 " (the others keep the previous translation)"
+                                                 if len(new_lines) < len(unique) else ""))
     return {"ritradotte": len(new_lines), "rimaste": len(unique) - len(new_lines), "testi": len(unique),
             "interrotta": p.translation_reason if p.translation_outcome == "TRADUTTORE_BLOCCATO" else ""}

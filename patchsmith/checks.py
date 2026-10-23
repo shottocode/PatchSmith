@@ -60,24 +60,24 @@ MAX_SAVED_ATTEMPTS = 20  # attempts kept for each fix
 MAX_SENTENCES = 200  # journal lines re-translated per check ("Analyze and translate" retries the others)
 EVENT_DAYS = 30  # crashes in the Windows log: at most from these last days
 XUNITY_SIGNALS = (  # (expression, what it means) in the Unity and BepInEx logs
-    (r"consecutive errors occurred\. Shutting down", "spento dopo troppi errori"),
-    (r"Failed: '", "frasi non tradotte"),
-    (r"SPAM DETECTED", "fermato dal controllo anti-spam di XUnity"),
-    (r"GoogleTranslateEndpointV2", "errore di Google"),
+    (r"consecutive errors occurred\. Shutting down", "turned off due to too many errors"),
+    (r"Failed: '", "untranslated phrases"),
+    (r"SPAM DETECTED", "blocked by XUnity's anti-spam filter"),
+    (r"GoogleTranslateEndpointV2", "Google error"),
 )
 MOD_STACK = ("BepInEx", "HarmonyX", "Harmony", "XUnity", "PatchSmith", "MonoMod")
 KEY_DESCRIPTIONS = {  # keys of the XUnity and BepInEx configuration, in words for the player
-    "Endpoint": "chi traduce le frasi nuove", "FallbackEndpoint": "chi traduce le frasi nuove",
-    "Url": "chi traduce le frasi nuove", "EnableShortDelay": "limiti per le frasi nuove",
-    "DisableSpamChecks": "limiti per le frasi nuove", "MaxCharactersPerTranslation": "limiti per le frasi nuove",
-    "EnableBatching": "limiti per le frasi nuove", "Language": "lingue", "FromLanguage": "lingue",
-    "EnableIMGUI": "testi disegnati dal gioco (IMGUI)", "EnableTextPathLogging": "opzioni di prova di XUnity",
-    "EnableTranslationHelper": "opzioni di prova di XUnity", "CopyToClipboard": "opzioni di prova di XUnity",
-    "Type": "avvio di BepInEx (Unity 6)", "WriteUnityLog": "registro delle lettere mancanti nei font del gioco",
+    "Endpoint": "who translates new phrases", "FallbackEndpoint": "who translates new phrases",
+    "Url": "who translates new phrases", "EnableShortDelay": "limits for new phrases",
+    "DisableSpamChecks": "limits for new phrases", "MaxCharactersPerTranslation": "limits for new phrases",
+    "EnableBatching": "limits for new phrases", "Language": "languages", "FromLanguage": "languages",
+    "EnableIMGUI": "texts drawn by the game (IMGUI)", "EnableTextPathLogging": "XUnity test options",
+    "EnableTranslationHelper": "XUnity test options", "CopyToClipboard": "XUnity test options",
+    "Type": "starting BepInEx (Unity 6)", "WriteUnityLog": "log of letters missing from the game's fonts",
 }
-PLUGIN_OUTCOMES = {"cfg-mancante": "manca il suo file di configurazione",
-                "patchsmith-mancante": "PatchSmith non si trova piu' dove era",
-                "python-mancante": "Python non si trova piu' dove era", "errore": "non e' partito"}
+PLUGIN_OUTCOMES = {"cfg-mancante": "its configuration file is missing",
+                "patchsmith-mancante": "PatchSmith is no longer where it used to be",
+                "python-mancante": "Python is no longer where it used to be", "errore": "didn't start"}
 
 
 class CheckError(Exception):
@@ -142,7 +142,7 @@ def _now():
 
 def _when(instant):
     try:
-        return datetime.datetime.fromtimestamp(instant).strftime("%d/%m alle %H:%M")
+        return datetime.datetime.fromtimestamp(instant).strftime("%d/%m at %H:%M")
     except (OSError, OverflowError, ValueError, TypeError):
         return "?"
 
@@ -240,7 +240,7 @@ def _read_profile(path):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):
-        raise ValueError("profilo non valido")
+        raise ValueError("invalid profile")
     return data
 
 
@@ -354,7 +354,7 @@ def _player_logs(c):
 
 
 def _chars_list(chars):
-    return ", ".join("«%s»" % ch for ch in sorted(chars)[:12]) + (" e altri" if len(chars) > 12 else "")
+    return ", ".join("«%s»" % ch for ch in sorted(chars)[:12]) + (" and others" if len(chars) > 12 else "")
 
 
 def _verify_font(c, logs):
@@ -367,7 +367,7 @@ def _verify_font(c, logs):
     try:
         return _missing_letters(c, logs)
     except Exception as e:  # noqa: BLE001 - an extra check
-        c.log("  ! Controllo delle lettere dei font non riuscito (%s: %s)" % (type(e).__name__, e))
+        c.log("  ! Font letter check failed (%s: %s)" % (type(e).__name__, e))
         return []
 
 
@@ -410,20 +410,20 @@ def _missing_letters(c, logs):
     if not lines and not new_items:
         return []  # only in the game's texts, or already adapted
     shown_chars = new_items or {ch for v, _ in lines.values() for ch in v if ch in all_}
-    message = ("Nel gioco alcune lettere delle traduzioni non si vedono (al loro posto un quadratino o uno spazio): "
-                 "i font del gioco non hanno %s. Le sostituisco nelle frasi tradotte (es. è diventa e') e da ora le "
-                 "traduzioni scritte nel gioco le evitano." % _chars_list(shown_chars))
+    message = ("In the game, some letters of the translations don't show (a small square or a space appears instead): "
+               "the game's fonts don't have %s. I'm replacing them in the translated phrases (e.g. è becomes e') and "
+               "from now on the translations written to the game avoid them." % _chars_list(shown_chars))
     # whole sentences, singular and plural (pieces cannot be translated into the interface language)
     if by_hand == 1:
-        message += (" Una frase con quelle lettere non la posso cambiare da solo (cambiata a mano, o senza una "
-                      "lettera simile): correggila con \"Correggi traduzioni\".")
+        message += (" One sentence with those letters can't be changed automatically (it was fixed by hand, or there "
+                    'is no similar letter): fix it with "Fix translations".')
     elif by_hand:
-        message += (" %d frasi con quelle lettere non le posso cambiare da solo (cambiate a mano, o senza una "
-                      "lettera simile): correggile con \"Correggi traduzioni\"." % by_hand)
+        message += (" %d sentences with those letters can't be changed automatically (they were fixed by hand, or "
+                    'there is no similar letter): fix them with "Fix translations".' % by_hand)
     return [Problem("FONT_MANCANTI", "avviso", message, remedy=lambda: _adapt_font(c, set(found), lines),
                      safe=True, signal="font:" + "".join(sorted(shown_chars | new_items)), key="font",
                      action="correggi" if by_hand else "crea_rapporto",
-                     detail="font senza questi caratteri: %s" % "; ".join(
+                     detail="font without these characters: %s" % "; ".join(
                          "%s U+%04X in %s" % (ch, ord(ch), ", ".join(sorted(f for f in found[ch] if f)) or "?")
                          for ch in sorted(found)[:12]))]
 
@@ -442,10 +442,11 @@ def _adapt_font(c, chars, lines):
                                           substitute={t: old_folder for t, (old_folder, _) in lines.items()},
                                           counts=counts)
         n = counts.get("sostituite", 0)
-        return True, ("una frase della cache adattata ai font del gioco" if n == 1 else
-                      "%d frasi della cache adattate ai font del gioco" % n)
+        return True, ("a phrase from the cache adapted to the game's fonts" if n == 1 else
+                      "%d phrases from the cache adapted to the game's fonts" % n)
     success, text = _reapply(c)
-    return success, ("traduzioni riscritte senza le lettere che i font non hanno (%s)" % text) if success else text
+    return success, ("rewritten translations without the letters that fonts don't have (%s)"
+                     % text) if success else text
 
 
 def _windows_crash(c, since):
@@ -489,13 +490,13 @@ def _reconfigure(c):
     from .outcome import LIVE
     manifest = adapter_unity.read_manifest(c.folder)
     if manifest is None:
-        raise CheckError("l'elenco dei file installati da PatchSmith non e' valido")
+        raise CheckError("the list of files installed by PatchSmith is invalid")
     info = adapter_unity.analyze(c.folder)
     missing = [rel for rel in manifest["file"] if not os.path.exists(os.path.join(c.folder, *rel.split("/")))]
     packages = ["bepinex5_%s" % info.get("architettura"), "xunity_bepinex5"]
     if missing and not all(n in components.CATALOG and components.is_available(n) for n in packages):
-        raise CheckError("per rimettere i file mancanti servono i componenti da scaricare: premi 'Analizza e "
-                              "traduci'")
+        raise CheckError("to restore the missing files, the components must be downloaded: press 'Analyze and "
+                         "translate'")
     choice = _live_choice(c.profile)
     local = c.path if choice == "servizio" else ("nessuno" if choice == "nessuno" else False)
     src_lang, a = _unity_languages(c)
@@ -503,19 +504,19 @@ def _reconfigure(c):
     if c.state.get("entrypoint_forzato"):
         adapter_unity.bepinex_entrypoint(c.folder, None, force=True)
     kind, note = _live(c.folder, c.profile, local)
-    text = "frasi nuove mentre giochi: %s" % LIVE.get(kind, kind or "nessuno")
+    text = "new phrases while playing: %s" % LIVE.get(kind, kind or "nessuno")
     if note == "senza_traduttore":  # PatchSmith's translator is in the game, but right now it has no translators
-        return False, "il traduttore di PatchSmith e' pronto nel gioco, ma adesso non ha un traduttore disponibile " \
-                      "(quello locale non e' installato e quelli online sono in pausa)", "installa_locale"
+        return False, ("the PatchSmith translator is ready in the game, but now it doesn't have a translator "
+                       "available (the local one isn't installed, and the online ones are paused)"), "installa_locale"
     if local and kind not in ("locale", "online"):
-        return False, "non sono riuscito a preparare il traduttore di PatchSmith nel gioco (%s)" % text
+        return False, "I couldn't set up PatchSmith's translator in the game (%s)" % text
     return True, text
 
 
 def _entrypoint(c):
     adapter_unity.bepinex_entrypoint(c.folder, None, force=True)
     c.state["entrypoint_forzato"] = True
-    return "BepInEx ora parte quando il gioco e' pronto (al primo MonoBehaviour)"
+    return "BepInEx now starts when the game is ready (at the first MonoBehaviour)"
 
 
 def _verify_unity(c):
@@ -523,12 +524,13 @@ def _verify_unity(c):
     folder = c.folder
     manifest = adapter_unity.read_manifest(folder)
     if manifest is None:
-        return [Problem("MANIFESTO", "avviso", "Il file con l'elenco di quello che PatchSmith ha installato nel gioco "
-                         "non e' valido: per sicurezza non correggo nulla da solo.", action="crea_rapporto",
-                         signal="manifesto")]
+        return [Problem("MANIFESTO", "avviso", "The file listing what PatchSmith installed in the game is not valid: "
+                                               "to be safe, I won't fix anything automatically.",
+                         action="crea_rapporto", signal="manifesto")]
     if manifest.get("in_corso"):  # as for "Analyze and translate": a half-done installation does not fix itself
-        return [Problem("INSTALLAZIONE_INTERROTTA", "errore", "L'installazione della traduzione si e' interrotta a "
-                         "meta': premi \"Ripristina originali\" e poi \"Analizza e traduci\" per rifarla.",
+        return [Problem("INSTALLAZIONE_INTERROTTA", "errore", "The translation installation was interrupted halfway: "
+                                                              'press "Restore originals" and then "Analyze and '
+                                                              'translate" to redo it.',
                          action="ripristina", signal="in_corso")]
     ref = c.reference
     logs = unity_logs(folder)
@@ -552,37 +554,40 @@ def _verify_unity(c):
         text = most_recent[2] if most_recent else log_text
         instant = most_recent[0] if most_recent else (max(e["istante"] for e in windows) if windows else t_log)
         when = _when(instant)
-        repeats = "%d volte, l'ultima il %s" % (len(recent), when) if len(recent) > 1 else "il %s" % when
+        repeats = "%d times, last on %s" % (len(recent), when) if len(recent) > 1 else "on %s" % when
         signature = "Chainloader:Start" in text and "Application:.cctor" in text
         signal = "crash:%s" % most_recent[1] if most_recent else "bepinex:%d" % int(t_log)
         forced = bool(c.state.get("entrypoint_forzato"))  # already fixed once by a check
         if (signature or not most_recent) and adapter_unity.current_entrypoint(folder) != "MonoBehaviour":
             problems.append(Problem(
-                "CRASH_AVVIO", "errore", "Il gioco si e' chiuso all'avvio (%s) mentre partiva BepInEx, il programma che "
-                "carica la traduzione: succede con alcuni giochi Unity. Lo faccio partire piu' tardi, quando il gioco "
-                "e' pronto." % repeats, remedy=lambda: _entrypoint(c), safe=True, signal=signal,
-                action="ripristina"))
+                "CRASH_AVVIO", "errore", "The game crashed at startup (%s) while BepInEx was loading, the program that "
+                                         "loads the translation. This happens with some Unity games. I'll start it "
+                                         "later, once the game is fully loaded." % repeats,
+                remedy=lambda: _entrypoint(c), safe=True, signal=signal, action="ripristina"))
         elif (most_recent and (signature or any(k in _stack(text) for k in MOD_STACK))) or windows:
             # "does not accept mods" only with a real crash (Unity crash folder or Windows log) while BepInEx was
             # starting or with BepInEx in the stack: an incomplete log alone is not enough
             problems.append(Problem(
-                "CRASH_CON_MOD", "errore", "Il gioco si e' chiuso all'improvviso (%s) e la causa sembra BepInEx, il "
-                "programma che carica la traduzione%s: questo gioco probabilmente non accetta mod. Premi \"Ripristina "
-                "originali\" per giocare senza traduzione (le traduzioni restano salvate) e crea un rapporto." % (
-                    repeats, ", anche dopo la correzione che lo fa partire piu' tardi" if forced else ""),
+                "CRASH_CON_MOD", "errore", "The game closed suddenly (%s) and the cause seems to be BepInEx, the "
+                                           "program that loads the translation%s: this game probably doesn't accept "
+                                           'mods. Press "Restore originals" to play without the translation (the '
+                                           "translations stay saved) and create a report." % (
+                    repeats, ", even after the fix that makes it start later" if forced else ""),
                 remedy=lambda: _remove_unity(c), safe=False, signal=signal, action="ripristina"))
         elif most_recent:
             problems.append(Problem(
-                "CRASH", "avviso", "Il gioco si e' chiuso all'improvviso (%s), ma non sembra colpa della traduzione. Se "
-                "succede ancora, prova \"Ripristina originali\" per vedere se senza traduzione va." % repeats,
+                "CRASH", "avviso", "The game closed suddenly (%s), but it doesn't seem to be the translation's fault. "
+                                   'If it happens again, try "Restore originals" to see if it works without the '
+                                   "translation." % repeats,
                 signal=signal, action="ripristina"))
         else:
             # BepInEx already starts at the first MonoBehaviour and there is no trace of a crash: usually the game was
             # closed while loading. Just to know
             problems.append(Problem(
-                "AVVIO_INCOMPLETO", "info", "All'ultima partita (%s) BepInEx, il programma che carica la traduzione, "
-                "non ha finito di partire, ma non c'e' traccia di un crash: forse il gioco e' stato chiuso mentre "
-                "caricava. Se invece si chiude da solo all'avvio, premi \"Ripristina originali\" e crea un rapporto."
+                "AVVIO_INCOMPLETO", "info", "In the last session (%s), BepInEx, the program that loads the "
+                                            "translation, didn't fully start, but there's no sign of a crash: perhaps "
+                                            "the game was closed while it was loading. If it closes on its own when "
+                                            'you start it, press "Restore originals" and create a report.'
                 % when, signal=signal))
 
     # 2) the translator of new lines stopped during the play session (XUnity: errors, anti-spam, Google)
@@ -604,24 +609,25 @@ def _verify_unity(c):
         failed += re.findall(r"Failed: '((?:[^'\\]|\\.){1,80})'", text)
     if found:
         kind = adapter_unity.live_translator(folder)
-        count = ((" (una frase rimasta in originale: \"%s\")" % failed[0]) if len(set(failed)) == 1 else
-                  (" (%d frasi rimaste in originale, es. \"%s\")" % (len(set(failed)), failed[0]))) if failed else ""
+        count = ((' (one phrase left untranslated: "%s")' % failed[0]) if len(set(failed)) == 1 else
+                  (' (%d phrases left untranslated, e.g. "%s")' % (len(set(failed)), failed[0]))) if failed else ""
         signal = "xunity:" + ",".join(sorted(set(signals)))
-        if kind != "servizio" or "errore di Google" in found:
+        if kind != "servizio" or "Google error" in found:
             problems.append(Problem(
-                "TRADUTTORE_FERMO", "avviso", "Durante l'ultima partita il traduttore delle frasi nuove si e' fermato "
-                "(%s)%s. Da ora le frasi nuove le traduce PatchSmith, con i suoi traduttori e le loro pause."
+                "TRADUTTORE_FERMO", "avviso", "During the last session, the translator for new phrases stopped (%s)%s. "
+                                              "From now on PatchSmith translates the new phrases, with its translators "
+                                              "and their pauses."
                 % (", ".join(sorted(found)), count), remedy=lambda: _reconfigure(c), safe=True, signal=signal,
                 key="riconfigura", action="crea_rapporto"))
         else:
             from . import xunity_service
             no_live = not xunity_service.expected_translators(c.profile)
             problems.append(Problem(
-                "TRADUTTORE_FERMO", "avviso", "Durante l'ultima partita il traduttore di PatchSmith non ha tradotto "
-                "alcune frasi nuove (%s)%s.%s" % (", ".join(sorted(found)), count,
-                                                  " Adesso non c'e' un traduttore disponibile: installa il traduttore "
-                                                  "locale." if no_live else " Alla prossima \"Analizza e traduci\" le "
-                                                  "riprovo."),
+                "TRADUTTORE_FERMO", "avviso", "During the last session, PatchSmith's translator didn't translate some "
+                                              "new phrases (%s)%s.%s" % (", ".join(sorted(found)), count,
+                                                  " Currently, there is no translator available: please install the "
+                                                  "local translator." if no_live else
+                                                  " I'll retry them at the next \"Analyze " 'and translate".'),
                 signal=signal, action="installa_locale" if no_live else None))
 
     # 2b) letters of the translations that the game's fonts cannot draw (TextMeshPro warnings)
@@ -631,8 +637,9 @@ def _verify_unity(c):
     missing = [rel for rel in manifest["file"] if not os.path.exists(os.path.join(folder, *rel.split("/")))]
     if missing:
         problems.append(Problem(
-            "FILE_MANCANTI", "errore", "Mancano %d file della traduzione nel gioco (es. %s): forse li ha tolti "
-            "l'antivirus. Li rimetto." % (len(missing), missing[0]), remedy=lambda: _reconfigure(c), safe=True,
+            "FILE_MANCANTI", "errore", "%d translation files are missing from the game (e.g. %s): maybe the antivirus "
+                                       "removed them. I'm putting them back." % (len(missing), missing[0]),
+            remedy=lambda: _reconfigure(c), safe=True,
             signal="mancanti:%d:%s" % (len(missing), missing[0]), key="riconfigura", action="riapplica"))
 
     # 4) PatchSmith's translator cannot start with the game (changed paths, state written by the plugin)
@@ -641,22 +648,23 @@ def _verify_unity(c):
         cfg = adapter_unity.read_service_command(folder)
         program = cfg.get("Programma")
         if not program or not os.path.exists(program):
-            faults.append("Python non si trova piu' dove era")
+            faults.append("Python is no longer where it used to be")
         m = re.search(r'-I "([^"]+)"', cfg.get("Argomenti", ""))
         if not m or not os.path.exists(m.group(1)):
-            faults.append("PatchSmith non si trova piu' dove era")
+            faults.append("PatchSmith is no longer where it used to be")
         m = re.search(r'--profilo "([^"]+)"', cfg.get("Argomenti", ""))
         if not m or not _same(m.group(1), c.path):
-            faults.append("il profilo del gioco e' cambiato")
+            faults.append("the game profile has been updated")
     plugin_state = adapter_unity.read_service_state(folder)
     t_plugin = _mtime(os.path.join(folder, *adapter_unity.SERVICE_STATE.split("/")))
     if plugin_state and t_plugin and t_plugin > ref and plugin_state.get("Esito", "avviato") != "avviato":
-        faults.append("all'ultimo avvio del gioco %s"
-                      % PLUGIN_OUTCOMES.get(plugin_state.get("Esito"), "non e' partito"))
+        faults.append("at the last game start %s"
+                      % PLUGIN_OUTCOMES.get(plugin_state.get("Esito"), "didn't start"))
     if faults:
         problems.append(Problem(
-            "SERVIZIO", "avviso", "Il traduttore di PatchSmith per le frasi nuove non puo' partire con il gioco (%s): "
-            "lo preparo di nuovo." % "; ".join(faults), remedy=lambda: _reconfigure(c), safe=True,
+            "SERVIZIO", "avviso", "The PatchSmith translator for new phrases cannot start with the game (%s): I'm "
+                                  "going to prepare it again." % "; ".join(faults),
+            remedy=lambda: _reconfigure(c), safe=True,
             signal="servizio:" + "|".join(faults), key="riconfigura", action="crea_rapporto"))
 
     # 5) who translates new lines, configuration and the version of PatchSmith that wrote it
@@ -689,24 +697,25 @@ def _verify_config(c, manifest):
         (choice == "nessuno" and kind not in ("nessuno", None))
     if mismatched:
         if choice == "nessuno":
-            where = "le traduce ancora un traduttore, ma l'hai spento alla fine di 'Analizza e traduci'"
+            where = "a translator still translates them, but you turned it off at the end of 'Analyze and translate'"
         elif kind == "google":
-            where = "le chiede XUnity a Google da solo, senza le pause di PatchSmith"
+            where = "XUnity requests them from Google on its own, without PatchSmith's pauses"
             from .limiter import Limiter, when
             try:
                 block = Limiter("google", log=None).current_block()
             except (OSError, ValueError, TypeError, AttributeError):
                 block = None
             if block:
-                where += ", ma Google e' in pausa (bloccato) %s: restano in originale" % (
-                    "finche' non lo riattivi" if block.get("disattivato") else "fino " + when(block["fino"]))
+                where += ", but Google is paused (blocked) %s: they stay untranslated" % (
+                    "until you reactivate it" if block.get("disattivato") else
+                    "until " + when(block["fino"]).replace("at ", "", 1))
         else:
-            where = "nessuno le traduce (restano in originale)"
+            where = "nobody translates them (they stay untranslated)"
         problems.append(Problem(
-            "DAL_VIVO", "avviso", "Frasi nuove mentre giochi: %s. %s" % (
-                where, "Le passo al traduttore di PatchSmith." if choice == "servizio" else
-                "Spengo il traduttore, come hai scelto." if choice == "nessuno" else
-                "Le rimetto a Google, come chiede il profilo del gioco."),
+            "DAL_VIVO", "avviso", "New phrases while playing: %s. %s" % (
+                where, "I'm passing them to the PatchSmith translator." if choice == "servizio" else
+                "I'm turning off the translator, as you requested." if choice == "nessuno" else
+                "I'm handing them back to Google, as the game profile requires."),
             remedy=lambda: _reconfigure(c), safe=True, signal="dal_vivo:%s" % kind, key="riconfigura",
             action="crea_rapporto"))
         mismatches = [d for d in mismatches
@@ -732,17 +741,19 @@ def _verify_config(c, manifest):
         # installed with another version: it is said here (the same fix also updates the version in the manifest),
         # without a second VERSION message for the same thing
         problems.append(Problem(
-            "CONFIGURAZIONE", "avviso", "La configurazione della traduzione nel gioco non e' quella giusta (%s)%s: la "
-            "rimetto a posto." % (", ".join(what), ", perche' e' stata installata con un'altra versione di "
-                                  "PatchSmith%s" % (" (%s)" % version if version else "") if differs else ""),
+            "CONFIGURAZIONE", "avviso", "The translation settings in the game are incorrect (%s)%s: I'm going to fix "
+                                        "them." % (", ".join(what),
+                                                   ", because it was installed with a different version of PatchSmith%s"
+                                                   % (" (%s)" % version if version else "") if differs else ""),
             remedy=lambda: _reconfigure(c), safe=True,
             signal="config:" + "|".join(sorted("%s.%s=%s" % (s, k, v) for s, k, v, _ in mismatches)),
             key="riconfigura", action="crea_rapporto",
-            detail="; ".join("%s.%s: %s invece di %s" % (s, k, v, exp) for s, k, v, exp in mismatches)))
+            detail="; ".join("%s.%s: %s instead of %s" % (s, k, v, exp) for s, k, v, exp in mismatches)))
     elif differs:
         problems.append(Problem(
-            "VERSIONE", "info", "La traduzione e' stata installata con un'altra versione di PatchSmith%s: "
-            "aggiorno la configurazione nel gioco con quella di adesso." % (" (%s)" % version if version else ""),
+            "VERSIONE", "info", "The translation was installed with a different version of PatchSmith%s: updating the "
+                                "configuration in the game to the current one."
+                                % (" (%s)" % version if version else ""),
             remedy=lambda: _reconfigure(c), safe=True, signal="versione:%s" % (version or "-"),
             key="riconfigura", action="riapplica"))
     return problems
@@ -793,23 +804,25 @@ def _verify_journal(c):
         # pauses with the window frozen. They stay to do, with the "Re-translate" button (or the next "Analyze and
         # translate"); the journal does not move forward, so the button's check finds them again. Lost lines are
         # saved at once (no translator needed)
-        problems = [Problem("FRASI_DA_RITRADURRE", "avviso", "Mentre giocavi, %d frasi sono rimaste in originale o "
-                             "tradotte senza tutti i controlli (es. \"%s\"): premi \"Ritraduci\" per tradurle adesso "
-                             "(le riprova anche la prossima \"Analizza e traduci\")." % (
+        problems = [Problem("FRASI_DA_RITRADURRE", "avviso", "While you were playing, %d phrases were left "
+                                                             "untranslated or translated without all the checks (e.g. "
+                                                             '"%s"): press "Re-translate" to translate them now (the '
+                                                             'next "Analyze and translate" also retries them).' % (
                                  len(provisional), " ".join(next(iter(provisional)).split())[:60]),
                              action="ritraduci", signal="diario:%s" % up_to, extra={"frasi": len(provisional)})]
         if lost:
-            problems.append(Problem("FRASI_DA_RIFARE", "info", "Mentre giocavi, %d frasi tradotte non erano state "
-                                     "salvate: le salvo." % len(lost), remedy=lambda: _redo_sentences(c, {}, lost),
-                                     safe=True, signal="diario-perse:%s" % up_to, key="FRASI_PERSE"))
+            problems.append(Problem("FRASI_DA_RIFARE", "info", "While you were playing, %d translated phrases hadn't "
+                                                               "been saved: I've saved them now." % len(lost),
+                                     remedy=lambda: _redo_sentences(c, {}, lost), safe=True,
+                                     signal="diario-perse:%s" % up_to, key="FRASI_PERSE"))
         return problems
     parts = []
     if provisional:
-        parts.append("%d frasi sono rimaste in originale o tradotte senza tutti i controlli (es. \"%s\"): le traduco "
-                     "di nuovo adesso" % (len(provisional), " ".join(next(iter(provisional)).split())[:60]))
+        parts.append('%d phrases were left untranslated or translated without all the checks (e.g. "%s"): translating '
+                     "them again now" % (len(provisional), " ".join(next(iter(provisional)).split())[:60]))
     if lost:
-        parts.append("%d frasi tradotte non erano state salvate: le salvo" % len(lost))
-    return [Problem("FRASI_DA_RIFARE", "info", "Mentre giocavi, %s." % "; ".join(parts),
+        parts.append("%d translated phrases had not been saved: saving them" % len(lost))
+    return [Problem("FRASI_DA_RIFARE", "info", "While you were playing, %s." % "; ".join(parts),
                      remedy=lambda: _redo_sentences(c, provisional, lost), safe=True,
                      signal="diario:%s" % up_to, action="traduci", extra={"diario_fino": up_to})]
 
@@ -832,19 +845,19 @@ def _verify_fixes(c):
     def write():
         from .auto import write_unity_fixes
         written_texts, how_many = write_unity_fixes(c.profile, c.log)
-        text = "%s nel gioco" % ("scritta" if written_texts == 1 else "scritte %d" % written_texts)
+        text = "%d written to the game" % written_texts
         if written_texts < how_many:
-            text += (", una lasciata com'era (la riga era stata cambiata dopo la correzione)"
+            text += (", one left as it was (the line had been changed after the fix)"
                       if how_many - written_texts == 1
-                      else ", %d lasciate com'erano (le righe erano state cambiate dopo la correzione)"
+                      else ", %d left as they were (the lines had been changed after the fix)"
                       % (how_many - written_texts))
         return True, text
 
     return [Problem(
         "CORREZIONI_IN_ATTESA", "info",
-        "Una tua correzione fatta in \"Correggi traduzioni\" con il gioco aperto non era ancora nel gioco: la scrivo "
-        "adesso." if n == 1 else "%d tue correzioni fatte in \"Correggi traduzioni\" con il gioco aperto non erano "
-        "ancora nel gioco: le scrivo adesso." % n,
+        'One of your corrections made in "Fix translations" while the game was open was not in the game yet: writing '
+        "it now." if n == 1 else '%d of your corrections made in "Fix translations" while the game was open were not '
+                                 "in the game yet: writing them now." % n,
         remedy=write, safe=True, signal="correzioni:%s" % fingerprint, key="correzioni", action="riapplica")]
 
 
@@ -878,10 +891,10 @@ def _redo_sentences(c, provisional, lost):
     adapter_unity.write_xunity_cache(c.folder, a, translations, c.log, substitute=substitute, counts=counts,
                                       excluded=c.profile.get("caratteri_mancanti"))
     remaining_count = len(provisional) - len([t for t in texts if t in translations])
-    text = "%d frasi tradotte e messe nel gioco (%d righe provvisorie sostituite)" % (
+    text = "%d phrases translated and written to the game (%d temporary lines replaced)" % (
         len(translations), counts.get("sostituite", 0))
     if remaining_count or failed:
-        text += "; %d restano in originale (\"Analizza e traduci\" le riprova con parametri nuovi)" % max(
+        text += '; %d still untranslated ("Analyze and translate" retries them with new parameters)' % max(
             remaining_count, failed)
     if absent is not None:
         text += ". %s" % absent
@@ -905,23 +918,25 @@ def _verify_service_log(c):
     text = _read(os.path.join(ollama.folder(), "servizio-xunity.log"), 512 * 1024)
     if not text:
         return []
-    port = "porta %d " % xunity_service.port_for(c.name)
+    ports = tuple(w % xunity_service.port_for(c.name) for w in ("Port %d ", "porta %d "))  # (porta: logs before 0.2)
     current_name, found = None, []
     for line in text.splitlines():
         m = re.match(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) (.*)$", line)
         if not m:
             continue
         message = m.group(2).strip()
-        g = re.search(r"\(gioco: ([^)]+)\)\s*$", message)
+        g = re.search(r"\((?:game|gioco): ([^)]+)\)\s*$", message)  # (gioco: logs written before 0.2)
         if g:
             current_name = g.group(1)
             continue
         # the "! ..." lines (port in use, a translator that does not start) and the translator queue left empty
-        unlabeled = message.startswith("Traduttori per le frasi nuove: nessuno")
+        unlabeled = message.startswith(("Translators for new phrases: nobody",
+                                        "Traduttori per le frasi nuove: nessuno"))
         if not message.startswith("!") and not unlabeled:
             continue
-        is_ours = current_name == c.name or port in message
-        if is_ours and (unlabeled or re.search(r"occupata|non pronti|non disponibile|non avviato", message)):
+        is_ours = current_name == c.name or any(p in message for p in ports)
+        if is_ours and (unlabeled or re.search(r"in use by another program|not ready|not available|not started"
+                                        r"|occupata|non pronti|non disponibile|non avviato", message)):
             try:
                 instant = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M:%S"))
             except (ValueError, OverflowError):
@@ -930,8 +945,8 @@ def _verify_service_log(c):
                 found.append((instant, message.lstrip("! ").strip()))
     if not found:
         return []
-    return [Problem("SERVIZIO_REGISTRO", "avviso", "Durante l'ultima partita il traduttore delle frasi nuove ha avuto "
-                     "un problema (%s: \"%s\")." % (_when(found[-1][0]), found[-1][1][:120]),
+    return [Problem("SERVIZIO_REGISTRO", "avviso", "During the last session, the translator for new phrases had a "
+                                                   'problem (%s: "%s").' % (_when(found[-1][0]), found[-1][1][:120]),
                      signal="registro:%d" % int(found[-1][0]), action="crea_rapporto")]
 
 
@@ -954,11 +969,11 @@ def _reapply(c, force_language=False):
     if force_language:
         _put_back_added_language(c, force=True)
     if e is None:
-        return False, "nessun esito"
+        return False, "no result"
     success = e.code in ("OK", "PARZIALE") and (e.written or e.translated_items)
-    text = "traduzioni rimesse nel gioco (testi tradotti: %d%s)" % (
-        e.translated_items, ", rimasti in originale: %d" % e.remaining if e.remaining else "") if success else \
-        (e.reason or "non riuscito")
+    text = "translations put back into the game (translated texts: %d%s)" % (
+        e.translated_items, ", left untranslated: %d" % e.remaining if e.remaining else "") if success else \
+        (e.reason or "failed")
     return success, text
 
 
@@ -969,8 +984,9 @@ def _verify_web_live(c):
     if adapter_web_live.installed(c.folder):
         return []
     preload = adapter_web_live.find_preload(c.folder)
-    return [Problem("RIPRISTINATO_DAL_GIOCO", "avviso", "Il gioco ha rimesso il suo file originale (preload.js): "
-                     "forse un aggiornamento o la verifica dei file di Steam. Rimetto la traduzione dal vivo.",
+    return [Problem("RIPRISTINATO_DAL_GIOCO", "avviso", "The game has reverted to its original file (preload.js): "
+                                                        "perhaps due to an update or a Steam file verification. I'm "
+                                                        "re-enabling the live translation.",
                      remedy=lambda: _reapply(c), safe=True,
                      signal="ripristinato:%s" % (_mtime(preload) if preload else ""), key="riapplica",
                      action="riapplica")]
@@ -1012,8 +1028,9 @@ def _verify_file(c):
     if put_back or removed:
         names = [r for r, _ in put_back] + removed
         problems.append(Problem(
-            "RIPRISTINATO_DAL_GIOCO", "avviso", "Il gioco ha rimesso i suoi file originali (%s): forse un "
-            "aggiornamento o la verifica dei file di Steam. Rimetto le traduzioni salvate." % ", ".join(names[:3]),
+            "RIPRISTINATO_DAL_GIOCO", "avviso", "The game has restored its original files (%s): perhaps due to an "
+                                                "update or a Steam file verification. I am restoring the saved "
+                                                "translations." % ", ".join(names[:3]),
             remedy=lambda: _reapply(c, force_language=bool(removed)), safe=True,
             signal="ripristinato:" + "|".join(sorted("%s=%s" % x for x in put_back) + sorted(removed)),
             key="riapplica", action="riapplica"))
@@ -1023,18 +1040,19 @@ def _verify_file(c):
         # table again and the game would not load the translated one (missing texts). Reapply removes the CRC
         # from the new catalog (which becomes the original, with its backup).
         problems.append(Problem(
-            "RIPRISTINATO_DAL_GIOCO", "avviso", "Un aggiornamento del gioco ha cambiato l'elenco dei suoi file (%s) e "
-            "ha rimesso il controllo che impedisce di caricare i testi tradotti. Lo tolgo di nuovo e rimetto le "
-            "traduzioni salvate." % ", ".join(new_catalogs), remedy=lambda: _reapply(c), safe=True,
+            "RIPRISTINATO_DAL_GIOCO", "avviso", "A game update changed its file list (%s) and brought back the check "
+                                                "that prevents loading translated texts. I'm removing it again and "
+                                                "putting back the saved translations." % ", ".join(new_catalogs),
+            remedy=lambda: _reapply(c), safe=True,
             signal="catalogo:" + "|".join(sorted("%s=%s" % (r, fingerprints[r]) for r in new_catalogs)),
             key="riapplica", action="riapplica"))
         changed_files = []
     if changed_files:
         problems.append(Problem(
-            "AGGIORNATO", "avviso", "Dopo la traduzione il gioco ha cambiato %d file con i testi (es. %s): forse un "
-            "aggiornamento. Premi \"Analizza e traduci\" per tradurre anche i testi nuovi (quelli gia' tradotti "
-            "restano)." % (len(changed_files), changed_files[0]), signal="cambiati:" + "|".join(sorted(changed_files)),
-            action="traduci"))
+            "AGGIORNATO", "avviso", "After the translation the game changed %d text files (e.g. %s): maybe an update. "
+                                    'Press "Analyze and translate" to translate the new texts too (the ones already '
+                                    "translated stay)." % (len(changed_files), changed_files[0]),
+            signal="cambiati:" + "|".join(sorted(changed_files)), action="traduci"))
     if c.engine == "gamemaker" and not removed:
         problems += _verify_added_language(c)
     return problems
@@ -1064,8 +1082,9 @@ def _verify_added_language(c):
         return []
     if path is None or spot[3] == written_lang:
         return []
-    return [Problem("LINGUA_AGGIUNTA", "info", "Nel gioco e' scelta la lingua '%s': la traduzione e' la lingua '%s'. "
-                     "Se la vuoi, sceglila nel gioco in Opzioni > Lingua." % (spot[3], written_lang),
+    return [Problem("LINGUA_AGGIUNTA", "info", "In the game, the language '%s' has been selected: the translation is "
+                                               "in language '%s'. If you wish, you can select it in the game under "
+                                               "Options > Language." % (spot[3], written_lang),
                      signal="lingua:%s:%s" % (spot[3], int(_mtime(path) or 0)))]
 
 
@@ -1084,8 +1103,9 @@ def _verify_unreal(c):
     dropped = [rel for rel in manifest["file"] if not os.path.exists(os.path.join(c.folder, *rel.split("/")))]
     if dropped:
         problems.append(Problem(
-            "TRADUZIONE_TOLTA", "avviso", "Il file con la traduzione (%s) non c'e' piu' nel gioco: forse un "
-            "aggiornamento. Lo rimetto con le traduzioni salvate." % os.path.basename(dropped[0]),
+            "TRADUZIONE_TOLTA", "avviso", "The file with the translation (%s) is no longer in the game: perhaps due to "
+                                          "an update. I'll re-add it with the saved translations."
+                                          % os.path.basename(dropped[0]),
             remedy=lambda: _reapply(c), safe=True, signal="tolti:" + "|".join(sorted(dropped)), key="riapplica",
             action="riapplica"))
     for log_file in _unreal_logs(c.folder, manifest):
@@ -1095,16 +1115,17 @@ def _verify_unreal(c):
         text = _read(log_file)
         if not dropped and not re.search(r"Mounting pak file .*%s" % re.escape(adapter_unreal.PAK_PREFIX), text):
             problems.append(Problem(
-                "PAK_NON_CARICATO", "avviso", "Nell'ultima partita il gioco non ha caricato il file della traduzione: "
-                "forse usa archivi firmati o un formato piu' nuovo. Crea un rapporto da inviare a chi ti aiuta con "
-                "PatchSmith.", signal="pak:%d" % int(t), action="crea_rapporto"))
+                "PAK_NON_CARICATO", "avviso", "The last time you played, the game didn't load the translation file: "
+                                              "maybe it uses signed archives or a newer format. Create a report to "
+                                              "send to whoever is helping you with PatchSmith.",
+                signal="pak:%d" % int(t), action="crea_rapporto"))
         origin = (c.profile.get("lingua_origine") or "en").split("-")[0]
         languages = set(re.findall(r"Overriding language with [^(]*\(([^)]+)\)", text))
         other_ones = sorted(x for x in languages if x.split("-")[0].lower() not in (origin, language.AUTO))
         if other_ones:
             problems.append(Problem(
-                "LINGUA_UNREAL", "info", "Nell'ultima partita il gioco usava la lingua '%s': la traduzione prende il "
-                "posto di quella originale (%s). Scegli %s nelle opzioni del gioco." % (
+                "LINGUA_UNREAL", "info", "The last time you played, the game used the '%s' language: the translation "
+                                         "takes the place of the original one (%s). Choose %s in the game options." % (
                     other_ones[0], language.label(origin), language.label(origin)),
                 signal="lingua:%s:%d" % (other_ones[0], int(t))))
     try:
@@ -1113,8 +1134,8 @@ def _verify_unreal(c):
         current_count = None
     if current_count and manifest.get("sorgenti") and current_count != manifest.get("sorgenti"):
         problems.append(Problem(
-            "AGGIORNATO", "avviso", "Il gioco e' stato aggiornato: premi \"Analizza e traduci\" per tradurre anche i "
-            "testi nuovi (quelli gia' tradotti restano).", signal="sorgenti:" + _sha1(
+            "AGGIORNATO", "avviso", 'The game has been updated: press "Analyze and translate" to translate the new '
+                                    "texts too (the ones already translated are kept).", signal="sorgenti:" + _sha1(
                 json.dumps(sorted(current_count.items())).encode("utf-8")), action="traduci"))
     return problems
 
@@ -1145,8 +1166,9 @@ def _verify_xna(c):
     dropped = [rel for rel in manifest["file"] if not os.path.exists(os.path.join(c.folder, *rel.split("/")))]
     if dropped:
         problems.append(Problem(
-            "TRADUZIONE_TOLTA", "avviso", "I file con la traduzione (%s) non ci sono piu' nel gioco: forse un "
-            "aggiornamento. Li rimetto con le traduzioni salvate." % ", ".join(dropped[:2]),
+            "TRADUZIONE_TOLTA", "avviso", "The files with the translations (%s) are no longer in the game: perhaps due "
+                                          "to an update. I'll re-add them with the saved translations."
+                                          % ", ".join(dropped[:2]),
             remedy=lambda: _reapply(c), safe=True, signal="tolti:" + "|".join(sorted(dropped)), key="riapplica",
             action="riapplica"))
     changed_files = []
@@ -1159,9 +1181,9 @@ def _verify_xna(c):
             changed_files.append(name)
     if changed_files:
         problems.append(Problem(
-            "AGGIORNATO", "avviso", "Il gioco e' stato aggiornato (%s): premi \"Analizza e traduci\" per tradurre "
-            "anche i testi nuovi." % ", ".join(changed_files[:2]), signal="sorgenti:" + "|".join(sorted(changed_files)),
-            action="traduci"))
+            "AGGIORNATO", "avviso", 'The game has been updated (%s): press "Analyze and translate" to translate the '
+                                    "new texts too." % ", ".join(changed_files[:2]),
+            signal="sorgenti:" + "|".join(sorted(changed_files)), action="traduci"))
     return problems
 
 
@@ -1249,11 +1271,12 @@ def _verify_crash_events(c, events):
     if not crash:
         return []
     most_recent = max(crash, key=lambda e: e["istante"])
-    repeats = "%d volte, l'ultima il %s" % (len(crash), _when(most_recent["istante"])) if len(crash) > 1 else \
-        "il %s" % _when(most_recent["istante"])
-    return [Problem("CRASH", "errore", "Il gioco si e' chiuso all'improvviso dopo la traduzione (%s). Se succede "
-                     "ogni volta, premi \"Ripristina originali\" per tornare ai file originali (le traduzioni restano "
-                     "salvate) e crea un rapporto." % repeats, remedy=lambda: _remove_file(c), safe=False,
+    repeats = "%d times, last on %s" % (len(crash), _when(most_recent["istante"])) if len(crash) > 1 else \
+        "on %s" % _when(most_recent["istante"])
+    return [Problem("CRASH", "errore", "The game closed suddenly after the translation (%s). If it happens every time, "
+                                       'press "Restore originals" to go back to the original files (the translations '
+                                       "stay saved) and create a report." % repeats,
+                     remedy=lambda: _remove_file(c), safe=False,
                      signal="eventi:" + ",".join(sorted(str(e["id"]) for e in crash)), action="ripristina")]
 
 
@@ -1432,9 +1455,9 @@ def check(profile_path, apply=True, log=print, translator=None, events=None, ret
     profile = _read_profile(profile_path)
     state = read_state(profile_path)
     c = _Context(profile_path, profile, state, log, apply, translator, retranslate, events)
-    log("Controllo dopo aver giocato: %s" % c.title_text)
+    log("Check after playing: %s" % c.title_text)
     if not _installed(c):
-        log("  Traduzione non installata in %s: niente da controllare." % (c.folder or "?"))
+        log("  Translation not installed in %s: nothing to check." % (c.folder or "?"))
         if apply and state:  # (e.g. removed with "Restore originals"): earlier problems no longer apply
             state.update(visti={}, ultimo_controllo=_now(), ultimo={"quando": _now(), "corretti": 0,
                                                                       "da_fare": 0, "problemi": []})
@@ -1444,7 +1467,7 @@ def check(profile_path, apply=True, log=print, translator=None, events=None, ret
                 pass
         return []
     c.reference = reference(c)
-    log("  Conta solo quello che e' successo dopo l'ultima scrittura di PatchSmith nel gioco (%s)."
+    log("  Only what happened after PatchSmith last wrote to the game (%s) counts."
         % _when(c.reference))
     if c.engine == "unity":
         problems = _verify_unity(c)
@@ -1490,7 +1513,7 @@ def check(profile_path, apply=True, log=print, translator=None, events=None, ret
         try:
             _save_state(profile_path, state)
         except OSError as e:
-            log("  ! Non ho potuto salvare il risultato del controllo (%s)" % e)
+            log("  ! I wasn't able to save the result of the check (%s)" % e)
     for line in lines(problems):
         log("  " + line)
     return problems
@@ -1518,12 +1541,13 @@ def _verify_temp_files(c):
                     dropped += 1
             except OSError:
                 pass
-        return "tolti %d" % dropped
+        return "%d removed" % dropped
 
-    return [Problem("TEMPORANEI", "info", "Nella memoria delle traduzioni %s di un salvataggio interrotto: %s tolgo "
-                     "(le traduzioni sono al sicuro nei file veri)." % (
-                         "è rimasto un file temporaneo" if len(old_files) == 1 else
-                         "sono rimasti %d file temporanei" % len(old_files), "lo" if len(old_files) == 1 else "li"),
+    return [Problem("TEMPORANEI", "info",
+                    "In the translation memory a temporary file remains from an interrupted save: removing it (the "
+                    "translations are safe in the real files)." if len(old_files) == 1 else
+                    "In the translation memory there are %d temporary files remaining from an interrupted save: "
+                    "removing them (the translations are safe in the real files)." % len(old_files),
                      remedy=remove, safe=True, signal="tmp:" + "|".join(sorted(os.path.basename(p)
                                                                                      for p in old_files)))]
 
@@ -1544,7 +1568,7 @@ def _run_remedies(c, problems):
     """The safe fixes, with the game closed, once per signal (applica=True); the others stay to do."""
     candidates = [p for p in problems if p.remedy is not None and p.safe]
     if c.apply and candidates and c.is_open():
-        c.log("  Il gioco e' aperto: le correzioni le faccio al prossimo controllo, a gioco chiuso.")
+        c.log("  The game is open: I'll make the fixes at the next check, with the game closed.")
     handled, actions = {}, {}
     for p in problems:
         if p.remedy is None or not p.safe:
@@ -1554,7 +1578,7 @@ def _run_remedies(c, problems):
         attempted = _already_tried(c.state, key, p.signal)
         if attempted:
             p.state = "gia_tentato"
-            p.detail = "gia' provato a correggerlo il %s (%s), ma il problema c'e' ancora" % (
+            p.detail = "already tried to fix it on %s (%s), but the problem is still there" % (
                 _when(attempted.get("ts")), attempted.get("dettaglio") or "")
             continue
         if not c.apply:
@@ -1579,7 +1603,7 @@ def _run_remedies(c, problems):
                                                                   BackendError)) else \
                     "%s: %s" % (type(e).__name__, e)
             handled[key] = (success, text)
-            c.log("  %s %s" % ("-> corretto:" if success else "-> non riuscito:", text))
+            c.log("  %s %s" % ("-> fixed:" if success else "-> not done:", text))
         success, text = handled[key]
         _record(c.state, key, p.signal, success, text)
         p.state = "corretto" if success else "non_riuscito"
@@ -1589,15 +1613,16 @@ def _run_remedies(c, problems):
 
 # --- results for the interface and the command line ----------------------------------------------------------
 
-LABELS = {"corretto": "corretto", "non_riuscito": "da fare (correzione non riuscita)",
-             "gia_tentato": "da fare (gia' corretto una volta, ma e' tornato)", "rimandato": "da correggere a gioco "
-             "chiuso", "da_fare": "da fare", "da_correggere": "si correggerebbe da solo", "info": "da sapere"}
+LABELS = {"corretto": "corretto", "non_riuscito": "to do (fix failed)",
+             "gia_tentato": "to do (already fixed once, but it came back)", "rimandato": "to fix with the game "
+                                                                                             "closed",
+             "da_fare": "to do", "da_correggere": "would be fixed automatically", "info": "please note"}
 
 
 def lines(problems):
     """The summary for the log and the command line."""
     if not problems:
-        return ["Nessun problema trovato."]
+        return ["No problems found."]
     output = []
     for p in problems:
         output.append("[%s] %s" % (LABELS.get(p.state, p.state), p.message))
@@ -1606,8 +1631,8 @@ def lines(problems):
     fixed_count = sum(p.state == "corretto" for p in problems)
     to_do = sum(p.state in TO_DO for p in problems)
     to_fix = sum(p.state in ("da_correggere", "rimandato") for p in problems)
-    output.append("Problemi corretti: %d, da fare: %d%s." % (fixed_count, to_do, ", da correggere a gioco chiuso o "
-                                                             "senza sola lettura: %d" % to_fix
+    output.append("Problems fixed: %d, to do: %d%s." % (fixed_count, to_do, ", to fix with the game closed or "
+                                                                                 "without read-only: %d" % to_fix
                                                              if to_fix else ""))
     return output
 
@@ -1622,7 +1647,7 @@ def as_outcome(problems, profile_path=None, title_text=None):
             profile = _read_profile(profile_path)
         except (OSError, ValueError):
             profile = {}
-    game = title_text or os.path.basename(os.path.normpath(profile.get("cartella_gioco") or "")) or "il gioco"
+    game = title_text or os.path.basename(os.path.normpath(profile.get("cartella_gioco") or "")) or "the game"
     fixed_count = [p for p in problems if p.state == "corretto"]
     to_do = [p for p in problems if p.state in TO_DO]
     postponed_problems = [p for p in problems if p.state == "rimandato"]
@@ -1634,14 +1659,14 @@ def as_outcome(problems, profile_path=None, title_text=None):
         actions.append("crea_rapporto")
     if postponed_problems:
         code, actions = "GIOCO_APERTO", ["chiudi_gioco"] + actions
-        reason = "Il gioco e' aperto: le correzioni le faccio quando e' chiuso."
+        reason = "The game is open: I'll apply the fixes when it's closed."
     elif to_do:
         code = "PARZIALE"
-        reason = "Dopo l'ultima partita a %s: %s, %d da fare." % (game, _fixed_label(len(fixed_count)), len(to_do))
+        reason = "After the last session of %s: %s, %d to do." % (game, _fixed_label(len(fixed_count)), len(to_do))
     else:
         code = "OK"
-        reason = ("Dopo l'ultima partita a %s: %s." % (game, _fixed_label(len(fixed_count))) if fixed_count else
-                  "Dopo l'ultima partita a %s: nessun problema." % game)
+        reason = ("After the last session of %s: %s." % (game, _fixed_label(len(fixed_count))) if fixed_count else
+                  "After the last session of %s: no problems." % game)
     return Outcome(code, reason, engine=profile.get("motore"), actions=actions,
                  extra={"controllo": [p.as_dict() for p in problems], "gioco": game,
                         "cartella": profile.get("cartella_gioco"), "profilo": profile_path,
@@ -1649,14 +1674,14 @@ def as_outcome(problems, profile_path=None, title_text=None):
 
 
 def _fixed_label(n):
-    return "1 problema corretto" if n == 1 else "%d problemi corretti" % n
+    return "1 problem fixed" if n == 1 else "%d problems fixed" % n
 
 
 def error_problem(error):
     """The check of a game failed (unexpected error): a problem to do, with the report."""
-    return Problem("ERRORE", "errore", "Il controllo non e' riuscito (%s: %s): puoi creare un rapporto da inviare a "
-                    "chi ti aiuta con PatchSmith." % (type(error).__name__, str(error)[:200]), action="crea_rapporto",
-                    state="da_fare")
+    return Problem("ERRORE", "errore", "The check failed (%s: %s): you can create a report to send to whoever helps "
+                                       "you with PatchSmith." % (type(error).__name__, str(error)[:200]),
+                    action="crea_rapporto", state="da_fare")
 
 
 def last(profile_path):

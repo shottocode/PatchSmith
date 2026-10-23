@@ -100,7 +100,7 @@ def read_compressed(data, pos):
         return ((b & 0x3F) << 8) | data[pos + 1], pos + 2
     if b & 0xE0 == 0xC0:
         return ((b & 0x1F) << 24) | (data[pos + 1] << 16) | (data[pos + 2] << 8) | data[pos + 3], pos + 4
-    raise DotnetError("intero compresso non valido")
+    raise DotnetError("invalid compressed integer")
 
 
 class Assembly:
@@ -119,10 +119,10 @@ class Assembly:
     def _pe(self):
         d = self.data
         if d[:2] != b"MZ":
-            raise DotnetError("non e' un eseguibile Windows")
+            raise DotnetError("it's not a Windows executable")
         pe = struct.unpack_from("<I", d, 0x3C)[0]
         if d[pe:pe + 4] != b"PE\x00\x00":
-            raise DotnetError("intestazione PE mancante")
+            raise DotnetError("missing PE header")
         self.machine, nsect, _, _, _, opt_size, self.characteristics = struct.unpack_from("<HHIIIHH", d, pe + 4)
         opt = pe + 24
         magic = struct.unpack_from("<H", d, opt)[0]
@@ -131,11 +131,11 @@ class Assembly:
         elif magic == 0x20B:
             data_dirs = opt + 112
         else:
-            raise DotnetError("intestazione opzionale PE sconosciuta")
+            raise DotnetError("unknown PE optional header")
         self.pe32_plus = magic == 0x20B
         n_dir = struct.unpack_from("<I", d, data_dirs - 4)[0]
         if n_dir <= 14:
-            raise DotnetError("non e' un assembly .NET (manca l'intestazione CLI)")
+            raise DotnetError("this is not a .NET assembly (it's missing the CLI header)")
         self.sections = []
         tab = opt + opt_size
         for k in range(nsect):
@@ -144,7 +144,7 @@ class Assembly:
             self.sections.append((name, vrva, vdim, rpos, rdim))
         cli_rva, cli_size = struct.unpack_from("<II", d, data_dirs + 14 * 8)
         if not cli_rva:
-            raise DotnetError("non e' un assembly .NET (intestazione CLI vuota)")
+            raise DotnetError("this is not a .NET assembly (empty CLI header)")
         c = self.offset(cli_rva)
         (_, self.cli_major, self.cli_minor, self.meta_rva, self.meta_size, self.cli_flags, self.entry_token,
          self.resources_rva, self.resources_size, self.signature_rva,
@@ -154,7 +154,7 @@ class Assembly:
         for _, vrva, vdim, rpos, rdim in self.sections:
             if vrva <= rva < vrva + max(vdim, rdim):
                 return rva - vrva + rpos
-        raise DotnetError("RVA 0x%x fuori dalle sezioni" % rva)
+        raise DotnetError("RVA 0x%x outside of sections" % rva)
 
     @property
     def only_32bit(self):
@@ -171,7 +171,7 @@ class Assembly:
         d = self.data
         base = self.offset(self.meta_rva)
         if struct.unpack_from("<I", d, base)[0] != 0x424A5342:
-            raise DotnetError("firma dei metadati non valida")
+            raise DotnetError("invalid metadata signature")
         length = struct.unpack_from("<I", d, base + 12)[0]
         self.runtime_version = d[base + 16:base + 16 + length].split(b"\x00")[0].decode("ascii", "replace")
         pos = base + 16 + length + 2
@@ -185,7 +185,7 @@ class Assembly:
             self.streams[name] = (base + off, dim)
         tables = self.streams.get("#~") or self.streams.get("#-")
         if not tables:
-            raise DotnetError("flusso delle tabelle dei metadati mancante")
+            raise DotnetError("metadata tables stream missing")
         self._tables(*tables)
 
     def _heap(self, name):
@@ -211,7 +211,7 @@ class Assembly:
         self._blob_size = 4 if heap_size & 4 else 2
         unknowns = [t for t in self.lines if t not in TABLES]
         if unknowns:
-            raise DotnetError("tabelle di metadati sconosciute: %s" % unknowns)
+            raise DotnetError("unknown metadata tables: %s" % unknowns)
         self._columns, self._start, self._row_size = {}, {}, {}
         for t in sorted(self.lines):
             widths = [self._width(c) for c in TABLES[t][1]]
@@ -242,7 +242,7 @@ class Assembly:
     def line(self, table, idx):
         """Raw values of row 'indice' (from 1) of the table."""
         if not 1 <= idx <= self.lines.get(table, 0):
-            raise DotnetError("riga %d fuori dalla tabella %s" % (idx, TABLES[table][0]))
+            raise DotnetError("row %d outside of table %s" % (idx, TABLES[table][0]))
         p = self._start[table] + (idx - 1) * self._row_size[table]
         values = []
         for width in self._columns[table]:
@@ -272,7 +272,7 @@ class Assembly:
     def identity(self):
         """Name, version, culture and public key of the assembly."""
         if not self.lines.get(0x20):
-            raise DotnetError("manca la tabella Assembly (e' un modulo, non un assembly)")
+            raise DotnetError("the Assembly table is missing (it's a module, not an assembly)")
         _, ma, mi, bu, re, flags, key, name, culture = self.line(0x20, 1)
         return {"nome": self.read_string(name), "versione": "%d.%d.%d.%d" % (ma, mi, bu, re),
                 "cultura": self.read_string(culture), "chiave_pubblica": self.blob(key).hex(), "flags": flags}
@@ -288,11 +288,11 @@ class Assembly:
             if impl:  # resource in another file/assembly
                 continue
             if not self.resources_rva:
-                raise DotnetError("risorse dichiarate ma directory delle risorse assente")
+                raise DotnetError("declared resources, but resource directory is missing")
             p = self.offset(self.resources_rva) + offset
             n = struct.unpack_from("<I", self.data, p)[0]
             if offset + 4 + n > self.resources_size:
-                raise DotnetError("risorsa %s oltre la directory delle risorse" % self.read_string(name))
+                raise DotnetError("resource %s beyond the resource directory" % self.read_string(name))
             output[self.read_string(name)] = (p + 4, n)
         return output
 
@@ -393,7 +393,7 @@ def _read_7bit(data, pos):
             return value_, pos
         shift += 7
         if shift > 35:
-            raise DotnetError("intero a 7 bit non valido")
+            raise DotnetError("invalid 7-bit integer")
 
 
 def _write_7bit(n):
@@ -435,23 +435,23 @@ def read_resources(data):
     try:
         return _read_resources(data)
     except (struct.error, IndexError, UnicodeDecodeError) as e:
-        raise DotnetError("file .resources non valido (%s)" % e) from e
+        raise DotnetError(".resources file is invalid (%s)" % e) from e
 
 
 def _read_resources(data):
     if len(data) < 12 or struct.unpack_from("<I", data, 0)[0] != MAGIC_RESOURCES:
-        raise DotnetError("non e' un file .resources")
+        raise DotnetError("this is not a .resources file")
     header_version, skip_bytes = struct.unpack_from("<ii", data, 4)
     if header_version != 1:
-        raise DotnetError("intestazione .resources versione %d non supportata" % header_version)
+        raise DotnetError(".resources header version %d not supported" % header_version)
     reader, p = _string_bw(data, 12)
     item_set, p = _string_bw(data, p)
     if p != 12 + skip_bytes:
-        raise DotnetError("intestazione .resources non coerente")
+        raise DotnetError(".resources header is inconsistent")
     version, n, n_types = struct.unpack_from("<iii", data, p)
     p += 12
     if version not in (1, 2):
-        raise DotnetError(".resources versione %d non supportata" % version)
+        raise DotnetError(".resources version %d is not supported" % version)
     kinds = []
     for _ in range(n_types):
         t, p = _string_bw(data, p)
@@ -460,7 +460,7 @@ def _read_resources(data):
     while p % 8:
         p += 1
     if data[pad_start:p] != b"PADPADP"[:p - pad_start]:
-        raise DotnetError("riempimento .resources inatteso")
+        raise DotnetError("unexpected .resources padding")
     hash_ = struct.unpack_from("<%di" % n, data, p)
     p += 4 * n
     positions = struct.unpack_from("<%di" % n, data, p)
@@ -471,7 +471,7 @@ def _read_resources(data):
     for h, pos_name in zip(hash_, positions):
         name, q = _string_bw(data, names_start + pos_name, "utf-16-le")
         if hash_name(name) != h:
-            raise DotnetError("hash del nome '%s' non corrisponde" % name)
+            raise DotnetError("hash for name '%s' does not match" % name)
         off_data = struct.unpack_from("<i", data, q)[0]
         entries.append((off_data, name))
     hash_order = [name for _, name in entries]  # order of the hash list (matters for names with the same hash)
@@ -489,7 +489,7 @@ def _read_resources(data):
         if code == KIND_STRING:
             value_, q3 = _string_bw(data, q2)
             if q3 != end:
-                raise DotnetError("stringa della risorsa '%s' non coerente" % name)
+                raise DotnetError("the resource string '%s' is inconsistent" % name)
         else:
             value_ = data[q2:end]
         result.append((name, code, value_))
@@ -502,7 +502,7 @@ def write_resources(info, new_lines=None):
 
     Non-string entries are copied identically. Order and headers as in the file read."""
     if info["versione"] != 2:
-        raise DotnetError("scrittura supportata solo per .resources versione 2")
+        raise DotnetError("writing supported only for .resources version 2")
     new_lines = new_lines or {}
     head = _write_string_bw(info["lettore"]) + _write_string_bw(info["insieme"])
     output = bytearray(struct.pack("<Iii", MAGIC_RESOURCES, 1, len(head)) + head)

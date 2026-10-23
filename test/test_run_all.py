@@ -59,7 +59,7 @@ def test_environment(base):
               "OLLAMA_HOST" not in singular and not inside(singular["PATCHSMITH_DATI"], os.environ["PATCHSMITH_DATI"])
               and not [k for k in singular if k.upper().startswith("PATCHSMITH_")
                        and k not in ("PATCHSMITH_DATI", "PATCHSMITH_INTERFACCIA")]
-              and singular.get("PATCHSMITH_INTERFACCIA") == "it")
+              and singular.get("PATCHSMITH_INTERFACCIA") == "en")
     del os.environ["PATCHSMITH_DATI"], os.environ["OLLAMA_HOST"]
 
 

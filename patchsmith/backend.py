@@ -104,7 +104,7 @@ def _read_error(e):
             pass
 
 
-UA = "Patchsmith/%s (traduttore di videogiochi)"
+UA = "Patchsmith/%s (Video Game Translator)"
 
 
 def _ua():
@@ -160,13 +160,14 @@ class GoogleFree(Backend):
                     kind = response.headers.get("Content-Type", "") if response.headers else ""
                     raw = response.read()
                 if "consent.google" in final:
-                    raise BackendError("Google chiede di accettare i cookie (pagina di consenso): da questo PC il "
-                                        "traduttore gratuito non e' utilizzabile. Scegli un altro traduttore.")
+                    raise BackendError("Google is asking you to accept cookies (consent page): Unfortunately, this "
+                                       "translator cannot be used from this computer. Please choose a different "
+                                       "translator.")
                 if "/sorry" in final or "html" in kind.lower():
-                    self._block(200, "pagina di blocco al posto della traduzione")
+                    self._block(200, "block page instead of the translation")
                 data = json.loads(raw.decode("utf-8"))
                 if not (isinstance(data, list) and data and isinstance(data[0], (list, type(None)))):
-                    raise BackendError("Google ha risposto in un formato inatteso: riprova piu' tardi.")
+                    raise BackendError("Google replied in an unexpected format: try again later.")
                 translated_text = "".join(seg[0] for seg in (data[0] or []) if isinstance(seg, list) and seg
                                          and isinstance(seg[0], str))
                 self.limiter.ok()
@@ -177,18 +178,18 @@ class GoogleFree(Backend):
                 error_content_type = (e.headers.get("Content-Type", "") if e.headers else "").lower()
                 html_error = b"<html" in error_body or b"<!doctype html" in error_body or "html" in error_content_type
                 if e.code in (429, 403) or "/sorry" in final or html_error or b"unusual traffic" in error_body:
-                    self._block(e.code, "pagina \"Sorry\" di Google" if b"sorry" in error_body else None)
+                    self._block(e.code, 'Google "Sorry" page' if b"sorry" in error_body else None)
                 if 400 <= e.code < 500:
-                    raise BackendError("Google rifiuta la richiesta (HTTP %d): controlla le lingue scelte (%s -> %s)"
+                    raise BackendError("Google rejects the request (HTTP %d): check the chosen languages (%s -> %s)"
                                         % (e.code, origin, dest_lang)) from e
                 error = "HTTP %d" % e.code
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, IndexError, TypeError) as e:
                 error = e
             errors += 1
             if errors > len(self.NETWORK_WAITS):
-                raise BackendError("Google non risponde (%s): riprova piu' tardi." % error)
+                raise BackendError("Google is unavailable (%s): Please try again later." % error)
             wait = self.NETWORK_WAITS[errors - 1]
-            self.log("    ! errore di rete (%s): riprovo tra %d s (tentativo %d di %d)"
+            self.log("    ! network error (%s): retrying in %d s (attempt %d of %d)"
                      % (error, wait, errors + 1, len(self.NETWORK_WAITS) + 1))
             interruption.wait_for(wait)
 
@@ -202,10 +203,10 @@ class GoogleFree(Backend):
                 translated_items[k] = t.strip()
             return
         if depth >= 3 or len(indices) == 1:
-            self.log("    ! %d righe non allineate nella risposta: restano in originale" % len(indices))
+            self.log("    ! %d misaligned lines in the response: left untranslated" % len(indices))
             return
         half = len(indices) // 2
-        self.log("    righe non allineate: riprovo in due meta' (%d + %d righe)" % (half, len(indices) - half))
+        self.log("    misaligned lines: retrying in two halves (%d + %d lines)" % (half, len(indices) - half))
         self._translate_indices(parts, indices[:half], translated_items, origin, dest_lang, depth + 1)
         self._translate_indices(parts, indices[half:], translated_items, origin, dest_lang, depth + 1)
 
@@ -225,7 +226,7 @@ class GoogleFree(Backend):
             return ["" if any(t is None for t in r) else " ".join(r) for r in joined]
         try:
             for n, indices in enumerate(blocks, 1):
-                self.log("    blocco %d/%d (%d righe)" % (n, len(blocks), len(indices)))
+                self.log("    block %d/%d (%d rows)" % (n, len(blocks), len(indices)))
                 self._translate_indices(parts, indices, translated_items, origin, dest_lang)
         except BaseException as e:  # block or "Stop" halfway: the lines already translated stay usable
             e.partials = results()
@@ -276,11 +277,11 @@ class DeepL(Backend):
         from .limiter import Limiter
         key = "".join((key or "").split()).replace("\u200b", "").replace("\ufeff", "")
         if not key:
-            raise BackendError("Per usare DeepL serve la tua chiave (gratuita): crea un account DeepL API Free su "
-                                "deepl.com/pro-api e incollala nel campo 'Chiave DeepL' dell'interfaccia (oppure "
-                                "nella variabile PATCHSMITH_DEEPL).", "TRADUTTORE_ASSENTE")
+            raise BackendError("To use DeepL you need your key (free): create a DeepL API Free account at "
+                               "deepl.com/pro-api and paste it into the 'DeepL key' field (or into the "
+                               "PATCHSMITH_DEEPL variable).", "TRADUTTORE_ASSENTE")
         if not re.fullmatch(r"[0-9A-Za-z:-]+", key):
-            raise BackendError("La chiave DeepL contiene caratteri non validi: ricopiala dal sito di DeepL.",
+            raise BackendError("The DeepL key contains invalid characters: copy it from the DeepL website.",
                                 "TRADUTTORE_ASSENTE")
         self.key = key
         self.from_variable = False
@@ -316,7 +317,7 @@ class DeepL(Backend):
                 try:
                     response = self.opener(req, 60)
                 except (ValueError, UnicodeError) as e:  # request that cannot be built (e.g. the key): never retry
-                    raise BackendError("Non riesco a preparare la richiesta per DeepL (%s): controlla la chiave."
+                    raise BackendError("I can't prepare the request for DeepL (%s): check the key."
                                         % type(e).__name__) from None
                 with response:
                     data = json.loads(response.read().decode("utf-8"))
@@ -325,30 +326,31 @@ class DeepL(Backend):
             except urllib.error.HTTPError as e:
                 detail = _read_error(e).decode("utf-8", "replace")[:200]
                 if e.code == 403:
-                    raise BackendError("DeepL non accetta la chiave (HTTP 403): controlla di averla copiata intera "
-                                        "nel campo 'Chiave DeepL'%s." % (" (ora viene dalla variabile PATCHSMITH_DEEPL)"
+                    raise BackendError("DeepL doesn't accept the key (HTTP 403): make sure you copied all of it into "
+                                       "the 'DeepL key' field%s." % (" (now taken from the PATCHSMITH_DEEPL "
+                                                                         "variable)"
                                                                          if self.from_variable else "")) from e
                 if e.code == 456:
-                    raise BackendError("Hai finito i caratteri gratuiti di DeepL di questo mese: le traduzioni fatte "
-                                        "restano salvate, riprendi il mese prossimo o scegli un altro traduttore.") from e
+                    raise BackendError("You've used up this month's free DeepL characters: the translations done stay "
+                                       "saved; resume next month or choose another translator.") from e
                 if e.code == 400:
-                    raise BackendError("DeepL rifiuta la richiesta (%s): forse la lingua non e' supportata."
+                    raise BackendError("DeepL rejects the request (%s): maybe the language isn't supported."
                                         % detail) from e
                 if e.code != 429 and e.code < 500:
-                    raise BackendError("DeepL: errore HTTP %d (%s)" % (e.code, detail)) from e
+                    raise BackendError("DeepL: HTTP error %d (%s)" % (e.code, detail)) from e
                 error = "HTTP %d" % e.code
                 suggested_wait = e.headers.get("Retry-After") if e.headers else None
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
                 error, suggested_wait = type(e).__name__, None  # never the error's text: it can contain the key
             errors += 1
             if errors > len(self.WAITS):
-                raise BackendError("DeepL non risponde (%s): riprova piu' tardi." % error)
+                raise BackendError("DeepL is currently unavailable (%s): please try again later." % error)
             try:
                 wait = min(self.LONGEST_WAIT, float(suggested_wait)) if suggested_wait else \
                     self.WAITS[errors - 1]
             except ValueError:
                 wait = self.WAITS[errors - 1]
-            self.log("    ! DeepL: %s, riprovo tra %d s (tentativo %d di %d)"
+            self.log("    ! DeepL: %s, I'll try again in %d seconds (attempt %d of %d)"
                      % (error, wait, errors + 1, len(self.WAITS) + 1))
             interruption.wait_for(wait)
 
@@ -366,11 +368,11 @@ class DeepL(Backend):
             request = {"text": [lines[k] for k in indices], "target_lang": _deepl_language(dest_lang, True)}
             if origin and origin != "auto":
                 request["source_lang"] = _deepl_language(origin, False)
-            self.log("    DeepL: %d testi" % len(indices))
+            self.log("    DeepL: %d texts" % len(indices))
             data = self._call("/v2/translate", json.dumps(request, ensure_ascii=False).encode("utf-8"))
             translations = [t.get("text", "") for t in data.get("translations", [])]
             if len(translations) != len(indices):
-                raise BackendError("DeepL ha risposto con %d traduzioni invece di %d"
+                raise BackendError("DeepL provided %d translations instead of %d"
                                    % (len(translations), len(indices)))
             output += [clean(t) for t in translations]
         return output
@@ -436,11 +438,11 @@ class MyMemory(Backend):
     def _quota_used_up(self):
         now = datetime.datetime.fromtimestamp(self.limiter.current_time())
         tomorrow = (now + datetime.timedelta(days=1)).replace(hour=0, minute=30, second=0, microsecond=0)
-        self.limiter.blocked(429, "caratteri gratuiti del giorno finiti", until=tomorrow.timestamp(),
+        self.limiter.blocked(429, "free daily characters have been used up", until=tomorrow.timestamp(),
                                  extra={"con_email": bool(self.email)})
-        return ("Hai usato i caratteri gratuiti di oggi di MyMemory (%s): le traduzioni fatte restano salvate, "
-                "riprendi domani%s." % ("50.000 con la tua email" if self.email else "5.000 senza email",
-                                        "" if self.email else " o indica la tua email per arrivare a 50.000"))
+        return ("You've used today's free MyMemory characters (%s): the translations done stay saved, resume "
+                "tomorrow%s." % ("50,000 with your email address" if self.email else "5,000 without email",
+                                        "" if self.email else " or enter your email address to reach 50,000"))
 
     def _request(self, text, origin, dest_lang):
         from .limiter import Paused
@@ -465,9 +467,9 @@ class MyMemory(Backend):
                     raise Blocked(self._quota_used_up())
                 if state != "200":
                     if "LENGTH" in str(data.get("responseDetails", "")).upper():
-                        self.log("    ! MyMemory: testo troppo lungo, resta in originale")
+                        self.log("    ! MyMemory: text too long, left untranslated")
                         return ""  # it only concerns this line: the work goes on
-                    raise BackendError("MyMemory rifiuta la richiesta (%s): %s" % (state, data.get("responseDetails")))
+                    raise BackendError("MyMemory rejects the request (%s): %s" % (state, data.get("responseDetails")))
                 self.limiter.ok()
                 return clean(html.unescape(translated))
             except urllib.error.HTTPError as e:
@@ -475,14 +477,14 @@ class MyMemory(Backend):
                 if e.code == 429:
                     raise Blocked(self._quota_used_up()) from e
                 if e.code < 500:
-                    raise BackendError("MyMemory: errore HTTP %d" % e.code) from e
+                    raise BackendError("MyMemory: HTTP error %d" % e.code) from e
                 error = "HTTP %d" % e.code
             except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError) as e:
                 error = e
             errors += 1
             if errors > 2:
-                raise BackendError("MyMemory non risponde (%s): riprova piu' tardi." % error)
-            self.log("    ! MyMemory: %s, riprovo tra %d s" % (error, 10 * errors))
+                raise BackendError("MyMemory is not responding (%s): try again later." % error)
+            self.log("    ! MyMemory: %s, retrying in %d s" % (error, 10 * errors))
             interruption.wait_for(10 * errors)
 
     def translate_lines(self, lines, origin, dest_lang):
@@ -651,33 +653,33 @@ def translation_problems(original, translated, dest_lang="it"):
     if not translated.strip():
         return ["vuota"]
     if "\n" in translated and "\n" not in original:
-        problems.append("a capo aggiunto")
+        problems.append("line break added")
     elif translated.count("\n") != original.count("\n"):  # more or fewer lines: the label overflows its space
-        problems.append("a capo diversi")
+        problems.append("different line breaks")
     if _PREAMBLE.match(translated) and not _PREAMBLE.match(original):
-        problems.append("testo di contorno")
+        problems.append("surrounding text")
     if _REFUSAL.match(translated) and not _REFUSAL.match(original):
-        problems.append("rifiuto del modello")
+        problems.append("model refusal")
     if dest_lang.split("-")[0] not in ("ru", "uk", "ja", "zh", "ko", "bg") and \
             _OTHER_SCRIPT.search(translated) and not _OTHER_SCRIPT.search(original):
-        problems.append("scrittura sbagliata")
+        problems.append("wrong script")
     lo, lt = _weight(original), _weight(translated)
     if lt > 2.5 * lo + 15 or (lo > 20 and lt < 0.3 * lo) or (lo > 80 and lt < 0.5 * lo):
-        problems.append("lunghezza anomala")
+        problems.append("abnormal length")
     if _REPETITION.search(translated) and not _REPETITION.search(original):
         problems.append("ripetizioni")
     if translated.strip() == original.strip() and len(_ENGLISH_WORDS.findall(original)) >= 2:
-        problems.append("non tradotta")
+        problems.append("not translated")
     o, t = _TOKEN.sub(" ", original), _TOKEN.sub(" ", translated)  # the digits of the [[0]] codes are not numbers
     if _numbers(o) != _numbers(t) and sorted(re.findall(r"\d+", o)) != sorted(re.findall(r"\d+", t)) \
             and not _numbers_in_words(o, t, dest_lang):
-        problems.append("numeri diversi")
+        problems.append("different numbers")
     if collections.Counter(_TOKEN.findall(original)) != collections.Counter(_TOKEN.findall(translated)):
         problems.append("segnaposto")
     own_letters = _LANGUAGE_LETTERS.get(dest_lang.split("-")[0])
     if own_letters and any(c not in own_letters and c not in original and c.isalpha() and not c.isascii()
                        and unicodedata.normalize("NFKD", c)[0].isascii() for c in translated):
-        problems.append("lettere di un'altra lingua")
+        problems.append("letters from another language")
     return problems
 
 
@@ -698,9 +700,9 @@ def seed_for(text, number):
     return zlib.crc32(("%d\x00%s" % (number, text)).encode("utf-8")) % 2_000_000_000 + 100
 
 
-NOT_INSTALLED = ("Il traduttore locale non e' installato: scegli 'Traduttore locale (sul tuo PC)' e premi "
-                  "'Installa...' accanto.")
-INSTALL_COMMAND = "python -I smith.py local --install 12b (o 4b)"
+NOT_INSTALLED = ("The local translator is not installed: choose 'Local translator (on your PC)' and press 'Install...' "
+                 "next to it.")
+INSTALL_COMMAND = "python -I smith.py local --install 12b (or 4b)"
 
 
 class Local(Backend):
@@ -768,15 +770,15 @@ class Local(Backend):
             if not ollama.installed():
                 raise BackendError(NOT_INSTALLED, "TRADUTTORE_ASSENTE", command=INSTALL_COMMAND)
             if not ollama.model_present(self.key):
-                raise BackendError("Il modello %s non e' scaricato: premi 'Installa...' accanto al traduttore locale."
+                raise BackendError("The %s model is not downloaded: press 'Install...' next to the local translator."
                                     % ollama.MODELS[self.key]["etichetta"], "TRADUTTORE_ASSENTE",
                                     command="python -I smith.py local --install %s" % self.key)
             self._server = ollama.Server(self.log, parallel=self.parallel)
         try:
             self._server.launch()
-            self.log("    Traduttore locale: carico il modello nella scheda video (la prima volta puo' volerci un "
-                     "minuto)...")
-            self.log(DETAIL + "    (modello %s)" % self.model)
+            self.log("    Local translator: loading the model into the graphics card (the first time it can take a "
+                     "minute)...")
+            self.log(DETAIL + "    (model %s)" % self.model)
             self._server.call("/api/generate", {"model": self.model, "keep_alive": "30m"}, timeout=600)
             loaded = self._server.call("/api/ps").get("models", [])
         except ollama.LocalError as e:
@@ -784,27 +786,27 @@ class Local(Backend):
         except urllib.error.HTTPError as e:
             raise BackendError(self._explain(e)) from None
         except (OSError, ValueError) as e:
-            raise BackendError("Il traduttore locale non risponde (%s)." % type(e).__name__) from None
+            raise BackendError("The local translator is not responding (%s)." % type(e).__name__) from None
         for m in loaded:
             if m.get("name") == self.model and m.get("size"):
                 quota = m.get("size_vram", 0) / m["size"]
                 self.log((DETAIL if quota > 0.95 else "") +  # fully ready: detail; otherwise the warning is shown
-                         "    Traduttore locale pronto: %.0f%% del modello nella scheda video%s" % (
-                    100 * quota, "" if quota > 0.95 else (" (il resto in memoria: piu' lento)" if quota > 0 else
-                                                         " - ATTENZIONE: usa solo il processore, molto piu' lento: "
-                                                         "controlla il driver NVIDIA")))
+                         "    Local translator ready: %.0f%% of the model in the graphics card%s" % (
+                    100 * quota, "" if quota > 0.95 else (" (the rest in memory: slower)" if quota > 0 else
+                                                         " - WARNING: using only the processor, much slower: check the "
+                                                         "NVIDIA driver")))
         self._ready = True
 
     def _explain(self, e):
         body = _read_error(e).decode("utf-8", "replace").lower()
         if e.code == 404 or "not found" in body:
-            return "Il modello %s non e' scaricato: premi 'Installa' accanto al traduttore locale." % self.model
+            return "The %s model is not downloaded: press 'Install' next to the local translator." % self.model
         if "memory" in body or "out of memory" in body:
-            return ("Memoria insufficiente per il traduttore locale: chiudi il gioco e gli altri programmi pesanti, "
-                    "oppure scegli il modello Veloce (4B).")
+            return ("Insufficient memory for the local translator: close the game and other heavy programs, or choose "
+                    "the Fast (4B) model.")
         if "cuda" in body:
-            return "Errore della scheda video (CUDA): aggiorna il driver NVIDIA e riprova."
-        return "Il traduttore locale ha dato un errore (HTTP %d)." % e.code
+            return "Graphics card error (CUDA): update the NVIDIA driver and try again."
+        return "The local translator encountered an error (HTTP %d)." % e.code
 
     @staticmethod
     def _english_name(code):
@@ -877,7 +879,7 @@ class Local(Backend):
             timed_out = isinstance(e, TimeoutError) or isinstance(getattr(e, "reason", None), TimeoutError)
             if timed_out and self._alive():
                 raise _SlowLine() from None
-            raise BackendError("Il traduttore locale non risponde (%s): riprova." % type(e).__name__) from None
+            raise BackendError("The local translator is not responding (%s): try again." % type(e).__name__) from None
         with self._lock:
             self.token += response.get("eval_count", 0)
             self.seconds += response.get("eval_duration", 0) / 1e9
@@ -954,7 +956,7 @@ class Local(Backend):
                     raw, end, _used = self._chat(text, origin, dest_lang, temperature, seed, num_predict,
                                                       base + fix)
                 except _SlowLine:
-                    self.log("    ! Un testo richiede troppo tempo al traduttore locale: resta in originale (\"%s\")"
+                    self.log('    ! A text is taking the local translator too long: it stays untranslated ("%s")'
                              % text[:50])
                     return ""
                 more_room = min(2 * num_predict, self.NUM_CTX - 256)  # truncated: more room, within the context
@@ -965,14 +967,14 @@ class Local(Backend):
             problems = translation_problems(text, translated, dest_lang)
             if len(key) >= 6 and key in re.sub(r"[\W_]+", "", translated).casefold() \
                     and key not in re.sub(r"[\W_]+", "", text).casefold():
-                problems.append("chiave copiata")  # the model wrote the hint instead of the translation
+                problems.append("copied key")  # the model wrote the hint instead of the translation
                 current["chiave"] = None  # the next attempt, without the hint
             if references and not _unchanged(text, translated) and any(_unchanged(r, translated) for r in references):
-                problems.append("riferimento copiato")  # an official translation of another language, copied
+                problems.append("copied reference")  # an official translation of another language, copied
                 current["riferimenti"] = {}  # next attempt, without the references (if the same again, it is right)
                 references = []
             fix = ""
-            if "numeri diversi" in problems and re.search(r"\d", text):
+            if "different numbers" in problems and re.search(r"\d", text):
                 fix += NUMBERS_FIX
             if "segnaposto" in problems:
                 fix += PLACEHOLDER_FIX
@@ -1040,10 +1042,10 @@ class Local(Backend):
         if self.lines_done == 20 and self.seconds > 0 and not self._warned_slow:
             per_second = self.token / self.seconds
             self._warned_slow = True
-            self.log(DETAIL + "    Traduttore locale: %.0f parole-unita' (token) al secondo%s" % (
-                per_second, ", %d righe insieme" % self.parallel if self.parallel > 1 else ""))
+            self.log(DETAIL + "    Local translator: %.0f tokens per second%s" % (
+                per_second, ", %d lines together" % self.parallel if self.parallel > 1 else ""))
             if per_second < 6:
-                self.log("    ! E' lento: se il gioco e' aperto chiudilo; altrimenti prova il modello Veloce (4B).")
+                self.log("    ! It's slow: if the game is open, close it; otherwise try the Fast model (4B).")
 
     def close(self):
         """Frees the graphics card and closes the server (if this translator started it)."""
@@ -1060,10 +1062,10 @@ class Local(Backend):
 
 BACKEND = {"locale": Local, "google": GoogleFree, "deepl": DeepL, "mymemory": MyMemory, "finto": Fake}
 DESCRIPTIONS = {
-    "locale": "Traduttore locale (sul tuo PC: nessun limite, nessun blocco)",
-    "google": "Google gratuito (non ufficiale, spesso bloccato: Google puo' rifiutarlo)",
-    "deepl": "DeepL (gratis con la tua chiave, 500.000 caratteri al mese)",
-    "mymemory": "MyMemory (senza account, 50.000 caratteri al giorno con la tua email)",
+    "locale": "Local translator (on your PC: no limits, no blocks)",
+    "google": "Free Google (unofficial, often blocked: Google may reject it)",
+    "deepl": "DeepL (free with your key, 500,000 characters per month)",
+    "mymemory": "MyMemory (without an account, 50,000 characters per day with your email)",
 }
 
 
@@ -1116,29 +1118,29 @@ def probe_local(model=None, log=print, text="Start game", a="it", server=None):
         response = translator.translate_lines([text], "en", a)[0]
         output["secondi"] = time.monotonic() - before
     except Exception as e:  # noqa: BLE001 - the installation succeeded: here we only say how the test went
-        output["messaggio"] = "la prova di traduzione non e' riuscita: %s" % (
+        output["messaggio"] = "the translation test failed: %s" % (
             e if isinstance(e, BackendError) else "%s: %s" % (type(e).__name__, e))
         return output
     finally:
         translator.close()
     output["traduzione"] = response
     if not response or _unchanged(response, text):
-        output["messaggio"] = ("la prova di traduzione non e' riuscita: \"%s\" e' rimasto in originale. Riprova; se "
-                               "succede ancora, crea un rapporto." % text)
+        output["messaggio"] = ('the translation test failed: "%s" stayed untranslated. Try again; if it happens again, '
+                               "create a report." % text)
         return output
     output["ok"] = True
     sheet = output["scheda"]
-    where = ("" if sheet is None else ", sulla scheda video" if sheet > 0.95 else
-            ", in parte sulla scheda video (un po' piu' lento)" if sheet > 0 else
-            ", ma solo con il processore, senza scheda video: sara' lento (aggiorna il driver della scheda video, "
-            "oppure scegli il modello Veloce)")
-    output["messaggio"] = "pronto%s: \"%s\" -> \"%s\" in %s (avvio e caricamento del modello: %s)." % (
+    where = ("" if sheet is None else ", on the graphics card" if sheet > 0.95 else
+            ", partly on the graphics card (a bit slower)" if sheet > 0 else
+            ", but only with the processor, without a graphics card: it will be slow (update the graphics card driver, "
+            'or choose the "Fast" model)')
+    output["messaggio"] = "ready%s: \"%s\" -> \"%s\" in %s (startup and model loading: %s)." % (
         where, text, response, _seconds(output["secondi"]), _seconds(output["avvio"]))
     return output
 
 
 def _seconds(value_):
-    return ("%.1f s" % value_).replace(".", ",") if value_ < 10 else "%d s" % round(value_)
+    return "%.1f s" % value_ if value_ < 10 else "%d s" % round(value_)
 
 
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -1150,31 +1152,32 @@ def verify_translator(name, credential, opener=None):
         if name == "deepl":
             used, limit = DeepL(credential, log=lambda _m: None, opener=opener).verify()
             if limit:
-                return True, ("La chiave DeepL funziona. Questo mese hai usato %s caratteri su %s (ne restano %s)."
-                              % tuple(format(n, ",d").replace(",", ".") for n in (used, limit, max(0, limit - used))))
-            return True, "La chiave DeepL funziona."
+                return True, ("The DeepL key works. This month you've used %s of %s characters (%s left)."
+                              % tuple(format(n, ",d") for n in (used, limit, max(0, limit - used))))
+            return True, "The DeepL key is working."
         if name == "mymemory":
             email = (credential or "").strip()
             if email and not EMAIL.match(email):
-                return False, "\"%s\" non sembra un indirizzo email: controlla che sia scritto bene (es. nome@esempio.it)." \
-                    % email
+                return False, "\"%s\" doesn't seem to be a valid email address: please check that it's written " \
+                    "correctly (e.g., name@example.it)." % email
             MyMemory(email or None, log=lambda _m: None, opener=opener).verify()
             if email:
-                return True, ("MyMemory risponde e accetta l'email: puoi tradurre fino a 50.000 caratteri al giorno. "
-                              "MyMemory non usa account e non manda conferme: l'email serve solo ad alzare il limite "
-                              "(senza: 5.000 caratteri al giorno).")
-            return True, ("MyMemory risponde: senza email puoi tradurre 5.000 caratteri al giorno. Con la tua email "
-                          "arrivi a 50.000 (non serve un account).")
+                return True, ("MyMemory responds and accepts the email: you can translate up to 50,000 characters per "
+                              "day. MyMemory doesn't use accounts and doesn't send confirmations: the email only "
+                              "raises the limit (without it: 5,000 characters per day).")
+            return True, ("MyMemory responds: Without email, you can translate 5,000 characters per day. With your "
+                          "email, you can translate up to 50,000 (no account required).")
     except BackendError as e:
         return False, str(e)
     except Exception as e:  # noqa: BLE001 - no network or odd answer: explain it, no exceptions in the window
-        return False, "Non riesco a contattare il servizio (%s). Controlla la connessione e riprova." % type(e).__name__
-    return False, "Questo traduttore non ha niente da verificare."
+        return False, ("I'm unable to reach the service (%s). Please check your connection and try again."
+                       % type(e).__name__)
+    return False, "This translator has nothing to verify."
 
 
 def create_backend(name, log=print):
     if name not in BACKEND:
-        raise ValueError("Backend sconosciuto: %s (disponibili: %s)" % (name, ", ".join(BACKEND)))
+        raise ValueError("Unknown backend: %s (available: %s)" % (name, ", ".join(BACKEND)))
     if name == "google":
         return GoogleFree(log=log)
     if name == "deepl":
@@ -1191,7 +1194,7 @@ def create_backend(name, log=print):
         model = credentials()["modello_locale"]
         if model not in ollama.MODELS or not ollama.model_present(model):
             if model in ollama.MODELS:
-                log("  Il modello %s non e' scaricato: uso %s." % (ollama.MODELS[model]["etichetta"],
+                log("  The %s model is not downloaded: using %s." % (ollama.MODELS[model]["etichetta"],
                                                                   ollama.MODELS[ollama.default_model()]["etichetta"]))
             model = ollama.default_model()
         return Local(model, log=log)

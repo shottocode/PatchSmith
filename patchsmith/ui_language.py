@@ -1,12 +1,12 @@
 """PatchSmith's interface language.
 
-The program's texts are written in Italian in the code. The other languages are in
-patchsmith/ui_language/<codice>.json:
-    {"nome": "English", "bandiera": {"tipo": "gb"}, "testi": {"testo italiano": "traduzione", ...}}
+The program's texts are written in English in the code. The other languages are in
+patchsmith/ui_language/<code>.json:
+    {"nome": "Italiano", "bandiera": {"verticali": [...]}, "testi": {"English text": "translation", ...}}
 Translation happens when the window shows a text (hook_tk: buttons, labels, titles, menus, values of drop-down
 menus; TextVar for status lines; translate() for the log), also for texts with values inside: an entry with %s, %d...
-("Testi del gioco: %d, gia' tradotti: %d") works as a template for all the lines of that form. Texts without a
-translation stay in Italian. The original texts stay remembered in the widgets: when the language changes,
+("Game texts: %d, already translated: %d") works as a template for all the lines of that form. Texts without a
+translation stay in English. The original texts stay remembered in the widgets: when the language changes,
 retranslate() puts the ones already shown back in the new language without reopening the program.
 
 To add a language: the command line command "interface --create fr" (translates all the texts with the local
@@ -21,8 +21,8 @@ import re
 import weakref
 
 FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui_language")
-SOURCE = "it"
-ITALIAN = {"nome": "Italiano", "bandiera": {"verticali": ["#009246", "#ffffff", "#ce2b37"]}}
+SOURCE = "en"
+ENGLISH = {"nome": "English", "bandiera": {"tipo": "gb"}}
 # placeholders of the program's texts: %s, %d, %5.1f, %r, %(nome)s, %%
 _MARKER = re.compile(r"%(?:\([^)]*\))?[-+ #0]*(?:\d+)?(?:\.\d+)?[sdrifxXceEgG%]")
 # what each placeholder matches in a line already written
@@ -30,14 +30,15 @@ _VALUE = {"d": r"-?\d[\d.,']*", "i": r"-?\d[\d.,']*", "f": r"-?[\d.,]+", "x": r"
 # at the start of log lines: indentation and markers ("! ", "~ ", "* ", "- ", "== ") that stay as they are
 _PREFIX = re.compile(r"^(\s*(?:(?:!|~|\*|-|==)\s+)?)(.*?)(\s*)$", re.S)
 _state = {"codice": SOURCE, "testi": {}, "modelli": None}
+_catalogs = {}  # texts_of
 VERBATIM = "⁠"  # at the start of a text: it stays as it is in every language (e.g. the language names in their menu)
 
 
 # --- available languages ---------------------------------------------------------------------------------------------
 
 def languages():
-    """{codice: {"nome", "bandiera"}}: Italian (the language of the code) and the files in patchsmith/ui_language/."""
-    output = {SOURCE: ITALIAN}
+    """{code: {"nome", "bandiera"}}: English (the language of the code) and the files in patchsmith/ui_language/."""
+    output = {SOURCE: ENGLISH}
     try:
         names = sorted(os.listdir(FOLDER))
     except OSError:
@@ -56,8 +57,8 @@ def languages():
 
 
 def default_language():
-    """The interface language if none was chosen: PATCHSMITH_INTERFACCIA, then the Windows one if available, then
-    English if available, then Italian."""
+    """The interface language if none was chosen: PATCHSMITH_INTERFACCIA, then the Windows one if PatchSmith has it
+    (today Italian), otherwise English. A language chosen with the flag is saved in settings.json and wins."""
     available = languages()
     choice = os.environ.get("PATCHSMITH_INTERFACCIA")
     if choice in available:
@@ -66,11 +67,22 @@ def default_language():
     windows = (windows_language() or "").split("-")[0].lower()
     if windows in available:
         return windows
-    return "en" if "en" in available else SOURCE
+    return SOURCE
+
+
+def texts_of(code):
+    """{source text: translation} of a language (empty for English or a missing file); read once."""
+    if code not in _catalogs:
+        try:
+            with open(os.path.join(FOLDER, code + ".json"), encoding="utf-8") as f:
+                _catalogs[code] = json.load(f).get("testi") or {}
+        except (OSError, ValueError):
+            _catalogs[code] = {}
+    return _catalogs[code]
 
 
 def set_(code):
-    """Uses the language 'codice' (if it is not available, Italian). Returns the one used."""
+    """Uses the language 'code' (if it is not available, English). Returns the one used."""
     texts = {}
     if code != SOURCE:
         try:
@@ -230,7 +242,7 @@ _VARIABLES = weakref.WeakSet()  # the TextVar objects, to translate again when t
 
 
 def _remember(widget, cnf):
-    """The original (Italian) texts given to the widget, to translate them again if the language changes (ritraduci)."""
+    """The original (English) texts given to the widget, to translate them again if the language changes (ritraduci)."""
     if not isinstance(cnf, dict):
         return
     for k in _TEXT_OPTIONS + ("values",):
@@ -241,7 +253,7 @@ def _remember(widget, cnf):
 
 def hook_tk():
     """The texts given to Tkinter (buttons, labels, menus, window titles, values of drop-down menus) go through
-    translate() and stay remembered in the widget (ritraduci). Only once; with Italian nothing changes."""
+    translate() and stay remembered in the widget (ritraduci). Only once; with English nothing changes."""
     import tkinter
     if getattr(tkinter.Misc, "_patchsmith_language", False):
         return
@@ -380,9 +392,12 @@ def _looks_like_text(s):
         return False
     if re.fullmatch(r"[\w.\-/\\:]+", core) and ("_" in core or "/" in core or "\\" in core):
         return False
-    if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|->|\[[^\]]*\]\?|^#|==|^if .*:$"
+    if re.search(r"\b(?:var|func|class|extends|return|elif|def|import)\b.*[:=(]|\(\)|\)\s*->|\[[^\]]*\]\?"
+                 r"|^#|==|^if .*:$"
                  r"|(?<![\w%])_[a-z]\w*", core):
         return False  # code (e.g. the script for Godot) or regular expressions
+    if re.search(r"\w\|\w", core):
+        return False  # alternatives of a regular expression (a|b)
     words = core.split()
     if len(words) >= 12 and core == core.lower() and not re.search(r"[.,:;!?()'\"]", core) \
             and sum(map(len, words)) / len(words) < 4.5:
@@ -391,7 +406,7 @@ def _looks_like_text(s):
 
 
 def program_texts(folder=None):
-    """The Italian texts of the code (patchsmith/*.py), without the docstrings, as they go in a language file."""
+    """The texts of the code (patchsmith/*.py, in English), without the docstrings, as they go in a language file."""
     folder = folder or os.path.dirname(os.path.abspath(__file__))
     texts = set()
     for name in sorted(os.listdir(folder)):
@@ -437,7 +452,7 @@ def create_language(code, name, translator, log=print, flag_info=None, maximum=N
         missing.remove(t)
     if maximum:
         missing = missing[:maximum]
-    log("Testi del programma da tradurre in %s: %d (gia' nel file: %d)" % (name, len(missing), len(texts)))
+    log("Program texts to translate into %s: %d (already in the file: %d)" % (name, len(missing), len(texts)))
     added = 0
     for i in range(0, len(missing), 40):
         group = missing[i:i + 40]
@@ -452,7 +467,7 @@ def create_language(code, name, translator, log=print, flag_info=None, maximum=N
         try:
             translated_items = translator.translate_lines([p for p, _ in protected], SOURCE, code)
         except BackendError as e:
-            log("  ! traduzione interrotta: %s" % e)
+            log("  ! translation interrupted: %s" % e)
             break
         for t, (p, markers), r in zip(group, protected, translated_items):
             if not r:
@@ -464,10 +479,10 @@ def create_language(code, name, translator, log=print, flag_info=None, maximum=N
             for j, s in enumerate(markers):
                 r = r.replace("{{%s}}" % chr(65 + j), s, 1)
             if re.search(r"\{\{[A-Z]\}\}", r) or len(_MARKER.findall(r)) != len(markers):
-                continue  # placeholders lost or extra: better the Italian
+                continue  # placeholders lost or extra: better the English
             texts[t] = r
             added += 1
-        log("  %d di %d" % (min(i + 40, len(missing)), len(missing)))
+        log("  %d of %d" % (min(i + 40, len(missing)), len(missing)))
         os.makedirs(FOLDER, exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=1, sort_keys=True)

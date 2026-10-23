@@ -49,23 +49,23 @@ class Pck:
                 f.seek(0, 2)
                 end = f.tell()
                 if end < 16:
-                    raise GodotError("non e' un pacchetto di Godot")
+                    raise GodotError("this is not a Godot package")
                 f.seek(end - 12)
                 size = struct.unpack("<Q", f.read(8))[0]
                 if f.read(4) != b"GDPC" or size + 12 > end:
-                    raise GodotError("nessun pacchetto di Godot nell'eseguibile")
+                    raise GodotError("no Godot package included in the executable")
                 start = end - 12 - size
                 f.seek(start)
                 if f.read(4) != b"GDPC":
-                    raise GodotError("pacchetto di Godot non valido")
+                    raise GodotError("invalid Godot package")
             self.fmt, self.major, self.minor, self.patch = struct.unpack("<4I", f.read(16))
             if self.fmt < 2:
-                raise GodotError("pacchetto di Godot %d (formato %d): per ora PatchSmith legge solo Godot 4"
+                raise GodotError("Godot package %d (format %d): for now PatchSmith only reads Godot 4"
                                   % (self.major, self.fmt))
             flags, base = struct.unpack("<IQ", f.read(12))
             self.encrypted = bool(flags & 1)
             if self.encrypted:
-                raise GodotError("l'elenco dei file del gioco e' cifrato")
+                raise GodotError("the game's file list is encrypted")
             relative = bool(flags & 2)
             f.read(64)
             self.file = {}
@@ -85,7 +85,7 @@ class Pck:
     def read_file(self, name):
         position, size, fl = self.file[name]
         if fl & 1:
-            raise GodotError("%s e' cifrato" % name)
+            raise GodotError("%s is encrypted" % name)
         with open(self.path, "rb") as f:
             f.seek(position)
             return f.read(size)
@@ -196,16 +196,16 @@ class _Reader:
             return v
         if kind == 34:  # PackedStringArray
             return [self.read_string() for _ in range(self.u32())]
-        raise ValueError("tipo %d non previsto" % kind)
+        raise ValueError("unexpected type %d" % kind)
 
 
 def read_resource(data):
     """(type, {property: value}) of the last internal resource of a binary Godot 4 .translation file."""
     if data[:4] != b"RSRC":
-        raise GodotError("non e' una risorsa binaria di Godot")
+        raise GodotError("it's not a binary resource from Godot")
     r = _Reader(data, 4)
     if r.u32():
-        raise GodotError("risorsa big-endian: non prevista")
+        raise GodotError("big-endian resource: not supported")
     r.u32()  # real64
     major = r.u32()
     r.u32()  # minor
@@ -225,7 +225,7 @@ def read_resource(data):
             r.read_string()  # uid
     internal_res = [(r.read_string(), r.u64()) for _ in range(r.u32())]
     if not internal_res:
-        raise GodotError("nessuna risorsa nel file")
+        raise GodotError("no resources found in the file")
     r.o = internal_res[-1][1]
     kind = r.read_string()
     properties = {}
@@ -254,7 +254,7 @@ def table_texts(data):
     if kind == "Translation":
         messages = p.get("messages") or {}
         return language, [v for v in messages.values() if isinstance(v, str)]
-    raise GodotError("tabella di tipo %s non prevista" % kind)
+    raise GodotError("unexpected table of type %s" % kind)
 
 
 def tables(pck):
@@ -372,7 +372,7 @@ def install(folder, table_language, translations, dest_lang, log=print):
     if os.path.exists(override) and OVERRIDE not in manifest["file"]:  # the game's override.cfg: it is kept
         with open(override, "rb") as f:  # (the exact bytes: it is put back identical)
             manifest["override_originale"] = base64.b64encode(f.read()).decode("ascii")
-        log("  override.cfg del gioco: conservato, aggiungo solo la riga di PatchSmith")
+        log("  game's override.cfg: kept, adding only PatchSmith's line")
     dictionary = {k: v for k, v in translations.items() if isinstance(v, str) and v and v != k}
     contents = {
         OVERRIDE: _override_text(_original(manifest), SCRIPT).encode("utf-8"),
@@ -387,7 +387,7 @@ def install(folder, table_language, translations, dest_lang, log=print):
         write_atomic(os.path.join(folder, name), data)
         manifest["file"][name] = hashlib.sha256(data).hexdigest()
     write_atomic(os.path.join(folder, MANIFEST), json.dumps(manifest, indent=2).encode())
-    log("  Traduzione per Godot accanto all'eseguibile: %d testi (override.cfg, %s, %s)" % (
+    log("  Translation for Godot next to the executable: %d texts (override.cfg, %s, %s)" % (
         len(dictionary), SCRIPT, DICTIONARY))
     return len(dictionary)
 
@@ -403,10 +403,10 @@ def uninstall(folder, log=print):
             if _sha256(p) == fingerprint:
                 os.remove(p)
             else:
-                log("  ! %s e' stato cambiato dopo la traduzione: lo lascio" % name)
+                log("  ! %s has been changed after the translation: I'm leaving it as is" % name)
     if manifest.get("override_originale") is not None:
         write_atomic(os.path.join(folder, OVERRIDE), base64.b64decode(manifest["override_originale"]))
-        log("  override.cfg del gioco rimesso com'era")
+        log("  game's override.cfg restored as it was")
     os.remove(os.path.join(folder, MANIFEST))
-    log("  Traduzione per Godot tolta dalla cartella del gioco")
+    log("  Translation for Godot removed from the game folder")
     return True

@@ -32,59 +32,74 @@ def check(name, condition):
 
 
 def test_translation():
-    ui.set_("en")
+    ui.set_("it")
     t = ui.translate
     check("testi uguali, con valori dentro, pezzi dentro, prefissi del registro, ripieghi e righe non nel file",
-              t("Crea rapporto") == "Create report"
-              and t("Tradotti 400 di 1654 (24%)...") == "Translated 400 of 1654 (24%)..."
-              and t("  ! Il gioco e' aperto: chiudilo e riprova.") == "  ! The game is open: close it and try again."
-              and t("Analisi e traduzione: D:\\giochi\\x") == "Analysis and translation: D:\\giochi\\x"
-              and t("Inglese (en)") == "English (en)"
-              and t("Una frase che non c'e' nel file") == "Una frase che non c'e' nel file"
-              and t("Crea rapporto\nCrea rapporto") == "Create report\nCreate report")
+              t("Create report") == "Crea rapporto"
+              and t("Translated 400 of 1654 (24%)...") == "Tradotti 400 di 1654 (24%)..."
+              and t("  ! The game is open: close it and try again.") == "  ! Il gioco e' aperto: chiudilo e riprova."
+              and t("Analysis and translation: D:\\games\\x") == "Analisi e traduzione: D:\\games\\x"
+              and t("English (en)") == "Inglese (en)"
+              and t("A sentence that is not in the file") == "A sentence that is not in the file"
+              and t("Create report\nCreate report") == "Crea rapporto\nCrea rapporto")
     # a message made of several entries of the file one after the other (also an entry of two sentences): in groups
     # of sentences
     entries = ui._state["testi"]
-    test = {"Mancano %s. Le metto io.": "%s are missing. I'll add them.",
-            "%d frasi sono rimaste.": "%d sentences are left."}
+    test = {"%s are missing. I'll add them.": "Mancano %s. Le metto io.",
+            "%d sentences are left.": "%d frasi sono rimaste."}
     entries.update(test)
     ui._state["modelli"] = None
     try:
         check("messaggio di piu' frasi: tradotto a gruppi di frasi, quelle che non ci sono restano",
-                  t("Mancano à, è. Le metto io. 3 frasi sono rimaste.") == "à, è are missing. I'll add them. 3 sentences are left."
-                  and t("Il gioco e' aperto: chiudilo e riprova. Frase nuova.")
-                  == "The game is open: close it and try again. Frase nuova.")
+                  t("à, è are missing. I'll add them. 3 sentences are left.")
+                  == "Mancano à, è. Le metto io. 3 frasi sono rimaste."
+                  and t("The game is open: close it and try again. A new sentence.")
+                  == "Il gioco e' aperto: chiudilo e riprova. A new sentence.")
     finally:
         for k in test:
             del entries[k]
         ui._state["modelli"] = None
-    ui.set_("it")
-    check("in italiano nessuna traduzione", ui.translate("Crea rapporto") == "Crea rapporto")
+    ui.set_("en")
+    check("in inglese (la lingua del codice) nessuna traduzione", ui.translate("Create report") == "Create report")
     languages = ui.languages()
-    check("lingue disponibili: italiano (dal codice) e inglese (dal file)",
-              languages["it"]["nome"] == "Italiano" and languages["en"]["nome"] == "English")
+    check("lingue disponibili: inglese (dal codice) e italiano (dal file)",
+              languages["en"]["nome"] == "English" and languages["it"]["nome"] == "Italiano")
+    # first start: the Windows language if PatchSmith has it (Italian), otherwise English; the chosen one is saved
+    real, before = language.windows_language, os.environ.pop("PATCHSMITH_INTERFACCIA", None)
+    try:
+        defaults = {}
+        for windows in ("it-IT", "en-US", "fr-FR", "de-DE", None):
+            language.windows_language = lambda default_language="it", w=windows: w
+            defaults[windows] = ui.default_language()
+    finally:
+        language.windows_language = real
+        if before is not None:
+            os.environ["PATCHSMITH_INTERFACCIA"] = before
+    check("lingua al primo avvio: quella di Windows se c'e' (italiano), altrimenti inglese (%s)" % defaults,
+              defaults == {"it-IT": "it", "en-US": "en", "fr-FR": "en", "de-DE": "en", None: "en"})
 
 
 def test_file():
-    with open(os.path.join(ui.FOLDER, "en.json"), encoding="utf-8") as f:
+    with open(os.path.join(ui.FOLDER, "it.json"), encoding="utf-8") as f:
         texts = json.load(f)["testi"]
     mismatched = [k for k, v in texts.items() if collections.Counter(ui._MARKER.findall(k))
                != collections.Counter(ui._MARKER.findall(v))]
-    check("file inglese: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(texts), mismatched[:3]),
+    check("file italiano: %d testi, ogni traduzione con gli stessi segnaposto (%s)" % (len(texts), mismatched[:3]),
               len(texts) > 1000 and not mismatched)
-    # the code's texts that are not Italian (instructions for the local translator, words to recognize the languages)
-    # stay as they are, and the code (e.g. the script for Godot) is not among the texts to translate
-    changed_files = [k for k, v in texts.items() if language.obvious_language(k, "it") and v != k]
+    # the code's texts that are not English (markers written into games, words to recognize the languages) stay as
+    # they are, and the code (e.g. the script for Godot) is not among the texts to translate
+    changed_files = [k for k, v in texts.items() if language.obvious_language(k.replace("e.g.", ""), "en")
+                     and v != k]
     code = [k for k in texts if k.startswith("if ") or "==" in k or k.startswith("the and of ")]
-    check("file inglese: testi in altre lingue lasciati com'erano (%s), niente codice (%s)"
+    check("file italiano: testi in altre lingue lasciati com'erano (%s), niente codice (%s)"
           % (changed_files[:2], code[:2]), not changed_files and not code)
     missing = [k for k in ui.program_texts() if k not in texts]
-    check("file inglese: c'e' ogni testo del programma (%d mancanti: %s)" % (len(missing), missing[:2]), not missing)
+    check("file italiano: c'e' ogni testo del programma (%d mancanti: %s)" % (len(missing), missing[:2]), not missing)
     check("testi del programma: niente codice ne' elenchi di parole",
-              not ui._looks_like_text("if not _fatto:") and not ui._looks_like_text("if f == null:")
-              and not ui._looks_like_text(" ".join(sorted(language._WORDS["it"])))
-              and ui._looks_like_text("Il gioco e' aperto: chiudilo e riprova.")
-              and ui._looks_like_text("Testi del gioco: %d, gia' tradotti: %d%s, da tradurre: %d"))
+              not ui._looks_like_text("if not _done:") and not ui._looks_like_text("if f == null:")
+              and not ui._looks_like_text(" ".join(sorted(language._WORDS["en"])))
+              and ui._looks_like_text("The game is open: close it and try again.")
+              and ui._looks_like_text("Game texts: %d, already translated: %d%s, to translate: %d"))
 
 
 def _pixel_png(path):
@@ -284,8 +299,8 @@ def test_window(base):
                   and str(app.text.cget("background")) == app.colors["campo"])
         test_sounds(app, root)
         test_music(app)
-        app._log("Analisi e traduzione: D:\\giochi\\x")
-        app.state.set("Tradotti 400 di 1654 (24%)...")
+        app._log("Analysis and translation: D:\\giochi\\x")
+        app.state.set("Translated 400 of 1654 (24%)...")
         app._drain_queue()
         log_en = app.text.get("1.0", "end").strip()
         started = []

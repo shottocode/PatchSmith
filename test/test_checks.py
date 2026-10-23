@@ -228,7 +228,7 @@ def test_unity(base):
     lines = []
     adapter_unity.state(game, name, "it", lines.append)
     check("stato: 'Chainloader started' senza 'startup complete' non vale come avviato",
-              any("NO  BepInEx avviato" in r for r in lines))
+              any("NO  BepInEx has been launched" in r for r in lines))
 
     # 1) read-only: finds everything, writes nothing
     whole = snapshot(base)
@@ -237,13 +237,13 @@ def test_unity(base):
     check("sola lettura: trovati crash all'avvio, Google fermo, comando rotto, configurazione, frasi, temporanei "
               "(%s)" % ", ".join(codes(problems)), codes(problems) == expected_list)
     check("file temporaneo rimasto: detto al singolare",
-              "è rimasto un file temporaneo" in by_code(problems, "TEMPORANEI").message)
+              "a temporary file remains" in by_code(problems, "TEMPORANEI").message)
     crash = by_code(problems, "CRASH_AVVIO")
     check("crash: solo quello di questa copia del gioco (l'altra copia ha le stesse cartelle)",
               crash and crash.signal == "crash:Crash_2026-10-17_211234219" and crash.safe)
     halted = by_code(problems, "TRADUTTORE_FERMO")
     check("Google fermo: errori di Google e \"Failed: 'MASTER'\" dal Player-prev.log di questa copia",
-              halted and "MASTER" in halted.message and "errore di Google" in halted.message)
+              halted and "MASTER" in halted.message and "Google error" in halted.message)
     check("sola lettura: tutto 'si correggerebbe da solo', niente scritto (nemmeno lo stato)",
               all(p.state == "da_correggere" for p in problems) and snapshot(base) == whole
               and not os.path.exists(checks.state_path(path)))
@@ -303,12 +303,12 @@ def test_unity(base):
               set(state.get("rimedi", {})) >= {"CRASH_AVVIO", "riconfigura", "FRASI_DA_RIFARE", "TEMPORANEI"}
               and state.get("visti") and state.get("diario_fino") == "2026-10-18T04:30:29"
               and state.get("entrypoint_forzato") is True)
-    check("registro: le correzioni con il loro esito", any("-> corretto:" in r for r in lines))
+    check("registro: le correzioni con il loro esito", any("-> fixed:" in r for r in lines))
     check("non piu' da controllare all'apertura (segnali gia' visti)",
               path not in checks.to_check(events=[]))
     window = outcome.window(e, "controlla")
     check("finestra: 'Controllo dopo aver giocato' con 'Corretto da solo'",
-              window["titolo"] == "Controllo dopo aver giocato" and "Corretto da solo:" in window["testo"]
+              window["titolo"] == "Check after playing" and "Fixed automatically:" in window["testo"]
               and "smith.py" not in window["testo"])
 
     # 4) a second check does nothing
@@ -331,8 +331,8 @@ def test_unity(base):
               and e.code == "PARZIALE" and adapter_unity.manifest_present(game) and snapshot(game) == whole)
     window = outcome.window(e, "controlla")
     check("finestra: 'Qualcosa da fare' con 'Da fare:' e il pulsante 'Ripristina originali'",
-              window["titolo"] == "Qualcosa da fare" and "Da fare:" in window["testo"]
-              and ("Ripristina originali", "ripristina") in window["pulsanti"])
+              window["titolo"] == "Something to do" and "To do:" in window["testo"]
+              and ("Restore originals", "ripristina") in window["pulsanti"])
     stored = checks.saved_outcome(path)
     check("l'ultimo controllo resta salvato (per ricordarlo all'apertura)",
               stored is not None and stored.extra.get("da_fare") == 1)
@@ -344,13 +344,13 @@ def test_unity(base):
                        env=environment, timeout=300)
     output = r.stdout.decode("utf-8", "replace")
     check("riga di comando: 'smith.py controlla --solo-leggi' -> codice 2, il crash da fare, niente scritto",
-              r.returncode == 2 and "non accetta" in output and "(sola lettura" in output and snapshot(base) == whole)
+              r.returncode == 2 and "doesn't accept" in output and "(read-only" in output and snapshot(base) == whole)
     empty = os.path.join(base, "nessun-gioco")
     os.makedirs(empty)
     r = subprocess.run([sys.executable, "-I", SMITH, "controlla", empty], capture_output=True, env=environment,
                        timeout=300)
     check("riga di comando: cartella senza traduzione -> codice 0", r.returncode == 0
-              and "niente da controllare" in r.stdout.decode("utf-8", "replace"))
+              and "nothing to check" in r.stdout.decode("utf-8", "replace"))
 
     # the status file is not a game profile and Project does not delete it (like the old .state.json)
     project.Project(path, silent)
@@ -408,8 +408,8 @@ def test_old_version(base):
         live = by_code(problems, "DAL_VIVO")
         check("versione vecchia: 'frasi nuove a Google, in pausa (bloccato) fino ...' e versione precedente (%s)"
                   % ", ".join(codes(problems)),
-                  live and "Google" in live.message and "bloccato" in live.message
-                  and "fino" in live.message and "VERSIONE" in codes(problems))
+                  live and "Google" in live.message and "blocked" in live.message
+                  and "until" in live.message and "VERSIONE" in codes(problems))
         problems = checks.check(path, apply=True, log=silent)
         live = by_code(problems, "DAL_VIVO")
         check("versione vecchia: traduttore di PatchSmith preparato e versione aggiornata; senza traduttori "
@@ -548,7 +548,7 @@ def test_gamemaker(base):
         problems = checks.check(path, apply=True, log=silent, events=[])
         check("GameMaker: un'altra lingua scelta nel gioco -> solo detto (la scelta di chi gioca resta)",
                   codes(problems) == ["LINGUA_AGGIUNTA"] and problems[0].state == "info" and not calls
-                  and "Opzioni > Lingua" in problems[0].message)
+                  and "Options > Language" in problems[0].message)
         os.remove(new_value)
         problems = checks.check(path, apply=True, log=silent, events=[])
         check("GameMaker: lingua aggiunta tolta dal gioco -> Riapplica e lingua rimessa (forzata)",
@@ -639,8 +639,8 @@ def test_after_verify(base):
     # the live translator started without translators (service log, shared by all games)
     current_time = datetime.datetime.fromtimestamp(after).strftime("%Y-%m-%d %H:%M:%S")
     write(os.path.join(base, "ollama", "servizio-xunity.log"),
-           "%s Traduttore per XUnity in ascolto su http://127.0.0.1:1/translate (gioco: %s)\n"
-           "%s Traduttori per le frasi nuove: nessuno (le frasi nuove restano in originale)\n"
+           "%s Translator for XUnity is listening on http://127.0.0.1:1/translate (game: %s)\n"
+           "%s Translators for new phrases: nobody (the new phrases remain in the original language)\n"
            % (current_time, name, current_time))
     problems = checks.check(path, apply=False, log=silent, events=[])
     check("registri grandi (oltre 2 MB): una partita riuscita non e' un crash all'avvio, gli errori in fondo al "
@@ -648,7 +648,7 @@ def test_after_verify(base):
                   codes(problems)), codes(problems) == ["SERVIZIO_REGISTRO", "TRADUTTORE_FERMO"])
     corrected = checks.Problem("TEMPORANEI", "info", "x", state="corretto")
     check("esito: '1 problema corretto' (singolare)",
-              "1 problema corretto." in checks.as_outcome([corrected], path).reason)
+              "1 problem fixed." in checks.as_outcome([corrected], path).reason)
 
     # PatchSmith updated: Unity games are checked again at startup (version to reconcile)
     other = os.path.join(automatic.profiles_folder(), "solo-crash-prova.json")
@@ -714,8 +714,8 @@ def test_after_verify(base):
     output = r.stdout.decode("utf-8", "replace")
     os.remove(broken)
     check("riga di comando con un profilo rovinato: errore detto, gli altri giochi controllati, codice 1",
-              r.returncode == 1 and "ERRORE nel controllo di rotto-prova.json" in output
-              and output.count("Controllo dopo aver giocato:") >= 6 and "Traceback" not in output
+              r.returncode == 1 and "ERROR while checking rotto-prova.json" in output
+              and output.count("Check after playing:") >= 6 and "Traceback" not in output
               and "Traceback" not in r.stderr.decode("utf-8", "replace"))
 
 
@@ -757,7 +757,7 @@ def test_retranslate_and_startup(base):
         check("all'apertura: il diario non va avanti; esito con 'ritraduci' (anche quello salvato, con 5 frasi)",
                   not state.get("diario_fino") and "ritraduci" in e.actions and stored is not None
                   and any(p.get("frasi") == 5 and p.get("azione") == "ritraduci" for p in stored.extra["controllo"])
-                  and ("Ritraduci le frasi", "ritraduci") in window["pulsanti"])
+                  and ("Re-translate the phrases", "ritraduci") in window["pulsanti"])
         problems = checks.check(path, apply=True, log=silent, events=[], retranslate=True)
         redone = by_code(problems, "FRASI_DA_RIFARE")
         check("pulsante 'Ritraduci': le frasi si ritraducono e vanno nella cache, il diario va avanti (%s)"
@@ -792,12 +792,12 @@ def test_retranslate_and_startup(base):
     mod = by_code(problems, "CRASH_CON_MOD")
     check("...con un crash vero (registro di Windows): 'non accetta mod' da confermare, senza 'anche dopo la "
               "correzione' (non c'e' stata)", mod and not mod.safe and mod.action == "ripristina"
-              and "anche dopo" not in mod.message)
+              and "even after" not in mod.message)
     checks._save_state(path, {"entrypoint_forzato": True})
     problems = checks.check(path, apply=False, log=silent, events=[event])
     mod = by_code(problems, "CRASH_CON_MOD")
     check("...e dopo la correzione del punto d'ingresso: 'anche dopo la correzione'",
-              mod and "anche dopo la correzione" in mod.message)
+              mod and "even after the fix" in mod.message)
 
 
 def test_pending_fixes(base):
@@ -828,8 +828,8 @@ def test_pending_fixes(base):
     problems = checks.check(path, apply=False, log=silent)
     p = by_code(problems, "CORREZIONI_IN_ATTESA")
     check("correzioni in attesa: in sola lettura 'si correggerebbe da solo', con un messaggio per chi gioca, "
-              "nulla scritto", p and p.state == "da_correggere" and "2 tue correzioni" in p.message
-              and "Correggi traduzioni" in p.message and snapshot(base) == whole)
+              "nulla scritto", p and p.state == "da_correggere" and "2 of your corrections" in p.message
+              and "Fix translations" in p.message and snapshot(base) == whole)
     real = system.game_open
     system.game_open = lambda _c: True
     try:
@@ -845,7 +845,7 @@ def test_pending_fixes(base):
               "le altre righe identiche, niente piu' in attesa (%s)" % (p.detail if p else None),
               p and p.state == "corretto" and entries.get("Start a new game") == "Nuova partita"
               and entries.get("Load game") == "Carica (a mano)" and entries.get("Quit") == "Esci"
-              and "una lasciata" in p.detail and not corrections.to_write(profile))
+              and "one left as it was" in p.detail and not corrections.to_write(profile))
     check("correzioni in attesa: il controllo dopo non trova piu' nulla",
               "CORREZIONI_IN_ATTESA" not in codes(checks.check(path, apply=True, log=silent)))
     # installed with a previous version and with the configuration to put back: a single message
@@ -858,7 +858,7 @@ def test_pending_fixes(base):
     p = by_code(problems, "CONFIGURAZIONE")
     check("versione precedente e configurazione da rimettere: solo CONFIGURAZIONE, che dice la versione (%s)"
               % ", ".join(codes(problems)), p and "VERSIONE" not in codes(problems)
-              and "un'altra versione di PatchSmith (0.15.0)" in p.message)
+              and "a different version of PatchSmith (0.15.0)" in p.message)
     checks.check(path, apply=True, log=silent)
     check("... dopo la correzione: versione nel manifesto aggiornata, niente da fare",
               adapter_unity.read_manifest(game).get("patchsmith_versione") == __version__
@@ -905,7 +905,7 @@ def test_retranslate_without_translator(base):
               "finestra, niente 'smith.py' (%s)" % (p.detail if p else None),
               p and p.state == "non_riuscito" and p.action == "installa_locale"
               and memory.get("Continuous glove") == "Guanto a lunga durata"
-              and ("Installa il traduttore locale", "installa_locale") in window["pulsanti"]
+              and ("Install the local translator", "installa_locale") in window["pulsanti"]
               and "smith.py" not in window["testo"])
 
 
@@ -938,7 +938,7 @@ def main(base):
                        env=dict(os.environ), timeout=600)
     output = r.stdout.decode("utf-8", "replace")
     check("riga di comando: 'smith.py controlla --solo-leggi' su tutti i giochi -> codice 2, nessun errore, nulla "
-              "scritto", r.returncode == 2 and "ERRORE" not in output and output.count("Controllo dopo aver giocato:")
+              "scritto", r.returncode == 2 and "ERROR" not in output and output.count("Check after playing:")
               >= 6 and snapshot(base) == whole)
     test_after_verify(base)
     test_retranslate_and_startup(base)
