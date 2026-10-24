@@ -19,7 +19,7 @@ Windows only. The interface is in Italian and English (the flag button switches 
 ## Download and start
 
 1. Download `PatchSmith-0.1.0-windows.zip` from the [Releases page](https://github.com/shottocode/PatchSmith/releases) and extract it anywhere (Python is included: nothing to install).
-2. Double-click **`PatchSmith.exe`**.
+2. Double-click **`PatchSmith.exe`**. The first time, Windows may show **"Windows protected your PC"**: PatchSmith is free and its executable is not signed with a paid certificate, so Windows does not know it yet. Click **More info**, then **Run anyway**. The code is all here on GitHub, and the release page shows the SHA-256 of the zip to check that it is the original one.
 3. **Browse…**: choose the game's folder (the one with its executable).
 4. Leave **From** on "Detect automatically" and **To** on your language, then press **Analyze and translate**.
 5. Start the game.
