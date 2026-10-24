@@ -6,7 +6,9 @@ Everything is in PatchSmith's folder (components/ollama: program and models), no
 - the user's OLLAMA_* variables are removed from the server's environment and PatchSmith's are set
   (models on D:, no cloud features);
 - calls to the local server never go through a system proxy.
-On C: Ollama writes only a small key in %USERPROFILE%\\.ollama.
+On C: Ollama writes only a small key in %USERPROFILE%\\.ollama, and PatchSmith remembers where the local translator
+is in %LOCALAPPDATA%\\PatchSmith\\local-translator.json: another copy of PatchSmith on the same PC (or the next version,
+extracted in another folder) uses the same one instead of downloading the gigabytes again (see folder).
 """
 import ctypes
 import hashlib
@@ -42,13 +44,76 @@ class LocalError(Exception):
     """The local translator is not installed, does not start or does not have enough memory."""
 
 
+# where the local translator was installed, for the other copies of PatchSmith on this PC (and the next versions,
+# extracted in another folder): %LOCALAPPDATA%\PatchSmith\local-translator.json, {"folder": ...}
+REMEMBERED = ("PatchSmith", "local-translator.json")
+
+
 def folder():
+    """The local translator's folder (program and models). This copy's components/ollama, unless the folder
+    remembered by another copy (see remember) has what this one lacks: the models first (gigabytes), then the
+    program. Read only."""
     from . import project
-    return project.components_folder("ollama")
+    own = project.components_folder("ollama")
+    remembered = _remembered()
+    candidates = [own]
+    if remembered and os.path.normcase(os.path.abspath(remembered)) != os.path.normcase(os.path.abspath(own)):
+        candidates.append(remembered)
+    score = {f: (_has_models(f), os.path.isfile(_program_in(f)), f == own) for f in candidates}
+    best = max(candidates, key=lambda f: score[f])
+    return best if any(score[best][:2]) else own  # (nothing anywhere: a new installation goes next to this copy)
+
+
+def remember():
+    """After an installation and when the local translator starts: its folder, if complete, is remembered for the
+    other copies of PatchSmith on this PC."""
+    f = folder()
+    if _has_models(f) and os.path.isfile(_program_in(f)):
+        _remember(f)
+
+
+def _program_in(f):
+    return os.path.join(f, VERSION, "ollama.exe")
+
+
+def _has_models(f):
+    return any(os.path.isfile(os.path.join(f, "modelli", "manifests", "registry.ollama.ai", "library",
+                                           *m["name"].split(":"))) for m in MODELS.values())
+
+
+def _remembered_path():
+    base = os.environ.get("LOCALAPPDATA")
+    return os.path.join(base, *REMEMBERED) if base else None
+
+
+def _remembered():
+    path = _remembered_path()
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            value_ = json.load(f).get("folder")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return value_ if isinstance(value_, str) and os.path.isdir(value_) else None
+
+
+def _remember(f):
+    path = _remembered_path()
+    if not path or _remembered() == f:
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        temp_file = path + ".tmp"
+        with open(temp_file, "w", encoding="utf-8") as out:
+            json.dump({"folder": f}, out)
+        os.replace(temp_file, path)
+    except OSError:  # (not essential: this copy works anyway)
+        pass
 
 
 def program():
-    return os.path.join(folder(), VERSION, "ollama.exe")
+    return _program_in(folder())
 
 
 def models_folder():
@@ -366,6 +431,7 @@ class Server:
         os.makedirs(models_folder(), exist_ok=True)
         temp_path = os.path.join(folder(), "tmp")
         os.makedirs(temp_path, exist_ok=True)
+        remember()
         self.port = _free_port()
         env = {k: v for k, v in os.environ.items() if not k.upper().startswith("OLLAMA_") and k.upper() != "HTTP_PROXY"}
         env.update(OLLAMA_HOST="127.0.0.1:%d" % self.port, OLLAMA_MODELS=models_folder(), OLLAMA_NO_CLOUD="1",
@@ -502,6 +568,7 @@ def install(selected, log=print):
         if not installed():
             _install_program(log)
         _download_models(selected, log)
+        remember()
     except (OSError, ValueError) as e:  # network, disk, unexpected response: an understandable message, not a traceback
         raise LocalError("Installation failed (%s: %s). Check your connection and try again: downloads will resume "
                          "from where they left off." % (type(e).__name__, e)) from None

@@ -532,6 +532,7 @@ def main(base):
     test_memory(base)
     test_apply(base)
     test_limited_redos(base)
+    test_shared_installation(base)
 
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
@@ -927,6 +928,61 @@ def test_limited_redos(base):
               not project.entry_problems("Gold", "Oro", "it", references=["Oro"])
               and project.entry_problems("Open the big chest now", "Abre el gran cofre ahora", "it",
                                          references=["Abre el gran cofre ahora"]) == ["copied reference"])
+
+
+def test_shared_installation(base):
+    """The local translator installed by another copy of PatchSmith on the same PC (remembered in %LOCALAPPDATA%) is
+    used instead of downloading it again; a complete installation of the copy's own comes first."""
+    saved = project.PROJECT_FOLDER, os.environ.get("LOCALAPPDATA")
+    root = os.path.join(base, "shared")
+    os.environ["LOCALAPPDATA"] = os.path.join(root, "localappdata")
+    remembered = os.path.join(os.environ["LOCALAPPDATA"], *ollama.REMEMBERED)
+
+    def own():
+        return project.components_folder("ollama")
+
+    def install(models=True):
+        os.makedirs(os.path.join(own(), ollama.VERSION), exist_ok=True)
+        open(os.path.join(own(), ollama.VERSION, "ollama.exe"), "w").close()
+        if models:
+            manifest = os.path.join(own(), "modelli", "manifests", "registry.ollama.ai", "library", "translategemma")
+            os.makedirs(manifest, exist_ok=True)
+            open(os.path.join(manifest, ollama.MODELS["4b"]["name"].split(":")[1]), "w").close()
+
+    def remembered_folder():
+        try:
+            return read_json(remembered).get("folder")
+        except OSError:
+            return None
+
+    try:
+        project.PROJECT_FOLDER = os.path.join(root, "first")
+        install()
+        first = own()
+        found_before = ollama.folder(), remembered_folder()
+        ollama.remember()  # (what installing it and starting it do)
+        check("local translator of this copy: found (just looking writes nothing), once used it is remembered for "
+              "the other copies", found_before == (first, None) and remembered_folder() == first)
+        project.PROJECT_FOLDER = os.path.join(root, "second")
+        check("another copy without the local translator: it uses the one remembered (ready, nothing to download)",
+              ollama.folder() == first and ollama.state() == "ready" and ollama.model_present("4b"))
+        install(models=False)
+        check("another copy with only the program: the remembered one, which has the models, comes first",
+              ollama.folder() == first)
+        install()
+        ollama.remember()
+        check("another copy with its own complete installation: its own, now remembered",
+              ollama.folder() == own() and remembered_folder() == own())
+        project.PROJECT_FOLDER = os.path.join(root, "third")
+        os.remove(remembered)
+        check("nothing remembered and nothing in this copy: a new installation goes next to this copy",
+              ollama.folder() == own() and ollama.state() == "not installed")
+    finally:
+        project.PROJECT_FOLDER = saved[0]
+        if saved[1] is None:
+            os.environ.pop("LOCALAPPDATA", None)
+        else:
+            os.environ["LOCALAPPDATA"] = saved[1]
 
 
 if __name__ == "__main__":
