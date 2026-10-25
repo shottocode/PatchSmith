@@ -1,14 +1,19 @@
 # Builds the Windows package (PatchSmith-<version>-windows.zip) on a clean GitHub runner, from the repository's code
-# (python -I smith.py package, with the official Python of actions/setup-python as the portable runtime). Run by hand
-# with "Run workflow": the zip is kept among the run's artifacts. The attestation lets anyone check where the zip comes
-# from:  gh attestation verify PatchSmith-<version>-windows.zip -R shottocode/PatchSmith
+# (python -I smith.py package, with the official Python of actions/setup-python as the portable runtime).
+# - When a version tag (v0.1.0...) is pushed: the zip goes into that release, replacing the previous one (a release
+#   that does not exist yet is created as a draft, to be completed and published by hand).
+# - By hand with "Run workflow": the zip is only kept among the run's artifacts, to try it.
+# The attestation lets anyone check where the zip comes from:
+#   gh attestation verify PatchSmith-<version>-windows.zip -R shottocode/PatchSmith
 name: Release package
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   attestations: write
 
@@ -31,3 +36,18 @@ jobs:
           name: PatchSmith-windows
           path: ${{ runner.temp }}/dist/PatchSmith-*-windows.zip
           if-no-files-found: error
+      - name: Put the zip in the release of the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $zip = Join-Path $env:RUNNER_TEMP "dist\PatchSmith-$($tag.Substring(1))-windows.zip"
+          if (-not (Test-Path $zip)) {
+            throw "The tag $tag does not match the version of PatchSmith (patchsmith/__init__.py): no $zip"
+          }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --draft --title "PatchSmith $tag" --notes "Download PatchSmith-$($tag.Substring(1))-windows.zip below."
+          }
+          gh release upload $tag $zip --clobber

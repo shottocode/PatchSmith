@@ -70,6 +70,8 @@ La traduzione automatica non ha contesto: la qualità è quella di una traduzion
 
 ## Pacchetto da pubblicare
 
+Lo zip di ogni release lo costruisce GitHub Actions ([.github/workflows/release.yml](.github/workflows/release.yml)) dal codice del repository, quando si pubblica il tag di una versione. Chiunque può verificare che uno zip scaricato venga da lì: `gh attestation verify PatchSmith-<versione>-windows.zip -R shottocode/PatchSmith`.
+
 `python -I smith.py package` prepara `PatchSmith-rilascio/PatchSmith` e `PatchSmith-<versione>-windows.zip` accanto alla cartella del programma: il programma, `PatchSmith.exe` e un Python portatile (con Tkinter) isolato dal resto del PC. `--python <cartella>` usa un altro Python (consigliato il più recente da python.org). Le prove: `python -I test/run_all.py` (usano giochi e traduttori finti, mai i tuoi dati veri). Dettagli in [docs/TECNICO.md](docs/TECNICO.md).
 
 ## Contatti
