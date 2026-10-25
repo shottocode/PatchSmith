@@ -1,0 +1,42 @@
+name: Something in PatchSmith doesn't work
+description: An error, a crash, a button that does nothing, a wrong translation written into the game...
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! You can write in English or Italian (*puoi scrivere in italiano*).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: translator
+    attributes:
+      label: Translator
+      options:
+        - Local translator (on your PC)
+        - DeepL
+        - MyMemory
+        - Free Google
+        - Not relevant
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: Drag here the zip made by **Create report** (it does not contain your DeepL key or email) and screenshots of the error.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: I'm using the latest release of PatchSmith.
+        - label: I searched the existing issues.

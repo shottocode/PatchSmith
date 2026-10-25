@@ -1,0 +1,20 @@
+name: Idea or request
+description: A new engine, a feature, an improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You can write in English or Italian (*puoi scrivere in italiano*).
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What you would like PatchSmith to do, and for which games or which situation.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: The problem it would solve, or how you do it today.

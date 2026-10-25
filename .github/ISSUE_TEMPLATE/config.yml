@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question
+    url: https://github.com/shottocode/PatchSmith/discussions
+    about: How to use PatchSmith, which game it can translate, anything that is not a problem to fix.
+  - name: Security problem
+    url: https://github.com/shottocode/PatchSmith/security/advisories/new
+    about: Report it privately, not in a public issue.

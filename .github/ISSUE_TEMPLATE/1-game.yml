@@ -1,0 +1,75 @@
+name: A game doesn't work
+description: PatchSmith doesn't translate a game (also when its engine isn't supported yet), or the translation doesn't show up in it.
+title: "Game: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! You can write in English or Italian (*puoi scrivere in italiano*).
+        The most useful thing is the zip made by **Create report** (bottom right in PatchSmith's window): it contains
+        the logs and what PatchSmith detected, without your DeepL key or email.
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: Name, store (Steam, GOG, Epic, itch.io...) and version if you know it.
+      placeholder: "Rubinite, Steam, 1.2.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Engine
+      description: The one PatchSmith shows after "Analyze and translate", if you know it. Engines not supported yet are welcome too.
+      options:
+        - I don't know
+        - Unity (Mono)
+        - Unity IL2CPP
+        - Unity with Unity Localization
+        - Unreal Engine 4
+        - Unreal Engine 5
+        - GameMaker
+        - Godot 4
+        - Godot 3
+        - XNA / FNA / MonoGame
+        - Electron / NW.js / HTML5
+        - RPG Maker
+        - Ren'Py
+        - KiriKiri
+        - Wolf RPG Editor
+        - Other (write it below)
+    validations:
+      required: true
+  - type: input
+    id: other_engine
+    attributes:
+      label: Other engine
+      description: If the engine isn't in the list, its name; if you don't know it, some files from the game's folder (e.g. *.pck, *.rpa, data.win, *.pak).
+      placeholder: "Ren'Py 8 (game/archive.rpa)"
+  - type: input
+    id: languages
+    attributes:
+      label: Languages
+      description: From which language to which one.
+      placeholder: "English -> Italian"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you did and what you see (the message of the window at the end, the game still in the original language...).
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: Drag here the zip made by **Create report**, and screenshots if useful.
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Before sending
+      options:
+        - label: I have a legitimate copy of the game (PatchSmith does not support cracked copies or online games with anti-cheat).
+          required: true
+        - label: I'm using the latest release of PatchSmith.
