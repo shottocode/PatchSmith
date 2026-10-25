@@ -70,8 +70,9 @@ def _portable_python(python, runtime, log):
                            'using the "tcl/tk and IDLE" option'
                               % python)
     os.makedirs(runtime)
-    for name in os.listdir(python):
-        if name.lower().endswith((".exe", ".dll")) or name == "LICENSE.txt":
+    for name in os.listdir(python):  # (only the two interpreters: not the installer or other programs that some
+        # Python folders hold, e.g. GitHub's actions/setup-python keeps python-<version>-amd64.exe there)
+        if name.lower() in ("python.exe", "pythonw.exe") or name.lower().endswith(".dll") or name == "LICENSE.txt":
             shutil.copy2(os.path.join(python, name), os.path.join(runtime, name))
     _copy_tree(os.path.join(python, "DLLs"), os.path.join(runtime, "DLLs"), SKIP_DLL, ("*.pyd", "*.dll"))
     _copy_tree(os.path.join(python, "Lib"), os.path.join(runtime, "Lib"), SKIP_LIB)
