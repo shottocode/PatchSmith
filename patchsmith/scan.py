@@ -33,6 +33,16 @@ def _game_files(folder):
             yield os.path.join(root, f)
 
 
+def engine_data(data):
+    """The engine whose project data the JSON is, or None. Its strings are the names of the objects, layouts,
+    animations, sounds and variables that the game looks up, not texts: translated, the game no longer finds them
+    (Construct: data.json of the export, {"project": [name, first layout, plugins, object types...]})."""
+    if isinstance(data, dict) and list(data) == ["project"] and isinstance(data["project"], list) \
+            and len(data["project"]) > 10 and isinstance(data["project"][0], str):
+        return "Construct"
+    return None
+
+
 def _json_candidate(rel, data):
     """The candidate of a JSON file: readable texts by the generic rules and, if the file is a {key: text}
     dictionary (with sections too), also by the rules of localization files (where a single word is a text: 'wood',
@@ -86,14 +96,15 @@ def _mark_localization(candidates):
             c["readable_strings"], c["chars"] = c["localization_texts"]
 
 
-def scan_folder(folder, log=print):
+def scan_folder(folder, log=print, engine_files=None):
     """Returns (candidates, others).
 
     candidates: [{"path": rel, "readable_strings": n, "chars": c, "stats": {...}}], plus
     "localization" for {key: text} files and "format": "csv" for tables with one column per language.
-    The skipped files (too large, unreadable JSON) go to the log with how many they are.
+    The skipped files (too large, unreadable JSON, engine project data) go to the log with how many they are.
+    engine_files: list that receives the paths of the engine project data files (see engine_data).
     """
-    candidates, others, large, unreadable = [], {}, [], []
+    candidates, others, large, unreadable, engines = [], {}, [], [], {}
     for path in _game_files(folder):
         interruption.check()
         rel = os.path.relpath(path, folder).replace(os.sep, "/")
@@ -107,6 +118,12 @@ def scan_folder(folder, log=print):
                 f = adapter_webjson.JSONFile(path)
             except (OSError, ValueError, UnicodeDecodeError):
                 unreadable.append(rel)
+                continue
+            engine = engine_data(f.data)
+            if engine:
+                engines.setdefault(engine, []).append(rel)
+                if engine_files is not None:
+                    engine_files.append(rel)
                 continue
             c = _json_candidate(rel, f.data)
             if c["readable_strings"] or c.get("localization_texts", [0])[0]:
@@ -130,6 +147,9 @@ def scan_folder(folder, log=print):
     if unreadable:
         log("  ! %d .json files not read because they are not valid JSON: %s" % (
             len(unreadable), ", ".join(unreadable[:3])))
+    for engine, paths in sorted(engines.items()):
+        log("  Project data of %s, not translated (names that the game looks up, not texts): %s" % (
+            engine, ", ".join(paths[:3])))
     return candidates, others
 
 

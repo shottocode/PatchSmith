@@ -203,7 +203,8 @@ Messages talk about the interface's buttons; when there is a command to fix some
 1. **Detection.** It uses SteamDB's rules on file names (about 125 engines, MIT license), checks the first bytes of files (Godot `.pck`, GameMaker `data.win`, KiriKiri `.xp3`, Ren'Py `.rpa`, `UnityFS`...) and recognizes web frameworks inside Electron/NW.js. Every engine gets a score with the evidence. It also reports anti-cheats.
 2. **Texts in the data (`web-json` adapter).** It looks for JSON files with readable text and chooses which fields to translate. It automatically excludes:
    - technical keys such as `id`, `url`, `path`, `author`, `...Id`, `...Type`;
-   - values that are not text: file names, colors, identifiers such as `room_12` or `UnlockFirstNewRule`, lines of code, values of 1–2 characters.
+   - values that are not text: file names, colors, identifiers such as `room_12` or `UnlockFirstNewRule`, lines of code, values of 1–2 characters;
+   - the **project data of Construct** (`data.json` of the export, `{"project": [...]}`): its strings are the names of layouts, objects, animations, sounds and variables that the game looks up, and translated the game no longer finds them (empty buttons). It is never translated; if an older version translated it, "Analyze and translate" puts the original back. The game's own text tables next to it (e.g. a `Database.json` with one field per language) are translated as usual.
 
    Also:
    - **JSON with comments** (`//` and `/* */`) and with a comma before `}` or `]`: many games accept them, and PatchSmith reads them. It rewrites them changing only the translated sentences: comments, spaces, line breaks and numbers stay identical byte for byte;

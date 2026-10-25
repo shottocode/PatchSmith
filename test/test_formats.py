@@ -10,6 +10,8 @@ Fake games and files built here, modeled on real ones seen read-only (no texts f
   labels are translated too and the characters are adapted to the fonts; the same for XNA;
 - GameMaker fonts: those for another script and the libraries' fallback ones do not count;
 - web page with the PLAY and OK buttons (test/web/index-inline.html) and JavaScript strings that are surely visible;
+- Construct game: the project data (data.json, names the game looks up) is never translated, and when an older version
+  translated it, the original goes back; the texts table next to it is translated;
 - Unreal without .locres and with an unreadable pak;
 - skipped files written to the log.
 Writes only in the temporary folder (PatchSmith's data included); no network (fake translator).
@@ -636,7 +638,101 @@ def test_web(base):
               any("too large" in r and "index.html" in r for r in lines))
 
 
-# --- 7. Unreal -----------------------------------------------------------------------------------
+# --- 7. Construct: the project data is not text ---------------------------------------------------
+
+CONSTRUCT_APP = "resources/app/src/app/"
+CONSTRUCT_MENUS = [
+    ("Pick a companion for the journey", "Choisissez un compagnon pour le voyage"),
+    ("Upgrade one of your items", "Améliorez un de vos objets"),
+    ("Gain +2 to an element of your choice", "Gagnez +2 dans un élément au choix"),
+    ("Heal all your wounds before the next fight", "Soignez vos blessures avant le prochain combat"),
+    ("Start a new run from the first level", "Commencez une partie depuis le premier niveau"),
+    ("Continue the run you left yesterday", "Continuez la partie laissée hier"),
+    ("Options and settings of the game", "Options et réglages du jeu"),
+    ("Quit to the desktop and save everything", "Quittez vers le bureau et sauvegardez tout"),
+    ("The shop is closed until the next level", "La boutique est fermée jusqu'au prochain niveau"),
+    ("You don't have enough coins for this item", "Vous n'avez pas assez de pièces pour cet objet"),
+    ("Thanks for playing, see you on the next adventure", "Merci d'avoir joué, à la prochaine aventure"),
+]
+
+
+def construct_game(folder):
+    """Fake Construct export inside Electron, modeled on a real one seen read-only: data.json is the project (names of
+    layouts, object types, behaviors, animations and sounds that the game looks up, plus the starting texts of the
+    layouts) and Database.json the texts in two languages, read by the game with "Menus." & number & "." & language."""
+    texts = [e for e, _ in CONSTRUCT_MENUS]
+    project_data = [
+        "Brick Game", "Main Menu",
+        [[[n, False, "", "", 0] for n in ("Sprite", "Text", "Mouse", "Keyboard", "Dictionary", "Browser")],
+         [[n, False, "", "", 0] for n in ("Tween", "Timer", "Bullet", "Physics", "Rotate", "Sine")]],
+        [[n, 3, ["Animation 1", "Default"], ["Damage", "Place", "Price"]]
+         for n in ("Fire", "Water", "Poison", "Ghost", "Rock", "Grass")],
+        [],
+        [["Main Menu", 854, 480, [["Background", [[0, 0, ["Text", [t, True, "Pixel Font"]]] for t in texts[:6]]]]],
+         ["Options Screen", 854, 480, [["Interface", [[0, 0, ["Text", [t, True, "Pixel Font"]]] for t in texts[6:]]]]]],
+        [["Main Menu events", [["Mouse", "On object clicked", "Tween", "Sine"]]]],
+        [["FREE VIDEO GAME MUSIC PACK - Devil on the Dancefloor", ["audio/webm; codecs=opus"]],
+         ["Thunderstruck", ["audio/webm; codecs=opus"]]],
+        "media/", False, 854, 480, 4, False, "nearest", True, "1.0.2"]
+    database = {"Menus": {str(i + 1): {"eng": e, "fr": f} for i, (e, f) in enumerate(CONSTRUCT_MENUS)},
+                "Enemy1": {"HP": 4, "Color": "fff24236"}}
+    for name, data in {
+            "chrome_100_percent.pak": b"pak", "v8_context_snapshot.bin": b"v8", "brick.exe": b"MZ",
+            "resources/app/package.json": b'{"main": "main.js"}',
+            "resources/app/main.js": b"require('electron');",
+            CONSTRUCT_APP + "index.html": b'<!DOCTYPE html><html><head><meta name="generator" content="Scirra Construct">'
+                                          b'</head><body><script src="scripts/main.js" type="module"></script>'
+                                          b'</body></html>',
+            CONSTRUCT_APP + "scripts/c3runtime.js": b'"use strict";self.C3_ExpressionFuncs=[()=>"Menus."];',
+            CONSTRUCT_APP + "data.json": json.dumps({"project": project_data}).encode("utf-8"),
+            CONSTRUCT_APP + "Database.json": json.dumps(database, ensure_ascii=False, indent=2).encode("utf-8")}.items():
+        write_bytes(os.path.join(folder, *name.split("/")), data)
+
+
+def test_construct(base):
+    game = os.path.join(base, "Brick Game")
+    construct_game(game)
+    data_path = os.path.join(game, *(CONSTRUCT_APP + "data.json").split("/"))
+    database_path = os.path.join(game, *(CONSTRUCT_APP + "Database.json").split("/"))
+    original = read_bytes(data_path)
+    data = json.loads(original)
+    check("Construct: data.json recognized as the project data (by the generic rules it would be a text file), the "
+          "texts table not", scan.engine_data(data) == "Construct"
+          and scan.above_threshold(scan._json_candidate("data.json", data))
+          and scan.engine_data(json.loads(read_bytes(database_path))) is None)
+
+    lines = []
+    path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "dictionary", lines.append)
+    paths = [f["path"] for f in json.loads(read_bytes(path))["file"]] if path else []
+    menus = json.loads(read_bytes(database_path))["Menus"]
+    check("Construct: data.json left out of the profile and untouched (written in the log), Database.json translated",
+          completed and read_bytes(data_path) == original and CONSTRUCT_APP + "data.json" not in paths
+          and CONSTRUCT_APP + "Database.json" in paths and menus["1"]["eng"].lower() == mock(CONSTRUCT_MENUS[0][0])
+          and any("Project data of Construct" in r for r in lines))
+
+    # game profile of an older version, which translated data.json too: the game no longer found its objects
+    profile = json.loads(read_bytes(path))
+    include, exclude = adapter_webjson.suggest_schemas(scan._json_candidate("data.json", data)["stats"])
+    profile["file"].append({"path": CONSTRUCT_APP + "data.json", "format": "json", "include": include,
+                            "exclude": exclude})
+    scan.save_json(path, profile)
+    old = project.Project(path, silent)
+    old.translate(Translator())
+    old.apply()
+    translated = read_bytes(data_path) != original
+    lines = []
+    path, completed, _ = automatic.analyze_and_translate(game, "auto", "it", "dictionary", lines.append)
+    paths = [f["path"] for f in json.loads(read_bytes(path))["file"]]
+    check("Construct: data.json translated by an older version -> original put back byte for byte and removed from "
+          "the profile", translated and completed and read_bytes(data_path) == original
+          and not os.path.exists(data_path + project.BACKUP_SUFFIX) and CONSTRUCT_APP + "data.json" not in paths
+          and any("data.json" in r and "original put back" in r for r in lines))
+    check("Construct: Restore originals puts back the texts table too",
+          automatic.restore(game, silent) and read_bytes(data_path) == original
+          and json.loads(read_bytes(database_path))["Menus"]["1"]["eng"] == CONSTRUCT_MENUS[0][0])
+
+
+# --- 8. Unreal -----------------------------------------------------------------------------------
 
 def test_unreal(base):
     adapter_unreal.game_open = lambda c: False
@@ -764,6 +860,7 @@ def main(base):
     test_generic(base)
     test_font(base)
     test_web(base)
+    test_construct(base)
     test_unreal(base)
     test_log(base)
     failed = [n for n, ok in OUTCOMES if not ok]

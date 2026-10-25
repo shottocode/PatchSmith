@@ -1129,7 +1129,10 @@ def _prepare(folder, origin, dest_lang, backend, log, force, regenerate, transla
         return None, _mark(outcome, "NOT_SUPPORTED", REASON_ENCRYPTED % encrypted, engine="web",
                            actions=["create_report"])
     log("== 2/3 Searching for texts")
-    candidates, others = scan.scan_folder(folder, log)
+    engine_files = []
+    candidates, others = scan.scan_folder(folder, log, engine_files)
+    # translated by a version that did not recognize them: the game no longer finds its objects, so they go back
+    _put_back_excluded(folder, engine_files, log)
     candidates, dropped, target_files = _original_language_only(candidates, folder, origin, dest_lang, log)
     # CSV tables with the target language column filled: official translation
     target_files += [c["path"] for c in candidates if c.get("format") == "csv" and dest_lang and any(
@@ -1174,6 +1177,10 @@ def _prepare(folder, origin, dest_lang, backend, log, force, regenerate, transla
             profile["file"] = [f for f in profile["file"] if f["path"] not in dropped]
             log("  Removed from profile (official game translations): %s" % ", ".join(excluded))
             _put_back_excluded(folder, excluded, log)
+        engine_data = [f["path"] for f in profile["file"] if f["path"] in engine_files]
+        if engine_data:
+            profile["file"] = [f for f in profile["file"] if f["path"] not in engine_files]
+            log(DETAIL + "  Removed from profile (project data of the engine): %s" % ", ".join(engine_data))
         log(DETAIL + "Existing profile updated: %s (%d new files)" % (existing, len(added)))
         path = existing
     else:

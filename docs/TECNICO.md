@@ -201,7 +201,8 @@ I messaggi parlano dei pulsanti dell'interfaccia; quando c'è un comando per rim
 1. **Rilevamento.** Usa le regole di SteamDB sui nomi dei file (circa 125 motori, licenza MIT), controlla i primi byte dei file (`.pck` Godot, `data.win` GameMaker, `.xp3` KiriKiri, `.rpa` Ren'Py, `UnityFS`...) e riconosce i framework web dentro Electron/NW.js. Ogni motore riceve un punteggio con le evidenze. Segnala anche gli anti-cheat.
 2. **Testi nei dati (adapter `web-json`).** Cerca i file JSON con testo leggibile e sceglie quali campi tradurre. Esclude automaticamente:
    - chiavi tecniche come `id`, `url`, `path`, `author`, `...Id`, `...Type`;
-   - valori che non sono testo: nomi di file, colori, identificatori come `room_12` o `UnlockFirstNewRule`, righe di codice, valori di 1–2 caratteri.
+   - valori che non sono testo: nomi di file, colori, identificatori come `room_12` o `UnlockFirstNewRule`, righe di codice, valori di 1–2 caratteri;
+   - i **dati del progetto di Construct** (`data.json` dell'esportazione, `{"project": [...]}`): le sue stringhe sono i nomi di scene, oggetti, animazioni, suoni e variabili che il gioco cerca, e tradotte il gioco non li trova più (pulsanti vuoti). Non si traducono mai; se una versione precedente li ha tradotti, "Analizza e traduci" rimette l'originale. Le tabelle dei testi del gioco accanto (es. un `Database.json` con un campo per lingua) si traducono come sempre.
 
    In più:
    - **JSON con commenti** (`//` e `/* */`) e con la virgola prima di `}` o `]`: molti giochi li accettano, e PatchSmith li legge. Li riscrive cambiando solo le frasi tradotte: commenti, spazi, a capo e numeri restano identici byte per byte;
