@@ -1,3 +1,3 @@
-# I file si salvano esattamente come sono (a capo di Windows o Unix compresi): alcune prove confrontano i byte di
-# file veri, che non devono cambiare passando dal repository.
+# Files are stored exactly as they are (Windows or Unix line endings included): some tests compare the bytes of real
+# files, which must not change on their way through the repository.
 * -text

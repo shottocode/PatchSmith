@@ -1,0 +1,33 @@
+# Builds the Windows package (PatchSmith-<version>-windows.zip) on a clean GitHub runner, from the repository's code
+# (python -I smith.py package, with the official Python of actions/setup-python as the portable runtime). Run by hand
+# with "Run workflow": the zip is kept among the run's artifacts. The attestation lets anyone check where the zip comes
+# from:  gh attestation verify PatchSmith-<version>-windows.zip -R shottocode/PatchSmith
+name: Release package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.15.1"
+      - name: Build the package
+        run: python -I smith.py package --output "$env:RUNNER_TEMP\dist" --python "$env:pythonLocation"
+      - name: Attest where the zip comes from
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ runner.temp }}/dist/PatchSmith-*-windows.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: PatchSmith-windows
+          path: ${{ runner.temp }}/dist/PatchSmith-*-windows.zip
+          if-no-files-found: error

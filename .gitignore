@@ -1,10 +1,11 @@
-# Nel repository va solo il codice di PatchSmith: tutto e' ignorato tranne quello elencato qui sotto con "!".
-# Cosi' non ci finiscono mai, nemmeno per sbaglio, i dati di chi lo usa (profili, memoria, registri, salvataggi,
-# configurazioni, impostazioni...), i componenti scaricati (Ollama e i modelli, BepInEx, XUnity), le cartelle di
-# lavoro e i file generati (PatchSmith.exe, i plugin compilati).
+# Only PatchSmith's code goes into the repository: everything is ignored except what is listed below with "!".
+# This way the data of whoever uses it (profiles, memory, logs, saves, configurations, settings...), the downloaded
+# components (Ollama and the models, BepInEx, XUnity), the work folders and the generated files (PatchSmith.exe,
+# the compiled plugins) never end up in it, not even by mistake.
 /*
 !/.gitignore
 !/.gitattributes
+!/.github/
 !/LICENSE
 !/README.md
 !/LEGGIMI.md
