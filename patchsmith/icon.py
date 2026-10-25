@@ -7,6 +7,7 @@ Drawn here, with no downloaded files: run on its own (patchsmith/icon.py) it rem
 """
 import math
 import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -162,38 +163,91 @@ def _csc():
     return None
 
 
+BUILD_FOLDER = "PatchSmith.build"  # (next to the .exe, only while compiling)
+# Windows 7 to 11 (the GUIDs of the application manifest): the launcher declares the systems it is made for
+_SUPPORTED_OS = ("35138b9a-5d96-4fbd-8e2d-a2440225f93a", "4a2f28e3-53b9-4441-ba9c-d69d4a4a6e38",
+                 "1f676c76-80e1-4239-95bb-83d0f6d0da78", "8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a")
+
+
+def _version_info():
+    """The details Windows shows in the file's Properties (and that antivirus programs expect in a normal program):
+    name, description, version of PatchSmith, author and copyright from LICENSE."""
+    from . import __version__
+    numbers = (__version__.split("+")[0].split("-")[0].split(".") + ["0"] * 4)[:4]
+    version = ".".join(n if n.isdigit() else "0" for n in numbers)
+    author, year = "PatchSmith contributors", ""
+    try:
+        with open(os.path.join(PROGRAM, "LICENSE"), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("Copyright (c)"):
+                    year, _, author = line[len("Copyright (c)"):].strip().partition(" ")
+                    break
+    except OSError:
+        pass
+    quote = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
+    attributes = {"AssemblyTitle": "PatchSmith", "AssemblyProduct": "PatchSmith",
+                  "AssemblyDescription": "PatchSmith: translates video games directly in their files",
+                  "AssemblyCompany": author, "AssemblyCopyright": ("Copyright (c) %s %s, MIT License" % (year, author))
+                  .replace("  ", " "), "AssemblyVersion": version, "AssemblyFileVersion": version,
+                  "AssemblyInformationalVersion": __version__}
+    return "using System.Reflection;\n" + "".join('[assembly: %s("%s")]\n' % (k, quote(v))
+                                                  for k, v in attributes.items())
+
+
+def _manifest():
+    return ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+            '<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">\n'
+            '  <assemblyIdentity version="1.0.0.0" name="PatchSmith.Launcher"/>\n'
+            '  <description>PatchSmith</description>\n'
+            '  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges>\n'
+            '    <requestedExecutionLevel level="asInvoker" uiAccess="false"/>\n'
+            '  </requestedPrivileges></security></trustInfo>\n'
+            '  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application>\n'
+            + "".join('    <supportedOS Id="{%s}"/>\n' % g for g in _SUPPORTED_OS) +
+            '  </application></compatibility>\n'
+            '</assembly>\n')
+
+
 def executable(folder=PROGRAM):
     """PatchSmith.exe next to PatchSmith.pyw, with this icon inside: the program to double-click (the .pyw necessarily
     has Python's icon, which Windows gives to the whole file type). It is the small launcher of launcher.cs, which opens
-    PatchSmith.pyw with the installed Python. It is compiled (Windows C# compiler, nothing to download) only if it is
-    missing or older than launcher.cs or the icon. True if it exists (already or now)."""
-    source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "launcher.cs")
+    PatchSmith.pyw with the installed Python, with the details of a normal program (name, version, author: see
+    _version_info) and its manifest. It is compiled (Windows C# compiler, nothing to download) only if it is missing or
+    older than launcher.cs, the icon, this file or the version. True if it exists (already or now)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    source = os.path.join(here, "launcher.cs")
     icon = os.path.join(FOLDER, "PatchSmith.ico")
     dest_lang = os.path.join(folder, "PatchSmith.exe")
     if not sys.platform.startswith("win") or not (os.path.isfile(source) and os.path.isfile(icon)):
         return False
+    inputs = [source, icon, os.path.abspath(__file__), os.path.join(here, "__init__.py")]
     try:
-        if os.path.getmtime(dest_lang) >= max(os.path.getmtime(source), os.path.getmtime(icon)):
+        if os.path.getmtime(dest_lang) >= max(os.path.getmtime(p) for p in inputs if os.path.exists(p)):
             return True
     except OSError:
         pass
     csc = _csc()
     if not csc:
         return os.path.isfile(dest_lang)
-    temp_file = os.path.join(folder, "PatchSmith.nuovo.exe")  # renamed afterwards: never a half-written .exe
-    command = [csc, "-nologo", "-target:winexe", "-optimize", "-codepage:65001", "-win32icon:" + icon,
-               "-r:System.Windows.Forms.dll", "-out:" + temp_file, source]
+    # compiled in a folder of its own with the final name (the name stays written inside the file), then moved:
+    # never a half-written .exe
+    build = os.path.join(folder, BUILD_FOLDER)
+    built = os.path.join(build, "PatchSmith.exe")
     try:
+        os.makedirs(build, exist_ok=True)
+        with open(os.path.join(build, "VersionInfo.cs"), "w", encoding="utf-8") as f:
+            f.write(_version_info())
+        with open(os.path.join(build, "PatchSmith.exe.manifest"), "w", encoding="utf-8") as f:
+            f.write(_manifest())
+        command = [csc, "-nologo", "-target:winexe", "-optimize", "-codepage:65001", "-win32icon:" + icon,
+                   "-win32manifest:" + os.path.join(build, "PatchSmith.exe.manifest"),
+                   "-r:System.Windows.Forms.dll", "-out:" + built, source, os.path.join(build, "VersionInfo.cs")]
         outcome = subprocess.run(command, capture_output=True, timeout=120, creationflags=0x08000000)
-        if outcome.returncode == 0 and os.path.isfile(temp_file):
-            os.replace(temp_file, dest_lang)
+        if outcome.returncode == 0 and os.path.isfile(built):
+            os.replace(built, dest_lang)
     except (OSError, subprocess.SubprocessError):
         pass
-    if os.path.isfile(temp_file):
-        try:
-            os.remove(temp_file)
-        except OSError:
-            pass
+    shutil.rmtree(build, ignore_errors=True)
     return os.path.isfile(dest_lang)
 
 

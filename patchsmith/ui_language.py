@@ -401,6 +401,8 @@ def _looks_like_text(s):
         return False  # code (e.g. the script for Godot) or regular expressions
     if re.match(r"[A-Z][a-z]+=\S", core) or re.fullmatch(r"[a-z][\w-]*:", core):
         return False  # a line of a configuration file (Program=...), the prefix of a signal (removed:)
+    if re.fullmatch(r"<.*>|-\w[\w-]*:?|\[assembly: .*\]|using [\w.]+;", core):
+        return False  # XML, a command-line option, C# source (the details of PatchSmith.exe: see icon.py)
     if re.search(r"\w\|\w", core):
         return False  # alternatives of a regular expression (a|b)
     words = core.split()

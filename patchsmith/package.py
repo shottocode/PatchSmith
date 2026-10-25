@@ -25,7 +25,7 @@ PROGRAM_FILES = ("PatchSmith.pyw", "smith.py", "LEGGIMI.md", "README.md", "LICEN
 # program folders and the files to take (the compiled plugins and the downloaded components do not go in)
 PROGRAM_FOLDERS = {"patchsmith": ("*",), "data": ("*",), "docs": ("*",),
                       os.path.join("components", "plugin"): ("*.cs",)}
-SKIP = ("__pycache__", "*.pyc", "*.tmp", "PatchSmith.nuovo.exe")
+SKIP = ("__pycache__", "*.pyc", "*.tmp", "PatchSmith.build")
 # from Python: what PatchSmith does not use (tests, IDLE editor, pip, demos...)
 SKIP_LIB = ("site-packages", "test", "tests", "idle_test", "idlelib", "turtledemo", "ensurepip", "lib2to3",
              "pydoc_data", "__pycache__", "*.pyc")
