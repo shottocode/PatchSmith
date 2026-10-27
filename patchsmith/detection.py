@@ -18,6 +18,9 @@ except ImportError:
 DATA_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 SECTIONS = ("Engine", "Container", "SDK", "AntiCheat", "Launcher", "Emulator", "Evidence")
 WEIGHTS = {"Engine": 3, "Container": 3, "SDK": 1, "AntiCheat": 1, "Launcher": 1, "Emulator": 3, "Evidence": 1}
+# sections whose result can be the main engine, in order: a PC engine found wins over the console files (a PC game
+# with console games inside, e.g. a collection made with Unity, is translated as a PC game)
+ENGINE_SECTIONS = ("Engine", "Container", "Emulator", "Console")
 MAX_FILE = 200_000
 MAX_RULE_POINTS = 15  # cap on the points given by the name rules for each entry
 KEY_LENGTH = 12  # maximum number of final characters used as a key by the suffix prefilter
@@ -61,6 +64,28 @@ SIGNATURES = [
      "Unity asset bundle (UnityFS)"),
     (r"\.utoc$", b"-==--==--==--==-", "Unreal", "IoStore .utoc Unreal"),
 ]
+
+# Games made for a console and run on the PC by an emulator or a port: their texts are in the formats of each game,
+# not in those of a PC engine. (regex on the path, console)
+CONSOLES = [
+    (r"\.xbe$", "Xbox"),
+    (r"\.xex$", "Xbox 360"),
+    (r"(?:^|/)system\.cnf$|(?:^|/)s[cl][a-z]{2}[-_]\d{3}\.\d{2}$", "PlayStation or PlayStation 2"),  # SLUS_209.46
+    (r"(?:^|/)eboot\.pbp$", "PSP"),
+    (r"(?:^|/)eboot\.bin$|(?:^|/)param\.sfo$", "PlayStation 3, 4 or Vita"),
+    (r"\.dol$|(?:^|/)opening\.bnr$|\.(?:rvz|wbfs|gcm)$", "GameCube or Wii"),
+    (r"\.rpx$|\.wud$|\.wux$", "Wii U"),
+    (r"(?:^|/)main\.npdm$|\.(?:nso|nca|nsp|xci)$", "Nintendo Switch"),
+    (r"\.(?:3ds|cia|cxi)$", "Nintendo 3DS"),
+    (r"\.nds$", "Nintendo DS"),
+    (r"\.(?:gba|gbc)$", "Game Boy"),
+    (r"\.(?:z64|n64|v64)$", "Nintendo 64"),
+    (r"\.(?:sfc|smc|nes)$", "NES or SNES"),
+]
+CONSOLE_ADVICE = ("Game made for a console: its texts are in the game's own formats, which PatchSmith cannot read. "
+                  "PatchSmith translates games made with PC engines.")
+for _, _console in CONSOLES:
+    ADVICE.setdefault(_console, CONSOLE_ADVICE)
 
 WEB_FRAMEWORKS = [
     ("Angular", re.compile(r"(?:^|/)polyfills[-.][\w-]*\.js$|(?:^|/)main[-.][A-Z0-9]{6,}\.js$"), b"ng-version|\xc9\xb5\xc9\xb5|@angular"),
@@ -350,14 +375,18 @@ def detect(folder):
     if web_roots:
         _add("Engine", "Web", "index.html: %s" % web_roots[0], 4 + len(framework))
 
-    section_order = {s: i for i, s in enumerate(("Engine", "Container", "Emulator", "AntiCheat", "SDK", "Launcher",
-                                                 "Evidence"))}
+    by_console = _filter([re.compile(path_re, re.I) for path_re, _ in CONSOLES], items)
+    for (_, console_name), paths in zip(CONSOLES, by_console):
+        if paths:
+            _add("Console", console_name, paths[0], 10)
+
+    section_order = {s: i for i, s in enumerate(ENGINE_SECTIONS + ("AntiCheat", "SDK", "Launcher", "Evidence"))}
     ordered = sorted(
         ({"section": s, "name": n, "score": v["score"], "evidence": v["evidence"]}
          for (s, n), v in results.items()),
         key=lambda r: (section_order.get(r["section"], 9), -r["score"], r["name"]),
     )
-    engines = [r for r in ordered if r["section"] in ("Engine", "Container", "Emulator")]
+    engines = [r for r in ordered if r["section"] in ENGINE_SECTIONS]
     best = max((r["score"] for r in engines), default=0)
     advice = []
     for r in engines:  # recommendations only for engines with at least half of the best score
@@ -383,13 +412,22 @@ def encrypted_container(outcome):
                  and r["name"] in ENCRYPTED), None)
 
 
+def console(outcome):
+    """The console the game was made for (e.g. 'Xbox'), if no PC engine was found: it is run by an emulator or a
+    port, and its texts are in the game's own formats. Otherwise None."""
+    main = next((r for r in outcome.get("results", ()) if r["section"] in ENGINE_SECTIONS), None)
+    return main["name"] if main and main["section"] == "Console" else None
+
+
 def print_summary(outcome, log=print):
     log("Files examined: %d%s" % (outcome["files_examined"], " (truncated list)" if outcome["truncated"] else ""))
     if not outcome["results"]:
         log("No engine detected.")
     labels = {"Engine": "Engine", "Container": "Container", "SDK": "Component", "AntiCheat": "ANTI-CHEAT",
-                 "Launcher": "Launcher", "Emulator": "Emulator", "Evidence": "Evidence"}
-    if outcome["main_engine"]:
+                 "Launcher": "Launcher", "Emulator": "Emulator", "Console": "Console", "Evidence": "Evidence"}
+    if console(outcome):
+        log("Game made for a console: %s (run by an emulator or a port)" % console(outcome))
+    elif outcome["main_engine"]:
         log("Main engine: %s" % outcome["main_engine"])
     elif outcome["results"]:
         log("Engine not recognized (probably proprietary or not in the list).")

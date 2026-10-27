@@ -39,6 +39,10 @@ REASON_WEB_LIVE = ("The game text is encrypted: PatchSmith translates it for you
                    "the game page, without needing to open the encrypted file. The first time a phrase appears, it "
                    "will first be in English, then in Italian; after that, it will always be in Italian.")
 REASON_CRC = "The game checks the integrity (CRC) of the text files: a modified file would not be loaded."
+REASON_CONSOLE = ("It's a game made for %s, run on the PC by an emulator or a port: its texts are in the game's own "
+                  "formats, not in those of a PC engine, and PatchSmith cannot translate them. If you have the disc, "
+                  "check whether the version of another region already has your language, or look for a fan "
+                  "translation patch.")
 REASON_BINARY_CATALOG = ("The game lists its files with text in a binary catalog (catalog.bin, used by newer Unity "
                          "games), which PatchSmith doesn't yet know how to read. I can't tell if a modified text file "
                          "would be loaded, so I don't make any changes.")
@@ -1127,6 +1131,11 @@ def _prepare(folder, origin, dest_lang, backend, log, force, regenerate, transla
     if encrypted:  # before looking for texts: the only readable ones would be others' files (e.g. a Steam emulator)
         log("  " + REASON_ENCRYPTED % encrypted)
         return None, _mark(outcome, "NOT_SUPPORTED", REASON_ENCRYPTED % encrypted, engine="web",
+                           actions=["create_report"])
+    console = detection.console(outcome)
+    if console:  # before looking for texts: the readable ones would be the emulator's or the port's, not the game's
+        log("  " + REASON_CONSOLE % console)
+        return None, _mark(outcome, "NOT_SUPPORTED", REASON_CONSOLE % console, engine="console",
                            actions=["create_report"])
     log("== 2/3 Searching for texts")
     engine_files = []

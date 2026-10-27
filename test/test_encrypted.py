@@ -1,4 +1,5 @@
-"""Games with encrypted files (GemShell) and Steam emulator folders: PatchSmith does not touch them.
+"""Games with encrypted files (GemShell), games made for a console and Steam emulator folders: PatchSmith does not
+touch them.
 
 Usage: python -I test/test_encrypted.py <test_folder_that_does_not_exist>
 """
@@ -74,6 +75,47 @@ def main(base):
     paths = [c["path"] for c in candidates] + [a if isinstance(a, str) else a.get("path", "") for a in others]
     check("Steam emulator folder (steam_settings) never scanned",
               not any("steam_settings" in p for p in paths) and any("texts.json" in p for p in paths))
+
+    # Xbox game run on the PC by a port (like the Oogie's Revenge package): the port's readable files are not the game's
+    xbox = os.path.join(base, "Xbox port")
+    for name, data in {"Port/port.exe": b"MZ", "Port/SDL2.dll": b"MZ", "Port/game/default.xbe": b"XBEH" + bytes(60),
+                       "Port/game/data/msg_00.lz": os.urandom(64),
+                       "Port/game/XACT_data/BGM.xwb": b"WBND" + bytes(28),
+                       "Port/config.json": json.dumps({"title": "Choose the controller layout you prefer",
+                                                       "help": "Press any key to open the settings menu"}).encode()
+                       }.items():
+        write(os.path.join(xbox, *name.split("/")), data)
+    outcome = detection.detect(xbox)
+    lines = []
+    detection.print_summary(outcome, lines.append)
+    check("console: the Xbox executable (.xbe) makes it an Xbox game, said in the detection summary",
+              detection.console(outcome) == "Xbox" and any("made for a console: Xbox" in r for r in lines))
+    before = fingerprints(xbox)
+    lines = []
+    path, outcome = automatic.prepare(xbox, "auto", "it", "fake", lines.append)
+    e = outcome.get("outcome")
+    check("console: not supported with the reason (Xbox, emulator or port), no experimental translation, no profile, "
+          "no text search", path is None and e is not None and e.code == "NOT_SUPPORTED" and "Xbox" in e.reason
+          and "emulator" in e.reason and "experimental" not in (e.actions or [])
+          and not any("Searching for texts" in r for r in lines))
+    check("console: no file changed", fingerprints(xbox) == before)
+
+    ps2 = os.path.join(base, "PS2")
+    for name in ("SYSTEM.CNF", "SLES_531.92", "DATA/MSG.BIN"):
+        write(os.path.join(ps2, *name.split("/")), b"BOOT2 = cdrom0:\\SLES_531.92;1\r\n")
+    check("console: SYSTEM.CNF and the disc's serial (SLES_531.92) make it a PlayStation game",
+              detection.console(detection.detect(ps2)) == "PlayStation or PlayStation 2")
+
+    # a PC game with console games inside (a collection made with Unity): translated as a PC game
+    collection = os.path.join(base, "Collection")
+    for name, data in {"Collection.exe": b"MZ", "UnityPlayer.dll": b"MZ",
+                       "Collection_Data/Managed/Assembly-CSharp.dll": b"MZ",
+                       "Collection_Data/StreamingAssets/roms/game1.sfc": bytes(64)}.items():
+        write(os.path.join(collection, *name.split("/")), data)
+    outcome = detection.detect(collection)
+    check("console: a Unity game with ROMs inside stays a Unity game",
+              outcome["main_engine"] == "Unity" and detection.console(outcome) is None
+              and any(r["section"] == "Console" for r in outcome["results"]))
 
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))

@@ -201,7 +201,7 @@ Messages talk about the interface's buttons; when there is a command to fix some
 
 ## How it works
 
-1. **Detection.** It uses SteamDB's rules on file names (about 125 engines, MIT license), checks the first bytes of files (Godot `.pck`, GameMaker `data.win`, KiriKiri `.xp3`, Ren'Py `.rpa`, `UnityFS`...) and recognizes web frameworks inside Electron/NW.js. Every engine gets a score with the evidence. It also reports anti-cheats.
+1. **Detection.** It uses SteamDB's rules on file names (about 125 engines, MIT license), checks the first bytes of files (Godot `.pck`, GameMaker `data.win`, KiriKiri `.xp3`, Ren'Py `.rpa`, `UnityFS`...) and recognizes web frameworks inside Electron/NW.js. Every engine gets a score with the evidence. It also reports anti-cheats. It recognizes **games made for a console** and run on the PC by an emulator or a port (Xbox `.xbe`, Xbox 360 `.xex`, PlayStation `SYSTEM.CNF` and the disc's serial such as `SLES_531.92`, PSP `EBOOT.PBP`, PS3/PS4/Vita `PARAM.SFO`, GameCube/Wii `.dol`, Wii U `.rpx`, Switch `main.npdm`/`.nsp`, 3DS, DS, Game Boy, N64, NES/SNES): if no PC engine is found, PatchSmith says so and stops before looking for texts, because the readable files would be the emulator's or the port's, and the game's texts are in its own formats. A PC game with console games inside (e.g. a collection made with Unity) stays a PC game.
 2. **Texts in the data (`web-json` adapter).** It looks for JSON files with readable text and chooses which fields to translate. It automatically excludes:
    - technical keys such as `id`, `url`, `path`, `author`, `...Id`, `...Type`;
    - values that are not text: file names, colors, identifiers such as `room_12` or `UnlockFirstNewRule`, lines of code, values of 1–2 characters;
