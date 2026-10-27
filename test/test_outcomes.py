@@ -426,7 +426,7 @@ def test_report(base, mono):
     with zipfile.ZipFile(zip_) as z:
         names = set(z.namelist())
         content = {n: z.read(n).decode("utf-8") for n in names}
-    expected_list = {"summary.txt", "settings.json", "services.json", "detection.txt",
+    expected_list = {"summary.txt", "settings.json", "services.json", "detection.txt", "files.txt",
               "logs/" + os.path.basename(log_file), "profile/%s.json" % name, "game/BepInEx/LogOutput.log",
               "game/" + adapter_unity.CONFIG_XUNITY, "game/" + adapter_unity.CONFIG_BEPINEX,
               "game/patchsmith-unity.json", "local-translator/servizio-xunity.log", "unity/Player.log",
@@ -434,6 +434,10 @@ def test_report(base, mono):
               "translations/" + os.path.basename(text_problems)}
     check("report: log, profile, settings, state, detection, BepInEx/XUnity, Unity, crashes, "
               "manifest, remaining texts with the reason (problemi.json)", expected_list <= names)
+    files = content["files.txt"]
+    check("report: the game's files in short (by extension, by folder, the largest with their first bytes), without "
+          "PatchSmith's own files", files.startswith("Files: ") and "  .log" in files and "  Game_Data" in files
+          and "Game_Data/app.info  46 61 6b 65" in files and "|Fake Company" in files and "patchsmith-" not in files)
     whole = "\n".join(content.values())
     check("report: no DeepL key or email (not even inside a log, even in uppercase)",
               key not in whole and email not in whole.lower() and "<removed>" in content["logs/" +

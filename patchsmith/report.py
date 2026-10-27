@@ -7,7 +7,8 @@ XUnity configuration, the end of the log and of the sentence diary of the live t
 Unity (Player.log, Player-prev.log and the last crash) and of Unreal (<project>.log), PatchSmith's manifests in the
 game, the list of texts left untranslated with the reason (problemi.json), the fixes not yet written to the game
 (Unity: da_scrivere.json), the letters of the fonts read (Unity Localization: font.json), the result of the after-play
-check (<game>.controllo.json) and the PatchSmith version.
+check (<game>.controllo.json), the game folder's files in short (files.txt: names, sizes and the first bytes of
+the largest ones, to recognize an engine PatchSmith does not know) and the PatchSmith version.
 It contains no game files and no saves. In the texts the key and the email (even if they ended up in a log by chance)
 become "<removed>" and the Windows user folder becomes %USERPROFILE%.
 """
@@ -30,6 +31,11 @@ MAX_LOGS = 5  # operation logs (the game's most recent)
 # logs that do not belong to a game: window errors, installation of the local translator, check at startup
 GENERAL_LOGS = ("interfaccia", "traduttore-locale", "controllo")
 REMOVED = "<removed>"
+MAX_FILES = 200000  # files.txt: beyond this the folder is not read further (e.g. a whole disk chosen by mistake)
+EXTENSION_LINES = 40
+FOLDER_LINES = 60
+LARGEST_FILES = 20
+SIGNATURE_BYTES = 16
 
 
 def desktop_folder():
@@ -129,6 +135,70 @@ def _date(path):
         return os.path.getmtime(path)
     except OSError:
         return 0
+
+
+def _size(n):
+    for unit in ("B", "KB", "MB"):
+        if n < 1024:
+            return "%d %s" % (n, unit) if unit == "B" else "%.1f %s" % (n, unit)
+        n /= 1024
+    return "%.1f GB" % n
+
+
+def _signature(path):
+    """The first bytes of the file in hexadecimal and as letters (the format's signature: 'PK', 'UnityFS', 'GDPC'...)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read(SIGNATURE_BYTES)
+    except OSError:
+        return ""
+    return "%s  |%s|" % (data.hex(" "), "".join(chr(b) if 32 <= b < 127 else "." for b in data))
+
+
+def files_overview(root):
+    """The game folder's files in short, to understand an engine PatchSmith does not recognize: how many and how big,
+    by extension and by folder (two levels), and the largest files with their first bytes. Only names, sizes and
+    signatures: no content. PatchSmith's own files (backups, scripts) are left out."""
+    from .adapter_webjson import MARKER
+    by_extension, by_folder, files, cut = {}, {}, [], False
+    for folder, dirs, names in os.walk(root):
+        dirs.sort()
+        rel_dir = os.path.relpath(folder, root).replace(os.sep, "/")
+        key = "/".join(rel_dir.split("/")[:2]) if rel_dir != "." else "."
+        for n in sorted(names):
+            if MARKER in n:
+                continue
+            if len(files) >= MAX_FILES:
+                cut = True
+                break
+            path = os.path.join(folder, n)
+            try:
+                size = os.path.getsize(path)
+            except OSError:
+                continue
+            files.append((size, path))
+            for table, k in ((by_extension, os.path.splitext(n)[1].lower() or "(none)"), (by_folder, key)):
+                total = table.setdefault(k, [0, 0])
+                total[0] += 1
+                total[1] += size
+        if cut:
+            break
+    lines = ["Files: %d, %s%s (only names, sizes and the first bytes of the largest files)"
+             % (len(files), _size(sum(s for s, _ in files)), ", read up to the first %d" % MAX_FILES if cut else "")]
+    extensions = sorted(by_extension.items(), key=lambda x: (-x[1][0], -x[1][1], x[0]))
+    lines.append("By extension (files, size):")
+    lines += ["  %6d  %9s  %s" % (n, _size(s), e) for e, (n, s) in extensions[:EXTENSION_LINES]]
+    if len(extensions) > EXTENSION_LINES:
+        lines.append("  ... and %d more extensions" % (len(extensions) - EXTENSION_LINES))
+    lines.append("By folder, two levels (files, size):")
+    lines += ["  %6d  %9s  %s" % (n, _size(s), d) for d, (n, s) in sorted(by_folder.items())[:FOLDER_LINES]]
+    if len(by_folder) > FOLDER_LINES:
+        lines.append("  ... and %d more folders" % (len(by_folder) - FOLDER_LINES))
+    lines.append("Largest files (size, first bytes):")
+    for size, path in sorted(files, key=lambda x: (-x[0], x[1]))[:LARGEST_FILES]:
+        lines.append("  %9s  %s  %s" % (_size(size), os.path.relpath(path, root).replace(os.sep, "/"),
+                                        _signature(path)))
+    return "\n".join(lines)
 
 
 def _unity(root):
@@ -232,6 +302,10 @@ def create(folder, dest_lang=None, outcome=None, logs=None, extra=None):
             texts["detection.txt"] = "\n".join(lines)
         except Exception as e:  # the report is made anyway: it is exactly when something goes wrong that it is needed
             problems.append("detection: %s: %s" % (type(e).__name__, e))
+        try:
+            texts["files.txt"] = files_overview(root)
+        except Exception as e:  # noqa: BLE001 - the report is made anyway, without the list
+            problems.append("files: %s: %s" % (type(e).__name__, e))
         unity = adapter_unity.find_root(root) or root
         for rel in (adapter_unity.BEPINEX_LOG, adapter_unity.CONFIG_XUNITY, adapter_unity.CONFIG_BEPINEX,
                     adapter_unity.SERVICE_CONFIG, adapter_unity.SERVICE_STATE):
