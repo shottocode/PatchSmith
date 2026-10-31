@@ -494,7 +494,7 @@ def _reconfigure(c):
         raise CheckError("the list of files installed by PatchSmith is invalid")
     info = adapter_unity.analyze(c.folder)
     missing = [rel for rel in manifest["file"] if not os.path.exists(os.path.join(c.folder, *rel.split("/")))]
-    packages = ["bepinex5_%s" % info.get("architecture"), "xunity_bepinex5"]
+    packages = adapter_unity.package_names(info)
     if missing and not all(n in components.CATALOG and components.is_available(n) for n in packages):
         raise CheckError("to restore the missing files, the components must be downloaded: press 'Analyze and "
                          "translate'")

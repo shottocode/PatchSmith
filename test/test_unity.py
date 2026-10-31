@@ -69,7 +69,115 @@ def prepare_components(folder):
             "BepInEx/core/XUnity.Common.dll": b"common",
             "BepInEx/plugins/XUnity.AutoTranslator/XUnity.AutoTranslator.Plugin.BepInEx.dll": b"plugin",
             "BepInEx/plugins/XUnity.AutoTranslator/Translators/GoogleTranslate.dll": b"google"}),
+        # BepInEx 6 for IL2CPP brings its .NET (dotnet/, with subfolders too)
+        "bepinex6_il2cpp_x64": create_zip(os.path.join(folder, "bep6.zip"), {
+            "winhttp.dll": b"proxy", "doorstop_config.ini": b"[General]\r\nenabled = true\r\n",
+            ".doorstop_version": b"4.4.0", "changelog.txt": b"log",
+            "BepInEx/core/BepInEx.Core.dll": b"core", "BepInEx/core/BepInEx.Unity.IL2CPP.dll": b"il2cpp",
+            "dotnet/coreclr.dll": b"clr", "dotnet/System.Private.CoreLib.dll": b"corelib",
+            "dotnet/runtimes/win/lib/native.dll": b"native"}),
+        "xunity_bepinex6_il2cpp": create_zip(os.path.join(folder, "xu6.zip"), {
+            "BepInEx/core/XUnity.Common.dll": b"common",
+            "BepInEx/plugins/XUnity.AutoTranslator/XUnity.AutoTranslator.Plugin.BepInEx-IL2CPP.dll": b"plugin",
+            "BepInEx/plugins/XUnity.ResourceRedirector/XUnity.ResourceRedirector.BepInEx-IL2CPP.dll": b"redirector"}),
     }
+
+
+def create_il2cpp_game(folder, x86=False):
+    """Fake Unity IL2CPP game: GameAssembly.dll and the metadata instead of the Managed folder."""
+    create_game(folder)
+    shutil.rmtree(os.path.join(folder, "Game_Data", "Managed"))
+    os.makedirs(os.path.join(folder, "Game_Data", "il2cpp_data", "Metadata"))
+    open(os.path.join(folder, "Game_Data", "il2cpp_data", "Metadata", "global-metadata.dat"), "wb").write(
+        b"\xaf\x1b\xb1\xfa" + b"\x00" * 64)
+    open(os.path.join(folder, "GameAssembly.dll"), "wb").write(b"MZ fake")
+    if x86:
+        with open(os.path.join(folder, "Game.exe"), "r+b") as f:
+            f.seek(0x84)
+            f.write(struct.pack("<H", 0x14C))
+
+
+def fingerprints(folder):
+    return {os.path.relpath(os.path.join(r, n), folder): hashlib.sha256(open(os.path.join(r, n), "rb").read())
+            .hexdigest() for r, _, files in os.walk(folder) for n in files}
+
+
+def test_il2cpp(base):
+    """64-bit IL2CPP game: BepInEx 6 with its .NET (dotnet/) and XUnity for IL2CPP; the plugin of PatchSmith's
+    translator compiled against them; the uninstall leaves the folder as before, also with what BepInEx 6 generates at
+    the first start (interop/, unity-libs/)."""
+    game = os.path.join(base, "il2cpp-game")
+    create_il2cpp_game(game)
+    before, files_before = sorted(os.listdir(game)), fingerprints(game)
+    lines = []
+    adapter_unity.install(game, "en", "it", NAME + "-il2cpp", lines.append)
+    m = adapter_unity.read_manifest(game)
+    check("IL2CPP: BepInEx 6 with dotnet/ (subfolders too) and XUnity for IL2CPP installed, in the manifest",
+          all(os.path.exists(os.path.join(game, *p.split("/"))) for p in (
+              "winhttp.dll", "BepInEx/core/BepInEx.Unity.IL2CPP.dll", "dotnet/runtimes/win/lib/native.dll",
+              "BepInEx/plugins/XUnity.AutoTranslator/XUnity.AutoTranslator.Plugin.BepInEx-IL2CPP.dll"))
+          and m and set(m["components"]) == {"bepinex6_il2cpp_x64", "xunity_bepinex6_il2cpp"}
+          and m["created_folders"] == ["BepInEx", "dotnet"] and len(m["file"]) == 11)
+    with open(os.path.join(game, *adapter_unity.CONFIG_BEPINEX.split("/")), encoding="utf-8") as f:
+        bepinex_cfg = f.read()
+    check("IL2CPP: no BepInEx 5 start setting (MonoBehaviour), Unity's log on, first start explained",
+          "MonoBehaviour" not in bepinex_cfg and "WriteUnityLog = true" in bepinex_cfg
+          and not adapter_unity.bepinex_entrypoint(game, None, force=True)
+          and any("first start" in r for r in lines))
+
+    commands = []
+
+    class Done:
+        returncode, stdout = 0, b""
+
+    def run(command, **_):
+        commands.append(command)
+        out = next(c[5:] for c in command if c.startswith("-out:"))
+        open(out, "wb").write(b"MZ plugin")
+        return Done()
+
+    real_run, real_csc = adapter_unity.subprocess.run, adapter_unity._csc
+    adapter_unity.subprocess.run, adapter_unity._csc = run, lambda: "csc.exe"
+    try:
+        adapter_unity._compile_plugin(game, adapter_unity.analyze(game))
+    finally:
+        adapter_unity.subprocess.run, adapter_unity._csc = real_run, real_csc
+    command = commands[0] if commands else []
+    check("IL2CPP: the plugin is compiled with -define:IL2CPP against BepInEx 6 and its .NET",
+          "-define:IL2CPP" in command and any(c.endswith(os.path.join("dotnet", "System.Private.CoreLib.dll"))
+                                               for c in command)
+          and any(c.endswith("BepInEx.Unity.IL2CPP.dll") for c in command)
+          and not any("Managed" in c for c in command)
+          and os.path.exists(os.path.join(game, *adapter_unity.SERVICE_PLUGIN.split("/"))))
+
+    # the first start: BepInEx 6 generates the interop assemblies and downloads Unity's libraries
+    for rel in ("BepInEx/interop/Assembly-CSharp.dll", "BepInEx/unity-libs/UnityEngine.dll", "BepInEx/cache/x.dat",
+                "BepInEx/LogOutput.log"):
+        os.makedirs(os.path.dirname(os.path.join(game, *rel.split("/"))), exist_ok=True)
+        open(os.path.join(game, *rel.split("/")), "wb").write(b"generated")
+    adapter_unity.uninstall(game, NAME + "-il2cpp", silent)
+    check("IL2CPP: the uninstall leaves the folder as before (dotnet/ and what BepInEx generated removed)",
+          sorted(os.listdir(game)) == before and fingerprints(game) == files_before)
+
+    other = os.path.join(base, "il2cpp-dotnet")
+    create_il2cpp_game(other)
+    os.makedirs(os.path.join(other, "dotnet"))
+    try:
+        adapter_unity.install(other, "en", "it", NAME + "-il2cpp", silent)
+        refused = False
+    except adapter_unity.UnityError as e:
+        refused = "dotnet" in str(e)
+    check("IL2CPP: a dotnet folder already in the game -> nothing installed",
+          refused and not adapter_unity.manifest_present(other) and not os.path.exists(os.path.join(other, "BepInEx")))
+    x86 = os.path.join(base, "il2cpp-x86")
+    create_il2cpp_game(x86, x86=True)
+    try:
+        adapter_unity.install(x86, "en", "it", NAME + "-il2cpp", silent)
+        code = None
+    except adapter_unity.UnityError as e:
+        code = e.code if "32-bit" in str(e) else None
+    check("IL2CPP 32-bit: not supported, said, nothing installed",
+          code == "NOT_SUPPORTED" and not adapter_unity.manifest_present(x86))
 
 
 def config(folder):
@@ -384,6 +492,7 @@ def main(base):
 
     shutil.rmtree(memory, ignore_errors=True)
     test_live(base)
+    test_il2cpp(base)
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed

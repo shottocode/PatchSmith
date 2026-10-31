@@ -1,4 +1,5 @@
-// Patchsmith - starts Patchsmith's translator when the game starts (plugin for BepInEx 5).
+// Patchsmith - starts Patchsmith's translator when the game starts (plugin for BepInEx 5, and for BepInEx 6 IL2CPP
+// when compiled with -define:IL2CPP).
 // XUnity.AutoTranslator sends the new sentences (e.g. those with numbers, built while playing) to the CustomTranslate
 // address on 127.0.0.1, where Patchsmith's service answers (smith.py xunity-service) and translates them with the
 // local translator or the online ones, with Patchsmith's pauses. The command to run is in
@@ -6,17 +7,38 @@
 // closes by itself when the game closes. If the given Python is gone (moved or updated) it tries the Windows
 // Python launcher (py -3). How it went is written to BepInEx/patchsmith-servizio-stato.txt, which Patchsmith reads
 // after playing.
-// Compiled by Patchsmith with csc (C# 5) against the game's libraries.
+// Compiled by Patchsmith with csc (C# 5) against the game's libraries (IL2CPP: against BepInEx 6 and the .NET it
+// brings in dotnet/).
 // The GUID and the file names stay as they were: games translated before know the plugin by them.
 using System;
 using System.Diagnostics;
 using System.IO;
 using BepInEx;
+#if IL2CPP
+using BepInEx.Logging;
+using BepInEx.Unity.IL2CPP;
+#endif
 
 [BepInPlugin("patchsmith.servizio", "Patchsmith translator", "1.2.0")]
+#if IL2CPP
+public class PatchsmithServizio : BasePlugin
+{
+    ManualLogSource Logger { get { return Log; } }
+
+    public override void Load()
+    {
+        Start();
+    }
+#else
 public class PatchsmithServizio : BaseUnityPlugin
 {
     void Awake()
+    {
+        Start();
+    }
+#endif
+
+    void Start()
     {
         string cfg = Path.Combine(Paths.ConfigPath, "patchsmith-servizio.cfg");
         if (!File.Exists(cfg))

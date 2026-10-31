@@ -233,12 +233,23 @@ def test_unity_games(base):
 
     il2cpp = os.path.join(base, "il2cpp", "Game")
     unity_il2cpp_game(il2cpp)
-    before = fingerprints(il2cpp)
     path, _, d = automatic.analyze_and_translate(il2cpp, "auto", "it", "fake", silent)
     e = outcome_of(d)
+    m = adapter_unity.read_manifest(il2cpp) or {}
+    check("Unity IL2CPP 64-bit without tables: BepInEx 6 and XUnity for IL2CPP installed, not NOT_SUPPORTED",
+              path and e.code != "NOT_SUPPORTED" and e.engine == "unity"
+              and set(m.get("components", ())) == {"bepinex6_il2cpp_x64", "xunity_bepinex6_il2cpp"})
+
+    il2cpp_x86 = os.path.join(base, "il2cpp-x86", "Game")
+    test_unity.create_il2cpp_game(il2cpp_x86, x86=True)
+    before = fingerprints(il2cpp_x86)
+    path, _, d = automatic.analyze_and_translate(il2cpp_x86, "auto", "it", "fake", silent)
+    e = outcome_of(d)
     f = outcome.window(e, "translate")
-    check("Unity IL2CPP without tables: NOT_SUPPORTED with 'IL2CPP' in the reason, nothing touched, 'Create report'",
-              not path and e.code == "NOT_SUPPORTED" and "IL2CPP" in e.reason and fingerprints(il2cpp) == before
+    check("Unity IL2CPP 32-bit without tables: NOT_SUPPORTED with 'IL2CPP' and '32-bit' in the reason, nothing "
+          "touched, 'Create report'",
+              not path and e.code == "NOT_SUPPORTED" and "IL2CPP" in e.reason and "32-bit" in e.reason
+              and fingerprints(il2cpp_x86) == before
               and ("Create report", "create_report") in f["buttons"] and "I haven't made any changes" in f["text"])
 
     crc = os.path.join(base, "crc", "Game")

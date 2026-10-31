@@ -36,9 +36,9 @@ ADVICE = {
     "NWJS": "Supported now: web-json adapter (scan and translate commands).",
     "RPGMaker": "MV/MZ: the data is JSON (www/data), the web-json adapter works experimentally. Other versions: coming "
                 "with rvpacker-txt-rs (Phase 1).",
-    "Unity": "Supported (Unity Mono): PatchSmith installs and configures BepInEx + XUnity.AutoTranslator, which "
-             "translates the texts inside the game. Unity IL2CPP: supported if it uses Unity Localization (text tables "
-             "in bundles), otherwise coming soon.",
+    "Unity": "Supported: PatchSmith installs and configures BepInEx + XUnity.AutoTranslator, which translates the "
+             "texts inside the game (BepInEx 5 for Unity Mono, BepInEx 6 for 64-bit Unity IL2CPP). Unity IL2CPP with "
+             "Unity Localization: the text tables in the bundles are translated, without mods.",
     "RenPy": "Coming soon (Phase 1): Ren'Py tl/ framework + unrpyc.",
     "Godot": "Supported (Godot 4) if the game uses Godot's translation tables: PatchSmith reads the English table from "
              "the data package (without modifying it) and adds the translation next to the executable (override.cfg).",

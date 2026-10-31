@@ -36,6 +36,21 @@ CATALOG = {
         "file": "XUnity.AutoTranslator-BepInEx-5.6.3.1.zip", "size": 759511, "version": "5.6.3.1",
         "sha256": "6c3ff03aafe9708f25c2115c0c04c255b6a9d88e716896ae7bacb590a8777609", "license": "MIT",
     },
+    # Unity IL2CPP games: BepInEx 6 exists only as builds of the official build server (no GitHub release supports
+    # Unity 6); build 785 is the one already used with XUnity on Unity 6 games. Its fingerprint was computed on the
+    # file downloaded on 2026-10-31 (the server does not publish one).
+    "bepinex6_il2cpp_x64": {
+        "url": "https://builds.bepinex.dev/projects/bepinex_be/785/"
+               "BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785%2B6abdba4.zip",
+        "file": "BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.785+6abdba4.zip", "size": 34335572, "version": "6.0.0-be.785",
+        "sha256": "2a7cbf74d26abe4765c3e662db1721b923bac39849ebfef2ca5dc7de7e2d9b7f", "license": "LGPL-2.1",
+    },
+    "xunity_bepinex6_il2cpp": {
+        "url": "https://github.com/bbepis/XUnity.AutoTranslator/releases/download/v5.6.3.1/"
+               "XUnity.AutoTranslator-BepInEx-IL2CPP-5.6.3.1.zip",
+        "file": "XUnity.AutoTranslator-BepInEx-IL2CPP-5.6.3.1.zip", "size": 762471, "version": "5.6.3.1",
+        "sha256": "f1d4d3151a061edfcda815e4472fe1f1de8756bdc23708c9b5ebb9bfe736fb1f", "license": "MIT",
+    },
 }
 
 

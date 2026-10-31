@@ -30,8 +30,8 @@ GENERIC_NAMES = {"game", "games", "gioco", "bin", "bin64", "win64", "win32", "x6
                  "release", "build", "windows", "windowsnoeditor", "binaries", "resources", "content"}
 # reasons of the outcomes (outcome.py), in words for the player
 REASON_ANTICHEAT = ("The game has an anti-cheat system: adding or changing its files could get your account banned.")
-REASON_IL2CPP = ("It's a Unity game compiled using IL2CPP that doesn't use Unity Localization's text tables: For now, "
-                 "PatchSmith can only translate Unity Mono games and those with these tables.")
+REASON_IL2CPP = ("It's a 32-bit Unity game compiled using IL2CPP that doesn't use Unity Localization's text tables: for "
+                 "now PatchSmith translates the IL2CPP games without these tables only when they are 64-bit.")
 REASON_ENCRYPTED = ("The game stores its text and code in an encrypted archive (%s), which is only unlocked while the "
                     "game is running. PatchSmith does not override the protections put in place by the developers, so "
                     "this game cannot be translated.")
@@ -960,8 +960,11 @@ def _prepare_unity(folder, existing, origin, dest_lang, outcome, log, backend="g
                 engine="unity-localization", actions=["create_report"])
         if tables:
             return tables, outcome
-        log("Unity IL2CPP game without Unity Localization tables: Not yet supported (BepInEx 6 would be required).")
-        return None, _mark(outcome, "NOT_SUPPORTED", REASON_IL2CPP, engine="unity", actions=["create_report"])
+        if adapter_unity.analyze(root)["architecture"] != "x64":
+            log("32-bit Unity IL2CPP game without Unity Localization tables: not supported yet.")
+            return None, _mark(outcome, "NOT_SUPPORTED", REASON_IL2CPP, engine="unity", actions=["create_report"])
+        log("  Unity IL2CPP without Unity Localization tables: BepInEx 6 and XUnity.AutoTranslator translate the texts "
+            "inside the game")
     root = adapter_unity.find_root(folder)
     if not root:
         log("I can't find the Unity game executable (the .exe file with the _Data folder next to it).")
@@ -991,7 +994,7 @@ def _prepare_unity(folder, existing, origin, dest_lang, outcome, log, backend="g
         path = os.path.join(profiles_folder(), name + ".json")
     profile["file"] = _mono_tables(folder, origin, dest_lang, log)
     scan.save_json(path, profile)
-    log("== 2/3 Unity Mono: The text will be translated within the game by XUnity.AutoTranslator (with BepInEx)")
+    log("== 2/3 Unity: The text will be translated within the game by XUnity.AutoTranslator (with BepInEx)")
     return path, outcome
 
 

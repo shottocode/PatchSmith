@@ -1,4 +1,5 @@
-"""Unity (Mono) adapter: installs and configures BepInEx 5 + XUnity.AutoTranslator.
+"""Unity adapter: installs and configures BepInEx + XUnity.AutoTranslator (BepInEx 5 for Mono games, BepInEx 6 for
+IL2CPP games: its package also brings the .NET it runs on, in dotnet/).
 
 XUnity translates the texts WHILE the game runs (UGUI, TextMeshPro, IMGUI...): the sentences it does not find already
 translated it asks PatchSmith's translator for (xunity_service, started by the PatchsmithServizio plugin when the
@@ -54,16 +55,18 @@ BEPINEX_LOG = "BepInEx/LogOutput.log"
 CONFLICTS = ["BepInEx", "MelonLoader", "winhttp.dll", "version.dll", "doorstop_config.ini", ".doorstop_version"]
 # Package files that are not needed (and might already exist in the game).
 EXCLUDED = {"changelog.txt"}
-# The only files allowed outside BepInEx/ (manifest validation).
+# The only files allowed outside BepInEx/ (manifest validation), besides the .NET of BepInEx 6 (dotnet/).
 ROOT_ALLOWED = {"winhttp.dll", "doorstop_config.ini", ".doorstop_version"}
-# Files that BepInEx/XUnity (and PatchSmith, after the installation) create inside BepInEx/ (removed on uninstall).
+ROOT_FOLDERS = ("BepInEx", "dotnet")
+# Files that BepInEx/XUnity (and PatchSmith, after the installation) create inside BepInEx/ (removed on uninstall);
+# BepInEx 6 also generates the game's interop assemblies (interop/) from the Unity libraries it downloads (unity-libs/).
 CREATED_BY_THEM = [
     "config/BepInEx.cfg", "config/AutoTranslatorConfig.ini", "config/gravydevsupreme.*.cfg",
     "config/patchsmith-servizio.cfg", "plugins/Patchsmith/*", "patchsmith-servizio-stato.txt",
-    "cache/*", "LogOutput.log*", "Translation/*", "DumpedAssemblies/*",
+    "cache/*", "LogOutput.log*", "ErrorLog.log*", "Translation/*", "DumpedAssemblies/*", "interop/*", "unity-libs/*",
 ]
 # Files that BepInEx can create in the game's root while running.
-ROOT_ARTIFACTS = re.compile(r"^(preloader_.*\.log|output_log\.txt|BepInEx_Shim_Backup)$", re.I)
+ROOT_ARTIFACTS = re.compile(r"^(preloader_.*\.log|doorstop_.*\.log|output_log\.txt|BepInEx_Shim_Backup)$", re.I)
 
 
 class UnityError(Exception):
@@ -279,7 +282,8 @@ def _read_assembly(path):
 def sample_texts(folder, info, max_mb=40):
     """Texts taken from the game's files to recognize its language (strings of the code and of the assets). Of the
     code only Assembly-CSharp counts: the game's other modules often have only technical messages in English, which
-    would make even a Japanese game look English."""
+    would make even a Japanese game look English. IL2CPP games have no Assembly-CSharp (their code is all in the
+    metadata, engine included): only the assets count."""
     texts = []
     code = os.path.join(info["data_folder"], "Managed", "Assembly-CSharp.dll") if info.get("data_folder") else None
     if code and os.path.exists(code):
@@ -305,7 +309,7 @@ def _valid_rel(rel):
     parts = rel.split("/")
     if any(p in ("", ".", "..") for p in parts):
         return False
-    return parts[0] == "BepInEx" or rel in ROOT_ALLOWED
+    return (parts[0] in ROOT_FOLDERS and len(parts) > 1) or rel in ROOT_ALLOWED
 
 
 def read_manifest(folder):
@@ -316,7 +320,8 @@ def read_manifest(folder):
     except (OSError, ValueError):
         return None
     if not (isinstance(m, dict) and m.get("patchsmith") is True and m.get("version") == 2
-            and m.get("created_folders") in ([], ["BepInEx"]) and isinstance(m.get("root_before"), list)
+            and m.get("created_folders") in ([], ["BepInEx"], ["BepInEx", "dotnet"])
+            and isinstance(m.get("root_before"), list)
             and isinstance(m.get("file"), dict) and all(_valid_rel(r) for r in m["file"])):
         return None
     return m
@@ -382,7 +387,10 @@ def bepinex_entrypoint(folder, unity_version, force=False):
     """Unity 6 (6000.x): BepInEx 5 starts in Application's static constructor, and adding its component there makes
     the game crash (GameObject.AddComponent inside UnityPlayer: seen with One Million Coins, Unity 6000.6).
     For these games BepInEx starts at the first MonoBehaviour, when the engine is ready. True if set.
-    force=True: with any Unity version (the after-play check saw exactly that crash)."""
+    force=True: with any Unity version (the after-play check saw exactly that crash). Not for IL2CPP games: BepInEx 6
+    starts in its own way there."""
+    if analyze(folder)["backend"] == "il2cpp":
+        return False
     if not force:
         try:
             major = int((unity_version or "").split(".")[0])
@@ -523,22 +531,36 @@ def _csc():
     return None
 
 
+# IL2CPP: the plugin is compiled against BepInEx 6 and the .NET it brings (dotnet/), where it then runs
+_IL2CPP_REFERENCES = ["dotnet/" + n for n in ("System.Private.CoreLib.dll", "System.Runtime.dll", "netstandard.dll",
+                                              "System.Diagnostics.Process.dll", "System.ComponentModel.Primitives.dll")] + \
+    ["BepInEx/core/" + n for n in ("BepInEx.Core.dll", "BepInEx.Unity.IL2CPP.dll", "Il2CppInterop.Runtime.dll",
+                                   "Il2CppInterop.Common.dll")]
+
+
 def _compile_plugin(folder, info):
     """Compiles the plugin that starts the service against THIS game's libraries (so it works with every Unity
-    version). Writes under a temporary name and then renames."""
+    version); for IL2CPP against BepInEx 6 (-define:IL2CPP, see PatchsmithServizio.cs). Writes under a temporary name
+    and then renames."""
     csc = _csc()
     if not csc:
         raise UnityError("the Windows C# compiler (.NET Framework 4) is missing")
-    managed = os.path.join(info["data_folder"], "Managed")
-    references = [os.path.join(managed, n) for n in ("mscorlib.dll", "netstandard.dll", "System.dll", "UnityEngine.dll",
-                                                      "UnityEngine.CoreModule.dll")
-                   if os.path.exists(os.path.join(managed, n))]
-    references.append(_path(folder, "BepInEx/core/BepInEx.dll"))
+    if info.get("backend") == "il2cpp":
+        # (warning 1701: BepInEx.Core asks for netstandard 2.0, dotnet/ has 2.1, which contains it)
+        options = ["-define:IL2CPP", "-nowarn:1701"]
+        references = [_path(folder, rel) for rel in _IL2CPP_REFERENCES]
+    else:
+        options = []
+        managed = os.path.join(info["data_folder"], "Managed")
+        references = [os.path.join(managed, n) for n in ("mscorlib.dll", "netstandard.dll", "System.dll",
+                                                          "UnityEngine.dll", "UnityEngine.CoreModule.dll")
+                      if os.path.exists(os.path.join(managed, n))]
+        references.append(_path(folder, "BepInEx/core/BepInEx.dll"))
     dest = _path(folder, SERVICE_PLUGIN)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     temp_file = dest + TMP_SUFFIX
     command = [csc, "-nologo", "-noconfig", "-nostdlib", "-target:library", "-optimize", "-out:" + temp_file] + \
-        ["-r:" + r for r in references] + [SERVICE_SOURCE]
+        options + ["-r:" + r for r in references] + [SERVICE_SOURCE]
     outcome = subprocess.run(command, capture_output=True, timeout=180,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     if outcome.returncode != 0 or not os.path.exists(temp_file):
@@ -908,7 +930,9 @@ def extract_texts(folder, info, origin, log=print):
     """The game's texts, in this order:
     1. the Unity Localization text tables in the game's language;
     2. the serialized strings (length + UTF-8) of the files in <game>_Data, read in pieces;
-    3. the strings of the game's code (all its DLLs, see game_assembly);
+    3. the strings of the game's code (all its DLLs, see game_assembly). Not for IL2CPP games: their metadata
+       (global-metadata.dat) mixes the game's strings with thousands of technical messages of the engine and of the
+       libraries; the game's ones are translated while playing;
     4. the inner files of data.unity3d (compressed) and the bundles in StreamingAssets, within MAX_MB_BUNDLE and
        MAX_BUNDLE_SECONDS (first those that usually have texts; never images and sounds, nor the tables of the other
        languages). Read only."""
@@ -1199,9 +1223,16 @@ def _write_entry(folder, rel, entry):
     os.replace(temp_file, dest)
 
 
+def package_names(info):
+    """(BepInEx, XUnity) components for the game: BepInEx 5 for Mono, BepInEx 6 for IL2CPP (64 bit only)."""
+    if info.get("backend") == "il2cpp":
+        return "bepinex6_il2cpp_%s" % info["architecture"], "xunity_bepinex6_il2cpp"
+    return "bepinex5_%s" % info["architecture"], "xunity_bepinex5"
+
+
 def _packages(info, log):
-    bepinex_name = "bepinex5_%s" % info["architecture"]
-    return bepinex_name, [components.obtain(bepinex_name, log), components.obtain("xunity_bepinex5", log)]
+    names = package_names(info)
+    return names, [components.obtain(n, log) for n in names]
 
 
 def _check_anticheat(folder):
@@ -1226,12 +1257,13 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
                          "ban).", "ANTICHEAT")
     if not info["exe"]:
         raise UnityError("I can't find the Unity game executable (the .exe file with the _Data folder next to it).")
-    if info["backend"] == "il2cpp":
-        raise UnityError("Unity IL2CPP Game: Not yet supported (requires BepInEx 6, coming soon).", "NOT_SUPPORTED")
-    if info["backend"] != "mono":
+    if info["backend"] not in ("mono", "il2cpp"):
         raise UnityError("I don't recognize the Unity game type (the \"Managed\" folder is missing).", "NOT_SUPPORTED")
     if info["architecture"] not in ("x64", "x86"):
         raise UnityError("Executable architecture not recognized.")
+    if info["backend"] == "il2cpp" and info["architecture"] != "x64":
+        raise UnityError("32-bit Unity IL2CPP game: not supported yet (PatchSmith installs BepInEx 6 only for 64-bit "
+                         "games).", "NOT_SUPPORTED")
     _check_anticheat(folder)
     if is_running(folder, info["exe"]):
         raise UnityError("The game is open: close it and try again.", "GAME_OPEN")
@@ -1259,7 +1291,7 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
         raise UnityError("There's already a mod loader in the game (%s): I'm not installing it to avoid breaking the "
                          "existing mods." % ", ".join(info["conflicts"]))
 
-    bepinex_name, packages = _packages(info, log)
+    (bepinex_name, xunity_name), packages = _packages(info, log)
     entries = {}
     for p in packages:
         for rel, entry in _package_entries(p, folder).items():
@@ -1269,6 +1301,10 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
     in_use = [rel for rel in entries if os.path.exists(_path(folder, rel))]
     if in_use:
         raise UnityError("These files already exist in the game: %s. I'm not overwriting anything." % in_use[:3])
+    created_folders = [d for d in ROOT_FOLDERS if any(rel.startswith(d + "/") for rel in entries)]
+    in_use = [d for d in created_folders if os.path.exists(os.path.join(folder, d))]
+    if in_use:
+        raise UnityError("The game already has a %s folder: I'm not adding files to it." % in_use[0])
 
     manifest = {
         "version": 2,
@@ -1277,9 +1313,9 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
         "exe": info["exe"],
         "unity_version": info["unity_version"],
         "components": {bepinex_name: components.CATALOG[bepinex_name]["version"],
-                       "xunity_bepinex5": components.CATALOG["xunity_bepinex5"]["version"]},
+                       xunity_name: components.CATALOG[xunity_name]["version"]},
         "root_before": sorted(os.listdir(folder)),
-        "created_folders": ["BepInEx"],
+        "created_folders": created_folders,
         "file": {rel: entry[2] for rel, entry in entries.items()},  # FULL list, before writing
         "in_progress": True,
         # which PatchSmith version wrote the configuration (the after-play check updates it when it is from another
@@ -1303,8 +1339,11 @@ def install(folder, src_lang, a, profile_name, log=print, anticheat=False, local
         _remove(folder, manifest, lambda m: None, forced=True)
         raise
     log("  Installed BepInEx %s and XUnity.AutoTranslator %s (%d files)%s" % (
-        manifest["components"][bepinex_name], manifest["components"]["xunity_bepinex5"], len(manifest["file"]),
+        manifest["components"][bepinex_name], manifest["components"][xunity_name], len(manifest["file"]),
         ", %d translation files restored" % n if n else ""))
+    if info["backend"] == "il2cpp":
+        log("  The first start of the game takes a few minutes longer: BepInEx prepares itself for this game (it "
+            "downloads Unity's libraries once, so it needs the internet)")
     return src_lang
 
 
@@ -1377,6 +1416,20 @@ def _remove(folder, manifest, log, forced=False):
         except OSError:
             log("  ! In the BepInEx folder, there are files that weren't added by PatchSmith (e.g., other mods): I'll "
                 "leave them.")
+    # the .NET of BepInEx 6 (dotnet/): its files are in the list above; here only the folders left empty go
+    dotnet = os.path.join(folder, "dotnet")
+    if "dotnet" in manifest.get("created_folders", []) and "dotnet" not in manifest.get("root_before", []) \
+            and os.path.isdir(dotnet):
+        for root, dirs, _files in os.walk(dotnet, topdown=False):
+            for d in dirs:
+                try:
+                    os.rmdir(os.path.join(root, d))  # only if empty
+                except OSError:
+                    pass
+        try:
+            os.rmdir(dotnet)
+        except OSError:
+            left_behind.append("dotnet/")
     before = set(manifest.get("root_before", []))
     for name in os.listdir(folder):
         if name not in before and ROOT_ARTIFACTS.match(name):

@@ -43,7 +43,8 @@ From source: you need **Python 3.10+** with Tkinter (no other libraries). Run `P
 | Electron / NW.js / HTML5 | **Supported**: JSON data and menus. Tested on Sudoku Mansion |
 | Web games with encrypted files (e.g. GemShell) | **Translated while you play**, when the game has a readable `preload.js`. The encrypted file is never opened. Tested on Now That's a Big Dragon |
 | RPG Maker MV/MZ | Experimental, after asking you |
-| Unity IL2CPP without Unity Localization, Unreal 5 / IoStore / encrypted paks, GameMaker text compiled in `data.win`, Godot 3, Ren'Py, KiriKiri, Wolf | Detected, not supported yet |
+| Unity IL2CPP (64-bit) without Unity Localization | **Supported (new)**: installs BepInEx 6 + XUnity.AutoTranslator for IL2CPP. The first start of the game takes a few minutes longer (BepInEx prepares itself once, with the internet) |
+| Unity IL2CPP 32-bit without Unity Localization, Unreal 5 / IoStore / encrypted paks, GameMaker text compiled in `data.win`, Godot 3, Ren'Py, KiriKiri, Wolf | Detected, not supported yet |
 | Console games run on the PC by an emulator or a port (Xbox, PlayStation, Nintendo...) | Recognized, not supported: their texts are in each game's own formats, not in a PC engine's |
 
 Machine translation has no context: expect machine-translation quality.
