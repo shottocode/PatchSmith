@@ -343,9 +343,11 @@ Per i giochi Unreal (UE4, archivi `.pak` classici) PatchSmith **non modifica i f
 - **Gioco senza `.locres`:** i `.locres` si cercano prima di creare il profilo. Se non ce ne sono, PatchSmith non lascia un profilo vuoto e spiega che i testi del gioco sono dentro gli altri dati, che oggi non sa tradurre; se i `.locres` ci sono ma fuori dagli archivi, o se alcuni archivi non si leggono, dice invece che sono in file che non sa ancora tradurre. Un pak che non si riesce a leggere (formato più nuovo, cifrato o rovinato) si salta, con una riga nel registro, e si cerca negli altri.
 - **Aggiornamenti:** `status` segnala se il gioco è stato aggiornato. In quel caso premi "Analizza e traduci": vengono tradotte solo le frasi nuove.
 - **Sicurezza:** non installa se il gioco è aperto, se c'è un anti-cheat o se i pak sono firmati (`.sig`), perché un pak aggiunto verrebbe rifiutato.
+- **Unreal 4.26+ e 5:** si leggono i pak versione 10–11 (voci codificate e indice delle cartelle), e il pak di patch si scrive nello stesso formato. Nei giochi UE5 con IoStore (`.utoc`/`.ucas`) i `.locres` restano nel `.pak`, quindi si traducono allo stesso modo.
+- **Oodle:** molti di questi giochi comprimono i file con Oodle, un formato proprietario che PatchSmith non sa leggere da solo e **non scarica né distribuisce mai**. Usa una libreria Oodle già presente sul PC (`oo2core_<n>_win64.dll`, la più recente trovata): quella del gioco, se la porta come file separato, oppure una che metti tu in `components/oodle/`, presa da un gioco che possiedi. Senza, PatchSmith si ferma prima di creare il profilo e dice dove metterla. Il pak di patch che scrive non è compresso, quindi la scrittura non ha mai bisogno di Oodle.
 - **Limiti:**
-  - pak versione 3–9 (Unreal 4.x) non cifrati, con file non compressi o zlib;
-  - Unreal 5 / IoStore (`.utoc`/`.ucas`) e pak cifrati non sono ancora gestiti;
+  - pak versione 3–11 (Unreal 4.x e 5) non cifrati, con file non compressi, zlib o Oodle (Oodle solo come sopra);
+  - i pak cifrati non sono gestiti;
   - le scritte disegnate nelle texture e i testi scritti direttamente negli asset (non localizzati dagli sviluppatori) restano in originale.
 
 ## Giochi XNA / FNA / MonoGame (.NET)
@@ -593,7 +595,7 @@ In arrivo con lo stesso impianto: risoluzione, modalità finestra/schermo intero
   - RPG Maker (rvpacker-txt-rs);
   - giochi web dentro `app.asar`.
 - **Fase 2:** Godot 3 e i testi di Godot fuori dalle tabelle delle traduzioni; i testi nel codice di GameMaker (`data.win`).
-- **Fase 3:** Unreal 5 / IoStore e motori delle visual novel giapponesi.
+- **Fase 3:** asset Unreal senza .locres e motori delle visual novel giapponesi.
 
 ## Test
 

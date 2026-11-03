@@ -345,9 +345,11 @@ For Unreal games (UE4, classic `.pak` archives) PatchSmith **does not change the
 - **Game without `.locres`:** the `.locres` files are looked for before creating the profile. If there are none, PatchSmith does not leave an empty profile and explains that the game's texts are inside the other data, which it cannot translate today; if the `.locres` files exist but outside the archives, or if some archives cannot be read, it says instead that they are in files it cannot translate yet. A pak that cannot be read (newer format, encrypted or damaged) is skipped, with a line in the log, and the others are searched.
 - **Updates:** `status` reports whether the game was updated. In that case press "Analyze and translate": only the new sentences are translated.
 - **Safety:** it does not install if the game is open, if there is an anti-cheat or if the paks are signed (`.sig`), because an added pak would be refused.
+- **Unreal 4.26+ and 5:** the paks of version 10–11 (encoded entries and directory index) are read, and the patch pak is written in the same format. In UE5 games with IoStore (`.utoc`/`.ucas`) the `.locres` files stay in the `.pak`, so they are translated in the same way.
+- **Oodle:** many of these games compress their files with Oodle, a proprietary format that PatchSmith cannot read by itself and **never downloads or distributes**. It uses an Oodle library already on the PC (`oo2core_<n>_win64.dll`, the newest found): the game's own, if it ships it as a separate file, or one you put in `components/oodle/`, taken from a game you own. Without it PatchSmith stops before creating the profile and says where to put it. The patch pak it writes is not compressed, so writing never needs Oodle.
 - **Limits:**
-  - unencrypted pak versions 3–9 (Unreal 4.x), with uncompressed or zlib files;
-  - Unreal 5 / IoStore (`.utoc`/`.ucas`) and encrypted paks are not handled yet;
+  - unencrypted pak versions 3–11 (Unreal 4.x and 5), with uncompressed, zlib or Oodle files (Oodle only as above);
+  - encrypted paks are not handled;
   - text drawn into textures and texts written directly into the assets (not localized by the developers) stay in the original.
 
 ## XNA / FNA / MonoGame games (.NET)
@@ -595,7 +597,7 @@ Coming with the same framework: resolution, windowed/fullscreen mode and FPS lim
   - RPG Maker (rvpacker-txt-rs);
   - web games inside `app.asar`.
 - **Phase 2:** Godot 3 and Godot texts outside the translation tables; texts in GameMaker's code (`data.win`).
-- **Phase 3:** Unreal 5 / IoStore and the Japanese visual novel engines.
+- **Phase 3:** Unreal assets without .locres and the Japanese visual novel engines.
 
 ## Tests
 

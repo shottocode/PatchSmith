@@ -340,7 +340,7 @@ def _prepare_unreal(folder, existing, origin, dest_lang, outcome, log, backend="
         log("  ! " + problem)
     if not info["versions"]:
         return None, _mark(outcome, "NOT_SUPPORTED", "The game's data archives (.pak) are in a format that PatchSmith "
-                                                      "doesn't yet recognize (Unreal 5, IoStore, or encrypted "
+                                                      "doesn't yet recognize (a newer version, or encrypted "
                                                       "archives).", engine="unreal",
                             actions=["create_report"])
     # the localized texts (.locres) are looked for before creating the game profile: a game without them does not
@@ -359,6 +359,11 @@ def _prepare_unreal(folder, existing, origin, dest_lang, outcome, log, backend="
             reason = ("The game has no localized texts (.locres files): its texts are inside the other game data, "
                       "which PatchSmith can't translate yet.")
         return None, _mark(outcome, "NOT_SUPPORTED", reason, engine="unreal", actions=["create_report"])
+    try:  # e.g. compressed with Oodle without an Oodle library (see oodle.py): said now, without a game profile
+        sources[0][0].read_file(sources[0][1])
+    except adapter_unreal.UnrealError as e:
+        log("  " + str(e))
+        return None, _mark(outcome, "NOT_SUPPORTED", str(e), engine="unreal", actions=["create_report"])
     if existing:
         profile = _read_profile(existing)
         profile.update({"engine": "unreal", "source_language": origin, "target_language": dest_lang,

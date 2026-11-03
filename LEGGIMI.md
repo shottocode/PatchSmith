@@ -44,7 +44,8 @@ Dal sorgente serve **Python 3.10+** con Tkinter (nessun'altra libreria): avvia `
 | Giochi web con i file cifrati (es. GemShell) | **Tradotti mentre giochi**, se il gioco ha un `preload.js` leggibile. Il file cifrato non si apre mai. Provato su Now That's a Big Dragon |
 | RPG Maker MV/MZ | Sperimentale, dopo averti chiesto |
 | Unity IL2CPP (64 bit) senza Unity Localization | **Supportato (nuovo)**: installa BepInEx 6 + XUnity.AutoTranslator per IL2CPP. Il primo avvio del gioco richiede qualche minuto in più (BepInEx si prepara una volta, con internet) |
-| Unity IL2CPP a 32 bit senza Unity Localization, Unreal 5 / IoStore / pak cifrati, GameMaker con i testi nel codice (`data.win`), Godot 3, Ren'Py, KiriKiri, Wolf | Riconosciuti, non ancora supportati |
+| Unreal Engine 4.26+ e 5 (pak non cifrati, anche con IoStore) | **Supportato (nuovo)**, come Unreal 4. Se i testi sono compressi con Oodle, a PatchSmith serve una libreria Oodle (`oo2core_9_win64.dll`) presa da un gioco che possiedi e copiata in `components/oodle/`: non la scarica mai |
+| Unity IL2CPP a 32 bit senza Unity Localization, pak Unreal cifrati, GameMaker con i testi nel codice (`data.win`), Godot 3, Ren'Py, KiriKiri, Wolf | Riconosciuti, non ancora supportati |
 | Giochi per console fatti girare sul PC da un emulatore o da un port (Xbox, PlayStation, Nintendo...) | Riconosciuti, non supportati: i loro testi sono nei formati propri di ogni gioco, non in quelli di un motore per PC |
 
 La traduzione automatica non ha contesto: la qualità è quella di una traduzione automatica.

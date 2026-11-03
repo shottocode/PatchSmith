@@ -1,4 +1,4 @@
-"""Unreal Engine 4 adapter (classic .pak archives): translates the .locres localization files.
+"""Unreal adapter (.pak archives of Unreal 4 and 5): translates the .locres localization files.
 
 1. reads (read only) the game's .pak files and finds the .locres files of the original language,
    for example DDS/Content/Localization/Game/en/Game.locres (the language comes from the .locmeta file);
@@ -8,8 +8,10 @@
    "_999" = high patch number, so it wins even over the official patches "_1_P", "_2_P"...).
 The original paks are never modified: to go back, removing the added pak is enough.
 
-Current limits: pak version 3-9 (UE 4.x) with an unencrypted index and uncompressed or zlib files;
-the original language (usually English) must be selected in the game.
+Current limits: pak version 3-11 (UE 4.x and 5) with an unencrypted index and uncompressed, zlib or Oodle files
+(Oodle only with an Oodle library already on the PC, see oodle.py); the patch pak has the format of the game's pak;
+the original language (usually English) must be selected in the game. In UE5 games with IoStore (.utoc/.ucas) the
+.locres files stay in the .pak, so they are translated in the same way.
 """
 import datetime
 import hashlib
@@ -20,7 +22,7 @@ import struct
 import unicodedata
 import zlib
 
-from . import __version__, language, legacy, detection
+from . import __version__, language, legacy, detection, oodle
 from .adapter_webjson import TMP_SUFFIX, write_atomic
 from .system import game_open
 
@@ -29,6 +31,23 @@ MAGIC_LOCRES = bytes.fromhex("0e147475674a03fc4a15909dc3377f1b")
 MAGIC_LOCMETA = bytes.fromhex("4fee4ca1684855836c4c46bd70da507c")
 MANIFEST = "patchsmith-unreal.json"
 PAK_PREFIX = "zz_Patchsmith_"
+
+
+REASON_OODLE = ("The game's texts are compressed with Oodle, a proprietary format that PatchSmith cannot read by itself "
+                "and never downloads (this game keeps it inside its executable). If you own another game that has "
+                "oo2core_9_win64.dll (or a newer version) in its folder, copy that file into %s: PatchSmith will use "
+                "it to read the texts.")
+
+
+def _game_root(pak_path):
+    """The game's folder from the path of one of its paks (<game>/<project>/Content/Paks/...): where its own Oodle
+    library could be."""
+    folder = os.path.dirname(os.path.abspath(pak_path))
+    for _ in range(6):
+        if os.path.basename(folder).lower() == "content":
+            return os.path.dirname(os.path.dirname(folder))
+        folder = os.path.dirname(folder)
+    return os.path.dirname(os.path.abspath(pak_path))
 
 
 def pak_name(target_lang):
@@ -80,14 +99,76 @@ def full_name(mount, name):
 
 
 class PakEntry:
-    def __init__(self, name, offset, size, orig_size, method, blocks, flags, block_size, sha1, entry_bytes):
+    def __init__(self, name, offset, size, orig_size, method, blocks, flags, block_size, sha1, header_length):
         self.name, self.offset, self.size, self.orig_size = name, offset, size, orig_size
         self.method, self.blocks, self.flags, self.block_size, self.sha1 = method, blocks, flags, block_size, sha1
-        self.header_length = len(entry_bytes)
+        self.header_length = header_length  # the entry written in front of the file's data (sha1: None if unknown)
+
+
+def _read_entry(data, pos, width=4):
+    """An FPakEntry as written in the index of versions 3-9 (and in front of each file's data), without the name."""
+    start = pos
+    offset, dim, dim_orig = struct.unpack_from("<qqq", data, pos)
+    pos += 24
+    method = struct.unpack_from("<I" if width == 4 else "<B", data, pos)[0]
+    pos += width
+    sha1 = data[pos:pos + 20]
+    pos += 20
+    blocks = []
+    if method:
+        nb = struct.unpack_from("<i", data, pos)[0]
+        pos += 4
+        for _ in range(nb):
+            blocks.append(struct.unpack_from("<qq", data, pos))
+            pos += 16
+    flags = data[pos]
+    block_size = struct.unpack_from("<I", data, pos + 1)[0]
+    pos += 5
+    return PakEntry(None, offset, dim, dim_orig, method, blocks, flags, block_size, sha1, pos - start), pos
+
+
+def _decode_entry(data, pos):
+    """An entry of the 'encoded' list of versions 10-11 (UE 4.26+ and UE5): a 32-bit field (block size, number of
+    blocks, encryption, compression method, which values fit in 32 bits) followed by offset and sizes. The hash is
+    not there: it stays in the entry in front of the data."""
+    value = struct.unpack_from("<I", data, pos)[0]
+    pos += 4
+    if value & 0x3F == 0x3F:
+        block_size = struct.unpack_from("<I", data, pos)[0]
+        pos += 4
+    else:
+        block_size = (value & 0x3F) << 11
+    method = (value >> 23) & 0x3F
+
+    def number(fits_32):
+        nonlocal pos
+        n = struct.unpack_from("<I" if fits_32 else "<Q", data, pos)[0]
+        pos += 4 if fits_32 else 8
+        return n
+
+    offset = number(value & (1 << 31))
+    orig_size = number(value & (1 << 30))
+    size = number(value & (1 << 29)) if method else orig_size
+    encrypted = bool(value & (1 << 22))
+    count = (value >> 6) & 0xFFFF
+    # the entry in front of the data: offset, sizes, method, hash, flags, block size (+ the blocks if compressed)
+    header_length = 53 + (4 + 16 * count if method else 0)
+    blocks, start = [], header_length  # positions relative to the entry, as from version 5
+    if count == 1 and not encrypted:
+        blocks = [(start, start + size)]
+    else:
+        for _ in range(count):
+            length = struct.unpack_from("<I", data, pos)[0]
+            pos += 4
+            blocks.append((start, start + length))
+            start += (length + 15) // 16 * 16 if encrypted else length
+    return PakEntry(None, offset, size, orig_size, method, blocks, int(encrypted), block_size, None,
+                    header_length), pos
 
 
 class Pak:
-    """Reader of UE4 paks version 3-9 ('legacy' index)."""
+    """Reader of Unreal paks version 3-9 ('legacy' index, UE4) and 10-11 (encoded entries and directory index,
+    UE 4.26+ and UE5)."""
 
     def __init__(self, path):
         self.path = path
@@ -99,31 +180,38 @@ class Pak:
         if i < 0:
             raise UnrealError("%s is not a valid Unreal pak" % os.path.basename(path))
         self.version, self.index_offset, self.index_size = struct.unpack_from("<Iqq", tail, i + 4)
-        if not 3 <= self.version <= 9:
-            raise UnrealError("Pak version %d: Not yet supported (versions 3-9, Unreal 4.x are supported)"
+        if not 3 <= self.version <= 11:
+            raise UnrealError("Pak version %d: Not yet supported (versions 3-11, Unreal 4 and 5, are supported)"
                               % self.version)
         self.index_encrypted = self.version >= 4 and tail[i - 1] != 0
         self.key_guid = tail[i - 17:i - 1] if self.version >= 7 else b"\x00" * 16
         if self.index_encrypted:
             raise UnrealError("The PAK index is encrypted (requires the game's AES key): Not supported")
         rest = tail[i + 4 + 4 + 8 + 8 + 20:]
-        self.frozen = rest[0] if self.version >= 9 else None
-        names = rest[1:] if self.version >= 9 else rest
+        self.frozen = rest[0] if self.version == 9 else None  # (only version 9 has it)
+        names = rest[1:] if self.version == 9 else rest
         self.compression_slots = len(names) // 32 if self.version >= 8 else 0
         self.methods = [names[k * 32:(k + 1) * 32].split(b"\x00")[0].decode("ascii", "replace")
                        for k in range(self.compression_slots)]
         with open(path, "rb") as f:
             f.seek(self.index_offset)
             idx = f.read(self.index_size)
-        for width in ((4, 1) if self.version == 8 else (4,)):  # 4.22 used 1 byte for the method
-            try:
-                self.mount, self.entries = self._read_index(idx, width)
-                self.method_width = width
-                break
-            except (struct.error, UnrealError, UnicodeDecodeError):
-                continue
-        else:
-            raise UnrealError("Pak index unreadable")
+            if self.version >= 10:
+                try:
+                    self.mount, self.entries = self._read_index_v10(f, idx)
+                except (struct.error, UnicodeDecodeError, IndexError) as e:
+                    raise UnrealError("Pak index unreadable (%s)" % e) from e
+                self.method_width = 4
+            else:
+                for width in ((4, 1) if self.version == 8 else (4,)):  # 4.22 used 1 byte for the method
+                    try:
+                        self.mount, self.entries = self._read_index(idx, width)
+                        self.method_width = width
+                        break
+                    except (struct.error, UnrealError, UnicodeDecodeError):
+                        continue
+                else:
+                    raise UnrealError("Pak index unreadable")
         self.prefix = full_name(self.mount, "")
 
     def _read_index(self, idx, width):
@@ -133,27 +221,52 @@ class Pak:
         entries = {}
         for _ in range(n):
             name, pos = _read_fstring(idx, pos)
-            start = pos
-            offset, dim, dim_orig = struct.unpack_from("<qqq", idx, pos)
-            pos += 24
-            method = struct.unpack_from("<I" if width == 4 else "<B", idx, pos)[0]
-            pos += width
-            sha1 = idx[pos:pos + 20]
-            pos += 20
-            blocks = []
-            if method:
-                nb = struct.unpack_from("<i", idx, pos)[0]
-                pos += 4
-                for _ in range(nb):
-                    blocks.append(struct.unpack_from("<qq", idx, pos))
-                    pos += 16
-            flags = idx[pos]
-            block_size = struct.unpack_from("<I", idx, pos + 1)[0]
-            pos += 5
-            entries[name] = PakEntry(name, offset, dim, dim_orig, method, blocks, flags, block_size, sha1,
-                                     idx[start:pos])
+            entries[name], pos = _read_entry(idx, pos, width)
+            entries[name].name = name
         if pos != len(idx):
             raise UnrealError("inconsistent index")
+        return mount, entries
+
+    def _read_index_v10(self, f, idx):
+        """Index of versions 10-11: mount point, number of files, the optional path hash index and the full directory
+        index (elsewhere in the file), the encoded entries and the entries that could not be encoded. The names
+        come from the directory index ({folder: {file: where its entry is}})."""
+        mount, pos = _read_fstring(idx, 0)
+        count = struct.unpack_from("<i", idx, pos)[0]
+        pos += 4 + 8  # (+ seed of the path hash index)
+        if struct.unpack_from("<i", idx, pos)[0]:  # path hash index: offset, size, hash (not needed)
+            pos += 8 + 8 + 20
+        pos += 4
+        if not struct.unpack_from("<i", idx, pos)[0]:
+            raise UnrealError("the pak has no directory index (only file name hashes): not supported")
+        directory_at, directory_size = struct.unpack_from("<qq", idx, pos + 4)
+        pos += 4 + 16 + 20
+        size = struct.unpack_from("<i", idx, pos)[0]
+        encoded = idx[pos + 4:pos + 4 + size]
+        pos += 4 + size
+        listed = []
+        not_encoded = struct.unpack_from("<i", idx, pos)[0]
+        pos += 4
+        for _ in range(not_encoded):
+            entry, pos = _read_entry(idx, pos)
+            listed.append(entry)
+        f.seek(directory_at)
+        directories = f.read(directory_size)
+        entries, p = {}, 4
+        for _ in range(struct.unpack_from("<i", directories, 0)[0]):
+            folder, p = _read_fstring(directories, p)
+            n = struct.unpack_from("<i", directories, p)[0]
+            p += 4
+            for _ in range(n):
+                file, p = _read_fstring(directories, p)
+                where = struct.unpack_from("<i", directories, p)[0]
+                p += 4
+                entry = _decode_entry(encoded, where)[0] if where >= 0 else listed[-where - 1]
+                name = (folder if folder != "/" else "").lstrip("/") + file
+                entry.name = name
+                entries[name] = entry
+        if len(entries) != count:
+            raise UnrealError("inconsistent index (%d files listed, %d expected)" % (len(entries), count))
         return mount, entries
 
     def method_name(self, entry):
@@ -177,15 +290,30 @@ class Pak:
                 f.seek(entry.offset + entry.header_length)
                 data = f.read(entry.size)
             else:
-                if self.method_name(entry).lower() != "zlib":
+                method = self.method_name(entry).lower()
+                library = None
+                if method == "oodle":
+                    library = oodle.find(_game_root(self.path))
+                    if not library:
+                        raise UnrealError(REASON_OODLE % oodle.user_folder(), "NOT_SUPPORTED")
+                elif method != "zlib":
                     raise UnrealError("%s is compressed with %s: not supported" % (name, self.method_name(entry)))
                 base = entry.offset if self.version >= 5 else 0  # relative blocks from version 5
-                parts = []
+                parts, left = [], entry.orig_size
                 for start, end in entry.blocks:
                     f.seek(base + start)
-                    parts.append(zlib.decompress(f.read(end - start)))
+                    block = f.read(end - start)
+                    if library:  # each block gives a full block of data, the last one what is left
+                        size = min(entry.block_size or left, left)
+                        try:
+                            parts.append(oodle.decompress(block, size, library))
+                        except oodle.OodleError as e:
+                            raise UnrealError("%s: %s" % (name, e), "NOT_SUPPORTED") from e
+                        left -= size
+                    else:
+                        parts.append(zlib.decompress(block))
                 data = b"".join(parts)
-        if not entry.method and hashlib.sha1(data).digest() != entry.sha1:
+        if not entry.method and entry.sha1 is not None and hashlib.sha1(data).digest() != entry.sha1:
             raise UnrealError("%s: hash different from the one in the index" % name)
         return data
 
@@ -197,6 +325,28 @@ def _serialize_entry(version, offset, data, method_width=4):
     parts += hashlib.sha1(data).digest()
     parts += struct.pack("<BI", 0, 0)  # flags (not encrypted), block size
     return parts
+
+
+def _index_v10(mount, entries, index_offset):
+    """(primary index, directory index) of versions 10-11 for uncompressed files: the encoded entries (offset and size
+    in 32 bits) and the full directory index right after the primary one, without the path hash index (Unreal uses
+    the directory index when a pak has only that)."""
+    encoded, folders = bytearray(), {}
+    for name, offset, data in entries:
+        folder, _, file = name.rpartition("/")
+        folders.setdefault(folder + "/" if folder else "/", []).append((file, len(encoded)))
+        encoded += struct.pack("<III", (1 << 31) | (1 << 30) | (1 << 29), offset, len(data))
+    directories = struct.pack("<i", len(folders))
+    for folder, files in folders.items():
+        directories += _write_fstring(folder) + struct.pack("<i", len(files))
+        for file, where in files:
+            directories += _write_fstring(file) + struct.pack("<i", where)
+    head = _write_fstring(mount) + struct.pack("<iQi", len(entries), 0, 0)  # files, hash seed, no path hash index
+    tail = struct.pack("<i", len(encoded)) + bytes(encoded) + struct.pack("<i", 0)  # no entries left not encoded
+    primary_size = len(head) + 4 + 16 + 20 + len(tail)
+    primary = head + struct.pack("<iqq", 1, index_offset + primary_size, len(directories)) + \
+        hashlib.sha1(directories).digest() + tail
+    return primary, directories
 
 
 def write_pak(path, model, file, mount=None):
@@ -211,21 +361,24 @@ def write_pak(path, model, file, mount=None):
         body += _serialize_entry(v, 0, data, width)  # the header in front of the data has offset 0 (like UnrealPak)
         body += data
         entries.append((name, offset, data))
-    idx = _write_fstring(mount) + struct.pack("<i", len(entries))
-    for name, offset, data in entries:
-        idx += _write_fstring(name) + _serialize_entry(v, offset, data, width)
+    if v >= 10:
+        idx, after = _index_v10(mount, entries, len(body))
+    else:
+        idx, after = _write_fstring(mount) + struct.pack("<i", len(entries)), b""
+        for name, offset, data in entries:
+            idx += _write_fstring(name) + _serialize_entry(v, offset, data, width)
     tail = b""
     if v >= 7:
         tail += b"\x00" * 16  # no encryption key
     if v >= 4:
         tail += b"\x00"  # index not encrypted
     tail += struct.pack("<IIqq", MAGIC_PAK, v, len(body), len(idx)) + hashlib.sha1(idx).digest()
-    if v >= 9:
-        tail += b"\x00"  # index not frozen
+    if v == 9:
+        tail += b"\x00"  # index not frozen (only version 9 has this byte)
     if v >= 8:
         tail += b"\x00" * 32 * model.compression_slots
     with open(path, "wb") as f:
-        f.write(bytes(body) + idx + tail)
+        f.write(bytes(body) + idx + after + tail)
 
 
 # --- .locres / .locmeta -------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import json
 import os
 import struct
 import sys
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -74,6 +75,128 @@ def pak_v9(file):
     tail = (b"\x00" * 16 + b"\x00" + struct.pack("<IIqq", 0x5A6F12E1, 9, len(body), len(idx))
             + hashlib.sha1(idx).digest() + b"\x00" + b"\x00" * 160)
     return body + idx + tail
+
+
+def pak_v11(files, methods=("Zlib",)):
+    """Pak v11 (UE 4.27/UE5), built independently of the adapter: encoded entries, a path hash index (not used) and
+    the full directory index. files: [(name, data, method, block size, how)]: method 0 = none, 1.. = methods[i-1]
+    (compressed with zlib for Zlib, kept as they are for the others); how: "" = encoded with 32-bit numbers,
+    "64" = offset and sizes in 64 bits, "listed" = among the entries that could not be encoded."""
+    body, encoded, listed, folders = bytearray(), bytearray(), [], {}
+    for name, data, method, block, how in files:
+        offset = len(body)
+        blocks, packed = [], []
+        if method:
+            chunks = [data[i:i + block] for i in range(0, len(data), block)]
+            packed = [zlib.compress(c) if methods[method - 1] == "Zlib" else c for c in chunks]
+            start = 53 + 4 + 16 * len(packed)
+            for c in packed:
+                blocks.append((start, start + len(c)))
+                start += len(c)
+        payload = b"".join(packed) if method else data
+        sha1 = hashlib.sha1(data).digest()
+        block_list = (struct.pack("<i", len(blocks)) + b"".join(struct.pack("<qq", s, e) for s, e in blocks)
+                      if method else b"")
+
+        def entry(at, payload=payload, data=data, method=method, sha1=sha1, block_list=block_list, block=block):
+            return (struct.pack("<qqqI", at, len(payload), len(data), method) + sha1 + block_list
+                    + struct.pack("<BI", 0, block if method else 0))
+
+        body += entry(0) + payload
+        folder, _, file = name.rpartition("/")
+        if how == "listed":
+            folders.setdefault(folder + "/", []).append((file, -len(listed) - 1))
+            listed.append(entry(offset))
+            continue
+        folders.setdefault(folder + "/", []).append((file, len(encoded)))
+        wide = how == "64"
+        value = 0x3F | (len(blocks) << 6) | (method << 23)
+        value |= 0 if wide else (1 << 31) | (1 << 30) | (1 << 29)
+        number = "<Q" if wide else "<I"
+        encoded += struct.pack("<I", value) + struct.pack("<I", block)
+        encoded += struct.pack(number, offset) + struct.pack(number, len(data))
+        if method:
+            encoded += struct.pack(number, len(payload))
+            if len(blocks) > 1:
+                encoded += b"".join(struct.pack("<I", e - s) for s, e in blocks)
+    directories = struct.pack("<i", len(folders))
+    for folder, items in folders.items():
+        directories += fs(folder) + struct.pack("<i", len(items))
+        directories += b"".join(fs(f) + struct.pack("<i", where) for f, where in items)
+    path_hashes = b"\x07" * 24  # not read by the adapter
+    head = fs("../../../") + struct.pack("<iQ", len(files), 0x1234)
+    tail = (struct.pack("<i", len(encoded)) + bytes(encoded) + struct.pack("<i", len(listed)) + b"".join(listed))
+    size = len(head) + (4 + 16 + 20) * 2 + len(tail)
+    at = len(body) + size
+    primary = (head + struct.pack("<iqq", 1, at, len(path_hashes)) + hashlib.sha1(path_hashes).digest()
+               + struct.pack("<iqq", 1, at + len(path_hashes), len(directories)) + hashlib.sha1(directories).digest()
+               + tail)
+    names = b"".join(m.encode("ascii").ljust(32, b"\x00") for m in methods).ljust(160, b"\x00")
+    footer = (b"\x00" * 16 + b"\x00" + struct.pack("<IIqq", 0x5A6F12E1, 11, len(body), len(primary))
+              + hashlib.sha1(primary).digest() + names)
+    return bytes(body) + primary + path_hashes + directories + footer
+
+
+def test_v11(base):
+    """Paks v11 of Unreal 4.27 and 5: encoded entries (32 and 64 bits, uncompressed, zlib in one and in more blocks,
+    one not encoded); texts compressed with Oodle: without an Oodle library the reason, with one (here a fake one)
+    the translation, in a v11 patch pak."""
+    from patchsmith import auto as automatic, oodle, outcome, project
+    long_text = os.urandom(20000)
+    folder = os.path.join(base, "v11")
+    os.makedirs(folder)
+    pak = os.path.join(folder, "Test.pak")
+    files = [("Proj/Content/a.txt", b"plain text", 0, 0, ""), ("Proj/Content/b.bin", long_text, 0, 0, "64"),
+             ("Proj/Content/c.txt", b"zlib one block " * 50, 1, 65536, ""),
+             ("Proj/Content/Sub/d.txt", b"zlib several blocks " * 400, 1, 2048, ""),
+             ("Proj/Content/e.txt", b"not encoded", 0, 0, "listed")]
+    open(pak, "wb").write(pak_v11(files))
+    p = adapter_unreal.Pak(pak)
+    check("pak v11: names from the directory index, 32/64-bit entries, zlib in one and in more blocks, an entry not "
+          "encoded", p.version == 11 and sorted(p.entries) == sorted(n for n, *_ in files)
+          and all(p.read_file(n) == d for n, d, *_ in files))
+
+    game = os.path.join(base, "ue5")
+    paks = os.path.join(game, "Proj", "Content", "Paks")
+    os.makedirs(paks)
+    os.makedirs(os.path.join(game, "Engine", "Binaries"))
+    english = locres_v2([("UI", "Start", "Start Game"), ("UI", "Quit", "Quit to the desktop")])
+    open(os.path.join(paks, "Proj-Windows.pak"), "wb").write(pak_v11([
+        ("Proj/Content/Localization/Game/Game.locmeta", locmeta("en"), 0, 0, ""),
+        ("Proj/Content/Localization/Game/en/Game.locres", english, 1, 64, ""),
+        ("Proj/Content/Localization/Game/de/Game.locres", locres_v2([("UI", "Start", "Spiel starten")]), 1, 64, "")],
+        methods=("Oodle",)))
+    open(os.path.join(paks, "Proj-Windows.utoc"), "wb").write(b"iostore")
+    sizes = []
+
+    def decompress(data, size, library):  # the test's "Oodle": the blocks are stored as they are
+        sizes.append(size)
+        return data[:size]
+
+    real = oodle.find, oodle.decompress, oodle._found
+    oodle._found = {}
+    oodle.find = lambda game_folder=None: None
+    project.DATA_ROOT = os.path.join(base, "data_folder")
+    automatic.PROFILES_FOLDER = None
+    try:
+        lines = []
+        path, d = automatic._prepare_unreal(game, None, "auto", "it", {"results": []}, lines.append)
+        e = d.get("outcome")
+        check("UE5, texts compressed with Oodle and no Oodle library: not supported with the reason (where to put "
+              "oo2core), no profile", path is None and e.code == "NOT_SUPPORTED" and "Oodle" in e.reason
+              and "oo2core_9_win64.dll" in e.reason and oodle.user_folder() in e.reason
+              and outcome.window(e, "translate"))
+        oodle.find, oodle.decompress = (lambda game_folder=None: "oo2core_9_win64.dll"), decompress
+        n = adapter_unreal.install(game, "it", "test", {"Start Game": "Inizia partita",
+                                                        "Quit to the desktop": "Esci al desktop"}, silent)
+        written = adapter_unreal.Pak(os.path.join(paks, adapter_unreal.pak_name("it")))
+        translated = adapter_unreal.read_locres(written.read_file("Proj/Content/Localization/Game/en/Game.locres"))
+        check("UE5 with an Oodle library: blocks of 64 bytes and the rest, texts translated in a v11 patch pak",
+              n == 2 and written.version == 11 and [s for s, _ in translated["strings"]]
+              == ["Inizia partita", "Esci al desktop"] and sizes[:2] == [64, 64]
+              and sum(sizes[:len(english) // 64 + 1]) == len(english))
+    finally:
+        oodle.find, oodle.decompress, oodle._found = real
 
 
 def create_game(base):
@@ -218,6 +341,7 @@ def main(base):
     check("game updated: reported", any("has been updated" in r for r in lines))
     adapter_unreal.uninstall(game, silent)
 
+    test_v11(base)
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed
