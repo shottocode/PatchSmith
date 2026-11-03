@@ -114,8 +114,10 @@ def _template_regex(key):
         parts.append("(%s)" % _VALUE.get(kind, r".*?") if kind != "%" else "%")
         position = m.end()
     parts.append(re.escape(key[position:]))
+    # a template of one line matches one line: its value must not swallow the lines after it (e.g. the paragraph
+    # "I haven't made any changes..." after the reason of a window), which are then translated each on its own
     try:
-        return re.compile("^" + "".join(parts) + "$", re.S), [s for s in markers if s != "%%"]
+        return re.compile("^" + "".join(parts) + "$", re.S if "\n" in key else 0), [s for s in markers if s != "%%"]
     except re.error:
         return None
 
@@ -222,7 +224,15 @@ def _translate_piece(text, depth=0):
     prefix, core, tail = m.group(1), m.group(2), m.group(3)
     if not re.search(r"[A-Za-zÀ-ÿ]{2}", core):  # numbers and symbols: only an entry of the file (e.g. "A:" -> "To:")
         return prefix + _state["texts"].get(core, core) + tail if core else text
-    return prefix + _translate_core(core, depth) + tail
+    translated = _translate_core(core, depth)
+    if translated == core and depth and core[:1].islower():
+        # a sentence put after a colon with a lowercase initial (see outcome._lowercase): the file has it with the
+        # capital letter, and its translation goes back to lowercase in the same way
+        capital = core[:1].upper() + core[1:]
+        found = _translate_core(capital, depth)
+        if found != capital:
+            translated = found if found[1:2].isupper() else found[:1].lower() + found[1:]
+    return prefix + translated + tail
 
 
 def translate(text):
@@ -231,10 +241,11 @@ def translate(text):
         return text[len(VERBATIM):]
     if not isinstance(text, str) or _state["code"] == SOURCE or not _state["texts"] or not text.strip():
         return text
-    whole = _translate_piece(text)
-    if whole != text or "\n" not in text:
-        return whole
-    return "\n".join(_translate_piece(line) for line in text.split("\n"))
+    if "\n" in text and text not in _state["texts"]:
+        # line by line: a line of a window (e.g. "This game cannot yet be translated: <reason>") is translated whole,
+        # its reason too, and is not cut into the sentences of the following lines
+        return "\n".join(_translate_piece(line) for line in text.split("\n"))
+    return _translate_piece(text)
 
 
 # --- window (Tkinter) ------------------------------------------------------------------------------------------------

@@ -59,6 +59,20 @@ def test_translation():
         for k in test:
             del entries[k]
         ui._state["models"] = None
+    # the "not supported" window: the reason goes after a colon with a lowercase initial, and the paragraph after it
+    # must not end up inside it (with Oodle's and the consoles' reasons, of two sentences, both stayed in English)
+    from patchsmith import adapter_unreal, auto as automatic, outcome
+    reasons = [adapter_unreal.REASON_OODLE % "D:\\PatchSmith\\components\\oodle", automatic.REASON_CONSOLE % "Xbox",
+               automatic.REASON_CRC, automatic.REASON_IL2CPP, automatic.REASON_ENCRYPTED % "GemShell"]
+    untranslated = []
+    for reason in reasons:
+        text = t(outcome.window(outcome.Outcome("NOT_SUPPORTED", reason, actions=["create_report"]))["text"])
+        translated_reason = t(reason)
+        expected = translated_reason[:1].lower() + translated_reason[1:]
+        if expected not in text or "I haven't made" in text or reason[:30].lower() in text.lower():
+            untranslated.append(reason[:40])
+    check("'not supported' window: the reason after the colon (lowercase) and the paragraph after it translated, "
+          "also for reasons of several sentences (%s)" % untranslated[:2], not untranslated)
     ui.set_("en")
     check("in English (the code's language) no translation", ui.translate("Create report") == "Create report")
     languages = ui.languages()
