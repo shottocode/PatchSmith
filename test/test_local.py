@@ -477,7 +477,7 @@ def main(base):
         def __exit__(self, *_):
             return False
 
-    def fake_urlopen(req, timeout=None):
+    def fake_urlopen(req, timeout=None, context=None):
         byte_range = req.get_header("Range")
         requests.append(byte_range)
         if byte_range:

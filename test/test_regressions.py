@@ -9,7 +9,9 @@ Covers:
 - the local translator's number check: '2.5' does not make the check crash (numbers in words only for integers);
 - web games: key names (<kbd>, class="key") are left untranslated, words like Delete are translated elsewhere
   (with node.js, if present, also the real injector; without it, only the check of the code);
-- the real logs in test/data/signals: present, with their signal, anonymous.
+- the real logs in test/data/signals: present, with their signal, anonymous;
+- HTTPS with an older Python (OpenSSL 1.1.1): the context of the downloads and of the online translators accepts the
+  chain at a certificate of Windows, as Python 3.13+ (github.com was refused with a cross-signed root).
 """
 import base64
 import json
@@ -452,6 +454,46 @@ def test_signals():
                   text and not personal)
 
 
+def test_https(base):
+    """github.com refused with Python 3.11 (OpenSSL 1.1.1): "unable to get issuer certificate", because of a copy of
+    USERTrust ECC signed by AAA Certificate Services among the Windows intermediate certificates. The context of
+    PatchSmith's connections accepts the chain as soon as it reaches a Windows certificate (as Python 3.13+), and
+    still checks names and certificates; the downloads and the online translators use it."""
+    import ssl
+    import urllib.request
+    from patchsmith import components, ollama, system
+    context = system.https_context()
+    check("HTTPS: certificates and host name checked, chain accepted at a certificate of Windows (partial chain)",
+          context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+          and context.verify_flags & ssl.VERIFY_X509_PARTIAL_CHAIN and system.https_context() is context)
+
+    used = []
+
+    class Stop(Exception):
+        pass
+
+    def urlopen(*_a, **k):
+        used.append(k.get("context"))
+        raise Stop()
+
+    real, real_folder, real_catalog = urllib.request.urlopen, components.FOLDER, components.CATALOG
+    urllib.request.urlopen = urlopen
+    components.FOLDER = os.path.join(base, "components")
+    components.CATALOG = {"x": {"url": "https://example.invalid/x.zip", "file": "x.zip", "size": 10, "sha256": "0"}}
+    try:
+        for call in (lambda: components.obtain("x", lambda _m: None),
+                     lambda: backend._default_opener(urllib.request.Request("https://example.invalid/"), 5),
+                     lambda: ollama._download_zip(os.path.join(base, "ollama.zip.part"), lambda _m: None)):
+            try:
+                call()
+            except Stop:
+                pass
+    finally:
+        urllib.request.urlopen, components.FOLDER, components.CATALOG = real, real_folder, real_catalog
+    check("HTTPS: components, online translators and Ollama's download use that context",
+          len(used) == 3 and all(c is context for c in used))
+
+
 def main(base):
     base = os.path.abspath(base)
     if os.path.exists(base) and os.listdir(base):
@@ -465,6 +507,7 @@ def main(base):
     test_decimals()
     test_keys(base)
     test_signals()
+    test_https(base)
     failed = [n for n, ok in OUTCOMES if not ok]
     print("\nRESULT: %d/%d checks passed" % (len(OUTCOMES) - len(failed), len(OUTCOMES)))
     return not failed

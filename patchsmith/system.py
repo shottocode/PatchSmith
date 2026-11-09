@@ -1,11 +1,25 @@
-"""Common system functions: running processes (so as not to touch the files of an open game)."""
+"""Common system functions: running processes (so as not to touch the files of an open game), the HTTPS connections."""
 import ctypes
+import functools
 import os
+import ssl
 import sys
 
 
 class SysError(Exception):
     pass
+
+
+@functools.lru_cache(maxsize=None)
+def https_context():
+    """The SSL context of PatchSmith's HTTPS connections (downloads, online translators): Python's default one, with the
+    Windows certificates, that also accepts a chain as soon as it reaches one of them, as Python does from 3.13
+    (VERIFY_X509_PARTIAL_CHAIN). With an older Python (OpenSSL 1.1.1) a cross-signed copy of a root among the
+    Windows intermediate certificates (USERTrust ECC signed by AAA Certificate Services, which was not installed)
+    made github.com fail with "unable to get issuer certificate"."""
+    context = ssl.create_default_context()
+    context.verify_flags |= getattr(ssl, "VERIFY_X509_PARTIAL_CHAIN", 0)
+    return context
 
 
 def windows_processes():

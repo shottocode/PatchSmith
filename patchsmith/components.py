@@ -10,6 +10,7 @@ import zipfile
 
 from . import interruption
 from .project import components_folder
+from .system import https_context
 
 FOLDER = None  # None: components/ next to the program (project.components_folder); the tests change it
 
@@ -87,7 +88,8 @@ def obtain(name, log=print):
     log("  downloading %s (%d KB) from %s" % (entry["file"], entry["size"] // 1024, entry["url"]))
     req = urllib.request.Request(entry["url"], headers={"User-Agent": "Mozilla/5.0 (patchsmith)"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as response, open(temp_file, "wb") as f:
+        with urllib.request.urlopen(req, timeout=60, context=https_context()) as response, \
+                open(temp_file, "wb") as f:
             read_items = 0
             for block in iter(lambda: response.read(1 << 16), b""):
                 interruption.check()

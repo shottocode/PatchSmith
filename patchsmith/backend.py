@@ -16,6 +16,7 @@ import urllib.request
 import zlib
 
 from . import interruption, legacy
+from .system import https_context
 from .text import DETAIL
 
 MAX_BLOCK = 4000  # characters per request (margin below the roughly 5,000 accepted)
@@ -88,7 +89,7 @@ class Blocked(BackendError):
 
 
 def _default_opener(req, timeout):
-    return urllib.request.urlopen(req, timeout=timeout)
+    return urllib.request.urlopen(req, timeout=timeout, context=https_context())
 
 
 def _read_error(e):

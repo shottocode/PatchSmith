@@ -24,6 +24,7 @@ import urllib.request
 import zipfile
 
 from . import interruption
+from .system import https_context
 
 VERSION = "0.40.4"
 ZIP_URL = "https://github.com/ollama/ollama/releases/download/v0.40.4/ollama-windows-amd64.zip"
@@ -633,7 +634,8 @@ def _download_zip(partial, log):
     http_headers = {"User-Agent": "PatchSmith (local translator installation)"}
     if already:
         http_headers["Range"] = "bytes=%d-" % already
-    with urllib.request.urlopen(urllib.request.Request(ZIP_URL, headers=http_headers), timeout=60) as r:
+    with urllib.request.urlopen(urllib.request.Request(ZIP_URL, headers=http_headers), timeout=60,
+                                context=https_context()) as r:
         if already and r.status != 206:  # the server does not resume: start again from zero
             already = 0
         if already:
